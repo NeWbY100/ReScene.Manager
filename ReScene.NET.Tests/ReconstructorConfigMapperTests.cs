@@ -36,8 +36,8 @@ public sealed class ReconstructorConfigMapperTests
         public event EventHandler<CRCValidationProgressEventArgs>? CRCValidationProgress { add { } remove { } }
         public event EventHandler<TimestampPreservationFailedEventArgs>? TimestampPreservationFailed { add { } remove { } }
 
-        public Task<bool> RunAsync(BruteForceOptions options, CancellationToken cancellationToken = default)
-            => Task.FromResult(true);
+        public Task<BruteForceRunResult> RunAsync(BruteForceOptions options, CancellationToken cancellationToken = default)
+            => Task.FromResult(new BruteForceRunResult(true, null));
     }
 
     private static ReconstructorViewModel CreateVm()

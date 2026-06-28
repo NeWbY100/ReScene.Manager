@@ -14,7 +14,7 @@ public class BruteForceService : IBruteForceService
     public event EventHandler<CRCValidationProgressEventArgs>? CRCValidationProgress;
     public event EventHandler<TimestampPreservationFailedEventArgs>? TimestampPreservationFailed;
 
-    public async Task<bool> RunAsync(BruteForceOptions options, CancellationToken cancellationToken = default)
+    public async Task<BruteForceRunResult> RunAsync(BruteForceOptions options, CancellationToken cancellationToken = default)
     {
         var logger = new ReSceneLogger();
         logger.Logged += (s, e) => LogMessage?.Invoke(s, e);

@@ -66,10 +66,10 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
 
         public int RunCalls { get; private set; }
 
-        public Task<bool> RunAsync(BruteForceOptions options, CancellationToken cancellationToken = default)
+        public Task<BruteForceRunResult> RunAsync(BruteForceOptions options, CancellationToken cancellationToken = default)
         {
             RunCalls++;
-            return Task.FromResult(true);
+            return Task.FromResult(new BruteForceRunResult(true, null));
         }
     }
 

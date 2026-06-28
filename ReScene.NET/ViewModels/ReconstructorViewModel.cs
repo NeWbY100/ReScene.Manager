@@ -1163,7 +1163,8 @@ public partial class ReconstructorViewModel : ViewModelBase
 
             // Run entirely on a background thread so the UI stays responsive
             // during setup (directory enumeration, input validation, etc.)
-            bool success = await Task.Run(() => _bruteForceService.RunAsync(options, token), token);
+            BruteForceRunResult runResult = await Task.Run(() => _bruteForceService.RunAsync(options, token), token);
+            bool success = runResult.Success;
 
             // A Stop during RAR execution cancels the run but returns normally (the library
             // swallows the process's OperationCanceledException), so detect the cancelled token
