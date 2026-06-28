@@ -24,4 +24,8 @@
     <ProjectReference Include="..\ReScene.NET\ReScene.NET.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="TestData\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

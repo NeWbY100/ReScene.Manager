@@ -690,6 +690,7 @@ public partial class ReconstructorViewModel : ViewModelBase
             _import.FileAccessTimes = info.FileAccessTimes;
             _import.ArchiveFileCrcs = info.ArchiveFileCrcs;
             _import.OriginalRarFileNames = info.OriginalRarFileNames;
+            _import.ArchiveSets = info.ArchiveSets;
             _import.ArchiveComment = info.ArchiveComment;
             _import.ArchiveCommentBytes = info.ArchiveCommentBytes;
             _import.CmtCompressedData = info.CmtCompressedData;

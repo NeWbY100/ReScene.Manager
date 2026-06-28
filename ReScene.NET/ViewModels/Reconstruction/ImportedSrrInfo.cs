@@ -36,6 +36,7 @@ internal sealed class ImportedSrrInfo
     public Dictionary<string, DateTime> FileAccessTimes { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> ArchiveFileCrcs { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public List<string> OriginalRarFileNames { get; init; } = [];
+    public IReadOnlyList<SrrArchiveSet> ArchiveSets { get; init; } = [];
     public string? ArchiveComment { get; init; }
     public byte[]? ArchiveCommentBytes { get; init; }
     public byte[]? CmtCompressedData { get; init; }
