@@ -1,26 +1,31 @@
 # Compare Busy Overlay (Async Load + Compare) (Design)
 
 **Date:** 2026-06-28
-**Status:** Draft (pending review)
+**Status:** Draft — revised after review (pending final approval)
 **Branch:** `feature/show-all-rar-flags` (accumulating Compare/Inspector improvements for v1.7.1)
-**Scope:** `ReScene.NET` app only — `FileCompareViewModel` + `FileCompareView.xaml`. No lib change.
+**Scope:** `ReScene.NET` app only — `FileCompareViewModel`, `FileCompareView.xaml(.cs)`. No lib change.
 
 ## Background
 
 In the Compare tab, loading the second file makes the window briefly freeze. `LoadFile`
 (`FileCompareViewModel.cs:343`) runs everything synchronously on the UI thread:
 `_compareService.LoadFileData`, `_compareService.ParseDetailedBlocks`, `new MemoryMappedDataSource`,
-and `RefreshComparison` → `_compareService.Compare(...)` + `CompareHighlighter.Apply(...)`. Because
-it blocks the UI thread, there is no feedback and a spinner could not even animate during it.
+and `RefreshComparison` → `_compareService.Compare(...)` + `CompareHighlighter.Apply(...)`. Because it
+blocks the UI thread there is no feedback, and a spinner could not even animate during it. The same
+freeze happens on **Swap** and **Close** (both call `RefreshComparison`, which compares when both
+panes are loaded).
 
-The VM already has the infrastructure to do better: an injected `IUiDispatcher` (`_uiDispatcher`) and
-an async byte-diff path (`RunDiffAsync` / `IHexDiffComputer.ComputeAsync`) that reports progress via
-`StatusMessage`. The structural load+compare is the one piece still synchronous.
+The VM already has the relevant infrastructure: an injected `IUiDispatcher`, and an async byte-diff
+path (`RunDiffAsync` / `IHexDiffComputer.ComputeAsync`, already `Task.Run` on the thread pool). The
+codebase already uses `await Task.Run(...)` from UI-thread VM methods (e.g. `InspectorViewModel`), and
+no `ConfigureAwait(false)` exists anywhere in the app, so awaited continuations resume on the UI
+thread.
 
 ## Goal
 
 Run the load+compare off the UI thread and show an **indeterminate inline busy overlay** ("Comparing
-files…") while it runs, so the UI stays responsive and the user gets clear feedback.
+files…") while it runs, so the UI stays responsive and the user gets clear feedback. Apply the same
+to Swap.
 
 ## Decision (agreed)
 
@@ -29,95 +34,158 @@ branch; ships in v1.7.1.
 
 ## Architecture
 
-### Threading split
+### Async surface
 
-`LoadFile(bool isLeft, string filePath)` becomes `async Task`; the public `LoadLeftFile` /
-`LoadRightFile` follow (`async Task`). The work divides as:
+These become `async Task`:
+- `LoadFile(bool, string)` → `LoadFileAsync(bool, string)`; the public `LoadLeftFile`/`LoadRightFile`
+  → `LoadLeftFileAsync`/`LoadRightFileAsync`.
+- `RefreshComparison()` → `RefreshComparisonAsync()`.
+- `Swap` → `[RelayCommand] async Task SwapAsync` and `ClosePane` → `[RelayCommand] async Task
+  ClosePaneAsync` (both currently call `RefreshComparison`).
 
-- **Background (`Task.Run`):** `_compareService.LoadFileData(filePath)`,
-  `_compareService.ParseDetailedBlocks(filePath)`, `new MemoryMappedDataSource(filePath)`, and (in
-  `RefreshComparison`) `_compareService.Compare(...)`. These are pure compute/IO with no UI access.
-- **UI thread (after `await`):** assign `pane.Data` / `pane.Blocks` / `pane.Source` / `pane.Path` /
-  `pane.FileSize`; populate `LeftTreeRoots` / `RightTreeRoots` (`PopulateTree`); run
-  `CompareHighlighter.Apply(...)` (it mutates the bound tree nodes); set `StatusMessage` and the diff
-  summary flags.
+**Callers adapt:**
+- Browse commands (`BrowseLeftAsync`/`BrowseRightAsync`, already `async Task`) `await` the load.
+- Drag-drop (`FileCompareView.xaml.cs` `OnPreviewDrop`, a `void` event handler) **fire-and-forgets**:
+  `_ = vm.LoadLeftFileAsync(file);` (it cannot `await`). The re-entrancy guard + disabled controls
+  cover overlap.
+- MainWindow does **not** route to this VM's load methods (only `InspectorViewModel.LoadFile`), so
+  there is no other entry point — recorded as an invariant: **every entry point is the UI thread.**
 
-Continuations naturally resume on the UI thread (the await is from a UI-thread context), so explicit
-`_uiDispatcher` marshalling is only needed if a continuation runs off-context; the implementation
-uses plain `await` and keeps UI mutations after the awaited `Task.Run`.
+### Threading split (in `LoadFileAsync`)
 
-`RefreshComparison` becomes `async Task RefreshComparisonAsync`: clear + populate the trees on the UI
-thread, then `var result = await Task.Run(() => _compareService.Compare(...))`, then apply the
-highlighter + status on the UI thread.
+The order matters. The synchronous teardown stays on the UI thread *before* backgrounding:
 
-**Unaffected:** the hex data sources (`LeftHexDataSource`/`RightHexDataSource`) are assigned on node
-**selection** (`FileCompareViewModel.cs:599-608`), not during load — `LoadFile` only clears them — so
-the threading change does not touch hex-view wiring. The byte-diff path (`RunDiffAsync`) is already
-async and is unchanged beyond the existing `CancelDiff()` call at load start.
+1. **UI thread, before `Task.Run`:** `CancelDiff()`; clear `LeftHexDataSource`/`RightHexDataSource`;
+   `pane.Source?.Dispose()`; `pane.Source = null`; set `LeftFilePath`/`RightFilePath`, `pane.Path`,
+   `pane.FileSize`. (This preserves the existing disposal-race protection — the byte-diff is cancelled
+   and the hex bindings cleared before the old source is disposed.)
+2. **Background (`Task.Run`):** `var data = _compareService.LoadFileData(filePath); var blocks =
+   _compareService.ParseDetailedBlocks(filePath); var source = new MemoryMappedDataSource(filePath);`
+   — pure compute/IO, no UI access.
+3. **UI thread, after `await`:** assign `pane.Data = data; pane.Blocks = blocks; pane.Source = source;`
+   then `await RefreshComparisonAsync()`.
 
-### Busy state + overlay
+`RefreshComparisonAsync()`:
+- Clear + populate `LeftTreeRoots`/`RightTreeRoots` (`PopulateTree`) on the UI thread.
+- When both panes loaded: `var result = await Task.Run(() => _compareService.Compare(_left.Data,
+  _right.Data, _left.Blocks, _right.Blocks, _left.Source, _right.Source));` (background), then on the
+  UI thread set `_compareResult = result`, run `CompareHighlighter.Apply(...)` (it mutates the bound
+  tree nodes), and `UpdateStatus()`.
+- When fewer than two panes: the cheap `else` branch (no `Task.Run`), as today.
 
-- Add `[ObservableProperty] public partial bool IsComparing { get; set; }` to `FileCompareViewModel`.
-  Set `true` at the start of `LoadFile` and `false` in a `finally`.
-- In `FileCompareView.xaml`, add an overlay as the last child of the root layout container (so it
-  renders on top): a semi-transparent `Border`/`Grid` with `Visibility` bound to `IsComparing` via
-  the app's existing bool→Visibility converter, containing an indeterminate `ProgressBar`
-  (`IsIndeterminate="True"`) and a `TextBlock` "Comparing files…". Because it overlays the content, it
-  also visually blocks the panes while busy.
+### Busy state, overlay, and re-entrancy
 
-### Concurrency
+- Add `[ObservableProperty] public partial bool IsComparing { get; set; }` with
+  `[NotifyPropertyChangedFor(nameof(IsNotComparing))]`, and `public bool IsNotComparing =>
+  !IsComparing`. (`IsNotComparing` drives `IsEnabled` bindings — the app has no plain bool→bool
+  inverse converter, only `BooleanToVisibility` and `InverseBoolToVisibilityConverter`, so a VM
+  property is cleaner than a new converter.)
+- A private wrapper enforces the **guard-before-try** ordering so the `finally` never clears another
+  load's flag:
+  ```csharp
+  private async Task RunBusyAsync(Func<Task> work)
+  {
+      if (IsComparing)
+      {
+          return;            // another load owns the overlay; ignore this request
+      }
 
-- The Browse / Swap / Close controls bind `IsEnabled` to the negation of `IsComparing` (disabled while
-  busy), using the app's existing inverse-bool converter (or an `IsComparing`-false binding).
-- `LoadFile` has a re-entrancy guard: if `IsComparing` is already true, it returns early (a stray
-  drag-drop or programmatic `LoadLeftFile`/`LoadRightFile` during the brief busy window is ignored
-  rather than interleaving). No `CancellationToken`/supersession machinery — the operation is short
-  and the disabled controls + guard prevent overlap.
-- No user-facing cancel.
+      IsComparing = true;    // set on the UI thread (caller is always UI-thread)
+      try
+      {
+          await work();
+      }
+      finally
+      {
+          IsComparing = false;
+      }
+  }
+  ```
+  `LoadFileAsync` and `SwapAsync` run their body through `RunBusyAsync` (heavy — both panes can be
+  compared). `ClosePaneAsync` reduces the pane count, so its `RefreshComparisonAsync` hits the cheap
+  no-compare branch; it `await`s the refresh directly **without** `RunBusyAsync` (closing should not
+  show "Comparing…"). Both `Swap`/`Close` are still disabled while another op is busy (see below).
+- `IsComparing` is set/cleared only on the UI thread (caller is UI-thread; the `finally` runs after an
+  await that resumes on the UI thread) — so `PropertyChanged` fires on the UI thread and the overlay
+  binding updates safely.
+
+### Overlay placement (XAML)
+
+`FileCompareView.xaml`'s root is a `DockPanel`; the panes live in a content `Grid` (≈ line 91, three
+columns: left / splitter / right) that already hosts the drop-zone overlays as its last children. Add
+the busy overlay as the **last child of that content `Grid`** with `Grid.ColumnSpan="3"` (spanning
+both panes and the splitter) — a semi-transparent `Border`/`Grid`, `Visibility` bound to `IsComparing`
+via the existing `BooleanToVisibility` converter, containing an indeterminate `ProgressBar`
+(`IsIndeterminate="True"`) and a `TextBlock` "Comparing files…". (Adding it to the `DockPanel` would
+dock rather than overlay — must be the content `Grid`.)
+
+- Browse / Swap / Close controls bind `IsEnabled="{Binding IsNotComparing}"` (disabled while busy).
+
+### Concurrency safety of background `Compare`
+
+`Compare(...)` reads the panes' memory-mapped sources on the background thread:
+`FileComparer.Compare` → `BlockDataMatches` → `MemoryMappedDataSource.Read` → `_accessor.ReadArray`.
+This is safe and adds a *second* concurrent reader alongside the already-backgrounded byte-diff
+(`HexDiffComputer.ComputeAsync`): `MemoryMappedDataSource.Read` is stateless (position is a parameter,
+no shared cursor), and concurrent reads of a read-only `MemoryMappedViewAccessor` are thread-safe.
+`CompareHighlighter.Apply` (which both re-reads the source via `HasBlockDifferences` and mutates bound
+tree nodes) runs on the UI thread, sequenced strictly **after** the awaited `Compare` — never
+concurrent with it. The re-entrancy guard prevents a second load from disposing a source mid-compare.
 
 ### Error handling
 
-The existing `try/catch` in `LoadFile` (reset the pane, clear the hex source, set an error
-`StatusMessage`) is preserved, now wrapping the awaited work. A `finally` always clears
-`IsComparing`, so the overlay never sticks on after an error.
+The existing `try/catch` in `LoadFileAsync` (reset the pane, clear the hex source, set an error
+`StatusMessage`) is preserved, now wrapping the awaited work. `RunBusyAsync`'s `finally` always clears
+`IsComparing`, so the overlay never sticks after an error.
 
 ## Data Flow
 
-Browse command (already async) → `await LoadLeftFile/RightFile(path)` → `LoadFile` sets
-`IsComparing=true` → background `Task.Run` parses the pane + (when both panes present) computes the
-`CompareResult` → UI thread populates trees, applies highlighting, updates status →
-`finally` sets `IsComparing=false` → overlay hides.
+Browse (UI) → `await LoadLeftFileAsync(path)` → `RunBusyAsync` sets `IsComparing=true` → UI-thread
+teardown → background `Task.Run` parse → UI-thread assign + `await RefreshComparisonAsync` (trees on
+UI, `Compare` on background, highlight/status on UI) → `finally` clears `IsComparing` → overlay hides.
 
 ## Testing & Verification
 
-- **VM tests** (`ReScene.NET.Tests`, existing synchronous test `IUiDispatcher`): a gated fake
-  `IFileCompareService` whose `Compare` (or `LoadFileData`) blocks on a `TaskCompletionSource` —
-  start a load (don't await to completion), assert `IsComparing == true`; release the gate, await,
-  assert `IsComparing == false`.
-- **Behavior preserved:** after an awaited load of both sides, `LeftTreeRoots`/`RightTreeRoots` are
-  populated and the compare result/status match the pre-change output (move the relevant existing
-  Compare VM test, if any, to `await` the now-async load).
-- **Re-entrancy:** calling `LoadLeftFile` while `IsComparing` is true is a no-op (the in-flight load
-  wins).
+- **Migrate the existing tests (they break otherwise):** `ReScene.NET.Tests/FileCompareViewModelMkvTests.cs`
+  has three tests — `Compare_MetadataDiffers_MarksTreeNodesDifferent`,
+  `Compare_OnlyClusterContentDiffers_MarksClusterNodesDifferent`,
+  `Compare_IdenticalFiles_ReportsIdentical` — that call `LoadLeftFile`/`LoadRightFile` synchronously
+  then assert. Rewrite them to `await vm.LoadLeftFileAsync(...)` / `await vm.LoadRightFileAsync(...)`
+  before asserting (the `Task.Run` hop means results aren't ready synchronously). Inject a
+  `SynchronousUiDispatcher` (pattern at `ReconstructorViewModelDialogTests.cs:49`).
+- **`IsComparing` lifecycle test (deterministic):** a gated fake `IFileCompareService` whose first
+  background call (`LoadFileData`) signals entry via a `TaskCompletionSource`/`ManualResetEventSlim`
+  **and then blocks** on a second gate. The test starts the load without awaiting, `await`s the entry
+  signal, asserts `IsComparing == true` (and `IsNotComparing == false`), releases the gate, awaits the
+  load task, asserts `IsComparing == false`. (Blocking the *first* background call avoids racing the
+  thread-pool hop.)
+- **Re-entrancy:** calling `LoadLeftFileAsync` while `IsComparing` is true is a no-op (returns without
+  touching the in-flight load's flag/state).
+- **Disposal race (regression guard):** mirror `InspectorViewModelImageTests.LoadFile_SecondFileWhileTextActive_DoesNotFailFromDisposedSource`
+  — loading a second file while a diff/selection is active must not throw from a disposed source.
 - **Build:** clean non-incremental, **0 warnings / 0 errors**; full `ReScene.NET` suite green.
-- **Manual:** load two files in Compare; the overlay ("Comparing files…") shows with an animated
-  indeterminate bar while the window stays responsive, and disappears when results render; Browse/Swap/
-  Close are disabled during it; an error still clears the overlay and shows the error status.
+- **Manual:** load two files; the overlay ("Comparing files…") shows with an animated indeterminate
+  bar while the window stays responsive, and disappears when results render; Browse/Swap/Close are
+  disabled during it; Swap shows the overlay; an error still clears the overlay and shows the error
+  status.
 
 ## Non-Goals
 
 - No determinate percentage (would require instrumenting `IFileCompareService.Compare` with progress
   callbacks — out of scope for a short operation).
 - No modal progress window; no user-facing cancel.
-- No change to `IFileCompareService` / the comparison logic itself, nor to the lib.
+- No change to `IFileCompareService` / the comparison logic, `MemoryMappedDataSource`, or the lib.
 
 ## File Structure
 
-- `ReScene.NET/ViewModels/FileCompareViewModel.cs` — `LoadFile`/`LoadLeftFile`/`LoadRightFile` →
-  `async Task`; `RefreshComparison` → `RefreshComparisonAsync` with the `Task.Run` split;
-  `IsComparing` observable + re-entrancy guard + `finally`.
-- `ReScene.NET/Views/FileCompareView.xaml` — inline busy overlay; `IsEnabled` bindings on
-  Browse/Swap/Close.
-- `ReScene.NET/Views/FileCompareView.xaml.cs` and any caller of `LoadLeftFile`/`LoadRightFile`
-  (drag-drop / MainWindow routing) — adapt to the async signature (await or fire-and-forget).
-- `ReScene.NET.Tests/…` — `IsComparing` lifecycle test (gated fake) + preserved-behavior test.
+- `ReScene.NET/ViewModels/FileCompareViewModel.cs` — async `LoadFileAsync`/`LoadLeftFileAsync`/
+  `LoadRightFileAsync`/`RefreshComparisonAsync`/`SwapAsync`/`ClosePaneAsync`; UI-thread teardown then
+  `Task.Run` parse + `Task.Run` `Compare`; `IsComparing` + `IsNotComparing`; `RunBusyAsync` wrapper
+  (guard-before-try).
+- `ReScene.NET/Views/FileCompareView.xaml` — busy overlay in the content `Grid` (`Grid.ColumnSpan=3`,
+  `Visibility` ← `IsComparing`); `IsEnabled="{Binding IsNotComparing}"` on Browse/Swap/Close.
+- `ReScene.NET/Views/FileCompareView.xaml.cs` — drag-drop `OnPreviewDrop` fire-and-forgets the async
+  load (`_ = vm.LoadLeftFileAsync(file)`).
+- `ReScene.NET.Tests/FileCompareViewModelMkvTests.cs` — migrate the three tests to `await` + inject
+  `SynchronousUiDispatcher`; add the `IsComparing` lifecycle + re-entrancy + disposal-race tests
+  (new test file is fine if cleaner).
