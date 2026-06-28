@@ -212,6 +212,16 @@ internal static class ArchiveSetPlanner
         return options;
     }
 
+    /// <summary>
+    /// True when full per-volume verification was requested and is genuinely incomplete:
+    /// CompleteAllVolumes is on, the verification is CRC32-based, at least one expected per-volume
+    /// CRC was found, but it does not cover every volume. For SHA1 runs (no per-volume CRC source)
+    /// or when no expected CRC matched at all, this returns false so the engine still runs and
+    /// gates on the first volume exactly as before (no regression).
+    /// </summary>
+    public static bool ShouldSkipUnverifiableSet(bool completeAllVolumes, HashType hashType, int expectedCrcCount, int volumeCount)
+        => completeAllVolumes && hashType == HashType.CRC32 && expectedCrcCount > 0 && expectedCrcCount < volumeCount;
+
     /// <summary>The working directory for a set's run: OutputPath for a single root set, else an isolated subdir.</summary>
     public static string WorkRootFor(SharedReconstructionSettings shared, SrrArchiveSet set) =>
         string.IsNullOrEmpty(set.Key)

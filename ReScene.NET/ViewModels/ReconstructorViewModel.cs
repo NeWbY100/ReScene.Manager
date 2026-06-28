@@ -1250,7 +1250,10 @@ public partial class ReconstructorViewModel : ViewModelBase
 
             // Full-volume verification needs a per-volume CRC for every volume; without them we
             // cannot honestly verify the set, so skip it rather than report a false success.
-            if (shared.CompleteAllVolumes && expected.Count < set.VolumeNames.Count)
+            // Note: SHA1 runs (no per-volume CRC source) and zero-coverage cases are NOT skipped —
+            // the engine still runs and gates on the first-volume hash. Only partial CRC32 coverage
+            // (some volumes have CRCs but not all) is an honest skip.
+            if (ArchiveSetPlanner.ShouldSkipUnverifiableSet(shared.CompleteAllVolumes, shared.HashType, expected.Count, set.VolumeNames.Count))
             {
                 Log(LogTarget.System, $"Set {label}: no per-volume CRCs to verify; supply its .sfv. Skipping.");
                 outcomes.Add(new SetOutcome(set, label, Success: false, Skipped: true));
@@ -1288,7 +1291,12 @@ public partial class ReconstructorViewModel : ViewModelBase
             if (success)
             {
                 seed ??= combo;
-                RelocateVerifiedOutput(options.OutputDirectoryPath, set, sets.Count);
+                if (!RelocateVerifiedOutput(options.OutputDirectoryPath, set, sets.Count))
+                {
+                    // Relocation failure: the set was reconstructed correctly but output could not be
+                    // moved to its final location. Report it as failed so the caller is not misled.
+                    success = false;
+                }
             }
 
             outcomes.Add(new SetOutcome(set, label, success, Skipped: false));
@@ -1473,11 +1481,15 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// final layout (<c>OutputPath\output\&lt;set.Directory&gt;\</c>), then deletes the scratch dir. A
     /// single root set is a no-op: its output already sits at <c>OutputPath\output\</c>.
     /// </summary>
-    private void RelocateVerifiedOutput(string workRoot, SrrArchiveSet set, int setCount)
+    /// <returns>
+    /// True if relocation succeeded (or was a no-op for a single set); false if an I/O or
+    /// authorization error prevented the move so the caller can record the set as failed.
+    /// </returns>
+    private bool RelocateVerifiedOutput(string workRoot, SrrArchiveSet set, int setCount)
     {
         if (setCount <= 1)
         {
-            return;
+            return true;
         }
 
         try
@@ -1485,7 +1497,7 @@ public partial class ReconstructorViewModel : ViewModelBase
             string sourceDir = Path.Combine(workRoot, "output");
             if (!Directory.Exists(sourceDir))
             {
-                return;
+                return true;
             }
 
             string targetDir = Path.Combine(OutputPath, "output", set.Directory.Replace('/', Path.DirectorySeparatorChar));
@@ -1509,10 +1521,12 @@ public partial class ReconstructorViewModel : ViewModelBase
 
             Directory.Delete(workRoot, recursive: true);
             Log(LogTarget.System, $"Set {set.Key}: output -> {targetDir}");
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Log(LogTarget.System, $"Failed to relocate output for {set.Key}: {ex.Message}");
+            return false;
         }
     }
 

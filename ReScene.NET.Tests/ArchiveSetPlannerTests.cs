@@ -238,6 +238,50 @@ public class ArchiveSetPlannerTests
         Assert.Equal(["x.rar", "x.r00"], sets[0].VolumeNames);
         Assert.Contains("x.iso", sets[0].ArchivedFiles);
     }
+
+    // ── ShouldSkipUnverifiableSet ────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ShouldSkipUnverifiableSet_Sha1_CompleteAllVolumes_ZeroExpected_ReturnsFalse()
+    {
+        // SHA1 run: no per-volume CRC source; engine must still run via the first-volume hash gate.
+        // Regression case — the old guard (expected.Count < volumeCount) would have skipped this.
+        Assert.False(ArchiveSetPlanner.ShouldSkipUnverifiableSet(
+            completeAllVolumes: true, hashType: HashType.SHA1, expectedCrcCount: 0, volumeCount: 30));
+    }
+
+    [Fact]
+    public void ShouldSkipUnverifiableSet_Crc32_CompleteAllVolumes_ZeroExpected_ReturnsFalse()
+    {
+        // CRC32 run but no expected CRC matched any set volume — no SFV coverage at all.
+        // Engine still runs; first-volume gate handles it.
+        Assert.False(ArchiveSetPlanner.ShouldSkipUnverifiableSet(
+            completeAllVolumes: true, hashType: HashType.CRC32, expectedCrcCount: 0, volumeCount: 30));
+    }
+
+    [Fact]
+    public void ShouldSkipUnverifiableSet_Crc32_CompleteAllVolumes_PartialExpected_ReturnsTrue()
+    {
+        // CRC32 + some volumes covered but not all: partial coverage is an honest skip.
+        Assert.True(ArchiveSetPlanner.ShouldSkipUnverifiableSet(
+            completeAllVolumes: true, hashType: HashType.CRC32, expectedCrcCount: 15, volumeCount: 30));
+    }
+
+    [Fact]
+    public void ShouldSkipUnverifiableSet_Crc32_CompleteAllVolumes_FullExpected_ReturnsFalse()
+    {
+        // Full coverage: all volumes have a CRC — verify, don't skip.
+        Assert.False(ArchiveSetPlanner.ShouldSkipUnverifiableSet(
+            completeAllVolumes: true, hashType: HashType.CRC32, expectedCrcCount: 30, volumeCount: 30));
+    }
+
+    [Fact]
+    public void ShouldSkipUnverifiableSet_Crc32_NotCompleteAllVolumes_ReturnsFalse()
+    {
+        // CompleteAllVolumes is off: skip guard should never fire regardless of CRC coverage.
+        Assert.False(ArchiveSetPlanner.ShouldSkipUnverifiableSet(
+            completeAllVolumes: false, hashType: HashType.CRC32, expectedCrcCount: 0, volumeCount: 30));
+    }
 }
 
 /// <summary>Small fixtures for the pure planner tests.</summary>
