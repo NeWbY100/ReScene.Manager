@@ -243,6 +243,36 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
     [ObservableProperty]
     public partial bool FilesIdentical { get; set; }
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsNotComparing))]
+    public partial bool IsComparing { get; set; }
+
+    /// <summary>Inverse of <see cref="IsComparing"/>, for IsEnabled bindings (no inverse-bool converter exists).</summary>
+    public bool IsNotComparing => !IsComparing;
+
+    /// <summary>
+    /// Runs <paramref name="work"/> with the busy overlay shown. Re-entrant calls are ignored (the
+    /// in-flight operation keeps ownership of <see cref="IsComparing"/>); the guard precedes the
+    /// try/finally so a later call can never clear the flag the earlier one owns.
+    /// </summary>
+    private async Task RunBusyAsync(Func<Task> work)
+    {
+        if (IsComparing)
+        {
+            return;
+        }
+
+        IsComparing = true;
+        try
+        {
+            await work();
+        }
+        finally
+        {
+            IsComparing = false;
+        }
+    }
+
     #region Commands
 
     [RelayCommand]
@@ -253,7 +283,7 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
 
         if (path is not null)
         {
-            LoadLeftFile(path);
+            await LoadLeftFileAsync(path);
         }
     }
 
@@ -265,20 +295,19 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
 
         if (path is not null)
         {
-            LoadRightFile(path);
+            await LoadRightFileAsync(path);
         }
     }
 
     [RelayCommand]
-    private void CloseLeft() => ClosePane(true);
+    private Task CloseLeftAsync() => ClosePaneAsync(true);
 
     [RelayCommand]
-    private void CloseRight() => ClosePane(false);
+    private Task CloseRightAsync() => ClosePaneAsync(false);
 
-    private void ClosePane(bool isLeft)
+    private async Task ClosePaneAsync(bool isLeft)
     {
         CancelDiff();
-        // Clear the bound hex source before disposing the mapping it wraps.
         if (isLeft)
         {
             LeftHexDataSource = null;
@@ -301,55 +330,42 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
 
         LeftDiffRanges = null;
         RightDiffRanges = null;
-        RefreshComparison();
+        await RefreshComparisonAsync(); // after close < 2 panes loaded → cheap no-compare branch
     }
 
     [RelayCommand]
-    private void Swap()
+    private Task SwapAsync() => RunBusyAsync(async () =>
     {
         CancelDiff();
         (_left, _right) = (_right, _left);
-
         (LeftFilePath, RightFilePath) = (RightFilePath, LeftFilePath);
-
         LeftHexDataSource = null;
         RightHexDataSource = null;
         LeftDiffRanges = null;
         RightDiffRanges = null;
-
-        RefreshComparison();
-    }
+        await RefreshComparisonAsync();
+    });
 
     #endregion
 
     #region File Loading
 
-    /// <summary>
-    /// Loads and parses a file into the left comparison pane.
-    /// </summary>
-    /// <param name="filePath">
-    /// Absolute path to the file.
-    /// </param>
-    public void LoadLeftFile(string filePath) => LoadFile(true, filePath);
+    /// <summary>Loads and parses a file into the left comparison pane (off the UI thread).</summary>
+    public Task LoadLeftFileAsync(string filePath) => LoadFileAsync(true, filePath);
 
-    /// <summary>
-    /// Loads and parses a file into the right comparison pane.
-    /// </summary>
-    /// <param name="filePath">
-    /// Absolute path to the file.
-    /// </param>
-    public void LoadRightFile(string filePath) => LoadFile(false, filePath);
+    /// <summary>Loads and parses a file into the right comparison pane (off the UI thread).</summary>
+    public Task LoadRightFileAsync(string filePath) => LoadFileAsync(false, filePath);
 
-    private void LoadFile(bool isLeft, string filePath)
+    private Task LoadFileAsync(bool isLeft, string filePath) => RunBusyAsync(async () =>
     {
         ComparePane pane = Pane(isLeft);
         try
         {
+            // UI-thread teardown BEFORE backgrounding: cancel the byte-diff and clear/dispose the
+            // old source so a pending render can't touch a disposed mapping.
             CancelDiff();
             LeftDiffRanges = null;
             RightDiffRanges = null;
-            // Clear the binding before disposing — a pending render would otherwise
-            // hit the disposed MemoryMappedDataSource via the HexDataSourceSlice.
             if (isLeft)
             {
                 LeftHexDataSource = null;
@@ -373,10 +389,19 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
 
             pane.Path = filePath;
             pane.FileSize = new FileInfo(filePath).Length;
-            pane.Data = _compareService.LoadFileData(filePath);
-            pane.Blocks = _compareService.ParseDetailedBlocks(filePath);
-            pane.Source = new MemoryMappedDataSource(filePath);
-            RefreshComparison();
+
+            // Background: parse + memory-map (no UI access).
+            (object? parsedData, IReadOnlyList<RARDetailedBlock>? parsedBlocks, MemoryMappedDataSource parsedSource) =
+                await Task.Run(() => (
+                    _compareService.LoadFileData(filePath),
+                    _compareService.ParseDetailedBlocks(filePath),
+                    new MemoryMappedDataSource(filePath)));
+
+            // UI thread (post-await): assign + refresh.
+            pane.Data = parsedData;
+            pane.Blocks = parsedBlocks;
+            pane.Source = parsedSource;
+            await RefreshComparisonAsync();
         }
         catch (Exception ex)
         {
@@ -402,13 +427,13 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
 
             StatusMessage = $"Error loading {(isLeft ? "left" : "right")} file: {ex.Message}";
         }
-    }
+    });
 
     #endregion
 
     #region Comparison
 
-    private void RefreshComparison()
+    private async Task RefreshComparisonAsync()
     {
         LeftTreeRoots.Clear();
         RightTreeRoots.Clear();
@@ -427,9 +452,9 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
 
         if (_left.Data is not null && _right.Data is not null)
         {
-            _compareResult = _compareService.Compare(_left.Data, _right.Data,
+            _compareResult = await Task.Run(() => _compareService.Compare(_left.Data, _right.Data,
                 _left.Blocks, _right.Blocks,
-                _left.Source, _right.Source);
+                _left.Source, _right.Source));
             CompareHighlighter.Apply(_compareResult, LeftTreeRoots, RightTreeRoots,
                 _left.Blocks, _right.Blocks,
                 _left.Source, _right.Source);

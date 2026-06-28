@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
+using ReScene.Core.Comparison;
 using ReScene.Hex;
 using ReScene.NET.Services;
 using ReScene.NET.ViewModels;
+using ReScene.RAR;
 
 namespace ReScene.NET.Tests;
 
@@ -20,6 +22,27 @@ public class FileCompareViewModelMkvTests : TempDirTestBase
             IHexDataSource rightSource, long rightOffset, long rightLength,
             IProgress<HexDiffProgress>? progress, CancellationToken ct) =>
             Task.FromResult(new HexDiffResult([], []));
+    }
+
+    private sealed class GatedCompareService : IFileCompareService
+    {
+        private readonly ManualResetEventSlim _release = new(false);
+        public ManualResetEventSlim Entered { get; } = new(false);
+
+        public void Release() => _release.Set();
+
+        public object? LoadFileData(string filePath)
+        {
+            Entered.Set();
+            _release.Wait();
+            return null; // data unused by the IsComparing lifecycle; null avoids PopulateTree on an unknown type
+        }
+
+        public IReadOnlyList<RARDetailedBlock>? ParseDetailedBlocks(string filePath) => [];
+
+        public CompareResult Compare(object? left, object? right,
+            IReadOnlyList<RARDetailedBlock>? leftBlocks = null, IReadOnlyList<RARDetailedBlock>? rightBlocks = null,
+            IHexDataSource? leftSource = null, IHexDataSource? rightSource = null) => new();
     }
 
     #endregion
@@ -62,14 +85,14 @@ public class FileCompareViewModelMkvTests : TempDirTestBase
         new(new FileCompareService(), new NoOpFileDialogService(), new StubHexDiffComputer());
 
     [Fact]
-    public void Compare_MetadataDiffers_MarksTreeNodesDifferent()
+    public async Task Compare_MetadataDiffers_MarksTreeNodesDifferent()
     {
         string left = WriteMkv("left.mkv", BuildMkv("libebml", 0xAA));
         string right = WriteMkv("right.mkv", BuildMkv("mkvmerge", 0xAA));
 
         using FileCompareViewModel vm = CreateViewModel();
-        vm.LoadLeftFile(left);
-        vm.LoadRightFile(right);
+        await vm.LoadLeftFileAsync(left);
+        await vm.LoadRightFileAsync(right);
 
         TreeNodeViewModel? muxLeft = vm.LeftTreeRoots.Flatten().FirstOrDefault(n => n.Text.StartsWith("MuxingApp", StringComparison.Ordinal));
         TreeNodeViewModel? muxRight = vm.RightTreeRoots.Flatten().FirstOrDefault(n => n.Text.StartsWith("MuxingApp", StringComparison.Ordinal));
@@ -82,7 +105,7 @@ public class FileCompareViewModelMkvTests : TempDirTestBase
     }
 
     [Fact]
-    public void Compare_OnlyClusterContentDiffers_MarksClusterNodesDifferent()
+    public async Task Compare_OnlyClusterContentDiffers_MarksClusterNodesDifferent()
     {
         // Identical metadata; only the audio/video payload bytes inside the Cluster differ
         // (same length). This is the typical "rebuilt sample vs original sample" case.
@@ -90,8 +113,8 @@ public class FileCompareViewModelMkvTests : TempDirTestBase
         string right = WriteMkv("right.mkv", BuildMkv("libebml", 0xBB));
 
         using FileCompareViewModel vm = CreateViewModel();
-        vm.LoadLeftFile(left);
-        vm.LoadRightFile(right);
+        await vm.LoadLeftFileAsync(left);
+        await vm.LoadRightFileAsync(right);
 
         TreeNodeViewModel? clusterLeft = vm.LeftTreeRoots.Flatten().FirstOrDefault(n => n.Text.StartsWith("Cluster", StringComparison.Ordinal));
         Assert.NotNull(clusterLeft);
@@ -101,17 +124,56 @@ public class FileCompareViewModelMkvTests : TempDirTestBase
     }
 
     [Fact]
-    public void Compare_IdenticalFiles_ReportsIdentical()
+    public async Task Compare_IdenticalFiles_ReportsIdentical()
     {
         byte[] bytes = BuildMkv("libebml", 0xAA);
         string left = WriteMkv("left.mkv", bytes);
         string right = WriteMkv("right.mkv", bytes);
 
         using FileCompareViewModel vm = CreateViewModel();
-        vm.LoadLeftFile(left);
-        vm.LoadRightFile(right);
+        await vm.LoadLeftFileAsync(left);
+        await vm.LoadRightFileAsync(right);
 
         Assert.True(vm.FilesIdentical, $"status was '{vm.StatusMessage}'");
         Assert.DoesNotContain(vm.LeftTreeRoots.Flatten(), n => n.IsDifferent);
+    }
+
+    [Fact]
+    public async Task IsComparing_TrueDuringLoad_FalseAfter()
+    {
+        string path = WriteMkv("one.mkv", BuildMkv("libebml", 0xAA));
+        var gated = new GatedCompareService();
+        using var vm = new FileCompareViewModel(gated, new NoOpFileDialogService(), new StubHexDiffComputer());
+
+        Task load = vm.LoadLeftFileAsync(path); // runs synchronously up to the Task.Run await
+
+        Assert.True(gated.Entered.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(vm.IsComparing);            // set synchronously before the first await
+        Assert.False(vm.IsNotComparing);
+
+        gated.Release();
+        await load;
+
+        Assert.False(vm.IsComparing);
+        Assert.True(vm.IsNotComparing);
+    }
+
+    [Fact]
+    public async Task LoadWhileComparing_IsIgnored()
+    {
+        string path = WriteMkv("one.mkv", BuildMkv("libebml", 0xAA));
+        var gated = new GatedCompareService();
+        using var vm = new FileCompareViewModel(gated, new NoOpFileDialogService(), new StubHexDiffComputer());
+
+        Task first = vm.LoadLeftFileAsync(path);
+        Assert.True(gated.Entered.Wait(TimeSpan.FromSeconds(5)));
+
+        await vm.LoadRightFileAsync(path); // re-entrancy guard: returns immediately, no-op
+        Assert.True(vm.IsComparing);       // the first load still owns the flag
+        Assert.Equal(string.Empty, vm.RightFilePath); // the ignored load did not set state
+
+        gated.Release();
+        await first;
+        Assert.False(vm.IsComparing);
     }
 }

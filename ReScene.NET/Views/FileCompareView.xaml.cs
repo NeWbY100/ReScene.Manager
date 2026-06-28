@@ -76,11 +76,11 @@ public partial class FileCompareView : UserControl
 
         if (IsOnLeftSide(e))
         {
-            vm.LoadLeftFile(file);
+            _ = vm.LoadLeftFileAsync(file);
         }
         else
         {
-            vm.LoadRightFile(file);
+            _ = vm.LoadRightFileAsync(file);
         }
 
         e.Handled = true;
