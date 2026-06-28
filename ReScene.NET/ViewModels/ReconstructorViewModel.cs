@@ -351,10 +351,15 @@ public partial class ReconstructorViewModel : ViewModelBase
         /// <summary>Wall-clock end time, or empty while the test is still running.</summary>
         public string EndText => EndedAt?.ToString("HH:mm:ss") ?? string.Empty;
 
-        /// <summary>Elapsed test time once finished, or empty while running.</summary>
-        public string DurationText => EndedAt is { } end
-            ? ReconstructorFormatting.FormatTimeSpan(end - StartedAt)
-            : string.Empty;
+        /// <summary>
+        /// Elapsed test time: counts up live while the test runs, then freezes at the final duration
+        /// once the row finishes. Driven once per second by <see cref="RefreshLiveDuration"/>.
+        /// </summary>
+        public string DurationText =>
+            ReconstructorFormatting.FormatTimeSpan((EndedAt ?? DateTime.Now) - StartedAt);
+
+        /// <summary>Raises a change for <see cref="DurationText"/> so the live value re-renders.</summary>
+        public void RefreshLiveDuration() => OnPropertyChanged(nameof(DurationText));
 
         // Stamp the end time the moment the row leaves "Testing" (Complete / Cancelled / Error all
         // flow through this setter, set by the tracker). The null guard makes it idempotent.
@@ -1612,6 +1617,11 @@ public partial class ReconstructorViewModel : ViewModelBase
         {
             RemainingText = tick.RemainingText;
             EtaText = tick.EtaText;
+        }
+
+        if (VersionEntries.Count > 0)
+        {
+            VersionEntries[^1].RefreshLiveDuration();
         }
     }
 

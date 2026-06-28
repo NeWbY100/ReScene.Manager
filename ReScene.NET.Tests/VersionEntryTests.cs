@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using ReScene.NET.ViewModels;
 
 namespace ReScene.NET.Tests;
@@ -5,12 +6,12 @@ namespace ReScene.NET.Tests;
 public class VersionEntryTests
 {
     [Fact]
-    public void NewRow_HasStartText_AndBlankEndAndDuration()
+    public void NewRow_HasStartText_LiveDuration_BlankEnd()
     {
         var row = new ReconstructorViewModel.VersionEntry();
-        Assert.Equal(8, row.StartText.Length); // HH:mm:ss
-        Assert.Equal(string.Empty, row.EndText);
-        Assert.Equal(string.Empty, row.DurationText);
+        Assert.Equal(8, row.StartText.Length);              // HH:mm:ss
+        Assert.Equal(string.Empty, row.EndText);            // no end yet
+        Assert.False(string.IsNullOrEmpty(row.DurationText)); // live (e.g. "00:00")
     }
 
     [Fact]
@@ -34,12 +35,24 @@ public class VersionEntryTests
     }
 
     [Fact]
-    public void WhileTesting_EndAndDuration_AreBlank()
+    public void WhileTesting_EndBlank_DurationLive()
     {
         var row = new ReconstructorViewModel.VersionEntry();
         row.Status = "Testing"; // no-op vs the default; must not stamp an end
         Assert.Null(row.EndedAt);
         Assert.Equal(string.Empty, row.EndText);
-        Assert.Equal(string.Empty, row.DurationText);
+        Assert.False(string.IsNullOrEmpty(row.DurationText)); // live, not blank
+    }
+
+    [Fact]
+    public void RefreshLiveDuration_RaisesDurationTextChanged()
+    {
+        var row = new ReconstructorViewModel.VersionEntry();
+        var raised = new List<string?>();
+        row.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        row.RefreshLiveDuration();
+
+        Assert.Contains(nameof(ReconstructorViewModel.VersionEntry.DurationText), raised);
     }
 }
