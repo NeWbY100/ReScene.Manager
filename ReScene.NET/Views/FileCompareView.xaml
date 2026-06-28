@@ -27,6 +27,7 @@
         <Button DockPanel.Dock="Right"
                 Content="Close"
                 Command="{Binding CloseLeftCommand}"
+                IsEnabled="{Binding IsNotComparing}"
                 Style="{StaticResource GhostButton}"
                 ToolTip="Close left file"
                 Margin="4,0,0,0"
@@ -34,6 +35,7 @@
         <Button DockPanel.Dock="Right"
                 Content="Browse"
                 Command="{Binding BrowseLeftCommand}"
+                IsEnabled="{Binding IsNotComparing}"
                 Style="{StaticResource GhostButton}"
                 Margin="4,0,0,0"
                 Padding="8,4" />
@@ -47,6 +49,7 @@
       <Button Grid.Column="1"
               Content="Swap"
               Command="{Binding SwapCommand}"
+              IsEnabled="{Binding IsNotComparing}"
               Style="{StaticResource GhostButton}"
               ToolTip="Swap left and right files"
               Margin="2,4"
@@ -58,6 +61,7 @@
         <Button DockPanel.Dock="Right"
                 Content="Close"
                 Command="{Binding CloseRightCommand}"
+                IsEnabled="{Binding IsNotComparing}"
                 Style="{StaticResource GhostButton}"
                 ToolTip="Close right file"
                 Margin="4,0,0,0"
@@ -65,6 +69,7 @@
         <Button DockPanel.Dock="Right"
                 Content="Browse"
                 Command="{Binding BrowseRightCommand}"
+                IsEnabled="{Binding IsNotComparing}"
                 Style="{StaticResource GhostButton}"
                 Margin="4,0,0,0"
                 Padding="8,4" />
@@ -481,6 +486,19 @@
                    FontSize="{DynamicResource FontSizeH1}"
                    FontWeight="Bold"
                    Foreground="White" />
+      </Border>
+
+      <!-- Busy overlay: shown while a comparison runs (work happens off the UI thread). -->
+      <Border Grid.Column="0" Grid.ColumnSpan="3"
+              Background="#80000000"
+              Visibility="{Binding IsComparing, Converter={StaticResource BoolToVisibility}}">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="240">
+          <TextBlock Text="Comparing files…"
+                     HorizontalAlignment="Center"
+                     Margin="0,0,0,8"
+                     Foreground="White" />
+          <ProgressBar IsIndeterminate="True" Height="6" />
+        </StackPanel>
       </Border>
 
     </Grid>
