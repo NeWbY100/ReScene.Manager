@@ -2,6 +2,14 @@
 
 All notable changes to ReScene.NET are documented here. Releases follow [SemVer](https://semver.org/) and this file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.7.1] — 2026-06-29
+
+### Added
+
+- **All archive flags are shown.** The Inspector and Compare tabs now list every header flag — set *and* unset (e.g. VOLUME / SOLID / FIRST_VOLUME), each marked with its meaning or "Not set". In Compare this means the differing flag is highlighted directly, instead of you having to notice a row that's simply missing on one side.
+- **End-of-Archive reserved space is shown.** The reserved bytes some archives keep at the end of the terminator (the REV_SPACE region) appear as a "Reserved Space" field, so a 20-byte terminator is no longer indistinguishable from a 13-byte one.
+- **Responsive Compare with a busy indicator.** Loading and comparing two files now runs in the background with a "Comparing files…" overlay, so the window no longer freezes; Browse/Swap/Close are disabled while a comparison is in progress.
+
 ## [1.7.0] — 2026-06-28
 
 ### Added
