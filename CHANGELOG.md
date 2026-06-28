@@ -2,6 +2,17 @@
 
 All notable changes to ReScene.NET are documented here. Releases follow [SemVer](https://semver.org/) and this file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.7.0] — 2026-06-28
+
+### Added
+
+- **Multi-disc reconstruction.** The RAR Reconstructor now rebuilds releases that contain more than one archive set (e.g. a game's `DVD1` and `DVD2`, or a movie's `CD1`/`CD2`). Each set is brute-forced and reconstructed independently — with its own input file(s), its own settings, and its own expected CRCs — and the rebuilt volumes are written under the release's original subfolders (`output\DVD1\…`, `output\DVD2\…`). When a later set was packed with the same settings as the first, those settings are tried first so it resolves almost immediately. The import shows a notice when a release has multiple sets, and the Brute Force Progress window gains a **Set** column.
+- **Every rebuilt volume is verified.** When recreating a whole release, the CRC of *every* produced volume is now checked against the release's `.sfv` (not just the first), so a match means the entire set is byte-exact.
+
+### Fixed
+
+- **Multi-disc releases reconstructed incorrectly.** Previously the whole release was packed as a single archive and only the first produced volume was verified, so additional discs — and the last volume of the first disc — came out with the wrong CRCs and were silently misnamed. The reconstructor now treats each disc as its own archive set and keeps searching settings until one reproduces the complete, fully-verified set.
+
 ## [1.6.2] — 2026-06-28
 
 ### Changed
