@@ -669,12 +669,19 @@ public partial class ReconstructorViewModel : ViewModelBase
                     "You will need to configure the RAR options manually before reconstructing.");
             }
 
+            // Remember the imported SRR path for ALL SRRs (not just custom-packer ones). It is the
+            // source for each set's embedded per-volume SFV (LoadEmbeddedSfvBytes) and lets
+            // ArchiveSetPlanner.ResolveSets re-derive sets from the SRR on config-restore. This is
+            // harmless for normal SRRs: RAROptions.SRRFilePath is consumed by the engine only on the
+            // custom-packer direct path (Manager guards on CustomPackerDetected != None), so a
+            // non-null value is ignored by the brute-force path.
+            _import.SRRFilePath = path;
+
             // Custom packer detection
             if (srr.HasCustomPackerHeaders)
             {
                 Log(LogTarget.System, $"Custom RAR packer detected: {srr.CustomPackerDetected}");
                 _import.CustomPackerType = info.CustomPackerType;
-                _import.SRRFilePath = path;
                 string warning = info.CustomPackerWarning ?? string.Empty;
                 CustomPackerWarning = warning;
 
@@ -683,7 +690,6 @@ public partial class ReconstructorViewModel : ViewModelBase
             else
             {
                 _import.CustomPackerType = CustomPackerType.None;
-                _import.SRRFilePath = null;
                 CustomPackerWarning = null;
             }
 
@@ -1464,9 +1470,12 @@ public partial class ReconstructorViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Reads the embedded SFV bytes for a set from the imported SRR's stored files, matching the
-    /// set by its volume key. For a single flat set (empty key) any stored .sfv matches. Returns
-    /// null when no SRR was imported or no stored .sfv matches.
+    /// Reads the embedded SFV bytes for a set from the imported SRR's stored files. For a single
+    /// flat set (empty key) any stored .sfv matches. Otherwise a stored .sfv matches this set when
+    /// either its archive-set key equals the set key (handles directory-prefixed stored names such
+    /// as "DVD1\aln-re4a.sfv" → key "DVD1/aln-re4a"), OR its base name equals the set's base name
+    /// (handles a flat "aln-re4a.sfv" matched to key "DVD1/aln-re4a"). Returns null when no SRR
+    /// was imported or no stored .sfv matches.
     /// </summary>
     private byte[]? LoadEmbeddedSfvBytes(SrrArchiveSet set)
     {
@@ -1479,16 +1488,43 @@ public partial class ReconstructorViewModel : ViewModelBase
         try
         {
             SRRFile srr = SRRFile.Load(srrPath);
-            bool isFlat = string.IsNullOrEmpty(set.Key);
-            return srr.ReadStoredFile(srrPath, name =>
-                name.EndsWith(".sfv", StringComparison.OrdinalIgnoreCase)
-                && (isFlat || RARVolumeIdentifier.GetArchiveSetKey(name).Equals(set.Key, StringComparison.OrdinalIgnoreCase)));
+            return srr.ReadStoredFile(srrPath, name => EmbeddedSfvMatchesSet(name, set));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
             Log(LogTarget.System, $"Could not read embedded SFV for {set.Key}: {ex.Message}");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Whether a stored file is the .sfv for the given set. See <see cref="LoadEmbeddedSfvBytes"/>
+    /// for the matching rules. Shared with the embedded-SFV resolution test so both use one predicate.
+    /// </summary>
+    internal static bool EmbeddedSfvMatchesSet(string storedName, SrrArchiveSet set)
+    {
+        if (!storedName.EndsWith(".sfv", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // Single flat set: any stored .sfv is its SFV.
+        if (string.IsNullOrEmpty(set.Key))
+        {
+            return true;
+        }
+
+        // Key match: handles a directory-prefixed stored name (e.g. "DVD1\aln-re4a.sfv").
+        if (RARVolumeIdentifier.GetArchiveSetKey(storedName).Equals(set.Key, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // Base-name match: handles a flat stored name (e.g. "aln-re4a.sfv") whose set key carries a
+        // directory prefix. The set's base name is the last '/'-segment of its key.
+        string setBaseName = set.Key[(set.Key.LastIndexOf('/') + 1)..];
+        string storedBaseName = Path.GetFileNameWithoutExtension(storedName);
+        return storedBaseName.Equals(setBaseName, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
