@@ -1155,35 +1155,17 @@ public partial class ReconstructorViewModel : ViewModelBase
 
         try
         {
-            BruteForceOptions options = BuildBruteForceOptions();
-
             Log(LogTarget.System, "Starting brute-force...");
             Log(LogTarget.System, $"WinRAR: {WinRarPath}");
             Log(LogTarget.System, $"Release: {ReleasePath}");
             Log(LogTarget.System, $"Output: {OutputPath}");
 
-            // Run entirely on a background thread so the UI stays responsive
-            // during setup (directory enumeration, input validation, etc.)
-            BruteForceRunResult runResult = await Task.Run(() => _bruteForceService.RunAsync(options, token), token);
-            bool success = runResult.Success;
+            await RunArchiveSetsAsync(token);
 
             // A Stop during RAR execution cancels the run but returns normally (the library
             // swallows the process's OperationCanceledException), so detect the cancelled token
             // here and report "Cancelled" rather than the misleading "No match found".
             token.ThrowIfCancellationRequested();
-
-            // Mark final version entry
-            _progress.CompleteActiveVersion(success ? "Match" : "No Match");
-
-            ProgressMessage = success ? "Match found!" : "No match found.";
-            PhaseDescription = success ? "Complete \u2014 Match Found!" : "Complete \u2014 No Match";
-            ProgressPercent = 100;
-            ProgressPercentText = "100%";
-            if (_progress.LastOperationSize > 0)
-            {
-                TestCountText = $"Test {_progress.LastOperationSize:N0} of {_progress.LastOperationSize:N0}";
-            }
-            Log(LogTarget.System, success ? "Brute-force completed: match found!" : "Brute-force completed: no match.");
         }
         catch (OperationCanceledException)
         {
@@ -1219,6 +1201,401 @@ public partial class ReconstructorViewModel : ViewModelBase
             _cts?.Dispose();
             _cts = null;
         }
+    }
+
+    // ── Per-archive-set reconstruction loop ──
+
+    /// <summary>
+    /// Reconstructs each archive set independently: per-set input/CRCs/metadata, isolated work dirs,
+    /// subfolder-preserving relocation, and seeded-with-fallback cross-set search. A single root set
+    /// runs exactly as before (work dir = OutputPath, no relocation, byte-identical output). A
+    /// failure in one set is recorded and the loop continues to the next; a cancellation stops the
+    /// loop, cleans the in-flight set, and leaves completed sets intact.
+    /// </summary>
+    private async Task RunArchiveSetsAsync(CancellationToken token)
+    {
+        SharedReconstructionSettings shared = BuildSharedSettings();
+
+        // For the legacy / no-SRR single flat set the original RAR names may be empty; fall back to
+        // the verification SFV's RAR-volume entries so output renaming still works (matches the old
+        // ResolveOutputRenameNames behaviour). When an SRR was imported its names take precedence.
+        IReadOnlyList<string> flatNames = _import.OriginalRarFileNames.Count > 0
+            ? _import.OriginalRarFileNames
+            : ResolveSfvVolumeNames();
+
+        IReadOnlyList<SrrArchiveSet> sets = ArchiveSetPlanner.ResolveSets(
+            _import.ArchiveSets, _import.SRRFilePath, flatNames, _import.ArchiveFiles);
+
+        SFVFile? userSfv = TryLoadUserSfv(VerificationPath);
+
+        var outcomes = new List<SetOutcome>();
+        WinningCombo? seed = null;
+
+        if (sets.Count > 1)
+        {
+            Log(LogTarget.System, $"Reconstructing {sets.Count} archive sets independently.");
+        }
+
+        for (int i = 0; i < sets.Count; i++)
+        {
+            SrrArchiveSet set = sets[i];
+            string label = string.IsNullOrEmpty(set.Key) ? "(release)" : set.Key;
+            if (sets.Count > 1)
+            {
+                Log(LogTarget.System, $"=== Set {i + 1}/{sets.Count}: {label} ===");
+            }
+
+            byte[]? embedded = LoadEmbeddedSfvBytes(set);
+            Dictionary<string, string> expected = ArchiveSetPlanner.BuildExpectedVolumeCrcs(set, embedded, userSfv);
+
+            // Full-volume verification needs a per-volume CRC for every volume; without them we
+            // cannot honestly verify the set, so skip it rather than report a false success.
+            if (shared.CompleteAllVolumes && expected.Count < set.VolumeNames.Count)
+            {
+                Log(LogTarget.System, $"Set {label}: no per-volume CRCs to verify; supply its .sfv. Skipping.");
+                outcomes.Add(new SetOutcome(set, label, Success: false, Skipped: true));
+                continue;
+            }
+
+            BruteForceOptions options = ArchiveSetPlanner.BuildOptionsForSet(set, shared, expected);
+
+            bool success;
+            WinningCombo? combo;
+            try
+            {
+                (success, combo) = await RunSingleSetAsync(label, options, seed, sets.Count, token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // A set's own failure (e.g. an InvalidDataException from input-CRC validation) must
+                // not abort the whole run — record it and move on to the next set.
+                Log(LogTarget.System, $"Set {label} failed: {ex.Message}");
+                CleanupWorkRoot(options.OutputDirectoryPath, set, sets.Count);
+                outcomes.Add(new SetOutcome(set, label, Success: false, Skipped: false));
+                continue;
+            }
+
+            if (token.IsCancellationRequested)
+            {
+                CleanupWorkRoot(options.OutputDirectoryPath, set, sets.Count);
+                break;
+            }
+
+            if (success)
+            {
+                seed ??= combo;
+                RelocateVerifiedOutput(options.OutputDirectoryPath, set, sets.Count);
+            }
+
+            outcomes.Add(new SetOutcome(set, label, success, Skipped: false));
+        }
+
+        ReportSetSummary(outcomes, sets.Count, token.IsCancellationRequested);
+    }
+
+    /// <summary>
+    /// Runs one set's brute force. For later sets a captured winning combo is tried first (seeding);
+    /// only if it fails (and the run was not cancelled) is the full option matrix run. Returns the
+    /// set's success and the winning combo (for seeding subsequent sets).
+    /// </summary>
+    private async Task<(bool Success, WinningCombo? Combo)> RunSingleSetAsync(
+        string label, BruteForceOptions options, WinningCombo? seed, int setCount, CancellationToken token)
+    {
+        BruteForceRunResult result;
+        if (seed is not null && setCount > 1)
+        {
+            BruteForceOptions narrowed = ArchiveSetPlanner.NarrowToCombo(options, seed);
+            result = await Task.Run(() => _bruteForceService.RunAsync(narrowed, token), token);
+            if (!result.Success && !token.IsCancellationRequested)
+            {
+                Log(LogTarget.System, $"Seed combo did not reproduce {label}; running full search.");
+                result = await Task.Run(() => _bruteForceService.RunAsync(options, token), token);
+            }
+        }
+        else
+        {
+            result = await Task.Run(() => _bruteForceService.RunAsync(options, token), token);
+        }
+
+        return (result.Success, result.Combo);
+    }
+
+    /// <summary>One archive set's reconstruction outcome.</summary>
+    private readonly record struct SetOutcome(SrrArchiveSet Set, string Label, bool Success, bool Skipped);
+
+    /// <summary>Captures the non-per-set toggles, version ranges, command-line matrix, and release-wide SRR data.</summary>
+    private SharedReconstructionSettings BuildSharedSettings()
+    {
+        RarSwitchSettings switches = BuildSwitchSettings();
+        HashType hashType = Path.GetExtension(VerificationPath).Equals(".sha1", StringComparison.OrdinalIgnoreCase)
+            ? HashType.SHA1
+            : HashType.CRC32;
+
+        return new SharedReconstructionSettings
+        {
+            WinRarPath = WinRarPath,
+            ReleasePath = ReleasePath,
+            OutputPath = OutputPath,
+            RarVersions = RarCommandLineBuilder.BuildVersionRanges(switches),
+            CommandLineArguments = RarCommandLineBuilder.BuildCommandLineArguments(switches),
+            HashType = hashType,
+            VerificationHashes = LoadVerificationHashes(hashType),
+            SetFileArchiveAttribute = ToTriState(FileA),
+            SetFileNotContentIndexedAttribute = ToTriState(FileI),
+            DeleteRARFiles = DeleteRARFiles,
+            DeleteDuplicateCRCFiles = DeleteDuplicateCRCFiles,
+            StopOnFirstMatch = StopOnFirstMatch,
+            CompleteAllVolumes = CompleteAllVolumes,
+            RenameToReleaseNames = RenameToReleaseNames,
+            EnableHostOSPatching = EnableHostOSPatching,
+            UseOldVolumeNaming = UseOldVolumeNaming,
+            ArchiveComment = _import.ArchiveComment,
+            ArchiveCommentBytes = _import.ArchiveCommentBytes,
+            CmtCompressedData = _import.CmtCompressedData,
+            CmtCompressionMethod = _import.CmtCompressionMethod,
+            DetectedCmtHostOS = _import.DetectedCmtHostOS,
+            DetectedCmtFileTime = _import.DetectedCmtFileTime,
+            DetectedCmtFileAttributes = _import.DetectedCmtFileAttributes,
+            CustomPackerDetected = _import.CustomPackerType,
+            SRRFilePath = _import.SRRFilePath,
+            ArchiveDirectories = _import.ArchiveDirectories,
+            DirectoryTimestamps = _import.DirTimestamps,
+            DirectoryCreationTimes = _import.DirCreationTimes,
+            DirectoryAccessTimes = _import.DirAccessTimes,
+        };
+    }
+
+    /// <summary>
+    /// Reads every expected output hash from the verification file: CRC32 entries from a .sfv or
+    /// SHA1 entries from a .sha1. These seed each set's first-volume gate. Empty when the file is
+    /// missing or unreadable (validation has already confirmed it exists and parses by this point).
+    /// </summary>
+    private IReadOnlyCollection<string> LoadVerificationHashes(HashType hashType)
+    {
+        if (string.IsNullOrWhiteSpace(VerificationPath) || !File.Exists(VerificationPath))
+        {
+            return [];
+        }
+
+        try
+        {
+            return hashType == HashType.SHA1
+                ? [.. SHA1File.ReadFile(VerificationPath).Entries.Select(e => e.SHA1)]
+                : [.. SFVFile.ReadFile(VerificationPath).Entries.Select(e => e.CRC)];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            Log(LogTarget.System, $"Could not read verification hashes: {ex.Message}");
+            return [];
+        }
+    }
+
+    /// <summary>Loads the user-supplied verification SFV (null for .sha1 or any non-SFV path).</summary>
+    private static SFVFile? TryLoadUserSfv(string verificationPath)
+    {
+        if (string.IsNullOrWhiteSpace(verificationPath)
+            || !Path.GetExtension(verificationPath).Equals(".sfv", StringComparison.OrdinalIgnoreCase)
+            || !File.Exists(verificationPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            return SFVFile.ReadFile(verificationPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The RAR-volume filenames listed in the verification SFV, in SFV order. Used as the flat set's
+    /// volume/rename names when no SRR supplied them. Empty when there is no readable .sfv.
+    /// </summary>
+    private List<string> ResolveSfvVolumeNames()
+    {
+        if (string.IsNullOrWhiteSpace(VerificationPath)
+            || !Path.GetExtension(VerificationPath).Equals(".sfv", StringComparison.OrdinalIgnoreCase)
+            || !File.Exists(VerificationPath))
+        {
+            return [];
+        }
+
+        try
+        {
+            return [.. SFVFile.ReadFile(VerificationPath).Entries
+                .Select(e => e.FileName)
+                .Where(RARVolumeIdentifier.IsRarVolume)];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            Log(LogTarget.System, $"Could not read SFV for output naming: {ex.Message}");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Reads the embedded SFV bytes for a set from the imported SRR's stored files, matching the
+    /// set by its volume key. For a single flat set (empty key) any stored .sfv matches. Returns
+    /// null when no SRR was imported or no stored .sfv matches.
+    /// </summary>
+    private byte[]? LoadEmbeddedSfvBytes(SrrArchiveSet set)
+    {
+        string? srrPath = _import.SRRFilePath;
+        if (string.IsNullOrWhiteSpace(srrPath) || !File.Exists(srrPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            SRRFile srr = SRRFile.Load(srrPath);
+            bool isFlat = string.IsNullOrEmpty(set.Key);
+            return srr.ReadStoredFile(srrPath, name =>
+                name.EndsWith(".sfv", StringComparison.OrdinalIgnoreCase)
+                && (isFlat || RARVolumeIdentifier.GetArchiveSetKey(name).Equals(set.Key, StringComparison.OrdinalIgnoreCase)));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            Log(LogTarget.System, $"Could not read embedded SFV for {set.Key}: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Moves a multi-set's verified volumes from its isolated work dir into the subfolder-preserving
+    /// final layout (<c>OutputPath\output\&lt;set.Directory&gt;\</c>), then deletes the scratch dir. A
+    /// single root set is a no-op: its output already sits at <c>OutputPath\output\</c>.
+    /// </summary>
+    private void RelocateVerifiedOutput(string workRoot, SrrArchiveSet set, int setCount)
+    {
+        if (setCount <= 1)
+        {
+            return;
+        }
+
+        try
+        {
+            string sourceDir = Path.Combine(workRoot, "output");
+            if (!Directory.Exists(sourceDir))
+            {
+                return;
+            }
+
+            string targetDir = Path.Combine(OutputPath, "output", set.Directory.Replace('/', Path.DirectorySeparatorChar));
+
+            // Clean a pre-existing target subfolder so re-runs are deterministic. Only when this set
+            // owns a distinct subfolder — multiple root-level sets (e.g. cd1/cd2 with Directory == "")
+            // share OutputPath\output\ and are distinguished by filename, so deleting it would wipe a
+            // sibling root set's already-relocated volumes.
+            if (!string.IsNullOrEmpty(set.Directory) && Directory.Exists(targetDir))
+            {
+                Directory.Delete(targetDir, recursive: true);
+            }
+
+            Directory.CreateDirectory(targetDir);
+
+            foreach (string file in Directory.GetFiles(sourceDir))
+            {
+                string dest = Path.Combine(targetDir, Path.GetFileName(file));
+                File.Move(file, dest, overwrite: true);
+            }
+
+            Directory.Delete(workRoot, recursive: true);
+            Log(LogTarget.System, $"Set {set.Key}: output -> {targetDir}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log(LogTarget.System, $"Failed to relocate output for {set.Key}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Removes an in-flight multi-set's scratch dir and any partial final subfolder so a cancelled
+    /// or failed set leaves no half-written output behind. No-op for a single root set.
+    /// </summary>
+    private void CleanupWorkRoot(string workRoot, SrrArchiveSet set, int setCount)
+    {
+        if (setCount <= 1)
+        {
+            return;
+        }
+
+        try
+        {
+            if (Directory.Exists(workRoot))
+            {
+                Directory.Delete(workRoot, recursive: true);
+            }
+
+            string targetDir = Path.Combine(OutputPath, "output", set.Directory.Replace('/', Path.DirectorySeparatorChar));
+            if (!string.IsNullOrEmpty(set.Directory) && Directory.Exists(targetDir))
+            {
+                Directory.Delete(targetDir, recursive: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log(LogTarget.System, $"Failed to clean up work dir for {set.Key}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Logs a per-set pass/fail/skip/cancelled summary and sets the overall progress message and
+    /// <see cref="LastRunSucceeded"/>. Overall success requires every set to have passed with none
+    /// skipped and no cancellation.
+    /// </summary>
+    private void ReportSetSummary(IReadOnlyList<SetOutcome> outcomes, int totalSets, bool cancelled)
+    {
+        bool multi = totalSets > 1;
+
+        if (multi)
+        {
+            Log(LogTarget.System, "=== Reconstruction summary ===");
+            foreach (SetOutcome o in outcomes)
+            {
+                string mark = o.Skipped ? "skipped" : o.Success ? "OK" : "failed";
+                Log(LogTarget.System, $"  [{mark}] {o.Label}");
+            }
+
+            int notAttempted = totalSets - outcomes.Count;
+            if (notAttempted > 0)
+            {
+                Log(LogTarget.System, $"  [not attempted] {notAttempted} set(s)");
+            }
+        }
+
+        if (cancelled)
+        {
+            // The outer cancellation handler owns the final version-row status and progress message.
+            return;
+        }
+
+        ProgressPercent = 100;
+        ProgressPercentText = "100%";
+        if (_progress.LastOperationSize > 0)
+        {
+            TestCountText = $"Test {_progress.LastOperationSize:N0} of {_progress.LastOperationSize:N0}";
+        }
+
+        bool attemptedAll = outcomes.Count == totalSets;
+        bool allOk = attemptedAll && outcomes.All(o => o is { Success: true, Skipped: false });
+        bool anySuccess = outcomes.Any(o => o is { Success: true, Skipped: false });
+
+        _progress.CompleteActiveVersion(anySuccess ? "Match" : "No Match");
+
+        ProgressMessage = allOk ? "Match found!" : "No match found.";
+        PhaseDescription = allOk ? "Complete — Match Found!" : "Complete — No Match";
+        LastRunSucceeded = allOk;
+        Log(LogTarget.System, allOk
+            ? "Brute-force completed: all sets matched!"
+            : "Brute-force completed: not all sets matched.");
     }
 
     [RelayCommand]
@@ -1314,127 +1691,6 @@ public partial class ReconstructorViewModel : ViewModelBase
     }
 
     // ── Build Options ──
-
-    private BruteForceOptions BuildBruteForceOptions()
-    {
-        var options = new BruteForceOptions(WinRarPath, ReleasePath, OutputPath)
-        {
-            RAROptions = BuildRAROptions()
-        };
-
-        // Load hashes from verification file
-        if (!string.IsNullOrWhiteSpace(VerificationPath))
-        {
-            string ext = Path.GetExtension(VerificationPath).ToLowerInvariant();
-            if (ext == ".sfv")
-            {
-                var sfv = SFVFile.ReadFile(VerificationPath);
-                foreach (SFVFileEntry entry in sfv.Entries)
-                {
-                    options.Hashes.Add(entry.CRC);
-                }
-
-                options.HashType = HashType.CRC32;
-            }
-            else if (ext == ".sha1")
-            {
-                var sha1 = SHA1File.ReadFile(VerificationPath);
-                foreach (SHA1FileEntry entry in sha1.Entries)
-                {
-                    options.Hashes.Add(entry.SHA1);
-                }
-
-                options.HashType = HashType.SHA1;
-            }
-        }
-
-        return options;
-    }
-
-    private RAROptions BuildRAROptions()
-    {
-        RarSwitchSettings switches = BuildSwitchSettings();
-        List<VersionRange> rarVersions = RarCommandLineBuilder.BuildVersionRanges(switches);
-
-        (bool renameOutput, List<string> renameNames) = ResolveOutputRenameNames();
-
-        return new()
-        {
-            SetFileArchiveAttribute = ToTriState(FileA),
-            SetFileNotContentIndexedAttribute = ToTriState(FileI),
-            CommandLineArguments = RarCommandLineBuilder.BuildCommandLineArguments(switches),
-            RARVersions = rarVersions,
-            DeleteRARFiles = DeleteRARFiles,
-            DeleteDuplicateCRCFiles = DeleteDuplicateCRCFiles,
-            StopOnFirstMatch = StopOnFirstMatch,
-            CompleteAllVolumes = CompleteAllVolumes,
-            RenameToOriginalNames = renameOutput,
-            OriginalRarFileNames = renameNames,
-            ArchiveFileCrcs = new Dictionary<string, string>(_import.ArchiveFileCrcs, StringComparer.OrdinalIgnoreCase),
-            ArchiveFilePaths = new HashSet<string>(_import.ArchiveFiles, StringComparer.OrdinalIgnoreCase),
-            ArchiveDirectoryPaths = new HashSet<string>(_import.ArchiveDirectories, StringComparer.OrdinalIgnoreCase),
-            DirectoryTimestamps = new Dictionary<string, DateTime>(_import.DirTimestamps, StringComparer.OrdinalIgnoreCase),
-            DirectoryCreationTimes = new Dictionary<string, DateTime>(_import.DirCreationTimes, StringComparer.OrdinalIgnoreCase),
-            DirectoryAccessTimes = new Dictionary<string, DateTime>(_import.DirAccessTimes, StringComparer.OrdinalIgnoreCase),
-            FileTimestamps = new Dictionary<string, DateTime>(_import.FileTimestamps, StringComparer.OrdinalIgnoreCase),
-            FileCreationTimes = new Dictionary<string, DateTime>(_import.FileCreationTimes, StringComparer.OrdinalIgnoreCase),
-            FileAccessTimes = new Dictionary<string, DateTime>(_import.FileAccessTimes, StringComparer.OrdinalIgnoreCase),
-            ArchiveComment = _import.ArchiveComment,
-            ArchiveCommentBytes = _import.ArchiveCommentBytes,
-            CmtCompressedData = _import.CmtCompressedData,
-            CmtCompressionMethod = _import.CmtCompressionMethod,
-            EnableHostOSPatching = EnableHostOSPatching,
-            DetectedFileHostOS = _import.DetectedFileHostOS,
-            DetectedFileAttributes = _import.DetectedFileAttributes,
-            DetectedCmtHostOS = _import.DetectedCmtHostOS,
-            DetectedCmtFileTime = _import.DetectedCmtFileTime,
-            DetectedCmtFileAttributes = _import.DetectedCmtFileAttributes,
-            DetectedLargeFlag = _import.DetectedLargeFlag,
-            DetectedHighPackSize = _import.DetectedHighPackSize,
-            DetectedHighUnpSize = _import.DetectedHighUnpSize,
-            UseOldVolumeNaming = UseOldVolumeNaming,
-            CustomPackerDetected = _import.CustomPackerType,
-            SRRFilePath = _import.SRRFilePath
-        };
-    }
-
-    /// <summary>
-    /// Picks the names the matched output volumes are renamed to. Uses the SRR's original RAR names
-    /// when an SRR is imported (they are exact, in volume order); without an SRR, the RAR volume
-    /// entries of the verification .sfv are used (in SFV order).
-    /// </summary>
-    private (bool Rename, List<string> Names) ResolveOutputRenameNames()
-    {
-        if (RenameToReleaseNames && _import.OriginalRarFileNames.Count > 0)
-        {
-            return (true, _import.OriginalRarFileNames);
-        }
-
-        if (RenameToReleaseNames
-            && !string.IsNullOrWhiteSpace(VerificationPath)
-            && Path.GetExtension(VerificationPath).Equals(".sfv", StringComparison.OrdinalIgnoreCase)
-            && File.Exists(VerificationPath))
-        {
-            try
-            {
-                List<string> sfvNames = SFVFile.ReadFile(VerificationPath).Entries
-                    .Select(e => e.FileName)
-                    .Where(RARVolumeIdentifier.IsRarVolume)
-                    .ToList();
-
-                if (sfvNames.Count > 0)
-                {
-                    return (true, sfvNames);
-                }
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                Log(LogTarget.System, $"Could not read SFV for output renaming: {ex.Message}");
-            }
-        }
-
-        return (RenameToReleaseNames, _import.OriginalRarFileNames);
-    }
 
     /// <summary>Captures the current RAR switch toggles for <see cref="RarCommandLineBuilder"/>.</summary>
     private RarSwitchSettings BuildSwitchSettings() => new()
