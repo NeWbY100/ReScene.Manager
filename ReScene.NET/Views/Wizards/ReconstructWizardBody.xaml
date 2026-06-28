@@ -127,6 +127,8 @@
       </DockPanel>
       <c:FieldStatusLine Status="{Binding VerifyStatus}" />
 
+      <c:FieldStatusLine Status="{Binding ArchiveSetStatus}" />
+
       <CheckBox Content="Recreate the whole release"
                 IsChecked="{Binding CompleteAllVolumes}" Margin="0,14,0,2" />
       <TextBlock Text="When a match is found, let WinRAR finish writing every .rar volume of the release instead of stopping after the first one. Takes longer but gives you the complete archive set."

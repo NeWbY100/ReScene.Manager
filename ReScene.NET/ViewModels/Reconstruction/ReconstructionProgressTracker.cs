@@ -21,6 +21,7 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     Func<string, string, string, TVersionRow> createRow,
     Action<TVersionRow, string> setStatus,
     Action<TVersionRow, string> setResult,
+    Action<TVersionRow, string> setSetText,
     Func<TVersionRow, string> getFullCommandLine,
     Action<LogTarget, string> appendLog)
 {
@@ -28,6 +29,7 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     private readonly Func<string, string, string, TVersionRow> _createRow = createRow;
     private readonly Action<TVersionRow, string> _setStatus = setStatus;
     private readonly Action<TVersionRow, string> _setResult = setResult;
+    private readonly Action<TVersionRow, string> _setSetText = setSetText;
     private readonly Func<TVersionRow, string> _getFullCommandLine = getFullCommandLine;
     private readonly Action<LogTarget, string> _appendLog = appendLog;
 
@@ -45,6 +47,7 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     private string _lastPhaseDescription = "";
     private int _activeVersionIndex = -1;
     private string _activeVersionKey = "";
+    private string _activeSetLabel = "";
 
     public long LastOperationSize => _lastOperationSize;
     public TimeSpan Elapsed => _stopwatch.Elapsed;
@@ -60,6 +63,7 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
         _lastPhaseDescription = "";
         _activeVersionIndex = -1;
         _activeVersionKey = "";
+        _activeSetLabel = "";
     }
 
     /// <summary>Stops the elapsed stopwatch (run finished/cancelled/errored).</summary>
@@ -67,6 +71,12 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     {
         _stopwatch.Stop();
     }
+
+    /// <summary>
+    /// Sets the archive-set label that will be stamped onto new version rows. The view-model calls
+    /// this before each set's <c>RunAsync</c>; an empty label is used for single-set releases.
+    /// </summary>
+    public void SetActiveSet(string label) => _activeSetLabel = label;
 
     /// <summary>Clears all bookkeeping (used by Reset before a fresh run is configured).</summary>
     public void Clear()
@@ -80,6 +90,7 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
         _lastPhaseDescription = "";
         _activeVersionIndex = -1;
         _activeVersionKey = "";
+        _activeSetLabel = "";
         _versionEntries.Clear();
     }
 
@@ -157,6 +168,7 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
             }
 
             TVersionRow entry = _createRow(versionLabel, e.RARCommandLineArguments, e.RARVersionDirectoryPath);
+            _setSetText(entry, _activeSetLabel);
             _versionEntries.Add(entry);
             _activeVersionIndex = _versionEntries.Count - 1;
             _activeVersionKey = key;

@@ -1,0 +1,98 @@
+using CommunityToolkit.Mvvm.Input;
+using ReScene.Core;
+using ReScene.NET.Models;
+using ReScene.NET.Services;
+using ReScene.NET.ViewModels;
+
+namespace ReScene.NET.Tests;
+
+/// <summary>
+/// Verifies that <see cref="ReconstructorViewModel.ArchiveSetStatus"/> is set correctly after
+/// importing an SRR: Info for a multi-set release, None for a single-set release.
+/// </summary>
+public class ReconstructorViewModelArchiveSetTests
+{
+    // ── Fakes ───────────────────────────────────────────────
+
+    /// <summary>Inert brute-force service — never invoked during import-only tests.</summary>
+    private sealed class InertBruteForceService : IBruteForceService
+    {
+        public event EventHandler<BruteForceProgressEventArgs>? Progress { add { } remove { } }
+        public event EventHandler<BruteForceStatusChangedEventArgs>? StatusChanged { add { } remove { } }
+        public event EventHandler<LogEventArgs>? LogMessage { add { } remove { } }
+        public event EventHandler<FileCopyProgressEventArgs>? FileCopyProgress { add { } remove { } }
+        public event EventHandler<CRCValidationProgressEventArgs>? CRCValidationProgress { add { } remove { } }
+        public event EventHandler<TimestampPreservationFailedEventArgs>? TimestampPreservationFailed { add { } remove { } }
+
+        public Task<BruteForceRunResult> RunAsync(BruteForceOptions options, CancellationToken cancellationToken = default)
+            => Task.FromResult(new BruteForceRunResult(true, null));
+    }
+
+    /// <summary>Dispatcher that runs everything inline so tests need no UI thread.</summary>
+    private sealed class InlineUiDispatcher : IUiDispatcher
+    {
+        public void Invoke(Action action) => action();
+        public void Post(Action action) => action();
+        public void Post(Action action, System.Windows.Threading.DispatcherPriority priority) => action();
+        public bool CheckAccess() => true;
+    }
+
+    /// <summary>
+    /// Dialog service that returns <see cref="FixturePath"/> from <see cref="OpenFileAsync"/> (first
+    /// call only) and behaves as no-op for everything else.
+    /// </summary>
+    private sealed class FixtureDialogService(string fixturePath) : NoOpFileDialogService
+    {
+        private int _openFileCalls;
+
+        public override Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters)
+        {
+            if (_openFileCalls++ == 0)
+            {
+                return Task.FromResult<string?>(fixturePath);
+            }
+            return Task.FromResult<string?>(null);
+        }
+    }
+
+    private static ReconstructorViewModel CreateVm(string fixturePath)
+    {
+        string srrPath = Path.Combine(AppContext.BaseDirectory, "TestData", fixturePath);
+        Assert.True(File.Exists(srrPath), $"Fixture not found: {srrPath}");
+
+        return new ReconstructorViewModel(
+            new InertBruteForceService(),
+            new FixtureDialogService(srrPath),
+            settingsService: null,
+            uiDispatcher: new InlineUiDispatcher());
+    }
+
+    private static async Task ImportAsync(ReconstructorViewModel vm)
+    {
+        await ((IAsyncRelayCommand)vm.ImportSRRCommand).ExecuteAsync(null);
+    }
+
+    // ── Tests ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task ArchiveSetStatus_MultipleSets_ShowsInfo()
+    {
+        ReconstructorViewModel vm = CreateVm(
+            @"cleanup_script\007.A.View.To.A.Kill.1985.UE.iNTERNAL.DVDRip.XviD-iNCiTE.fine_2cd.srr");
+
+        await ImportAsync(vm);
+
+        Assert.Equal(FieldState.Info, vm.ArchiveSetStatus.State);
+        Assert.Contains("2 archive sets", vm.ArchiveSetStatus.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ArchiveSetStatus_SingleSet_IsNone()
+    {
+        ReconstructorViewModel vm = CreateVm("store_little.srr");
+
+        await ImportAsync(vm);
+
+        Assert.Equal(FieldState.None, vm.ArchiveSetStatus.State);
+    }
+}

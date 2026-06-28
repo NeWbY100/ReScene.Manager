@@ -106,6 +106,7 @@
                 </ContextMenu>
             </DataGrid.ContextMenu>
             <DataGrid.Columns>
+                <DataGridTextColumn Header="Set" Binding="{Binding SetText}" Width="80" />
                 <DataGridTextColumn Header="Version" Binding="{Binding VersionName}" Width="140" />
                 <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
                 <DataGridTextColumn Header="Result" Binding="{Binding Result}" Width="80" />

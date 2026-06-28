@@ -145,6 +145,8 @@
                             <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}" />
                         </DockPanel>
                         <c:FieldStatusLine Status="{Binding OutputStatus}" Margin="0,1,0,2" />
+
+                        <c:FieldStatusLine Status="{Binding ArchiveSetStatus}" Margin="0,1,0,2" />
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

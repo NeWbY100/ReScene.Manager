@@ -61,6 +61,7 @@ public partial class ReconstructorViewModel : ViewModelBase
             createRow: (label, args, dir) => new VersionEntry { VersionName = label, Arguments = args, VersionDirectory = dir },
             setStatus: (row, status) => row.Status = status,
             setResult: (row, result) => row.Result = result,
+            setSetText: (row, setText) => row.SetText = setText,
             getFullCommandLine: row => row.FullCommandLine,
             appendLog: AppendLog);
 
@@ -176,6 +177,9 @@ public partial class ReconstructorViewModel : ViewModelBase
 
     [ObservableProperty]
     public partial FieldStatus OutputStatus { get; set; } = FieldStatus.None;
+
+    [ObservableProperty]
+    public partial FieldStatus ArchiveSetStatus { get; set; } = FieldStatus.None;
 
     partial void OnWinRarPathChanged(string value) =>
         WinRarStatus = ReconstructorFieldGuidance.EvaluateWinRarPath(value);
@@ -320,6 +324,9 @@ public partial class ReconstructorViewModel : ViewModelBase
         [ObservableProperty] public partial string Status { get; set; } = "Testing";
         [ObservableProperty] public partial string Arguments { get; set; } = "";
         [ObservableProperty] public partial string Result { get; set; } = "";
+
+        /// <summary>Label of the archive set this test belongs to (empty for single-set releases).</summary>
+        public string SetText { get; set; } = "";
 
         /// <summary>
         /// Directory of the WinRAR version this entry tested; the run executes rar.exe inside it.
@@ -550,6 +557,7 @@ public partial class ReconstructorViewModel : ViewModelBase
 
         // Imported SRR + detected header state — back to empty/null
         _import.Clear();
+        ArchiveSetStatus = FieldStatus.None;
 
         // Progress
         ProgressPercent = 0;
@@ -691,6 +699,10 @@ public partial class ReconstructorViewModel : ViewModelBase
             _import.ArchiveFileCrcs = info.ArchiveFileCrcs;
             _import.OriginalRarFileNames = info.OriginalRarFileNames;
             _import.ArchiveSets = info.ArchiveSets;
+            ArchiveSetStatus = _import.ArchiveSets.Count > 1
+                ? FieldStatus.Info($"This release has {_import.ArchiveSets.Count} archive sets " +
+                    $"({string.Join(", ", _import.ArchiveSets.Select(s => string.IsNullOrEmpty(s.Directory) ? s.Key : s.Directory))}); each is reconstructed independently.")
+                : FieldStatus.None;
             _import.ArchiveComment = info.ArchiveComment;
             _import.ArchiveCommentBytes = info.ArchiveCommentBytes;
             _import.CmtCompressedData = info.CmtCompressedData;
@@ -1261,6 +1273,9 @@ public partial class ReconstructorViewModel : ViewModelBase
             }
 
             BruteForceOptions options = ArchiveSetPlanner.BuildOptionsForSet(set, shared, expected);
+
+            // Tell the progress tracker which set is active so new rows are stamped with the label.
+            _progress.SetActiveSet(sets.Count > 1 ? label : string.Empty);
 
             bool success;
             WinningCombo? combo;
