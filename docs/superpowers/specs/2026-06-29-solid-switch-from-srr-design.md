@@ -71,15 +71,21 @@ loading (the new field defaults off).
 
 ### SRR import drives the switch (the fix)
 
-- `SrrSwitchMapper.SwitchDiff` gains `bool? SwitchS` (alongside the existing `bool? SwitchSDash`).
+- `SrrSwitchMapper.SwitchDiff` gains `bool? SwitchS` placed **immediately before** `bool? SwitchSDash`:
+  `SwitchDiff(CompressionMap? Compression, DictionaryMap? Dictionary, bool? SwitchS, bool? SwitchSDash, FormatMap? Format)`.
+  The only construction site is `Map` (which uses named arguments, so order is cosmetic) and every
+  test reads members by name — no positional call site breaks.
 - `SrrSwitchMapper.Map` sets the pair from `srr.IsSolidArchive`:
   - `true` (solid) → `SwitchS = true`, `SwitchSDash = false`
   - `false` (non-solid) → `SwitchS = false`, `SwitchSDash = true`
   - `null` (unknown) → both `null` (toggles untouched)
-- The view-model's apply step (around `ReconstructorViewModel.cs:2177-2180`) applies both: when
-  `diff.SwitchS is { } s` → `SwitchS = s`; when `diff.SwitchSDash is { } sd` → `SwitchSDash = sd`. The
-  mapper always provides a consistent pair (one true, one false), so the exclusion hooks never
-  conflict regardless of apply order.
+- The view-model's apply step (around `ReconstructorViewModel.cs:2177-2180`) applies both, **`SwitchS`
+  first then `SwitchSDash`** (the "true one first" convention): when `diff.SwitchS is { } s` →
+  `SwitchS = s`; when `diff.SwitchSDash is { } sd` → `SwitchSDash = sd`. The mapper always provides a
+  consistent pair (one true, one false), so the exclusion hooks never clear the value about to be set,
+  regardless of order. Add a System-log line for the solid state for parity with the surrounding
+  Compression/Dictionary/Format apply logs (e.g. `"Solid archiving: -s"` / `"-s-"`) — the current
+  `SwitchSDash`-only apply block emits no log line.
 
 ### Config round-trip
 
@@ -109,13 +115,25 @@ toggles are left as the user set them, exactly as today.
 
 ## Testing & Verification
 
-- `SrrSwitchMapper` tests: solid SRR → `SwitchS == true && SwitchSDash == false`; non-solid →
-  `SwitchS == false && SwitchSDash == true`; unknown → both null.
-- `RarCommandLineBuilder` tests: `SwitchS` → args contain `-s`; `SwitchSDash` → contain `-s-`;
-  `SwitchS` set → never `-s-` (precedence); neither → neither.
+- `SrrSwitchMapper` tests: **extend the existing** solid/non-solid/unknown tests
+  (`Map_SolidArchiveTrue_*`, `Map_SolidArchiveFalse_*`, `Map_SolidArchiveUnknown_*`), the combined
+  `Map_FullyPopulatedSrr_*`, and `Map_EmptySrr_AllGroupsNull` to also assert `diff.SwitchS` — solid →
+  `SwitchS == true && SwitchSDash == false`; non-solid → `SwitchS == false && SwitchSDash == true`;
+  unknown/empty → `diff.SwitchS == null`. Do not add parallel duplicate tests.
+- `RarCommandLineBuilder` tests: `SwitchS` → args contain `-s` and **not** `-s-` (precedence);
+  `SwitchSDash` (only) → contain `-s-`; neither → neither. Add a positional-order assertion for the
+  `SwitchS=true` case (e.g. `["a", "-r", "-ds", "-s"]`), mirroring the existing
+  `BuildCommandLineArguments_SimpleSwitches_AppearInExpectedOrder` test (which asserts
+  `["a", "-r", "-ds", "-s-"]` and stays green since the `-s-`-only path is unchanged).
 - VM mutual-exclusion tests: setting `SwitchS = true` clears `SwitchSDash`, and setting `SwitchSDash
   = true` clears `SwitchS`.
-- `ReconstructorConfigMapper` test: `SwitchS` round-trips (capture→apply).
+- `ReconstructorConfigMapper` round-trip: **`SwitchS`/`SwitchSDash` are a radio pair** — the
+  mutual-exclusion hook makes "both true" impossible. In `ReconstructorConfigMapperTests`'
+  `StampDistinctiveValues`, set `SwitchS = true; SwitchSDash = false` (a consistent pair) and assert
+  that exact pair after Apply. **Do NOT** add `vm.SwitchS = true` next to the existing
+  `vm.SwitchSDash = true` — that would trip the hook and break the current `Assert.True(vm.SwitchSDash)`
+  at `:193`. Treat it the way the file already treats the `StopOnFirstMatch`/`RenameToReleaseNames`
+  radio pair.
 - Build: clean non-incremental, **0 warnings / 0 errors**; full `ReScene.NET` suite green.
 - Manual: import a solid-release SRR; the advanced tab shows `-s` checked and `-s-` unchecked; the
   System log / brute-force args include `-s`; a non-solid SRR shows `-s-` checked.
