@@ -2,6 +2,12 @@
 
 All notable changes to ReScene.NET are documented here. Releases follow [SemVer](https://semver.org/) and this file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.7.2] — 2026-06-29
+
+### Fixed
+
+- **Solid releases now reconstruct as solid.** When the imported SRR's archive is solid, the RAR Reconstructor enables solid compression (`-s`) instead of defaulting to non-solid — previously a solid original was rebuilt non-solid, which changes the packed bytes for multi-file solid archives (so they couldn't be reconstructed at all). The advanced tab gains a "-s: Solid archiving." checkbox that's set automatically from the SRR and is mutually exclusive with "-s-: Disable solid archiving.".
+
 ## [1.7.1] — 2026-06-29
 
 ### Added
