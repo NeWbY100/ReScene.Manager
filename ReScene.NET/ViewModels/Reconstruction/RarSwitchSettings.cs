@@ -70,6 +70,7 @@ internal sealed record RarSwitchSettings
     public bool SwitchAI { get; init; }
     public bool SwitchR { get; init; }
     public bool SwitchDS { get; init; }
+    public bool SwitchS { get; init; }
     public bool SwitchSDash { get; init; }
     public bool SwitchMT { get; init; }
     public int SwitchMTStart { get; init; }

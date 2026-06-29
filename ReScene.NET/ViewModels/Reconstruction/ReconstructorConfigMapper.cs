@@ -70,6 +70,7 @@ internal static class ReconstructorConfigMapper
         SwitchAI = vm.SwitchAI,
         SwitchR = vm.SwitchR,
         SwitchDS = vm.SwitchDS,
+        SwitchS = vm.SwitchS,
         SwitchSDash = vm.SwitchSDash,
         SwitchMT = vm.SwitchMT,
         SwitchMTStart = vm.SwitchMTStart,
@@ -152,6 +153,7 @@ internal static class ReconstructorConfigMapper
         vm.SwitchAI = c.SwitchAI;
         vm.SwitchR = c.SwitchR;
         vm.SwitchDS = c.SwitchDS;
+        vm.SwitchS = c.SwitchS;
         vm.SwitchSDash = c.SwitchSDash;
         vm.SwitchMT = c.SwitchMT;
         vm.SwitchMTStart = c.SwitchMTStart;

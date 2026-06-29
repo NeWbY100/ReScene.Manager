@@ -75,6 +75,7 @@ public sealed class ReconstructorConfig
     public bool SwitchAI { get; set; }
     public bool SwitchR { get; set; } = true;
     public bool SwitchDS { get; set; }
+    public bool SwitchS { get; set; }
     public bool SwitchSDash { get; set; }
     public bool SwitchMT { get; set; }
     public int SwitchMTStart { get; set; } = 1;

@@ -183,6 +183,30 @@ public sealed class RarCommandLineBuilderTests
     }
 
     [Fact]
+    public void BuildCommandLineArguments_SwitchS_EmitsSolidNotDisable()
+    {
+        var settings = new RarSwitchSettings { Version2 = true, SwitchR = true, SwitchDS = true, SwitchS = true };
+
+        List<RARCommandLineArgument[]> result = RarCommandLineBuilder.BuildCommandLineArguments(settings);
+
+        string[] args = result[0].Select(a => a.Argument).ToArray();
+        Assert.Contains("-s", args);
+        Assert.DoesNotContain("-s-", args);
+        Assert.Equal(["a", "-r", "-ds", "-s"], args);
+    }
+
+    [Fact]
+    public void BuildCommandLineArguments_SwitchS_TakesPrecedenceOverSwitchSDash()
+    {
+        // Defense in depth: even if both reach the builder, only -s is emitted.
+        var settings = new RarSwitchSettings { Version2 = true, SwitchS = true, SwitchSDash = true };
+
+        string[] args = RarCommandLineBuilder.BuildCommandLineArguments(settings)[0].Select(a => a.Argument).ToArray();
+        Assert.Contains("-s", args);
+        Assert.DoesNotContain("-s-", args);
+    }
+
+    [Fact]
     public void BuildCommandLineArguments_VolumeWithOldNaming_AddsVolumeAndVnSwitch()
     {
         var settings = new RarSwitchSettings

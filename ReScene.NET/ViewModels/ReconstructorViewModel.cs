@@ -454,6 +454,7 @@ public partial class ReconstructorViewModel : ViewModelBase
 
     [ObservableProperty] public partial bool SwitchR { get; set; } = true;
     [ObservableProperty] public partial bool SwitchDS { get; set; }
+    [ObservableProperty] public partial bool SwitchS { get; set; }
     [ObservableProperty] public partial bool SwitchSDash { get; set; }
 
     [ObservableProperty]
@@ -507,6 +508,22 @@ public partial class ReconstructorViewModel : ViewModelBase
         if (!value)
         {
             RenameToReleaseNames = false;
+        }
+    }
+
+    partial void OnSwitchSChanged(bool value)
+    {
+        if (value)
+        {
+            SwitchSDash = false;
+        }
+    }
+
+    partial void OnSwitchSDashChanged(bool value)
+    {
+        if (value)
+        {
+            SwitchS = false;
         }
     }
 
@@ -1812,6 +1829,7 @@ public partial class ReconstructorViewModel : ViewModelBase
         SwitchAI = SwitchAI,
         SwitchR = SwitchR,
         SwitchDS = SwitchDS,
+        SwitchS = SwitchS,
         SwitchSDash = SwitchSDash,
         SwitchMT = SwitchMT,
         SwitchMTStart = SwitchMTStart,
@@ -2175,9 +2193,19 @@ public partial class ReconstructorViewModel : ViewModelBase
         }
 
         // Solid archive
+        if (diff.SwitchS is { } switchS)
+        {
+            SwitchS = switchS;
+        }
+
         if (diff.SwitchSDash is { } switchSDash)
         {
             SwitchSDash = switchSDash;
+        }
+
+        if (diff.SwitchS is { } || diff.SwitchSDash is { })
+        {
+            Log(LogTarget.System, SwitchS ? "Solid archiving: -s" : "Solid archiving: -s-");
         }
 
         // Archive format

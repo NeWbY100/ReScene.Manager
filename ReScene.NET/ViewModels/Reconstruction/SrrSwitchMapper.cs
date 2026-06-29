@@ -41,6 +41,7 @@ internal static class SrrSwitchMapper
     public readonly record struct SwitchDiff(
         CompressionMap? Compression,
         DictionaryMap? Dictionary,
+        bool? SwitchS,
         bool? SwitchSDash,
         FormatMap? Format);
 
@@ -50,6 +51,7 @@ internal static class SrrSwitchMapper
     public static SwitchDiff Map(SRRFile srr) => new(
         Compression: MapCompression(srr),
         Dictionary: MapDictionary(srr),
+        SwitchS: srr.IsSolidArchive,
         SwitchSDash: srr.IsSolidArchive.HasValue ? !srr.IsSolidArchive.Value : null,
         Format: MapFormat(srr));
 

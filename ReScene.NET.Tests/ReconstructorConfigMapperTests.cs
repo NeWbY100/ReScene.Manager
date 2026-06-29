@@ -77,7 +77,8 @@ public sealed class ReconstructorConfigMapperTests
         vm.SwitchTSA0 = true; vm.SwitchTSA1 = true; vm.SwitchTSA2 = true;
         vm.SwitchTSA3 = true; vm.SwitchTSA4 = true;
 
-        vm.SwitchAI = true; vm.SwitchR = true; vm.SwitchDS = true; vm.SwitchSDash = true;
+        vm.SwitchAI = true; vm.SwitchR = true; vm.SwitchDS = true;
+        vm.SwitchS = true; vm.SwitchSDash = false;
         vm.SwitchMT = true; vm.SwitchMTStart = 3; vm.SwitchMTEnd = 9;
 
         vm.SwitchV = true; vm.VolumeSize = "12345"; vm.VolumeSizeUnitIndex = 2;
@@ -121,7 +122,8 @@ public sealed class ReconstructorConfigMapperTests
         vm.SwitchTSA0 = false; vm.SwitchTSA1 = false; vm.SwitchTSA2 = false;
         vm.SwitchTSA3 = false; vm.SwitchTSA4 = false;
 
-        vm.SwitchAI = false; vm.SwitchR = false; vm.SwitchDS = false; vm.SwitchSDash = false;
+        vm.SwitchAI = false; vm.SwitchR = false; vm.SwitchDS = false;
+        vm.SwitchS = false; vm.SwitchSDash = true;
         vm.SwitchMT = false; vm.SwitchMTStart = 0; vm.SwitchMTEnd = 0;
 
         vm.SwitchV = false; vm.VolumeSize = "0"; vm.VolumeSizeUnitIndex = 0;
@@ -190,7 +192,9 @@ public sealed class ReconstructorConfigMapperTests
 
         // Other option flags + multithread bounds (ints).
         Assert.True(vm.SwitchAI); Assert.True(vm.SwitchR); Assert.True(vm.SwitchDS);
-        Assert.True(vm.SwitchSDash); Assert.True(vm.SwitchMT);
+        Assert.True(vm.SwitchS);
+        Assert.False(vm.SwitchSDash);
+        Assert.True(vm.SwitchMT);
         Assert.Equal(3, vm.SwitchMTStart);
         Assert.Equal(9, vm.SwitchMTEnd);
 

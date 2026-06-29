@@ -283,7 +283,11 @@ internal static class RarCommandLineBuilder
                                             switches.Add(new("-ds", 200));
                                         }
 
-                                        if (s.SwitchSDash)
+                                        if (s.SwitchS)
+                                        {
+                                            switches.Add(new("-s", 200));
+                                        }
+                                        else if (s.SwitchSDash)
                                         {
                                             switches.Add(new("-s-", 201));
                                         }

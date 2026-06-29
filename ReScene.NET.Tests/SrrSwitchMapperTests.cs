@@ -158,6 +158,7 @@ public sealed class SrrSwitchMapperTests
 
         SrrSwitchMapper.SwitchDiff diff = SrrSwitchMapper.Map(srr);
 
+        Assert.True(diff.SwitchS);
         Assert.False(Assert.NotNull(diff.SwitchSDash));
     }
 
@@ -169,6 +170,7 @@ public sealed class SrrSwitchMapperTests
 
         SrrSwitchMapper.SwitchDiff diff = SrrSwitchMapper.Map(srr);
 
+        Assert.False(diff.SwitchS);
         Assert.True(Assert.NotNull(diff.SwitchSDash));
     }
 
@@ -180,6 +182,7 @@ public sealed class SrrSwitchMapperTests
 
         SrrSwitchMapper.SwitchDiff diff = SrrSwitchMapper.Map(srr);
 
+        Assert.Null(diff.SwitchS);
         Assert.Null(diff.SwitchSDash);
     }
 
@@ -251,6 +254,7 @@ public sealed class SrrSwitchMapperTests
 
         Assert.Null(diff.Compression);
         Assert.Null(diff.Dictionary);
+        Assert.Null(diff.SwitchS);
         Assert.Null(diff.SwitchSDash);
         Assert.Null(diff.Format);
     }
@@ -265,6 +269,7 @@ public sealed class SrrSwitchMapperTests
 
         Assert.Equal(3, Assert.NotNull(diff.Compression).Method);
         Assert.Equal(SrrSwitchMapper.DictionarySwitch.MD4096K, Assert.NotNull(diff.Dictionary).Switch);
+        Assert.True(diff.SwitchS);                      // solid → -s on
         Assert.False(Assert.NotNull(diff.SwitchSDash)); // solid → -s- off
         Assert.True(Assert.NotNull(diff.Format).MA5);   // RAR5
     }

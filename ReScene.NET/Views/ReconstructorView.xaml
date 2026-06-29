@@ -273,6 +273,7 @@
                                   IsEnabled="{Binding IsSwitchAIEnabled}" Margin="0,1" />
                         <CheckBox Content="-r: Recurse subdirectories." IsChecked="{Binding SwitchR}" Margin="0,1" />
                         <CheckBox Content="-ds: Disable name sort. Files are added in filesystem order." IsChecked="{Binding SwitchDS}" Margin="0,1" />
+                        <CheckBox Content="-s: Solid archiving." IsChecked="{Binding SwitchS}" Margin="0,1" />
                         <CheckBox Content="-s-: Disable solid archiving." IsChecked="{Binding SwitchSDash}" Margin="0,1" />
 
                         <Border Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
