@@ -117,7 +117,10 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
     public async Task Start_WithNonExistentReleasePath_ShowsReleaseError()
     {
         ReconstructorViewModel vm = CreateVm(out RecordingFileDialogService dialog, out FakeBruteForceService brute);
-        vm.WinRarPath = NewTempDir();
+        string winrar1 = NewTempDir();
+        Directory.CreateDirectory(Path.Combine(winrar1, "winrar-500"));
+        File.WriteAllText(Path.Combine(winrar1, "winrar-500", "rar.exe"), "stub");
+        vm.WinRarPath = winrar1;
         vm.ReleasePath = @"C:\does\not\exist\release";
         vm.OutputPath = NewTempDir();
 
@@ -131,7 +134,11 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
     public async Task Start_WithMissingVerificationFile_ShowsVerificationError()
     {
         ReconstructorViewModel vm = CreateVm(out RecordingFileDialogService dialog, out FakeBruteForceService brute);
-        vm.WinRarPath = NewTempDir();
+        string winrar = NewTempDir();
+        string versionDir = Path.Combine(winrar, "winrar-500");
+        Directory.CreateDirectory(versionDir);
+        File.WriteAllText(Path.Combine(versionDir, "rar.exe"), "stub");
+        vm.WinRarPath = winrar;
         vm.ReleasePath = NewTempDir();   // empty dir -> no subdir warning, no missing-input warning
         vm.OutputPath = NewTempDir();
         // VerificationPath left blank -> verification validation branch fires.
@@ -146,7 +153,10 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
     public async Task Start_WithSubdirectoriesAndNoTimestamps_AbortsWhenConfirmDeclined()
     {
         ReconstructorViewModel vm = CreateVm(out RecordingFileDialogService dialog, out FakeBruteForceService brute);
-        vm.WinRarPath = NewTempDir();
+        string winrar2 = NewTempDir();
+        Directory.CreateDirectory(Path.Combine(winrar2, "winrar-500"));
+        File.WriteAllText(Path.Combine(winrar2, "winrar-500", "rar.exe"), "stub");
+        vm.WinRarPath = winrar2;
 
         string release = NewTempDir();
         Directory.CreateDirectory(Path.Combine(release, "subdir"));   // triggers the modified-date warning
