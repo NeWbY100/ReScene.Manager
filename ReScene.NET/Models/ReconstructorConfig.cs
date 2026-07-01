@@ -21,6 +21,10 @@ public sealed class ReconstructorConfig
     public bool Version6 { get; set; } = true;
     public bool Version7 { get; set; }
 
+    /// <summary>Explicit per-sub-version selection. Null in configs written before this feature —
+    /// such configs fall back to ticking all installed versions in the enabled majors.</summary>
+    public List<int>? SelectedRarVersions { get; set; }
+
     // Compression Method
     public bool SwitchM0 { get; set; }
     public bool SwitchM1 { get; set; }

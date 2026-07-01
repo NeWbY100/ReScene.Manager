@@ -25,6 +25,11 @@ internal static class ReconstructorConfigMapper
         Version6 = vm.Version6,
         Version7 = vm.Version7,
 
+        // Only persist an explicit list when a real folder scan produced the tree; otherwise write
+        // null so re-import falls back to the enabled-major ticking (an empty [] would wrongly
+        // suppress all versions, because an explicit empty selection wins over the majors).
+        SelectedRarVersions = vm.HasScannedVersions ? vm.SelectedLeafVersions.ToList() : null,
+
         SwitchM0 = vm.SwitchM0,
         SwitchM1 = vm.SwitchM1,
         SwitchM2 = vm.SwitchM2,
@@ -176,5 +181,9 @@ internal static class ReconstructorConfigMapper
         vm.StopOnFirstMatch = c.StopOnFirstMatch;
 
         vm.EnableHostOSPatching = c.EnableHostOSPatching;
+
+        // Set the pending explicit selection last; the next folder scan (triggered by WinRarPath
+        // above, or the tab's initial scan) consumes it. A null list keeps the enabled-major fallback.
+        vm.LoadPendingVersionSelection(c.SelectedRarVersions);
     }
 }

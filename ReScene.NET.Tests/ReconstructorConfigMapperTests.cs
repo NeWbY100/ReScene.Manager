@@ -331,6 +331,59 @@ public sealed class ReconstructorConfigMapperTests
         Assert.Contains("folder/FILE.rar", state.ArchiveFiles);
     }
 
+    // ── SelectedRarVersions round-trip ───────────────────────────
+
+    private static readonly IReadOnlyList<InstalledRarVersion> InstalledVersions =
+    [
+        new(500, "winrar-500", "p500"),
+        new(560, "winrar-560", "p560"),
+        new(624, "winrar-624", "p624"),
+    ];
+
+    [Fact]
+    public void Capture_WritesTickedLeafVersions()
+    {
+        ReconstructorViewModel vm = CreateVm();
+        vm.LoadPendingVersionSelection([560, 624]);
+        vm.ApplyScanResult(InstalledVersions, folderScanned: true);
+
+        ReconstructorConfig config = ReconstructorConfigMapper.Capture(vm);
+
+        Assert.Equal(new[] { 560, 624 }, config.SelectedRarVersions!.OrderBy(v => v).ToArray());
+    }
+
+    [Fact]
+    public void Apply_WithSelectedVersions_TicksThoseAfterScan()
+    {
+        ReconstructorViewModel vm = CreateVm();
+        var config = new ReconstructorConfig { SelectedRarVersions = [500, 624] };
+
+        ReconstructorConfigMapper.Apply(vm, config);          // sets pending
+        vm.ApplyScanResult(InstalledVersions, folderScanned: true);
+
+        int[] ticked = vm.VersionGroups.SelectMany(g => g.Leaves)
+            .Where(l => l.IsChecked).Select(l => l.Version).OrderBy(v => v).ToArray();
+        Assert.Equal(new[] { 500, 624 }, ticked);
+    }
+
+    [Fact]
+    public void Apply_OldConfigWithoutSelectedVersions_FallsBackToEnabledMajors()
+    {
+        ReconstructorViewModel vm = CreateVm();
+        var config = new ReconstructorConfig  // SelectedRarVersions == null (old config)
+        {
+            Version2 = false, Version3 = false, Version4 = false,
+            Version5 = true, Version6 = true, Version7 = false,
+        };
+
+        ReconstructorConfigMapper.Apply(vm, config);          // pending stays null
+        vm.ApplyScanResult(InstalledVersions, folderScanned: true);
+
+        int[] ticked = vm.VersionGroups.SelectMany(g => g.Leaves)
+            .Where(l => l.IsChecked).Select(l => l.Version).OrderBy(v => v).ToArray();
+        Assert.Equal(new[] { 500, 560, 624 }, ticked);        // all installed in enabled majors
+    }
+
     [Fact]
     public void Apply_InconsistentConfig_NormalisesRenameOffWhenStopIsOff()
     {
