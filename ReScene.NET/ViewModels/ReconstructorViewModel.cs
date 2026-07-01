@@ -181,8 +181,11 @@ public partial class ReconstructorViewModel : ViewModelBase
     [ObservableProperty]
     public partial FieldStatus ArchiveSetStatus { get; set; } = FieldStatus.None;
 
-    partial void OnWinRarPathChanged(string value) =>
+    partial void OnWinRarPathChanged(string value)
+    {
         WinRarStatus = ReconstructorFieldGuidance.EvaluateWinRarPath(value);
+        TriggerVersionScan();
+    }
 
     partial void OnReleasePathChanged(string value) => RefreshReleaseOutputStatuses();
 
@@ -393,6 +396,214 @@ public partial class ReconstructorViewModel : ViewModelBase
     [ObservableProperty] public partial bool Version5 { get; set; } = true;
     [ObservableProperty] public partial bool Version6 { get; set; } = true;
     [ObservableProperty] public partial bool Version7 { get; set; }
+
+    // ── Per-sub-version selection (tree over the installed WinRAR versions) ──
+
+    /// <summary>Installed-version tree grouped by major; the checked leaves drive the brute-force.</summary>
+    public ObservableCollection<RarVersionGroup> VersionGroups { get; } = [];
+
+    /// <summary>True once a folder scan has completed for an existing folder (even if it had no versions).</summary>
+    [ObservableProperty]
+    public partial bool HasScannedVersions { get; set; }
+
+    /// <summary>True when the tree is empty, so the view can show the "no versions found" hint.</summary>
+    [ObservableProperty]
+    public partial bool ShowNoVersionsHint { get; set; }
+
+    /// <summary>Last folder scan result, reused by import/config reconcile without re-hitting disk.</summary>
+    private IReadOnlyList<InstalledRarVersion> _lastScan = [];
+
+    /// <summary>Explicit version list from a config load, consumed by the next scanned reconcile.</summary>
+    private List<int>? _pendingVersionSelection;
+
+    /// <summary>Latest-wins guard for overlapping async scans.</summary>
+    private int _scanToken;
+
+    /// <summary>Suppresses tree→major sync while the VM is programmatically rebuilding the tree.</summary>
+    private bool _suppressGroupSync;
+
+    /// <summary>The currently-ticked leaf versions, ascending. Snapshotted at Start and by config Capture.</summary>
+    internal IReadOnlyList<int> SelectedLeafVersions =>
+        VersionGroups.SelectMany(g => g.Leaves).Where(l => l.IsChecked).Select(l => l.Version).OrderBy(v => v).ToList();
+
+    [RelayCommand]
+    private void RescanVersions() => TriggerVersionScan();
+
+    [RelayCommand]
+    private void SelectAllVersions() => SetAllLeaves(true);
+
+    [RelayCommand]
+    private void SelectNoVersions() => SetAllLeaves(false);
+
+    private void SetAllLeaves(bool value)
+    {
+        _suppressGroupSync = true;
+        foreach (RarVersionGroup group in VersionGroups)
+        {
+            foreach (RarVersionLeaf leaf in group.Leaves)
+            {
+                leaf.IsChecked = value;
+            }
+        }
+
+        _suppressGroupSync = false;
+        SyncMajorsFromTree();
+    }
+
+    /// <summary>Kicks off a folder scan: synchronous empty result for an invalid folder (keeps tests
+    /// deterministic), otherwise off-thread with a latest-wins token.</summary>
+    private void TriggerVersionScan()
+    {
+        string folder = WinRarPath;
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+        {
+            ApplyScanResult([], folderScanned: false);
+            return;
+        }
+
+        _ = RunVersionScanAsync(folder);
+    }
+
+    private async Task RunVersionScanAsync(string folder)
+    {
+        int token = ++_scanToken;
+        IReadOnlyList<InstalledRarVersion> installed;
+        try
+        {
+            installed = await Task.Run(() => WinRarVersionScanner.Scan(folder));
+        }
+        catch
+        {
+            installed = [];
+        }
+        if (token != _scanToken)
+        {
+            return;  // superseded by a newer scan
+        }
+
+        ApplyScanResult(installed, folderScanned: installed.Count > 0 || Directory.Exists(folder));
+    }
+
+    /// <summary>Stores a scan result and reconciles the tree. Also the test seam for the async scan.</summary>
+    internal void ApplyScanResult(IReadOnlyList<InstalledRarVersion> installed, bool folderScanned)
+    {
+        _lastScan = installed;
+        HasScannedVersions = folderScanned;
+        ApplyReconcile();
+    }
+
+    /// <summary>Sets the pending explicit selection (config load) and reconciles against the last scan.</summary>
+    internal void LoadPendingVersionSelection(IReadOnlyList<int>? explicitVersions)
+    {
+        _pendingVersionSelection = explicitVersions?.ToList();
+        ApplyReconcile();
+    }
+
+    private void ApplyReconcile()
+    {
+        HashSet<int> enabledMajors = EnabledMajors();
+        HashSet<int> ticked = VersionSelectionReconciler.ComputeTicked(_lastScan, _pendingVersionSelection, enabledMajors);
+
+        // The pending explicit selection is consumed only once a real scan has materialised the tree.
+        if (_pendingVersionSelection is not null && HasScannedVersions)
+        {
+            _pendingVersionSelection = null;
+        }
+
+        RebuildVersionGroups(_lastScan, ticked);
+        SyncMajorsFromTree();
+        ShowNoVersionsHint = VersionGroups.Count == 0;
+    }
+
+    private void RebuildVersionGroups(IReadOnlyList<InstalledRarVersion> installed, HashSet<int> ticked)
+    {
+        _suppressGroupSync = true;
+        foreach (RarVersionGroup group in VersionGroups)
+        {
+            group.SelectionChanged -= OnGroupSelectionChanged;
+            group.Detach();
+        }
+
+        VersionGroups.Clear();
+        foreach (IGrouping<int, InstalledRarVersion> majorGroup in installed.GroupBy(v => v.Version / 100).OrderBy(g => g.Key))
+        {
+            List<RarVersionLeaf> leaves = majorGroup
+                .OrderBy(v => v.Version)
+                .Select(v => new RarVersionLeaf(v.Version, v.FolderName) { IsChecked = ticked.Contains(v.Version) })
+                .ToList();
+            RarVersionGroup group = new(majorGroup.Key, leaves);
+            group.SelectionChanged += OnGroupSelectionChanged;
+            VersionGroups.Add(group);
+        }
+
+        _suppressGroupSync = false;
+    }
+
+    private void OnGroupSelectionChanged(object? sender, EventArgs e)
+    {
+        if (_suppressGroupSync)
+        {
+            return;
+        }
+
+        SyncMajorsFromTree();
+    }
+
+    /// <summary>Mirrors "any leaf in this major ticked" onto the coarse major bools — but only when a
+    /// tree exists; with no scan the bools remain the fallback/coarse intent.</summary>
+    private void SyncMajorsFromTree()
+    {
+        if (!HasScannedVersions)
+        {
+            return;
+        }
+
+        Version2 = MajorHasTick(2);
+        Version3 = MajorHasTick(3);
+        Version4 = MajorHasTick(4);
+        Version5 = MajorHasTick(5);
+        Version6 = MajorHasTick(6);
+        Version7 = MajorHasTick(7);
+    }
+
+    private bool MajorHasTick(int major) =>
+        VersionGroups.FirstOrDefault(g => g.Major == major)?.Leaves.Any(l => l.IsChecked) ?? false;
+
+    private HashSet<int> EnabledMajors()
+    {
+        HashSet<int> majors = [];
+        if (Version2)
+        {
+            majors.Add(2);
+        }
+
+        if (Version3)
+        {
+            majors.Add(3);
+        }
+
+        if (Version4)
+        {
+            majors.Add(4);
+        }
+
+        if (Version5)
+        {
+            majors.Add(5);
+        }
+
+        if (Version6)
+        {
+            majors.Add(6);
+        }
+
+        if (Version7)
+        {
+            majors.Add(7);
+        }
+
+        return majors;
+    }
 
     // ── Compression Method ──
 
@@ -835,6 +1046,8 @@ public partial class ReconstructorViewModel : ViewModelBase
 
             // RAR version selection
             SetRARVersionsFromSRR(srr);
+            _pendingVersionSelection = null;
+            ApplyReconcile();
 
             // Extract stored SFV for verification
             TryExtractStoredSFV(path, srr);
@@ -983,6 +1196,15 @@ public partial class ReconstructorViewModel : ViewModelBase
         {
             Log(LogTarget.System, "WinRAR directory does not exist.");
             _fileDialog.ShowError("Validation Error", "WinRAR directory does not exist.");
+            return;
+        }
+
+        // A materialised tree with nothing ticked would brute-force zero versions — block it with a
+        // clear message. The no-scan case (empty tree) is unaffected and uses the broad fallback.
+        if (VersionGroups.Count > 0 && VersionGroups.SelectMany(g => g.Leaves).All(l => !l.IsChecked))
+        {
+            Log(LogTarget.System, "No WinRAR versions selected.");
+            _fileDialog.ShowError("Validation Error", "Select at least one WinRAR version.");
             return;
         }
 
@@ -1783,6 +2005,8 @@ public partial class ReconstructorViewModel : ViewModelBase
         Version5 = Version5,
         Version6 = Version6,
         Version7 = Version7,
+        SelectedRarVersions = SelectedLeafVersions,
+        HasScannedVersions = HasScannedVersions,
 
         SwitchM0 = SwitchM0,
         SwitchM1 = SwitchM1,
