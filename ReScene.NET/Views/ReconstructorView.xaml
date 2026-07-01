@@ -155,14 +155,45 @@
             <TabItem Header="Versions">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
                     <StackPanel>
-                        <TextBlock Text="The RAR version to compress the release files with. Older releases will have been compressed with older versions of WinRAR."
+                        <TextBlock Text="The WinRAR versions to try. Only versions found in your WinRAR versions folder are listed — tick the ones you think produced the release."
                                    TextWrapping="Wrap" Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" Margin="0,0,0,4" />
-                        <CheckBox Content="RAR 2.x (versions 2.00–2.90). Oldest supported format." IsChecked="{Binding Version2}" Margin="0,1" />
-                        <CheckBox Content="RAR 3.x (versions 3.00–3.93). Introduced -ts timestamp options at 3.20+." IsChecked="{Binding Version3}" Margin="0,1" />
-                        <CheckBox Content="RAR 4.x (versions 4.00–4.20). Last major version using RAR4 format by default." IsChecked="{Binding Version4}" Margin="0,1" />
-                        <CheckBox Content="RAR 5.x (versions 5.00–5.90). Introduced RAR5 format. 5.50+ defaults to RAR5." IsChecked="{Binding Version5}" Margin="0,1" />
-                        <CheckBox Content="RAR 6.x (versions 6.00+). Always uses RAR5 format unless -ma4 is specified." IsChecked="{Binding Version6}" Margin="0,1" />
-                        <CheckBox Content="RAR 7.x (versions 7.00+). Uses RAR7 format only — cannot create RAR4/RAR5 archives." IsChecked="{Binding Version7}" Margin="0,1" />
+                        <DockPanel Margin="0,0,0,4">
+                            <Button DockPanel.Dock="Right" Content="Rescan" Command="{Binding RescanVersionsCommand}"
+                                    Style="{StaticResource GhostButton}" Margin="4,0,0,0" MinWidth="70" />
+                            <Button DockPanel.Dock="Right" Content="None" Command="{Binding SelectNoVersionsCommand}"
+                                    Style="{StaticResource GhostButton}" Margin="4,0,0,0" MinWidth="55" />
+                            <Button DockPanel.Dock="Right" Content="All" Command="{Binding SelectAllVersionsCommand}"
+                                    Style="{StaticResource GhostButton}" Margin="4,0,0,0" MinWidth="55" />
+                            <TextBlock Text="" />
+                        </DockPanel>
+
+                        <TextBlock Text="No WinRAR versions found. Set the WinRAR versions folder on the Files tab, then Rescan."
+                                   TextWrapping="Wrap" Foreground="{DynamicResource ForegroundSecondary}"
+                                   FontSize="{DynamicResource FontSizeCaption}" Margin="0,4"
+                                   Visibility="{Binding ShowNoVersionsHint, Converter={StaticResource BoolToVisibility}}" />
+
+                        <ItemsControl ItemsSource="{Binding VersionGroups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,2,0,0">
+                                        <CheckBox IsThreeState="True" IsChecked="{Binding IsChecked, Mode=OneWay}"
+                                                  Command="{Binding ToggleAllCommand}">
+                                            <TextBlock>
+                                                <Run Text="RAR " /><Run Text="{Binding Header}" /><Run Text="  " /><Run Text="{Binding CountText}" />
+                                            </TextBlock>
+                                        </CheckBox>
+                                        <ItemsControl ItemsSource="{Binding Leaves}" Margin="18,0,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox IsChecked="{Binding IsChecked}" Content="{Binding Label}"
+                                                              ToolTip="{Binding FolderName}" Margin="0,1" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
