@@ -280,4 +280,56 @@ public sealed class RarCommandLineBuilderTests
 
         Assert.Equal("-v100", arg);
     }
+
+    [Fact]
+    public void BuildVersionRanges_Scanned_TightRangePerSelectedVersion()
+    {
+        var settings = new RarSwitchSettings
+        {
+            HasScannedVersions = true,
+            SelectedRarVersions = [560, 624],
+        };
+
+        List<VersionRange> ranges = RarCommandLineBuilder.BuildVersionRanges(settings);
+
+        Assert.Equal(2, ranges.Count);
+        Assert.Equal((560, 561), (ranges[0].Start, ranges[0].End));
+        Assert.Equal((624, 625), (ranges[1].Start, ranges[1].End));
+    }
+
+    [Fact]
+    public void BuildVersionRanges_Scanned_DedupsAndSorts()
+    {
+        var settings = new RarSwitchSettings
+        {
+            HasScannedVersions = true,
+            SelectedRarVersions = [560, 560, 500],
+        };
+
+        List<VersionRange> ranges = RarCommandLineBuilder.BuildVersionRanges(settings);
+
+        Assert.Equal(new[] { 500, 560 }, ranges.Select(r => r.Start).ToArray());
+    }
+
+    [Fact]
+    public void BuildVersionRanges_Scanned_EmptySelection_ReturnsEmpty()
+    {
+        var settings = new RarSwitchSettings { HasScannedVersions = true, Version5 = true };
+
+        List<VersionRange> ranges = RarCommandLineBuilder.BuildVersionRanges(settings);
+
+        Assert.Empty(ranges);  // scanned + nothing ticked -> no versions (Start guard blocks the run)
+    }
+
+    [Fact]
+    public void BuildVersionRanges_NotScanned_FallsBackToBroadMajorRanges()
+    {
+        var settings = new RarSwitchSettings { HasScannedVersions = false, Version5 = true, Version6 = true };
+
+        List<VersionRange> ranges = RarCommandLineBuilder.BuildVersionRanges(settings);
+
+        Assert.Equal(2, ranges.Count);
+        Assert.Equal((500, 600), (ranges[0].Start, ranges[0].End));
+        Assert.Equal((600, 700), (ranges[1].Start, ranges[1].End));
+    }
 }

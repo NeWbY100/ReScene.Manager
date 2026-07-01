@@ -16,6 +16,11 @@ internal sealed record RarSwitchSettings
     public bool Version6 { get; init; }
     public bool Version7 { get; init; }
 
+    // Per-sub-version selection (materialised from a folder scan). When HasScannedVersions is
+    // true, SelectedRarVersions is authoritative and the major bools above are ignored.
+    public IReadOnlyList<int> SelectedRarVersions { get; init; } = [];
+    public bool HasScannedVersions { get; init; }
+
     // Compression method
     public bool SwitchM0 { get; init; }
     public bool SwitchM1 { get; init; }

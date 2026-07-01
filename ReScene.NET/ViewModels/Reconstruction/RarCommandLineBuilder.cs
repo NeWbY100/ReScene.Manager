@@ -15,6 +15,18 @@ internal static class RarCommandLineBuilder
     /// <summary>Builds the enabled RAR version ranges, in the same order the UI lists them.</summary>
     public static List<VersionRange> BuildVersionRanges(RarSwitchSettings s)
     {
+        // A completed folder scan makes the per-version selection authoritative: one tight range
+        // per chosen version. Before any scan (beginner wizard / pre-folder editing) fall back to
+        // the broad major-version ranges so behaviour matches the pre-tree UI.
+        if (s.HasScannedVersions)
+        {
+            return s.SelectedRarVersions
+                .Distinct()
+                .OrderBy(v => v)
+                .Select(v => new VersionRange(v, v + 1))
+                .ToList();
+        }
+
         List<VersionRange> rarVersions = [];
         if (s.Version2)
         {
