@@ -38,13 +38,21 @@ The set of installed sub-versions is **fully discoverable** — the engine alrea
   single version is representable as a tight range `[v, v+1)`. **No engine change is needed
   to restrict the brute-force to a hand-picked set.**
 
-### Latent engine bug (in scope to fix)
+### Latent engine bug (in scope to fix — TWO call sites)
 
-In `GetValidRarDirectories`, `ParseRARVersion(dirName)` is called *after* the `rar.exe`
-check with no guard. A folder containing `rar.exe` but whose name has no parseable version
-(e.g. `winrar-beta/`) makes `ParseRARVersion` throw `FormatException`, which propagates out
-of `BruteForceRARVersionAsync` and aborts the whole run. We touch version parsing here, so
-we harden it.
+`ParseRARVersion(dirName)` is called *after* the `rar.exe` check with no guard in **two**
+places, and a folder containing `rar.exe` but whose name has no parseable version (e.g.
+`winrar-beta/`) makes it throw `FormatException`:
+
+1. `GetValidRarDirectories` (`Manager.cs:628`) — throws, propagating out of
+   `BruteForceRARVersionAsync` and aborting the run.
+2. `CalculateBruteForceProgressSize` (`Manager.cs:381`) — the **same** unguarded call, inside
+   a `Parallel.ForEach` (`Manager.cs:372`). This path runs at `Manager.cs:240` **before** the
+   main loop, so it throws first, surfacing as an `AggregateException`.
+
+We touch version parsing here, so **both** sites must be hardened, or the "unparseable folders
+are skipped, not crashed" contract does not hold. Hardening only `GetValidRarDirectories`
+would leave the earlier progress-sizing path still crashing.
 
 ## Goal
 
@@ -93,9 +101,13 @@ public static bool TryParseRARVersion(string rarVersionDirectoryName, out int ve
 }
 ```
 
-**`GetValidRarDirectories` hardening.** Replace the unguarded `ParseRARVersion(dirName)` with
-`TryParseRARVersion`; when it returns `false`, log (`"Unrecognised WinRAR version folder name:
-{dir}"`) and `continue` instead of throwing.
+**Hardening (both call sites).** Replace the unguarded `ParseRARVersion` with
+`TryParseRARVersion` in:
+- `GetValidRarDirectories` (`Manager.cs:628`): on `false`, log
+  (`"Unrecognised WinRAR version folder name: {dir}"`) and `continue`.
+- `CalculateBruteForceProgressSize` (`Manager.cs:381`): on `false`, `return;` (the
+  `Parallel.ForEach` body's early-out, exactly like the existing `rar.exe`-missing `return`
+  just above it).
 
 ### `ReScene.NET`
 
@@ -117,35 +129,78 @@ busy-work pattern.
 
 **Tree node VM types (new).**
 - `RarVersionLeaf` : `[ObservableProperty] bool IsChecked`; read-only `int Version`,
-  `string Label` (friendly, derived from the parsed version as `Version / 100` `.`
-  `Version % 100` two-digit — e.g. `560` → `5.60`, `700` → `7.00`), `string FolderName`
-  (tooltip). A leaf toggle notifies its parent to recompute tri-state and syncs the coarse
-  major booleans.
+  `string Label` (friendly, `$"{Version / 100}.{Version % 100:D2}"` — e.g. `560` → `5.60`,
+  `700` → `7.00`), `string FolderName` (tooltip). A leaf toggle notifies its parent to
+  recompute tri-state and syncs the coarse major booleans.
+  - **Label caveat:** `TryParseRARVersion` normalises names `< 100` as `×10`, so two- and
+    three-digit folder names render correctly (`winrar-56` → `560` → `5.60`; `winrar-624` →
+    `6.24`). Only a single-digit name (`winrar-6` → `60` → `0.60`) degrades — such names do
+    not occur for real WinRAR (≥ 2.x), so this is accepted. A scanner test pins
+    `winrar-56` → label `5.60`.
 - `RarVersionGroup` : read-only `int Major`, `string Header` (e.g. `5.x`),
   `ObservableCollection<RarVersionLeaf> Leaves`, computed `bool? IsChecked` (true=all,
   false=none, null=some), computed `string CountText` (`"(2 of 4)"`), and a command/handler
   to set all leaves. Group and leaf changes route through the VM so intent, tri-state, and
   the `Version2..7` booleans stay consistent.
+  - **Header click semantics (explicit):** the header's `bool?` is *display-only* — the user
+    can never set it to Indeterminate. Clicking a header in **Unchecked or Indeterminate**
+    state checks **all** leaves; clicking in **Checked** state unchecks **all** leaves. (This
+    overrides WPF's default 3-state click cycle, which would be user-hostile here.) Covered by
+    a reconciliation test.
 
 **`ReconstructorViewModel` changes.**
 - New `ObservableCollection<RarVersionGroup> VersionGroups`.
 - New `RescanVersionsCommand`, `SelectAllVersionsCommand`, `SelectNoVersionsCommand`.
+- New backing state: `bool HasScannedVersions` (set true once a scan has completed for a
+  folder, regardless of how many leaves resulted) and `List<int>? _pendingVersionSelection`
+  (config intent, §Reconciliation).
 - `Version2..7` **retained** as *coarse intent* / fallback / config compatibility (§Reconciliation).
-- Scan trigger points: `OnWinRarPathChanged`, `RefreshFromSettings` (settings-driven folder
-  change), and manual `RescanVersionsCommand`.
+- **A single `RescanAndReconcile()` method** owns scan + reconcile. It is invoked from every
+  intent-changing event, not just folder changes:
+  - `OnWinRarPathChanged` — folder set/changed. This *also* covers the settings-driven default:
+    `OnSettingsChanged` → `ApplyPathDefaultsFromSettings` (`ReconstructorViewModel.cs:95`)
+    assigns `WinRarPath`, which fires `OnWinRarPathChanged`. (There is **no** `RefreshFromSettings`
+    method — the earlier draft named a symbol that does not exist.)
+  - **After `SetRARVersionsFromSRR`** in the SRR-import path (`ReconstructorViewModel.cs:837`):
+    import mutates `Version2..7` **without** touching `WinRarPath`, so it must call
+    `RescanAndReconcile()` (or, if a scan already exists, at least re-run the reconcile step)
+    explicitly — otherwise a folder-then-import ordering leaves the tree stale (Decision #2
+    silently not applied).
+  - Manual `RescanVersionsCommand`.
+- **Manual leaf/group edits → major sync is imperative, not hook-driven.** There are **no**
+  `OnVersion{2..7}Changed` partial hooks today and we do **not** add any (they would create a
+  major→rescan→leaf→major feedback loop). Instead the leaf/group toggle handler directly
+  recomputes each group's tri-state and sets `Version2..7 = "any leaf in this major ticked"`.
+  A re-entrancy guard (`bool _syncingVersionState`) makes the reconcile/sync writes to leaves
+  and booleans no-ops for each other.
+- **Scan race:** `RescanAndReconcile` runs `Scan` on `Task.Run` and applies on the UI thread
+  under a **latest-wins** guard — an incrementing `int _scanToken` captured before the await;
+  results from a superseded token are discarded. Reconcile reads intent (`_pendingVersionSelection`
+  / `Version2..7`) at **apply-time on the UI thread**, so it always sees current intent. Mirrors
+  the Compare busy-work off-thread pattern.
 - `BuildSwitchSettings` (`ReconstructorViewModel.cs:~1780`) is extended so the selected leaf
-  set flows into range building (§Command line).
+  set **and** `HasScannedVersions` flow into range building (§Command line).
 
-**`RarSwitchSettings`** gains `IReadOnlyList<int> SelectedRarVersions` — a snapshot of the
-**currently-ticked leaf versions** taken at Start; empty when no folder has been scanned.
-This is distinct from the *pending config intent* (below): the intent is a not-yet-applied
-wish list consumed by the next reconcile, whereas this is the materialised result of a scan.
+**`RarSwitchSettings`** gains:
+- `IReadOnlyList<int> SelectedRarVersions` — a snapshot of the **currently-ticked leaf
+  versions** taken at Start.
+- `bool HasScannedVersions` — whether a folder scan has produced the tree.
 
-**`RarCommandLineBuilder.BuildVersionRanges`** becomes:
-- If `SelectedRarVersions` is non-empty → return one tight `VersionRange(v, v + 1)` per
-  selected version (deduplicated, ascending).
-- Else → today's broad ranges from `Version2..7` (fallback when nothing has been scanned,
-  e.g. beginner wizard or pre-folder editing).
+`SelectedRarVersions` alone is ambiguous: an empty list means *both* "no folder scanned yet"
+and "scanned but user unticked everything". `HasScannedVersions` disambiguates so
+`BuildVersionRanges` and the Start guard agree. This snapshot is distinct from the *pending
+config intent* (below): the intent is a not-yet-applied wish list consumed by the next
+reconcile, whereas this is the materialised result of a scan.
+
+**`RarCommandLineBuilder.BuildVersionRanges`** becomes deterministic on `HasScannedVersions`:
+- If **`HasScannedVersions` is false** (no scan yet — beginner wizard / pre-folder editing) →
+  today's broad ranges from `Version2..7`. This preserves current behaviour when the tree was
+  never materialised.
+- If **`HasScannedVersions` is true** → one tight `VersionRange(v, v + 1)` per selected leaf
+  version (deduplicated, ascending). If the selection is empty here, the result is an empty
+  range list (⇒ zero versions) — the "scanned but nothing ticked" case, which the Start guard
+  blocks before it can run (§Error handling). No other production caller reaches Start with an
+  empty scanned selection; verify no caller of `BuildVersionRanges` bypasses the guard.
 
 **`ReconstructorView.xaml`** replaces the flat checkbox row with a `TreeView`/grouped
 `ItemsControl` bound to `VersionGroups`, plus **Rescan**, **Select all**, **Select none**
@@ -157,18 +212,23 @@ A scan materialises the tree from **folder contents × current intent**. Every s
 same reconcile step; only the source of "which leaves to tick" differs, resolved at the
 moment each event occurs:
 
-- **Config load** sets a *pending explicit selection* — a VM field distinct from the
-  ticked-leaf snapshot (e.g. `_pendingVersionSelection : List<int>?`). The next scan ticks
-  exactly the installed leaves whose version is in that list, then clears the pending field;
-  missing entries are dropped.
+- **Config load** sets a *pending explicit selection* (`_pendingVersionSelection : List<int>?`,
+  distinct from the ticked-leaf snapshot) **and then calls `RescanAndReconcile()`**. The
+  reconcile ticks exactly the installed leaves whose version is in that list, then clears the
+  pending field; missing entries are dropped.
 - **SRR import** (and old configs with only major booleans) sets coarse intent via
-  `Version2..7`. Next scan ticks **all installed leaves whose major is enabled**.
-- **Manual** tree edits are the live selection immediately; after each edit the VM syncs
-  `Version2..7` to "any leaf in this major ticked", keeping coarse intent and config coherent.
+  `Version2..7` **and then calls `RescanAndReconcile()`** (import mutates no path, so it must
+  trigger the reconcile itself). The reconcile ticks **all installed leaves whose major is
+  enabled**. This holds for both orderings — folder-then-import (a tree already exists; import's
+  reconcile re-ticks it) and import-then-folder (no tree yet; the later `OnWinRarPathChanged`
+  reconcile applies the still-current coarse intent).
+- **Manual** tree edits are the live selection immediately; the toggle handler imperatively
+  syncs `Version2..7` to "any leaf in this major ticked" under `_syncingVersionState`
+  (no `OnVersionXChanged` hooks — see Architecture), keeping coarse intent and config coherent.
 
-Import/config may set intent *before* a folder is known; the scan is where intent becomes
-concrete ticks. If a scan occurs with no pending explicit selection and no enabled major
-(fresh state), nothing is ticked.
+Reconcile precedence, evaluated at apply-time on the UI thread: if `_pendingVersionSelection`
+is non-null, it wins (config path) and is then cleared; otherwise coarse intent
+(`Version2..7`) is used. If neither is present (fresh state), nothing is ticked.
 
 ## Data flow
 
@@ -209,23 +269,35 @@ The engine re-derives progress size from the same ranges
 - **Unparseable folder names** → skipped by the scanner and (now) skipped, not crashed, by
   the engine.
 - **Stale config picks** (version no longer installed) → silently dropped on load.
-- **Empty selection at Start** (folder present, everything unticked) → block with a clear
-  message ("Select at least one WinRAR version.") instead of silently brute-forcing nothing.
+- **Empty selection at Start** → block with a clear message ("Select at least one WinRAR
+  version.") instead of silently brute-forcing nothing. The guard keys off **VM state**, not
+  the snapshot's empty list: block only when `VersionGroups` contains **at least one leaf and
+  zero leaves are checked**. The "no folder scanned / no leaves" case (`HasScannedVersions ==
+  false`) does **not** trip the guard — it uses the broad `Version2..7` fallback, so a wizard
+  user who never expands the tree is never blocked.
   This is a deliberate behaviour change from today's silent-range path.
 
 ## Testing & Verification
 
 - `WinRarVersionScanner` (temp-dir fixtures): rar.exe filter; unparseable-name skip;
-  grouping/sort; empty/missing folder → empty; a folder without rar.exe excluded.
+  grouping/sort; empty/missing folder → empty; a folder without rar.exe excluded; `winrar-56`
+  → version `560`, label `5.60` (pins the `< 100` normalisation label).
 - `Manager.TryParseRARVersion`: valid (`winrar-560` → `560`); normalised (`< 100` → `×10`);
   invalid name → `false`; and `ParseRARVersion` still throws on invalid (unchanged contract).
-- `GetValidRarDirectories` hardening: a folder containing `rar.exe` with an unparseable name
-  is skipped (no throw), valid siblings still returned.
-- Reconciliation: import intent ticks all-in-major; config explicit ticks the subset and
-  drops missing; manual leaf toggle syncs the major booleans; group tri-state math
-  (all/none/some) and `CountText`.
-- `BuildVersionRanges`: tight ranges from a selected leaf set (dedup/ascending);
-  broad-range fallback when `SelectedRarVersions` is empty.
+- **Engine hardening — both sites:** a folder containing `rar.exe` with an unparseable name is
+  skipped (no throw) in `GetValidRarDirectories` **and** in `CalculateBruteForceProgressSize`
+  (the `Parallel.ForEach` path — assert no `AggregateException`); valid siblings still returned/
+  counted.
+- Reconciliation: import intent ticks all-in-major; **folder-then-import ordering** re-ticks
+  the already-scanned tree; config explicit ticks the subset and drops missing; manual leaf
+  toggle syncs the major booleans (and does not recurse, via `_syncingVersionState`); group
+  tri-state math (all/none/some), `CountText`, and header-click semantics
+  (Unchecked/Indeterminate → all; Checked → none).
+- `BuildVersionRanges`: `HasScannedVersions == true` → tight ranges from a selected leaf set
+  (dedup/ascending); `HasScannedVersions == false` → broad `Version2..7` fallback; scanned +
+  empty selection → empty range list.
+- Empty-selection guard: blocks when `VersionGroups` has ≥1 leaf and 0 checked; does **not**
+  block when `HasScannedVersions == false`.
 - `ReconstructorConfigMapper`: `SelectedRarVersions` round-trip; old config (field absent)
   falls back to enabled-major ticking.
 - Build: clean non-incremental, **0 warnings / 0 errors** (`-p:BaseOutputPath=bin2/`); full
@@ -234,25 +306,47 @@ The engine re-derives progress size from the same ranges
   some → brute-force log/args show only the chosen versions; drop a new WinRAR version into
   the folder → Rescan surfaces it; empty the folder → hint shown.
 
+## Beginner-wizard behaviour (no UI change; both orderings traced)
+
+The wizard (`ReconstructWizardBody.xaml`) has `ImportSRRCommand` and a WinRAR-path field with
+**no enforced order**. Both orderings are safe because import and folder-set each call
+`RescanAndReconcile()`:
+
+- **Import-then-path** (common): import sets `Version2..7`, calls reconcile — no folder yet, so
+  no leaves tick and `HasScannedVersions` stays false. Later the path is set →
+  `OnWinRarPathChanged` → reconcile with the *still-current* coarse intent → ticks all installed
+  leaves in the enabled majors. `_pendingVersionSelection` is null throughout (no config load),
+  so coarse intent correctly wins.
+- **Path-then-import**: path scan ticks per whatever intent exists (default majors); then import
+  updates `Version2..7` and re-runs reconcile, re-ticking to match the SRR.
+- **Wizard user never expands the tree:** if a folder *was* scanned, leaves are ticked from
+  intent, so the Start guard passes and tight ranges are used. If somehow no scan occurred
+  (`HasScannedVersions == false`), `BuildVersionRanges` uses the broad `Version2..7` fallback and
+  the guard does not fire — identical to today's behaviour. Either way the wizard runs, never
+  silently empty, never wrongly blocked.
+
 ## Non-Goals
 
 - No change to compression / dictionary / timestamp search axes.
 - No auto-guessing the *exact* WinRAR build from the SRR (the SRR does not carry it).
 - No recursive folder scanning — immediate subdirectories only, matching the engine.
-- No Beginner-wizard UI change; it relies on import auto-select, which now flows through the
-  same reconcile step.
+- No Beginner-wizard UI change (behaviour traced above).
 
 ## File Structure
 
 - `ReScene.Lib/ReScene/Core/Manager.cs` — `TryParseRARVersion`; refactor `ParseRARVersion`;
-  harden `GetValidRarDirectories`.
+  harden **both** unguarded call sites (`GetValidRarDirectories` and
+  `CalculateBruteForceProgressSize`).
 - `ReScene.NET/ViewModels/Reconstruction/WinRarVersionScanner.cs` — new scanner +
   `InstalledRarVersion` record.
 - `ReScene.NET/ViewModels/Reconstruction/RarVersionLeaf.cs`,
   `.../RarVersionGroup.cs` — new tree node VMs.
-- `ReScene.NET/ViewModels/ReconstructorViewModel.cs` — `VersionGroups`, scan/reconcile,
-  commands, `BuildSwitchSettings`, empty-selection guard.
-- `ReScene.NET/ViewModels/Reconstruction/RarSwitchSettings.cs` — `SelectedRarVersions`.
+- `ReScene.NET/ViewModels/ReconstructorViewModel.cs` — `VersionGroups`, `RescanAndReconcile`
+  (with scan-token latest-wins + `_syncingVersionState` guard), `_pendingVersionSelection`,
+  `HasScannedVersions`, commands, `BuildSwitchSettings`, empty-selection guard, reconcile call
+  after `SetRARVersionsFromSRR`.
+- `ReScene.NET/ViewModels/Reconstruction/RarSwitchSettings.cs` — `SelectedRarVersions`,
+  `HasScannedVersions`.
 - `ReScene.NET/ViewModels/Reconstruction/RarCommandLineBuilder.cs` — `BuildVersionRanges`.
 - `ReScene.NET/Models/ReconstructorConfig.cs` +
   `.../Reconstruction/ReconstructorConfigMapper.cs` — `SelectedRarVersions` round-trip.
