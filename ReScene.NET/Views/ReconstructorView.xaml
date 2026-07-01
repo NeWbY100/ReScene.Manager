@@ -178,8 +178,10 @@
                                     <StackPanel Margin="0,2,0,0">
                                         <CheckBox IsThreeState="True" IsChecked="{Binding IsChecked, Mode=OneWay}"
                                                   Command="{Binding ToggleAllCommand}">
+                                            <!-- Run.Text binds TwoWay by default (Run is built for editable flow docs);
+                                                 Header/CountText are read-only, so the bound Runs must be OneWay. -->
                                             <TextBlock>
-                                                <Run Text="RAR " /><Run Text="{Binding Header}" /><Run Text="  " /><Run Text="{Binding CountText}" />
+                                                <Run Text="RAR " /><Run Text="{Binding Header, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding CountText, Mode=OneWay}" />
                                             </TextBlock>
                                         </CheckBox>
                                         <ItemsControl ItemsSource="{Binding Leaves}" Margin="18,0,0,0">
