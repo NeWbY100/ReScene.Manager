@@ -470,18 +470,22 @@ public partial class ReconstructorViewModel : ViewModelBase
         IReadOnlyList<InstalledRarVersion> installed;
         try
         {
-            installed = await Task.Run(() => WinRarVersionScanner.Scan(folder));
+            installed = await Task.Run(() => WinRarVersionScanner.Scan(folder)).ConfigureAwait(false);
         }
         catch
         {
             installed = [];
         }
-        if (token != _scanToken)
-        {
-            return;  // superseded by a newer scan
-        }
 
-        ApplyScanResult(installed, folderScanned: installed.Count > 0 || Directory.Exists(folder));
+        _uiDispatcher.Invoke(() =>
+        {
+            if (token != _scanToken)
+            {
+                return;
+            }
+
+            ApplyScanResult(installed, folderScanned: installed.Count > 0 || Directory.Exists(folder));
+        });
     }
 
     /// <summary>Stores a scan result and reconciles the tree. Also the test seam for the async scan.</summary>
@@ -1196,6 +1200,17 @@ public partial class ReconstructorViewModel : ViewModelBase
         {
             Log(LogTarget.System, "WinRAR directory does not exist.");
             _fileDialog.ShowError("Validation Error", "WinRAR directory does not exist.");
+            return;
+        }
+
+        // A real scan that found zero valid version subfolders — block with a clear message so the
+        // user knows to add a version subfolder. The no-scan fallback (HasScannedVersions == false)
+        // still uses the broad major-version range and must not be blocked here.
+        if (HasScannedVersions && VersionGroups.Count == 0)
+        {
+            Log(LogTarget.System, "No WinRAR versions found in the selected folder.");
+            _fileDialog.ShowError("Validation Error",
+                "No WinRAR versions were found in the WinRAR versions folder. Add a version subfolder containing rar.exe, then click Rescan.");
             return;
         }
 
