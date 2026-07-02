@@ -34,6 +34,23 @@ public sealed class RarVersionTreeTests
     }
 
     [Fact]
+    public void Group_IsExpanded_InitialisedFromTickState()
+    {
+        Assert.False(MakeGroup(2, (200, false), (250, false)).IsExpanded);  // nothing ticked -> collapsed
+        Assert.True(MakeGroup(3, (300, false), (320, true)).IsExpanded);    // any tick -> expanded
+    }
+
+    [Fact]
+    public void Group_IsExpanded_UserToggleIsWritable()
+    {
+        RarVersionGroup g = MakeGroup(2, (200, false));
+
+        g.IsExpanded = true;
+
+        Assert.True(g.IsExpanded);
+    }
+
+    [Fact]
     public void Group_IsChecked_ReflectsLeafState()
     {
         Assert.True(MakeGroup(5, (500, true), (560, true)).IsChecked);

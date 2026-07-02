@@ -175,29 +175,41 @@
                         <ItemsControl ItemsSource="{Binding VersionGroups}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <StackPanel Margin="0,2,0,0">
-                                        <CheckBox IsThreeState="True" IsChecked="{Binding IsChecked, Mode=OneWay}"
-                                                  Command="{Binding ToggleAllCommand}">
-                                            <!-- Run.Text binds TwoWay by default (Run is built for editable flow docs);
-                                                 Header/CountText are read-only, so the bound Runs must be OneWay. -->
-                                            <TextBlock>
-                                                <Run Text="RAR " /><Run Text="{Binding Header, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding CountText, Mode=OneWay}" />
-                                            </TextBlock>
-                                        </CheckBox>
-                                        <ItemsControl ItemsSource="{Binding Leaves}" Margin="18,0,0,0">
+                                    <!-- Collapsible major-version group: the expander arrow (or empty header
+                                         space) toggles expansion; the checkbox toggles all leaves. Groups with
+                                         ticked leaves start expanded (IsExpanded is derived on rebuild). -->
+                                    <Expander IsExpanded="{Binding IsExpanded}" Margin="0,2,0,0">
+                                        <Expander.Header>
+                                            <CheckBox IsThreeState="True" IsChecked="{Binding IsChecked, Mode=OneWay}"
+                                                      Command="{Binding ToggleAllCommand}">
+                                                <!-- Run.Text binds TwoWay by default (Run is built for editable flow docs);
+                                                     Header/CountText are read-only, so the bound Runs must be OneWay. -->
+                                                <TextBlock>
+                                                    <Run Text="RAR " /><Run Text="{Binding Header, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding CountText, Mode=OneWay}" />
+                                                </TextBlock>
+                                            </CheckBox>
+                                        </Expander.Header>
+                                        <ItemsControl ItemsSource="{Binding Leaves}" Margin="24,2,0,4">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <!-- Bound Run.Text must be Mode=OneWay: Run binds TwoWay by default
-                                                         and these are read-only properties. -->
-                                                    <CheckBox IsChecked="{Binding IsChecked}" ToolTip="{Binding FolderName}" Margin="0,1">
-                                                        <TextBlock>
+                                                         and these are read-only properties. Fixed width keeps the wrap
+                                                         columns aligned; the tooltip carries the full folder name. -->
+                                                    <CheckBox IsChecked="{Binding IsChecked}" ToolTip="{Binding FolderName}"
+                                                              Margin="0,1" Width="230">
+                                                        <TextBlock TextTrimming="CharacterEllipsis">
                                                             <Run Text="{Binding LabelWithTag, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding FolderDisplay, Mode=OneWay}" Foreground="{DynamicResource ForegroundSecondary}" />
                                                         </TextBlock>
                                                     </CheckBox>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                    </StackPanel>
+                                    </Expander>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>

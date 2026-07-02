@@ -24,11 +24,20 @@ public sealed partial class RarVersionGroup : ObservableObject
         Major = major;
         Header = $"{major}.x";
         Leaves = leaves;
+        IsExpanded = leaves.Any(l => l.IsChecked);
         foreach (RarVersionLeaf leaf in Leaves)
         {
             leaf.PropertyChanged += OnLeafChanged;
         }
     }
+
+    /// <summary>
+    /// Whether the group's leaves are shown. Initialised to "any leaf ticked" so an SRR import or
+    /// config load auto-expands the relevant groups; the user can toggle freely afterwards (a
+    /// rescan/reconcile rebuilds groups and re-derives it from the new tick state).
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsExpanded { get; set; }
 
     public bool? IsChecked
     {
