@@ -2,6 +2,30 @@
 
 All notable changes to ReScene.NET are documented here. Releases follow [SemVer](https://semver.org/) and this file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.0] — 2026-07-02
+
+### Added
+
+- **Pick the exact WinRAR versions to try.** The RAR Reconstructor's Versions tab now lists the
+  WinRAR sub-versions actually installed in your WinRAR versions folder as a collapsible tree —
+  one expander per major version (`RAR 2.x (2 of 38)`) with the individual builds in columns
+  inside — instead of six coarse `2.x`–`7.x` checkboxes. Tick only the versions you think produced
+  the release and the brute-force tests just those. Importing an SRR still auto-selects all
+  installed versions in the matching majors (and expands those groups); **Rescan** picks up
+  versions you drop into the folder while the app is running; **All**/**None** for bulk selection.
+- **Same-version builds are distinguishable.** Folders that parse to the same version (betas,
+  locale builds) show their variant and origin: `2.50 b2  (wrar25b2)`.
+- **Exported configurations remember the exact selection.** A saved Reconstructor configuration
+  round-trips the individual ticked versions; configurations from older versions keep loading and
+  fall back to selecting all installed versions in their enabled majors.
+- Starting with a scanned folder but nothing ticked (or a folder with no usable WinRAR versions)
+  is now blocked with a clear message instead of silently testing nothing.
+
+### Fixed
+
+- A WinRAR version folder whose name has no parseable version (e.g. `winrar-beta/`) no longer
+  crashes the brute-force — it is skipped with a log line.
+
 ## [1.7.2] — 2026-06-29
 
 ### Fixed
