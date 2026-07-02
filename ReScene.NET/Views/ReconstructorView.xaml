@@ -187,8 +187,13 @@
                                         <ItemsControl ItemsSource="{Binding Leaves}" Margin="18,0,0,0">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <CheckBox IsChecked="{Binding IsChecked}" Content="{Binding Label}"
-                                                              ToolTip="{Binding FolderName}" Margin="0,1" />
+                                                    <!-- Bound Run.Text must be Mode=OneWay: Run binds TwoWay by default
+                                                         and these are read-only properties. -->
+                                                    <CheckBox IsChecked="{Binding IsChecked}" ToolTip="{Binding FolderName}" Margin="0,1">
+                                                        <TextBlock>
+                                                            <Run Text="{Binding LabelWithTag, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding FolderDisplay, Mode=OneWay}" Foreground="{DynamicResource ForegroundSecondary}" />
+                                                        </TextBlock>
+                                                    </CheckBox>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>

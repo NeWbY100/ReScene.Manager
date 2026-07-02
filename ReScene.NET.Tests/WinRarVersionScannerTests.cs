@@ -56,4 +56,18 @@ public sealed class WinRarVersionScannerTests : IDisposable
         Assert.Single(result);
         Assert.Equal(560, result[0].Version);
     }
+
+    [Fact]
+    public void Scan_SameVersionVariants_CarryDistinguishingTags()
+    {
+        MakeVersion("winrar-250", withRarExe: true);
+        MakeVersion("winrar-250-beta1", withRarExe: true);
+
+        IReadOnlyList<InstalledRarVersion> result = WinRarVersionScanner.Scan(_root);
+
+        Assert.Equal(2, result.Count);
+        Assert.All(result, r => Assert.Equal(250, r.Version));
+        Assert.Contains(result, r => r.FolderName == "winrar-250" && r.Tag.Length == 0);
+        Assert.Contains(result, r => r.FolderName == "winrar-250-beta1" && r.Tag == "beta1");
+    }
 }

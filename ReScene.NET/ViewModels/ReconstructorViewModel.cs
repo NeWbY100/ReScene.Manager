@@ -533,7 +533,7 @@ public partial class ReconstructorViewModel : ViewModelBase
         {
             List<RarVersionLeaf> leaves = majorGroup
                 .OrderBy(v => v.Version)
-                .Select(v => new RarVersionLeaf(v.Version, v.FolderName) { IsChecked = ticked.Contains(v.Version) })
+                .Select(v => new RarVersionLeaf(v.Version, v.FolderName, v.Tag) { IsChecked = ticked.Contains(v.Version) })
                 .ToList();
             RarVersionGroup group = new(majorGroup.Key, leaves);
             group.SelectionChanged += OnGroupSelectionChanged;

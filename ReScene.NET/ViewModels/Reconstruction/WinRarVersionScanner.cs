@@ -2,8 +2,12 @@ using ReScene.Core;
 
 namespace ReScene.NET.ViewModels.Reconstruction;
 
-/// <summary>One installed WinRAR version folder that the brute-force engine would accept.</summary>
-public sealed record InstalledRarVersion(int Version, string FolderName, string Path);
+/// <summary>
+/// One installed WinRAR version folder that the brute-force engine would accept. <paramref name="Tag"/>
+/// is the variant part of the folder name after the version digits (e.g. "beta1"; empty when none) —
+/// it distinguishes folders that parse to the same version.
+/// </summary>
+public sealed record InstalledRarVersion(int Version, string FolderName, string Path, string Tag = "");
 
 /// <summary>
 /// Enumerates the installed WinRAR sub-versions in the WinRAR versions folder, applying the same
@@ -29,12 +33,12 @@ public static class WinRarVersionScanner
             }
 
             string name = Path.GetFileName(dir);
-            if (!Manager.TryParseRARVersion(name, out int version))
+            if (!Manager.TryParseRARVersion(name, out int version, out string variantTag))
             {
                 continue;
             }
 
-            found.Add(new InstalledRarVersion(version, name, dir));
+            found.Add(new InstalledRarVersion(version, name, dir, variantTag));
         }
 
         return found.OrderBy(v => v.Version).ToList();

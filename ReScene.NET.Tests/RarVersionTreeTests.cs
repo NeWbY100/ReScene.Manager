@@ -21,6 +21,19 @@ public sealed class RarVersionTreeTests
     }
 
     [Fact]
+    public void Leaf_LabelWithTag_AppendsTagOnlyWhenPresent()
+    {
+        Assert.Equal("2.50", new RarVersionLeaf(250, "winrar-250").LabelWithTag);
+        Assert.Equal("2.50 beta1", new RarVersionLeaf(250, "winrar-250-beta1", "beta1").LabelWithTag);
+    }
+
+    [Fact]
+    public void Leaf_FolderDisplay_WrapsFolderNameInParentheses()
+    {
+        Assert.Equal("(winrar-250-beta1)", new RarVersionLeaf(250, "winrar-250-beta1", "beta1").FolderDisplay);
+    }
+
+    [Fact]
     public void Group_IsChecked_ReflectsLeafState()
     {
         Assert.True(MakeGroup(5, (500, true), (560, true)).IsChecked);
