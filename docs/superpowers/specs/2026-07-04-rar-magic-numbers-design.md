@@ -71,10 +71,18 @@ RARFlagMasks.DictionarySizeMask`, as `RARUtils.GetDictionarySize` already does),
 
 ### B. Consolidate & add the missing named constants
 
-- **Markers → consolidate onto the existing `RARUtils.Rar4Marker`/`Rar5Marker`.** Remove the
-  duplicate `RAR5HeaderReader.RAR5Marker` and replace the inline marker byte sequences in
-  `RARUtils.FindRarMarkerOffset` and `RARDetailedParser.IsValidRAR4Signature` with references to them.
-  (Test-covered: `RARDetailedParserTests` + every `RARArchive`/`RARStream` fixture writes the marker.)
+- **Markers → consolidate onto the existing `RARUtils.Rar4Marker`/`Rar5Marker`** — which are
+  `ReadOnlySpan<byte>` expression-bodied properties, NOT `byte[]`. The duplicate
+  `RAR5HeaderReader.RAR5Marker` (`:420`) is a real `byte[]` and is asserted on directly by
+  `RAR5HeaderReaderTests.cs:58,64`, so **deleting it outright breaks the test compile** (and no suite
+  can run). Either keep it as a thin alias (`=> RARUtils.Rar5Marker.ToArray()`) OR migrate those two
+  tests to `RARUtils.Rar5Marker`, adjusting `Assert.Equal(byte[], …)` for the span type
+  (`.ToArray()`/`SequenceEqual`). Where byte-exact behaviour allows, replace the inline marker byte
+  sequences in `RARUtils.FindRarMarkerOffset` (`:335-364` — a prefix-scan that branches on byte 6/7
+  for RAR4-vs-RAR5 plus a tail special-case; reuse the marker consts only where a prefix/`SequenceEqual`
+  check preserves the exact scan) and `RARDetailedParser.IsValidRAR4Signature` (which can reuse the
+  existing `RARDetailedHeader.cs:236` `Rar4Signature => RARUtils.Rar4Marker` alias). (Test-covered:
+  `RARDetailedParserTests` + every `RARArchive`/`RARStream` fixture writes the marker.)
 - **`Rar4HeaderLayout` (new static class) — consolidate the existing scattered offsets into one
   source of truth.** Migrate `RARPatcher`'s private `Offset*` consts and the `RARHeaderReader`
   locals into it; both files then reference the shared class. Members (values verified against
@@ -87,9 +95,11 @@ RARFlagMasks.DictionarySizeMask`, as `RARUtils.GetDictionarySize` already does),
   (only when LARGE is set) AND the NAME offset (when LARGE is clear): `RARPatcher.cs:488/667`
   `nameOffset = 32 + (large ? 8 : 0)`; `:843-851` copy/insert at 32. Provide
   `HighPackSizeOffset = 32` **and** `FixedFieldsEnd = 32` (used as the name base when not LARGE) —
-  choose by intent at each site, never one name for both. The derived siblings `36` (=32+4), `40`
-  (=32+8), `11` (=7+4) at `RARPatcher.cs:466,601,743,829,873` should be expressed as
-  `FixedFieldsEnd + 4` / `+ 8` / `BaseHeaderSize + AddSizeFieldLength` rather than bare numbers.
+  choose by intent at each site, never one name for both. The derived siblings — `11` (=7+4) at
+  `:601,829`; `36` (=32+4) at `:264,743`; `40` (=32+8) at `:873` — should be expressed as
+  `BaseHeaderSize + AddSizeFieldLength` / `FixedFieldsEnd + 4` / `FixedFieldsEnd + 8` rather than bare
+  numbers. (Note `RARPatcher.cs:466` is a bare `>= 32` guard — that is a `FixedFieldsEnd` use, not a
+  sibling.)
 - **EXT_TIME decode constants (name the whole nibble family, not half).** `ExtTimePresentBit = 0x8`,
   `ExtTimeRoundUpBit = 0x4`, `ExtTimePrecisionMask = 0x3`, the per-field nibble arithmetic `(3 - t) *
   4` (name the `4` bits-per-nibble and `3`/`4` field count/index), and the mtime-nibble mask family
@@ -146,7 +156,9 @@ Each substitution must pick the name that matches the code's intent at that site
   `RARDetailedParser.ParseRAR4FileHeader` (`:895-970` — the `0x8`/`0x4`/`0x3` nibble decode, `(3-t)*4`
   bit arithmetic, precision labels) has **no existing test**, so a fat-fingered constant there would
   go undetected. Phase 1 adds a small `RARDetailedParserTests` case asserting the rendered EXT_TIME
-  field of a known header, before renaming those constants.
+  field of a known header, before renaming those constants. (The RAR5 CompInfo *display* duplicate at
+  `RARDetailedHeader.cs:1276-1279` is likewise display-only, but the identical masks are exercised by
+  the RAR5 reader tests, so a wrong value would surface there — no extra test required.)
 - Optionally add a `Rar4HeaderLayout` value-assertion test (`HighPackSizeOffset == 32`, etc.) as
   living documentation.
 - The reviewer confirms the `git diff` is ONLY value-preserving substitutions + the consolidated/new
@@ -154,8 +166,9 @@ Each substitution must pick the name that matches the code's intent at that site
 
 ## Naming conventions
 
-- `[Flags]` enums, PascalCase members; static-class constants `public const`/`internal const`;
-  markers `static readonly byte[]`.
+- `[Flags]` enums, PascalCase members; static-class constants `public const`/`internal const`. The
+  existing markers are `ReadOnlySpan<byte>` expression-bodied properties in `RARUtils` — consolidate
+  onto those, don't introduce a new `byte[]` form.
 - New `ReScene/RAR/Rar4HeaderLayout.cs` (offsets/sizes/EXT_TIME), internal.
 - `RAR5ArchiveFlags` added to `RARFlags.cs`; `RarHostOs` where the host-OS table lives.
 
@@ -167,10 +180,12 @@ Each substitution must pick the name that matches the code's intent at that site
 - Extend: `RARFlags.cs` (add `RAR5ArchiveFlags`), `RARBlockType.cs` (only if a value is genuinely
   absent).
 - Create: `ReScene/RAR/Rar4HeaderLayout.cs`.
-- Remove duplicates: `RAR5HeaderReader.RAR5Marker`, `RARPatcher.Offset*` private consts,
-  `RARHeaderReader` offset locals (migrated into the shared class).
-- Tests: existing suites pin behaviour; add the EXT_TIME-display test (required) and optionally a
-  layout value-assertion test.
+- Remove/alias duplicates: `RARPatcher.Offset*` private consts and the `RARHeaderReader` offset
+  locals (migrated into `Rar4HeaderLayout`); `RAR5HeaderReader.RAR5Marker` becomes a thin alias to
+  `RARUtils.Rar5Marker` OR is removed with `RAR5HeaderReaderTests.cs:58,64` migrated (see §B).
+- Tests: existing suites pin behaviour; add the EXT_TIME-display test (required); adjust
+  `RAR5HeaderReaderTests.cs:58,64` if the marker duplicate is removed; optionally a layout
+  value-assertion test.
 
 ## Success criteria
 
