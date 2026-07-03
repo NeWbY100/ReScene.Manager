@@ -37,8 +37,9 @@ adoption and consolidation**, not new definition. Verified against the code:
   `RARFlagMasks` with `DictionarySizeMask = 0x00E0`. **(pinned by `RARFlagsTests`.)**
 - `RARBlockType.cs`: `RAR4BlockType` (`Marker=0x72`, `ArchiveHeader=0x73`, `FileHeader=0x74`,
   `Service=0x7A`, …).
-- `RARUtils.cs`: `Rar4Marker` (`:24`) and `Rar5Marker` (`:29`) already exist as `static readonly
-  byte[]` — but `RAR5HeaderReader.RAR5Marker` (`:420`) **duplicates** `Rar5Marker`, and the raw marker
+- `RARUtils.cs`: `Rar4Marker` (`:24`) and `Rar5Marker` (`:29`) already exist as `ReadOnlySpan<byte>`
+  expression-bodied properties — but `RAR5HeaderReader.RAR5Marker` (`:420`) is a `byte[]` that
+  **duplicates** `Rar5Marker`, and the raw marker
   bytes are still inlined in `RARUtils.FindRarMarkerOffset` and `RARDetailedParser.IsValidRAR4Signature`.
 - Partial header-offset constants already exist as `RARPatcher`'s private consts (`OffsetCRC=0 …
   OffsetAttr=28, OffsetHighPackSize=32`, `RARPatcher.cs:222-231`) and as locals in
