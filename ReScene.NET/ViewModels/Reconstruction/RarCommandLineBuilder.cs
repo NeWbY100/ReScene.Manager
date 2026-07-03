@@ -262,6 +262,12 @@ internal static class RarCommandLineBuilder
 
         List<RARCommandLineArgument[]> result = [];
 
+        // Normalise the thread-count (-mt) range so a reversed or empty pair (Start > End, or a
+        // typo/imported config) never collapses the whole matrix to zero combinations — which would
+        // otherwise complete instantly with a misleading "No match found". Thread counts start at 1.
+        int mtLo = s.SwitchMT ? Math.Max(1, Math.Min(s.SwitchMTStart, s.SwitchMTEnd)) : 0;
+        int mtHi = s.SwitchMT ? Math.Max(s.SwitchMTStart, s.SwitchMTEnd) : 0;
+
         for (int a = 0; a < Math.Max(compressionLevels.Count, 1); a++)
         {
             for (int b = 0; b < Math.Max(archiveFormats.Count, 1); b++)
@@ -276,7 +282,7 @@ internal static class RarCommandLineBuilder
                             {
                                 for (int x = 0; x < (s.SwitchAI ? 2 : 1); x++)
                                 {
-                                    for (int z = s.SwitchMT ? s.SwitchMTStart : 0; z < (s.SwitchMT ? s.SwitchMTEnd + 1 : 1); z++)
+                                    for (int z = mtLo; z <= mtHi; z++)
                                     {
                                         List<RARCommandLineArgument> switches = [new("a", 200)];
 

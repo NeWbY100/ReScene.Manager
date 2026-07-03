@@ -119,6 +119,31 @@ public sealed class RarCommandLineBuilderTests
     }
 
     [Fact]
+    public void BuildCommandLineArguments_ThreadRange_ProducesOneComboPerThreadCount()
+    {
+        var settings = new RarSwitchSettings { SwitchMT = true, SwitchMTStart = 2, SwitchMTEnd = 4 };
+
+        List<RARCommandLineArgument[]> matrix = RarCommandLineBuilder.BuildCommandLineArguments(settings);
+
+        Assert.Equal(3, matrix.Count);   // -mt2, -mt3, -mt4
+        Assert.All(matrix, combo => Assert.Contains(combo, c => c.Argument is "-mt2" or "-mt3" or "-mt4"));
+    }
+
+    [Fact]
+    public void BuildCommandLineArguments_ReversedThreadRange_NormalisesInsteadOfProducingZero()
+    {
+        // Start > End (a typo or swapped imported config) must not collapse the whole matrix to
+        // zero combinations and a silent "No match found".
+        var settings = new RarSwitchSettings { SwitchMT = true, SwitchMTStart = 4, SwitchMTEnd = 2 };
+
+        List<RARCommandLineArgument[]> matrix = RarCommandLineBuilder.BuildCommandLineArguments(settings);
+
+        Assert.Equal(3, matrix.Count);   // normalised to 2..4
+        Assert.Contains(matrix, combo => combo.Any(c => c.Argument == "-mt2"));
+        Assert.Contains(matrix, combo => combo.Any(c => c.Argument == "-mt4"));
+    }
+
+    [Fact]
     public void BuildCommandLineArguments_ArchiveFormatSwitch_CarriesVersionRange()
     {
         var settings = new RarSwitchSettings { SwitchMA5 = true };

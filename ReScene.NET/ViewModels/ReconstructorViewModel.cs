@@ -450,6 +450,10 @@ public partial class ReconstructorViewModel : ViewModelBase
         SyncMajorsFromTree();
     }
 
+    /// <summary>The most recent folder-scan Task, exposed so tests can await scan completion
+    /// deterministically (production is fire-and-forget and marshals results to the UI thread).</summary>
+    internal Task? LastVersionScan { get; private set; }
+
     /// <summary>Kicks off a folder scan: synchronous empty result for an invalid folder (keeps tests
     /// deterministic), otherwise off-thread with a latest-wins token.</summary>
     private void TriggerVersionScan()
@@ -457,11 +461,15 @@ public partial class ReconstructorViewModel : ViewModelBase
         string folder = WinRarPath;
         if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
         {
+            // Bump the token so a still-running async scan of a previous folder cannot land later
+            // and repopulate the tree (with HasScannedVersions=true) against the now-invalid path.
+            _scanToken++;
             ApplyScanResult([], folderScanned: false);
+            LastVersionScan = Task.CompletedTask;
             return;
         }
 
-        _ = RunVersionScanAsync(folder);
+        LastVersionScan = RunVersionScanAsync(folder);
     }
 
     private async Task RunVersionScanAsync(string folder)
@@ -1026,7 +1034,9 @@ public partial class ReconstructorViewModel : ViewModelBase
             SwitchMT = false;
             SwitchR = true;
 
-            // Volume size
+            // Volume size. The SRR fully determines the volume state, so a single-volume release must
+            // actively CLEAR any multi-volume switch left over from a previous import — otherwise a
+            // stale -v… would be added to every combination and guarantee a no-match.
             if (srr.RARFiles.Count > 1 && srr.VolumeSizeBytes.HasValue)
             {
                 ApplyVolumeSize(srr.VolumeSizeBytes.Value);
@@ -1035,6 +1045,16 @@ public partial class ReconstructorViewModel : ViewModelBase
             {
                 SwitchV = true;
                 Log(LogTarget.System, "Multi-volume: Yes (size unknown)");
+            }
+            else if (srr.IsVolumeArchive == false || srr.RARFiles.Count <= 1)
+            {
+                if (SwitchV)
+                {
+                    Log(LogTarget.System, "Multi-volume: No");
+                }
+
+                SwitchV = false;
+                UseOldVolumeNaming = false;
             }
 
             // Volume naming

@@ -162,8 +162,10 @@ public class ArchiveSetPlannerTests
         BruteForceOptions narrowed = ArchiveSetPlanner.NarrowToCombo(full, combo);
 
         Assert.Single(narrowed.RAROptions.RARVersions);
+        // End is exclusive, so the single-version range must be [351, 352) and actually accept 351.
         Assert.Equal(351, narrowed.RAROptions.RARVersions[0].Start);
-        Assert.Equal(351, narrowed.RAROptions.RARVersions[0].End);
+        Assert.Equal(352, narrowed.RAROptions.RARVersions[0].End);
+        Assert.True(narrowed.RAROptions.RARVersions[0].InRange(351));
         Assert.Single(narrowed.RAROptions.CommandLineArguments);
         Assert.Equal("-m0", narrowed.RAROptions.CommandLineArguments[0][0].Argument);
     }

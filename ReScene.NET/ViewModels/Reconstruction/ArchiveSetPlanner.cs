@@ -234,8 +234,12 @@ internal static class ArchiveSetPlanner
         var narrowed = new BruteForceOptions(full.RARInstallationsDirectoryPath, full.ReleaseDirectoryPath, full.OutputDirectoryPath)
         {
             HashType = full.HashType,
+            // VersionRange end is exclusive (InRange is `>= Start && < End`), so a single version
+            // is [v, v+1) — matching RarCommandLineBuilder.BuildVersionRanges. A [v, v) range is
+            // empty and would exclude the winning version's own folder, making the seed run test
+            // nothing and always fall back to the full matrix.
             RAROptions = CloneWith(full.RAROptions,
-                versions: [new VersionRange(combo.Version, combo.Version)],
+                versions: [new VersionRange(combo.Version, combo.Version + 1)],
                 args: [combo.Args.ToArray()]),
         };
 
