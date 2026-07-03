@@ -128,6 +128,11 @@ public class HexViewControl : UserControl
     {
         if (d is HexViewControl c)
         {
+            // A DataSource/BlockOffset/BlockLength change replaces the displayed block, so any
+            // in-progress mouse selection (absolute offsets against the old block) no longer maps
+            // to the new content. Clear it — mirroring OnSelectionOffsetChanged — so Copy/Ctrl+C
+            // can't grab bytes from the new slice at a meaningless offset.
+            c._canvas.ClearMouseSelection();
             c.RefreshCanvas();
         }
     }
@@ -542,8 +547,17 @@ public class HexViewControl : UserControl
             }
 
             long blockOffset = _owner.BlockOffset;
-            long relStart = Math.Max(0, selStart - blockOffset);
-            long len = Math.Min(selLength, _owner.BlockLength - relStart);
+            long relStart = selStart - blockOffset;
+            long len = selLength;
+            if (relStart < 0)
+            {
+                // Selection begins before the block: drop the clipped leading bytes from the
+                // length too, otherwise we'd read past the intended end of the selection.
+                len += relStart;
+                relStart = 0;
+            }
+
+            len = Math.Min(len, _owner.BlockLength - relStart);
             if (len <= 0)
             {
                 return;

@@ -130,11 +130,22 @@ internal static class CompareHighlighter
                 {
                     RARDetailedBlock? otherBlock = otherBlocks.FirstOrDefault(b =>
                         b.BlockType == block.BlockType && b.ItemName == block.ItemName);
-                    if (otherBlock is not null
-                        && FileComparer.HasBlockDifferences(block, otherBlock, leftFileSource, rightFileSource))
+                    if (otherBlock is not null)
                     {
-                        node.Text = $"{GetBaseNodeText(node.Text)} [DIFF]";
-                        node.IsDifferent = true;
+                        // HasBlockDifferences reads leftSource at the FIRST block's offset and
+                        // rightSource at the SECOND block's offset. Keep the sides consistent: the
+                        // left block must pair with leftFileSource and the right block with
+                        // rightFileSource. For a right-tree node `block` is the right file's block
+                        // and `otherBlock` is the left file's, so swap the arguments — otherwise
+                        // each file is byte-compared at the other file's block offset.
+                        bool differs = isLeft
+                            ? FileComparer.HasBlockDifferences(block, otherBlock, leftFileSource, rightFileSource)
+                            : FileComparer.HasBlockDifferences(otherBlock, block, leftFileSource, rightFileSource);
+                        if (differs)
+                        {
+                            node.Text = $"{GetBaseNodeText(node.Text)} [DIFF]";
+                            node.IsDifferent = true;
+                        }
                     }
                 }
             }

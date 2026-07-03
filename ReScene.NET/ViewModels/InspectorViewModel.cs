@@ -895,9 +895,16 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
             return;
         }
 
+        // HexDataSource is a slice based at HexBlockOffset, so the searcher works in and returns
+        // block-relative offsets. Convert the absolute selection seed to slice-relative before the
+        // search, then convert the result back to an absolute file offset so the selection, address
+        // column, status text, highlight ranges, and Export all use the true coordinate.
+        long sliceBase = HexBlockOffset;
+        long relSelection = HexSelectionOffset >= sliceBase ? HexSelectionOffset - sliceBase : -1;
+
         long start = forward
-            ? (HexSelectionOffset >= 0 ? HexSelectionOffset + 1 : 0)
-            : (HexSelectionOffset >= 0 ? HexSelectionOffset : HexDataSource.Length);
+            ? (relSelection >= 0 ? relSelection + 1 : 0)
+            : (relSelection >= 0 ? relSelection : HexDataSource.Length);
 
         long match = forward
             ? HexSearcher.FindForward(HexDataSource, pattern, start)
@@ -909,7 +916,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
             return;
         }
 
-        ApplyHexMatch(match, pattern.Bytes.Length);
+        ApplyHexMatch(match + sliceBase, pattern.Bytes.Length);
         UpdateHexMatchRanges(pattern);
     }
 
@@ -937,7 +944,10 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
             return;
         }
 
-        long start = HexSelectionOffset >= 0 ? HexSelectionOffset : 0;
+        // HexDataSource is a slice based at HexBlockOffset; seed with a slice-relative offset and
+        // convert the match back to an absolute file offset (see RunHexSearch).
+        long sliceBase = HexBlockOffset;
+        long start = HexSelectionOffset >= sliceBase ? HexSelectionOffset - sliceBase : 0;
         long match = HexSearcher.FindForward(HexDataSource, pattern, start);
 
         if (match < 0 && start > 0)
@@ -952,7 +962,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
             return;
         }
 
-        ApplyHexMatch(match, pattern.Bytes.Length);
+        ApplyHexMatch(match + sliceBase, pattern.Bytes.Length);
         UpdateHexMatchRanges(pattern);
     }
 
@@ -990,10 +1000,13 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
             return;
         }
 
+        // FindAll returns block-relative offsets over the slice; the hex view treats highlight
+        // ranges as absolute file offsets, so rebase onto HexBlockOffset.
+        long sliceBase = HexBlockOffset;
         var ranges = new List<HexMatchRange>(offsets.Count);
         foreach (long offset in offsets)
         {
-            ranges.Add(new HexMatchRange(offset, pattern.Bytes.Length));
+            ranges.Add(new HexMatchRange(offset + sliceBase, pattern.Bytes.Length));
         }
 
         HexMatchRanges = ranges;

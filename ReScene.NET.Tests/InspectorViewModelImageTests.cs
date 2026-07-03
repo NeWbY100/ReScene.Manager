@@ -1,4 +1,5 @@
 using System.Text;
+using ReScene.Hex;
 using ReScene.NET.Models;
 using ReScene.NET.Services;
 using ReScene.NET.ViewModels;
@@ -245,5 +246,42 @@ public class InspectorViewModelImageTests : TempDirTestBase
         // Search lives in the Hex tab, so invoking it must switch back to Hex and reveal the bar.
         Assert.False(vm.IsTextViewActive);
         Assert.True(vm.IsHexSearchVisible);
+    }
+
+    [Fact]
+    public void HexSearch_InsideSubBlock_ReportsAbsoluteFileOffset()
+    {
+        // A stored-file block never starts at file offset 0 (the SRR header precedes it), so its
+        // hex slice has BlockOffset > 0. A pattern in the payload must resolve to the TRUE absolute
+        // file offset — not the slice-relative one — so the address column, status bar, highlight
+        // ranges, and Export all stay coordinate-consistent.
+        byte[] payload = [0x11, 0x22, 0xDE, 0xAD, 0xBE, 0xEF, 0x33];
+        string srr = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "search.srr", "data.bin", payload);
+
+        using InspectorViewModel vm = CreateVm(new FakeReadEditingService(), new RecordingImagePreviewService());
+        vm.LoadFile(srr);
+
+        TreeNodeViewModel node = vm.TreeRoots.Flatten()
+            .First(n => n.Tag is SRRStoredFileBlock b && b.FileName == "data.bin");
+        vm.SelectedTreeNode = node;
+
+        var stored = (SRRStoredFileBlock)node.Tag!;
+        Assert.True(vm.HexBlockOffset > 0, "sub-block slice must be based past file offset 0");
+
+        // The pattern sits at payload index 2 → absolute offset is DataOffset + 2.
+        long expected = stored.DataOffset + 2;
+
+        vm.HighlightAllMatches = true;
+        vm.HexSearchText = "DEADBEEF"; // hex mode is the default
+        vm.FindNextCommand.Execute(null);
+
+        Assert.Equal(expected, vm.HexSelectionOffset);
+        // The block base must NOT be clobbered to 0 (which would make Export read from file offset 0).
+        Assert.Equal(stored.BlockPosition, vm.HexBlockOffset);
+        Assert.Contains(expected.ToString("X"), vm.HexSearchStatus, StringComparison.Ordinal);
+
+        // Highlight-all ranges are also rebased to absolute file offsets.
+        HexMatchRange range = Assert.Single(vm.HexMatchRanges!);
+        Assert.Equal(expected, range.Offset);
     }
 }
