@@ -263,6 +263,37 @@ public sealed class CreatorViewModelTests : IDisposable
     }
 
     [Fact]
+    public void InputPathChange_WithSamplePlaceholder_DoesNotThrow_AndRecomputesRealItems()
+    {
+        string dirA = CreateTempRelease("movie.sfv");
+        // A real stored file living in a subfolder of the SECOND release, so switching the input to
+        // it must recompute the stored name to the release-relative "subs/real.nfo".
+        string dirB = CreateTempRelease("other.sfv", Path.Combine("subs", "real.nfo"));
+        string realFile = Path.Combine(dirB, "subs", "real.nfo");
+
+        CreatorViewModel vm = CreateVm(out _);
+        vm.InputPath = Path.Combine(dirA, "movie.sfv");
+        vm.AddStoredFiles([realFile]);
+
+        // A wizard sample placeholder has an empty FullPath (Kind = GeneratedSrs).
+        vm.ExtraSampleFiles.Add(Path.Combine(dirA, "Sample", "movie-sample.mkv"));
+        vm.BuildSampleAndSubtitlePlaceholders();
+        var placeholder = Assert.Single(vm.StoredFiles, f => f.Kind == CreatorViewModel.StoredFileKind.GeneratedSrs);
+        Assert.Equal(string.Empty, placeholder.FullPath);
+
+        // Changing the input path re-runs UpdateStoredNames over EVERY stored item, including the
+        // empty-FullPath placeholder. Before the fix, Path.GetRelativePath(releaseDir, "") threw
+        // ArgumentException here and aborted the rest of OnInputPathChanged.
+        Exception? ex = Record.Exception(() => vm.InputPath = Path.Combine(dirB, "other.sfv"));
+
+        Assert.Null(ex);
+        // The real item is recomputed against the new release dir; the placeholder is left untouched.
+        var real = vm.StoredFiles.Single(f => f.Kind == CreatorViewModel.StoredFileKind.Regular);
+        Assert.Equal("subs/real.nfo", real.StoredName);
+        Assert.Equal(string.Empty, placeholder.FullPath);
+    }
+
+    [Fact]
     public void BuildPlaceholders_UnchangedSources_PreservesExistingRowsAndOrder()
     {
         string dir = CreateTempRelease("movie.sfv");

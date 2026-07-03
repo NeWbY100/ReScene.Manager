@@ -184,6 +184,15 @@ public partial class ReconstructorViewModel : ViewModelBase
     partial void OnWinRarPathChanged(string value)
     {
         WinRarStatus = ReconstructorFieldGuidance.EvaluateWinRarPath(value);
+
+        // The folder changed, so the previous folder's scan no longer describes the current path.
+        // Mark the tree as not-yet-scanned (and invalidate any in-flight scan) BEFORE kicking off the
+        // async scan for this folder. Otherwise a config's pending version selection applied right
+        // after this (the mapper sets WinRarPath, then LoadPendingVersionSelection) would be consumed
+        // by ApplyReconcile against the STALE previous scan and lost before the new folder's scan
+        // lands, clearing the restored major toggles too. See audit #39.
+        HasScannedVersions = false;
+        _scanToken++;
         TriggerVersionScan();
     }
 
@@ -1490,6 +1499,15 @@ public partial class ReconstructorViewModel : ViewModelBase
                 IsCopying = false;
             }
 
+            // Same for input-CRC validation: a cancel during verification throws before the lib's
+            // final 100% event, so IsVerifying would otherwise stay true forever and the modal CRC
+            // window could never close (its Closing handler cancels while IsVerifying).
+            if (IsVerifying)
+            {
+                _progress.StopVerify();
+                IsVerifying = false;
+            }
+
             _cts?.Dispose();
             _cts = null;
         }
@@ -2156,6 +2174,13 @@ public partial class ReconstructorViewModel : ViewModelBase
     {
         _uiDispatcher.Post(() =>
         {
+            // A queued progress event can arrive after a cancelled run already cleaned up;
+            // re-raising IsVerifying then would re-open (and strand) the CRC progress window.
+            if (!IsRunning)
+            {
+                return;
+            }
+
             if (!IsVerifying)
             {
                 IsVerifying = true;

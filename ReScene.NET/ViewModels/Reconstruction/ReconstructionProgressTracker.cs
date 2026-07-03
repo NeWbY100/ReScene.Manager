@@ -261,6 +261,7 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     // ── CRC validation sub-operation ──
 
     public void StartVerify() => _verifyStopwatch.Restart();
+    public void StopVerify() => _verifyStopwatch.Stop();
 
     public VerifyProgressUpdate ApplyVerifyProgress(CRCValidationProgressEventArgs e)
     {

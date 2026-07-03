@@ -5,14 +5,65 @@ using ReScene.NET.ViewModels.Reconstruction;
 
 namespace ReScene.NET.Tests;
 
-public sealed class ReconstructorViewModelVersionsTests
+public sealed class ReconstructorViewModelVersionsTests : IDisposable
 {
+    private readonly List<string> _tempDirs = [];
+
+    public void Dispose()
+    {
+        foreach (string d in _tempDirs)
+        {
+            try { Directory.Delete(d, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    /// <summary>Creates a real WinRAR versions folder containing one "winrar-NNN" subfolder (with a
+    /// rar.exe stub) per version, so setting WinRarPath drives the actual async folder scan.</summary>
+    private string MakeWinRarFolder(params int[] versions)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "rvm-versions-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        _tempDirs.Add(root);
+        foreach (int v in versions)
+        {
+            string dir = Path.Combine(root, $"winrar-{v}");
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "rar.exe"), "stub");
+        }
+
+        return root;
+    }
+
     private sealed class InlineUiDispatcher : IUiDispatcher
     {
         public void Invoke(Action action) => action();
         public void Post(Action action) => action();
         public void Post(Action action, System.Windows.Threading.DispatcherPriority priority) => action();
         public bool CheckAccess() => true;
+    }
+
+    /// <summary>
+    /// Dispatcher that DEFERS marshalled actions onto a queue instead of running them inline. The
+    /// async folder scan marshals its result via Invoke; queueing lets the test drain the scan Task
+    /// and then run that continuation on the TEST thread via <see cref="Pump"/> — so nothing mutates
+    /// the view-model concurrently and the scan landing is fully deterministic.
+    /// </summary>
+    private sealed class QueueingUiDispatcher : IUiDispatcher
+    {
+        private readonly Queue<Action> _queue = new();
+        public void Invoke(Action action) => _queue.Enqueue(action);
+        public void Post(Action action) => _queue.Enqueue(action);
+        public void Post(Action action, System.Windows.Threading.DispatcherPriority priority) => _queue.Enqueue(action);
+        public bool CheckAccess() => true;
+
+        /// <summary>Runs every queued action on the calling thread, in order.</summary>
+        public void Pump()
+        {
+            while (_queue.Count > 0)
+            {
+                _queue.Dequeue()();
+            }
+        }
     }
 
     private sealed class InertBruteForceService : IBruteForceService
@@ -110,6 +161,45 @@ public sealed class ReconstructorViewModelVersionsTests
         vm.ApplyScanResult(Installed, folderScanned: true);
 
         Assert.Equal(new[] { 500, 624 }, vm.SelectedLeafVersions.ToArray());
+    }
+
+    [Fact]
+    public async Task ChangingWinRarPath_ResetsScannedState_SoConfigSelectionSurvivesNewScan()
+    {
+        // Folder A is already scanned (mirrors the automatic startup scan from settings); folder B is
+        // a config's target with a disjoint set of versions. Both are real dirs so the WinRarPath
+        // changes drive the actual OnWinRarPathChanged / async-scan path — where the pending selection
+        // used to be lost. A queueing dispatcher makes each scan's landing deterministic (pumped on
+        // the test thread), so no assertion races the scan continuation.
+        string folderA = MakeWinRarFolder(400);          // major 4 only
+        string folderB = MakeWinRarFolder(560, 624);     // majors 5 and 6
+
+        var dispatcher = new QueueingUiDispatcher();
+        ReconstructorViewModel vm = new(new InertBruteForceService(), new NoOpFileDialogService(),
+            settingsService: null, uiDispatcher: dispatcher);
+
+        // Folder A scanned: run the scan Task, then pump its queued ApplyScanResult onto this thread.
+        vm.WinRarPath = folderA;
+        await vm.LastVersionScan!;
+        dispatcher.Pump();
+        Assert.True(vm.HasScannedVersions);
+
+        // Changing to a different folder must SYNCHRONOUSLY mark the tree as not-yet-scanned; B's scan
+        // continuation is only queued (not yet pumped), so this reads the fix's direct effect.
+        // Without the fix this stays true (folder A's stale scanned state).
+        vm.WinRarPath = folderB;
+        Assert.False(vm.HasScannedVersions);
+
+        // Mirror ConfigMapper.Apply's ordering: the pending selection is applied while B's scan is
+        // still in flight. Because HasScannedVersions is now false, ApplyReconcile KEEPS the pending
+        // list (rather than consuming it against folder A's stale scan and losing it).
+        vm.LoadPendingVersionSelection([560, 624]);
+
+        // B's scan lands: drain the Task, then pump its queued ApplyScanResult. The surviving pending
+        // selection now ticks exactly the configured versions.
+        await vm.LastVersionScan!;
+        dispatcher.Pump();
+        Assert.Equal(new[] { 560, 624 }, Ticked(vm));
     }
 
     [Fact]

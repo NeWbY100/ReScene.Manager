@@ -358,11 +358,13 @@ public partial class SRSReconstructorViewModel : OperationViewModelBase
         }
         finally
         {
-            if (_scanModalActive)
-            {
-                _scanModalActive = false;
-                ISOProcessing = false;
-            }
+            // Clear both flags unconditionally (matching SRSCreatorViewModel): the ISO extraction
+            // phase sets ISOProcessing=true while _scanModalActive is still false, so a cancel/error
+            // there must not leave ISOProcessing stuck true — that keeps the ISO modal open and, since
+            // [ObservableProperty] suppresses no-op sets, the next ISO run would raise no
+            // PropertyChanged and open no progress window. See audit #40.
+            _scanModalActive = false;
+            ISOProcessing = false;
 
             IsRebuilding = false;
             _cts?.Dispose();

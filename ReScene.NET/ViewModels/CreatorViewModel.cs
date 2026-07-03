@@ -1011,7 +1011,15 @@ public partial class CreatorViewModel : OperationViewModelBase
     {
         foreach (StoredFileItem item in StoredFiles)
         {
-            item.StoredName = ComputeStoredName(item.FullPath);
+            // Only recompute names for real files. Wizard sample/subtitle placeholders have an empty
+            // FullPath (materialized at creation time); ComputeStoredName would call
+            // Path.GetRelativePath(releaseDir, "") which throws ArgumentException and aborts the rest
+            // of OnInputPathChanged. Their names are derived separately via GeneratedStoredName. See
+            // audit #34.
+            if (item.Kind == StoredFileKind.Regular)
+            {
+                item.StoredName = ComputeStoredName(item.FullPath);
+            }
         }
     }
 
