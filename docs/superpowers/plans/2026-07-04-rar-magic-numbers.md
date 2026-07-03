@@ -13,7 +13,8 @@
 - **Behaviour-preserving:** every named constant MUST equal the literal it replaces; no logic changes. Pick the name by INTENT at each site (see the overloaded-literal list below), not just by value.
 - **Overloaded literals** (same value, different meaning — choose the right name per site):
   - `0x00E0` = `RARFileFlags.Directory` (all-bits-set test) vs `RARFlagMasks.DictionarySizeMask` (dict-size extraction).
-  - `32` = `Rar4HeaderLayout.HighPackSizeOffset` (only when LARGE set) vs `Rar4HeaderLayout.FixedFieldsEnd` (name base offset otherwise).
+  - `32` = `Rar4HeaderLayout.HighPackSizeOffset` (only when LARGE set) vs `Rar4HeaderLayout.FixedFieldsEnd` (name base offset otherwise). **`<< 32`** (the 64-bit hi/lo pack-size combine, e.g. `(long)highPack << 32` at `RARPatcher.cs:267,750`, readers `:452-453`) is a SHIFT, NOT an offset — leave it a literal, never `FixedFieldsEnd`.
+  - `7` / `8` are overloaded: the RAR4/RAR5 **marker lengths** (`isRar5 ? 8 : 7 // skip marker` at `RARStream.cs:278,346`, `RARArchive.cs:407`, `RARPatcher.PatchStream:436`) → `RARUtils.Rar4Marker.Length` / `Rar5Marker.Length` (do these in **Task 5**, not Task 2); the RAR4 **base header size** (`7`) → `Rar4HeaderLayout.BaseHeaderSize` (Task 2). Same value, opposite meaning — pick by intent.
   - `RARFileFlags.DictSize64…DictSize4096` are multi-bit FIELD VALUES — NEVER call `HasFlag` on them; keep the dict-size bits as `flags & RARFlagMasks.DictionarySizeMask`. `HasFlag` is only for single-bit flags (Large/Unicode/ExtTime/LongBlock/Salt) and the `Directory` all-bits-set test.
 - **Scope:** `ReScene.Lib/ReScene/RAR/*.cs` only. NOT `RAR/Decompression/**` (Phase 5) — including the `RARMethod` enum's file (`RARDecompressor.cs`), which we only *use*, never edit.
 - **Build/test ONLY with `-p:BaseOutputPath=bin2/`** (a running app locks `bin/`). NEVER kill the app. After verifying, delete bin2: `find E:/Projects/ReScene.NET -type d -name bin2 -prune -exec rm -rf {} + 2>/dev/null`.
@@ -54,8 +55,10 @@ public void ParseRAR4_ExtTime_RendersModifiedTimeFieldExactly()
     byte[] header = /* a RAR4 file header with RARFileFlags.ExtTime and a known mtime remainder */;
     RARDetailedBlock block = RARDetailedParser.Parse(header).Single(b => b.BlockType == "File");
 
-    RARHeaderField mtime = block.Fields.Single(f => f.Name.Contains("Modified", StringComparison.Ordinal));
-    Assert.Equal(/* the exact string the parser produces today */, mtime.Value);
+    // RAR4 EXT_TIME display fields are named "Extended Time Flags" / "Ext mtime DOS" / "Ext mtime
+    // subsec" (RARDetailedHeader.cs:898,944,965) — NOT "Modification Time" (that's the RAR5 path).
+    RARHeaderField subsec = block.Fields.Single(f => f.Name.Contains("Ext mtime subsec", StringComparison.Ordinal));
+    Assert.Equal(/* the exact string the parser produces today */, subsec.Value);
 }
 ```
 
@@ -117,11 +120,11 @@ internal static class Rar4HeaderLayout
 }
 ```
 
-- [ ] **Step 2: Migrate `RARPatcher`.** Delete the `private const int Offset* = …;` block (`:222-231`). Replace each `OffsetXxx` use with `Rar4HeaderLayout.Xxx` — with the `32` split: `OffsetHighPackSize` uses that read/write HIGH_PACK_SIZE (`:266,746`) → `Rar4HeaderLayout.HighPackSizeOffset`; the name-base and copy/insert uses of 32 (`nameOffset = 32 + (large?8:0)` at `:488,667`; `:843-851,882-887`; the `>= 32` guard at `:466`) → `Rar4HeaderLayout.FixedFieldsEnd`. Express the derived siblings as sums: `11`(`:601,829`)→`Rar4HeaderLayout.BaseHeaderSize + Rar4HeaderLayout.AddSizeFieldLength`; `36`(`:264,743`)→`Rar4HeaderLayout.FixedFieldsEnd + Rar4HeaderLayout.AddSizeFieldLength`; `40`(`:873`)→`Rar4HeaderLayout.FixedFieldsEnd + 8` (the `8` is the HIGH_PACK_SIZE+HIGH_UNP_SIZE width; leave `8` inline or add `Rar4HeaderLayout.HighSizeFieldsWidth = 8` — your call, but be consistent).
+- [ ] **Step 2: Migrate `RARPatcher`.** Delete the `private const int Offset* = …;` block (`:222-231`). Replace each `OffsetXxx` use with `Rar4HeaderLayout.Xxx` — with the `32` split: `OffsetHighPackSize` uses that read/write HIGH_PACK_SIZE (`:266,746`) → `Rar4HeaderLayout.HighPackSizeOffset`; the name-base, copy/insert, and header-size guard uses of 32 (`nameOffset = 32 + (large?8:0)` at `:488,667`; `extTimeOffset = 32 + …` at `:348`; the `>= 32` guards at `:466,651,834`; the copy/insert at `:843-851,882-887`) → `Rar4HeaderLayout.FixedFieldsEnd`. Express the derived siblings as sums: `11`(`:601,829`)→`Rar4HeaderLayout.BaseHeaderSize + Rar4HeaderLayout.AddSizeFieldLength`; `36`(`:264,744`)→`Rar4HeaderLayout.FixedFieldsEnd + 4`; `40`(`:873`)→`Rar4HeaderLayout.FixedFieldsEnd + 8` (the trailing `4`/`8` are the HIGH_PACK_SIZE / HIGH_PACK_SIZE+HIGH_UNP_SIZE widths — leave inline, or add `HighPackSizeWidth = 4`/`HighSizeFieldsWidth = 8`; be consistent). Do NOT touch the `(long)highPack << 32` combines (`:267,750`) — that `32` is a shift.
 
 - [ ] **Step 3: Migrate `RARHeaderReader`.** Replace the `baseHeaderSize`/`addSizeField`/`serviceFieldsSize` locals (`:417-419,737-738`) and the bare `7`/`4` header-arithmetic with `Rar4HeaderLayout.*`. `serviceFieldsSize = 21` stays a local (it is service-specific, not in the layout) unless it decomposes cleanly into layout members.
 
-- [ ] **Step 4: Adopt in `RARStream`, `RARArchive`, `RARDetailedHeader`.** Replace bare RAR4 base-header/offset literals (`+ 7`, offset 32, etc.) with `Rar4HeaderLayout.*`, intent-correct.
+- [ ] **Step 4: Adopt in `RARStream`, `RARArchive`, `RARDetailedHeader`.** Replace bare RAR4 base-header/offset literals with `Rar4HeaderLayout.*`, intent-correct. CAUTION: the `7`/`8` in `RARStream.cs:278,346` and `RARArchive.cs:407` (`isRar5 ? 8 : 7 // skip marker`) are MARKER LENGTHS, not base-header size — leave them for **Task 5** (`Rar4Marker.Length`/`Rar5Marker.Length`); only rename a `7` here that is genuinely the base-header size.
 
 - [ ] **Step 5: Build + full lib suite — must be green, no new failures.**
 
@@ -160,26 +163,32 @@ Add the EXT_TIME and DOS date/time constants to `Rar4HeaderLayout` and adopt the
     public const int ExtTimePresentBit = 0x8;     // time field is present
     public const int ExtTimeRoundUpBit = 0x4;     // +1s rounding
     public const int ExtTimePrecisionMask = 0x3;  // number of extra 100ns remainder bytes (0-3)
+    public const int ExtTimeNibbleMask = 0xF;     // one rmode nibble
 
-    // mtime nibble packing inside the ext-time flags word.
+    // rmode nibble packing inside the ext-time flags word: mtime>>12, ctime>>8, atime>>4, arctime>>0.
     public const int MtimeNibbleShift = 12;       // << 12 / >> 12
+    public const int CtimeNibbleShift = 8;
+    public const int AtimeNibbleShift = 4;
     public const int MtimeNibbleMask = 0x0FFF;    // clear the mtime nibble
 
     // DOS date/time packing (FTIME).
-    public const int DosSecondMask = 0x1F;   // *2 seconds
+    public const int DosSecondMask = 0x1F;      // *2 seconds
+    public const int DosSecondEvenMask = 0x3E;  // encode: keep even seconds before >> 1
     public const int DosMinuteMask = 0x3F;
     public const int DosMinuteShift = 5;
     public const int DosHourShift = 11;
     public const int DosDayMask = 0x1F;
     public const int DosMonthMask = 0x0F;
     public const int DosMonthShift = 5;
+    public const int DosYearMask = 0x7F;        // 7-bit year (years since 1980)
     public const int DosYearShift = 9;
     public const int DosEpochYear = 1980;
+    public const int DosMaxYear = 2107;         // encode clamp (1980 + 0x7F)
 ```
 
-- [ ] **Step 2: Adopt EXT_TIME constants** in `RARHeaderReader.cs` (`:584-600,812-829`), `RARDetailedHeader.cs` (`:895-970`), `RARPatcher.cs` (`:355-370` mtime nibble; the remainder encode already uses named `mtimeByteCount`). Replace `& 0x8`→`& ExtTimePresentBit`, `& 0x4`→`& ExtTimeRoundUpBit`, `& 0x3`→`& ExtTimePrecisionMask`, `(3 - i) * 4`→`(ExtTimeFieldCount - 1 - i) * ExtTimeNibbleBits`, `<< 12`/`>> 12`→`<< MtimeNibbleShift`, `& 0x0FFF`→`& MtimeNibbleMask`.
+- [ ] **Step 2: Adopt EXT_TIME constants** in `RARHeaderReader.cs` (reader decode `:584-620,812-829`), `RARDetailedHeader.cs` (`:895-970` display), `RARPatcher.cs` (`:355-370` mtime nibble; the remainder encode already uses named `mtimeByteCount`). Replace `& 0x8`→`& ExtTimePresentBit`, `& 0x4`→`& ExtTimeRoundUpBit`, `& 0x3`→`& ExtTimePrecisionMask`, `& 0xF`→`& ExtTimeNibbleMask`, `(3 - i) * 4`→`(ExtTimeFieldCount - 1 - i) * ExtTimeNibbleBits`, and the reader's explicit per-field shifts `>> 12`/`>> 8`/`>> 4` (`:812,819,826`)→`>> MtimeNibbleShift`/`>> CtimeNibbleShift`/`>> AtimeNibbleShift`, `<< 12`→`<< MtimeNibbleShift`, `& 0x0FFF`→`& MtimeNibbleMask`.
 
-- [ ] **Step 3: Adopt DOS-date constants** in `RARUtils.DosDateToDateTime` (`:91-101`, consolidate its existing `dosEpochYear` onto `Rar4HeaderLayout.DosEpochYear`) and `RARPatcher.EncodeDosDate` (`:280-287`, which re-inlines `1980`).
+- [ ] **Step 3: Adopt DOS-date constants** in `RARUtils.DosDateToDateTime` (`:91-101`, consolidate its existing `dosEpochYear` onto `Rar4HeaderLayout.DosEpochYear`; name the `0x7F` year mask, `0x1F`/`0x3F`/`0x0F` masks, and `9`/`5`/`11` shifts) and `RARPatcher.EncodeDosDate` (`:280-287`, which re-inlines `1980` → `DosEpochYear`, and uses `0x3E`+`>> 1` even-seconds → `DosSecondEvenMask`, `& 0x7F` year → `DosYearMask`, and the `2107` clamp → `DosMaxYear`).
 
 - [ ] **Step 4: Build + full lib suite green (no new failures).** The EXT_TIME test (Task 1), `RARPatcherTests` §"File Modified Times", and `RARHeaderReaderTests` precision tests are the guards here — they MUST stay green.
 
@@ -198,7 +207,7 @@ git commit -m "refactor(rar): name EXT_TIME and DOS-date bit-field constants"
 Replace raw flag/block-type literals with the existing enums, minding the `HasFlag` hazard.
 
 **Files:**
-- Modify: `RARHeaderReader.cs`, `RARDetailedHeader.cs`, `RARPatcher.cs`, `RARStream.cs`, `RARArchive.cs`, `RARFileHeader.cs`, `RARUtils.cs` (only flag/block-type literal sites).
+- Modify: `RARHeaderReader.cs`, `RARDetailedHeader.cs`, `RARPatcher.cs`, `RARStream.cs`, `RARArchive.cs`, `RARUtils.cs` (only flag/block-type literal sites). (NOT `RARFileHeader.cs` — its convenience properties already use `RARFileFlags.*`; nothing to change.)
 
 **Interfaces:**
 - Consumes: existing `RARFileFlags`, `RARArchiveFlags`, `RAREndArchiveFlags`, `RAR4BlockType`, `RARFlagMasks` (all in `RARFlags.cs`/`RARBlockType.cs`).
@@ -239,7 +248,7 @@ Adopt the existing `RARUtils.Rar4Marker`/`Rar5Marker`; alias-or-migrate the `RAR
 public static byte[] RAR5Marker => RARUtils.Rar5Marker.ToArray();
 ```
 
-(Alternatively remove it and change `RAR5HeaderReaderTests.cs:58` to `Assert.Equal(8, RARUtils.Rar5Marker.Length)` and `:64` to `Assert.True(RARUtils.Rar5Marker.SequenceEqual(expected))`. Pick one; the alias is lower-churn.)
+(Alternatively remove it and change `RAR5HeaderReaderTests.cs:58` to `Assert.Equal(8, RARUtils.Rar5Marker.Length)` and `:64` to `Assert.True(RARUtils.Rar5Marker.SequenceEqual(expected))`. Pick one; the alias is lower-churn.) Also repoint the production consumer at `RAR5HeaderReader.cs:463` (`marker[i] != RAR5Marker[i]` in an 8-iteration loop) to `RARUtils.Rar5Marker` so the alias isn't allocated per-index.
 
 - [ ] **Step 2: `IsValidRAR4Signature` → reuse the existing alias.** `RARDetailedHeader.cs:236` already exposes `Rar4Signature => RARUtils.Rar4Marker`. Replace the inline byte comparison in `IsValidRAR4Signature` (`:388-397`) with a `SequenceEqual`/prefix check against `RARUtils.Rar4Marker`, ONLY if it preserves the exact match (same length, same bytes). If the method checks a partial prefix, keep the exact semantics.
 
@@ -287,7 +296,7 @@ internal enum RAR5ArchiveFlags : ulong
 
 - [ ] **Step 2: Adopt it in `RAR5ArchiveInfo`** (`RAR5HeaderReader.cs:123-143`): `(ArchiveFlags & 0x0001) != 0`→`((RAR5ArchiveFlags)ArchiveFlags).HasFlag(RAR5ArchiveFlags.Volume)`, etc.
 
-- [ ] **Step 3: Name the vint + CompInfo masks.** Add `private const` (or a small `Rar5Format` static class) for the vint decode (`0x7F` data mask, `0x80` continuation bit, `63` max shift; `:522-533`) and the CompInfo unpacking (`& 0x3F` version, `>>7 & 0x07` method, `>>10 & 0x0F` dict, `128 << power` base) at `:225-235,706-708`, and apply the same names to the display duplicate in `RARDetailedHeader.cs:1276-1279`.
+- [ ] **Step 3: Name the vint + CompInfo masks.** Add `private const` (or a small `Rar5Format` static class) for the vint decode (`0x7F` data mask, `0x80` continuation bit, `63` max shift; `:522-533`) and the CompInfo unpacking (`& 0x3F` version, `& 0x40` solid bit, `>>7 & 0x07` method, `>>10 & 0x0F` dict, `128 << power` base) at `:225-235,706-708`, and apply the same names to the display duplicate in `RARDetailedHeader.cs:1276-1279` (which also carries the `& 0x40` solid bit at `:1277`).
 
 - [ ] **Step 4: Build + full lib suite green (no new failures).** `RAR5HeaderReaderTests` (which exercise the vint/CompInfo masks) guard this.
 
