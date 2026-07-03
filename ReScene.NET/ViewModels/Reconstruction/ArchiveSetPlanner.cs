@@ -18,6 +18,15 @@ internal sealed record SharedReconstructionSettings
     public required string ReleasePath { get; init; }
     public required string OutputPath { get; init; }
     public required IReadOnlyList<VersionRange> RarVersions { get; init; }
+
+    /// <summary>
+    /// The WinRAR version folder NAMES the user ticked in the version tree (e.g. "winrar-390-beta1").
+    /// Carried to the engine as <see cref="RAROptions.AllowedVersionFolders"/> so that unticking one
+    /// same-version variant leaf actually excludes its folder — the version ranges alone cannot
+    /// distinguish two folders that parse to the same version. Empty means no folder filter (the
+    /// no-scan fallback path, which uses broad ranges).
+    /// </summary>
+    public IReadOnlyList<string> SelectedVersionFolders { get; init; } = [];
     public required IReadOnlyList<RARCommandLineArgument[]> CommandLineArguments { get; init; }
     public required HashType HashType { get; init; }
 
@@ -155,6 +164,7 @@ internal static class ArchiveSetPlanner
                 SetFileNotContentIndexedAttribute = shared.SetFileNotContentIndexedAttribute,
                 CommandLineArguments = [.. shared.CommandLineArguments],
                 RARVersions = [.. shared.RarVersions],
+                AllowedVersionFolders = [.. shared.SelectedVersionFolders],
                 DeleteRARFiles = shared.DeleteRARFiles,
                 DeleteDuplicateCRCFiles = shared.DeleteDuplicateCRCFiles,
                 StopOnFirstMatch = shared.StopOnFirstMatch,
@@ -263,6 +273,9 @@ internal static class ArchiveSetPlanner
             SetFileNotContentIndexedAttribute = src.SetFileNotContentIndexedAttribute,
             CommandLineArguments = [.. args],
             RARVersions = [.. versions],
+            // Preserve the folder allow-list: the narrowed seed run must still respect the user's
+            // folder selection (now narrowed to the winning version's folder).
+            AllowedVersionFolders = [.. src.AllowedVersionFolders],
             DeleteRARFiles = src.DeleteRARFiles,
             DeleteDuplicateCRCFiles = src.DeleteDuplicateCRCFiles,
             StopOnFirstMatch = src.StopOnFirstMatch,

@@ -435,6 +435,15 @@ public partial class ReconstructorViewModel : ViewModelBase
     internal IReadOnlyList<int> SelectedLeafVersions =>
         VersionGroups.SelectMany(g => g.Leaves).Where(l => l.IsChecked).Select(l => l.Version).OrderBy(v => v).ToList();
 
+    /// <summary>
+    /// The currently-ticked leaf FOLDER names (e.g. "winrar-390-beta1"). Carried to the engine as the
+    /// version-folder allow-list so unticking one same-version variant leaf actually excludes its
+    /// folder (two folders can parse to the same version, so version ranges alone cannot distinguish
+    /// them).
+    /// </summary>
+    internal IReadOnlyList<string> SelectedLeafFolders =>
+        VersionGroups.SelectMany(g => g.Leaves).Where(l => l.IsChecked).Select(l => l.FolderName).ToList();
+
     [RelayCommand]
     private void RescanVersions() => TriggerVersionScan();
 
@@ -1649,7 +1658,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     private readonly record struct SetOutcome(SrrArchiveSet Set, string Label, bool Success, bool Skipped);
 
     /// <summary>Captures the non-per-set toggles, version ranges, command-line matrix, and release-wide SRR data.</summary>
-    private SharedReconstructionSettings BuildSharedSettings()
+    internal SharedReconstructionSettings BuildSharedSettings()
     {
         RarSwitchSettings switches = BuildSwitchSettings();
         HashType hashType = Path.GetExtension(VerificationPath).Equals(".sha1", StringComparison.OrdinalIgnoreCase)
@@ -1662,6 +1671,9 @@ public partial class ReconstructorViewModel : ViewModelBase
             ReleasePath = ReleasePath,
             OutputPath = OutputPath,
             RarVersions = RarCommandLineBuilder.BuildVersionRanges(switches),
+            // Only folder-filter when a real scan produced the tree; the no-scan fallback uses broad
+            // major-version ranges and must NOT be restricted to specific folder names.
+            SelectedVersionFolders = HasScannedVersions ? SelectedLeafFolders : [],
             CommandLineArguments = RarCommandLineBuilder.BuildCommandLineArguments(switches),
             HashType = hashType,
             VerificationHashes = LoadVerificationHashes(hashType),

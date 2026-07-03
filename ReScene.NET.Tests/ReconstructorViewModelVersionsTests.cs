@@ -2,6 +2,7 @@ using ReScene.Core;
 using ReScene.NET.Services;
 using ReScene.NET.ViewModels;
 using ReScene.NET.ViewModels.Reconstruction;
+using ReScene.SRR;
 
 namespace ReScene.NET.Tests;
 
@@ -212,5 +213,47 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
         Assert.Empty(vm.VersionGroups);
         Assert.True(vm.ShowNoVersionsHint);
         Assert.False(vm.HasScannedVersions);
+    }
+
+    /// <summary>Two folders that both parse to version 390, distinguished only by folder name.</summary>
+    private static readonly IReadOnlyList<InstalledRarVersion> SameVersionVariants =
+    [
+        new(390, "winrar-390", "path-390"),
+        new(390, "winrar-390-beta1", "path-390-beta1", "beta1"),
+    ];
+
+    [Fact]
+    public void BuildSharedSettings_UntickedVariantLeaf_ExcludesItsFolder()
+    {
+        // audit #36: unticking one same-version variant leaf must exclude ONLY that folder, even
+        // though both leaves collapse to version 390.
+        ReconstructorViewModel vm = CreateVm();
+        vm.Version3 = true;                                  // major 3 enabled → both 390 leaves tick
+        vm.ApplyScanResult(SameVersionVariants, folderScanned: true);
+
+        RarVersionLeaf beta = vm.VersionGroups.SelectMany(g => g.Leaves).Single(l => l.FolderName == "winrar-390-beta1");
+        beta.IsChecked = false;                             // untick the beta variant only
+
+        SharedReconstructionSettings shared = vm.BuildSharedSettings();
+
+        Assert.Equal(["winrar-390"], shared.SelectedVersionFolders);
+
+        // And the folder allow-list flows through the planner into the engine options.
+        var set = new SrrArchiveSet { Key = "", Directory = "" };
+        set.VolumeNames.Add("x.rar");
+        BruteForceOptions opts = ArchiveSetPlanner.BuildOptionsForSet(set, shared,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(["winrar-390"], opts.RAROptions.AllowedVersionFolders);
+    }
+
+    [Fact]
+    public void BuildSharedSettings_NoScan_LeavesFolderAllowListEmpty()
+    {
+        // With no real scan (broad fallback ranges), the run must NOT be folder-filtered.
+        ReconstructorViewModel vm = CreateVm();
+
+        SharedReconstructionSettings shared = vm.BuildSharedSettings();
+
+        Assert.Empty(shared.SelectedVersionFolders);
     }
 }
