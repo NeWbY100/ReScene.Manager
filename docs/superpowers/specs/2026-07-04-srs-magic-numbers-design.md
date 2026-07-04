@@ -47,10 +47,18 @@ concern. New homes follow the Phase-1/2 per-format pattern.
   Rebuilder `IsKnown*`, SRSFile name switch); ADD the §1b new members (`FileData`, `FileName`,
   `FileMimeType`, `Timestamp`, `PrevSize`, `Position`, `CRC32Element`, `Void`, `TrackUID`, `TrackType`,
   `CodecID`, `BlockDuration`, `ReferenceBlock`), §1c display-only IDs, and `ContentCompAlgoHeaderStripping=3`.
+  **CAUTION:** `MKVContainerHandler._mKVSrsContainers` is a DISTINCT 4-element set {Cluster, BlockGroup,
+  Attachments, AttachedFile} (write-walk at `:394`), NOT the same as `EBMLIds.IsContainer` (10 members,
+  profile-walk at `:153`). RENAME its 4 hex literals in place to `EBMLIds.Cluster/BlockGroup/
+  Attachments/AttachedFile` and KEEP the 4-element set — do NOT substitute `IsContainer` (that changes
+  the set and is not byte-exact for all inputs).
 - **T2 — EBML VINT / writer internals.** Extend `EBMLVInt` (EBMLLacing.cs) with the tier limits
   (`0x7F`/`0x3FFF`/`0x1FFFFF`/`0x0FFFFFFF`/`0x07FFFFFFFF`), `MaxByteWidth=8`, `Marker1..4`
   (0x80/0x40/0x20/0x10), `FiveByteMinWidth=5`; `EBMLIds` ID byte-width bounds (`0x100`/`0x10000`/
-  `0x1000000`); `EBMLLacing.XiphContinuation=0xFF` (unify the `255`/`0xFF` split).
+  `0x1000000`); `EBMLLacing.XiphContinuation=0xFF` (unify the `255`/`0xFF` split). NOTE: `MaxByteWidth=8`
+  applies at `EBMLWriter.cs:84` + `EBMLReader.cs:23/29/66/71` ONLY — the `8` at `EBMLWriter.cs:88`
+  (`max = (max<<8)|0xFF`) is a bits-per-byte SHIFT, not a byte-width count; leave it (and all other
+  `*8`/`>>8`/BE shifts) raw.
 - **T3 — MKV block-flags lacing normalisation (BEHAVIOUR-SENSITIVE — highest risk).** Reconcile the
   three coexisting lacing idioms — `flags & 0x06` → `EBMLLaceType`; `(flags>>1)&0x03`; raw `==1`
   (Xiph)/`==3` (EBML) — onto `EBMLLaceType` + `MkvBlockFlags.LacingMask=0x06`, PRESERVING the exact
@@ -59,9 +67,14 @@ concern. New homes follow the Phase-1/2 per-format pattern.
   `MKVContainerRebuilder.PreTrackSkipMargin=4096`, `TrackInfo.CompressionAlgoUnknown=-1`.
 - **T4 — SRS block framing + FourCCs + flags (cross-format core).** New `SrsBlockLayout.HeaderSize=8`,
   `SrsFourCC` (SrsFile/SrsTrack/SrsPadding/Strm), `[Flags] SrstFlags` (None/BigFile=0x4/
-  BigTrackNumber=0x8), `[Flags] SrsfFlags` (None/SimpleBlockFix=0x1/AttachmentsRemoved=0x2),
+  BigTrackNumber=0x8), `[Flags] SrsfFlags` (None/SimpleBlockFix=0x1/AttachmentsRemoved=0x2 — note these
+  are WRITE-ONLY, only ever emitted combined as `0x0003`; naming is harmless, no bit-wise read),
   `SrstLayout.TrackNumberWidthThreshold=0x10000`, and shared `SrsConstants.BigFileSizeThreshold=
-  0x80000000L` (replaces the 6 copies across all handlers).
+  0x80000000L` (replaces the **SEVEN** copies — `FlacContainerHandler.cs:149`, `MKVContainerHandler.cs:474`,
+  `MP3ContainerHandler.cs:93`, `AVIContainerHandler.cs:206`, `WMVContainerHandler.cs:181`,
+  `MP4ContainerHandler.cs:92`, `StreamContainerHandler.cs:81`; the inventory's "6"/"5-way" is wrong —
+  MKV was omitted). The `L` suffix is byte-safe: the unsuffixed `0x80000000` is already a `uint`
+  (>int.MaxValue) compared against a `long sampleSize`, so both forms yield the identical `long>=long`.
 - **T5 — MP4 atom layout.** New `Mp4AtomTypes` (Ftyp, `AtomHeaderSize=8`, `AtomExtendedHeaderSize=16`,
   `ExtendedSizeSentinel=1`, `ToEndSentinel=0`, `TkhdTrackIdOffsetV0=12`/`V1=20`/`FieldSize=4`).
 - **T6 — RIFF/AVI + Stream framing.** New `RiffFourCC` (Riff, `ChunkHeaderSize=8`, `SizeOffset=4`),
@@ -105,16 +118,19 @@ The inventory §4 lists every site. The highest-risk:
   tests (MKV/MP4/AVI/WMV/FLAC/MP3/Stream create + rebuild, SRSFile parse, SRSPayloadSerializer) must
   stay green.
 - **Verification blind spots — pin BEFORE renaming (this phase's Task-1-style pins):**
-  - **T3 MKV lacing** — before normalising the three idioms, add characterization tests that drive an
-    MKV sample of EACH lacing type (None/Xiph/Fixed/EBML) through the affected read/rebuild paths and
-    assert the exact reconstructed bytes, so a wrong `EBMLLaceType` mapping fails loudly.
-  - **AVI / MP4 / WMV rebuild paths** — these are documented KNOWN LIMITATIONS
-    (`docs/known-limitations.md`, audit #12/#13/#14): the rebuilders do not byte-exactly reconstruct
-    pyrescene samples of those formats, and may be under-tested. For any rename site in
-    `AVIContainerRebuilder`/`MP4ContainerRebuilder`/`WMVContainerRebuilder`, confirm a covering test
-    exists (create-then-rebuild round-trip over THIS codebase's own SRS); if not, add a characterization
-    test before renaming — a value-preserving rename can't change bytes, but the pin guards intent and
-    documents coverage. Map each rename site to a covering test during planning.
+  - **T3 MKV lacing (the one real gap)** — `EBMLLacingTests` covers `EBMLLacing.GetFrameLengths` (idiom
+    A, `flags & 0x06`) for all four types, but `MKVContainerRebuilder.ReadLacingHeaderSize` (`:294`) is a
+    SEPARATE parallel implementation using idioms B/C (`(flags>>1)&0x03`, `==1`/`==3`) that is only
+    round-tripped for Xiph (`Rebuild_MKVWithXiphLacing_RoundTrip_ByteMatch`). Before normalising, ADD
+    Fixed- and EBML-lacing rebuild round-trips that exercise `ReadLacingHeaderSize` and assert exact
+    reconstructed bytes — the migration must change extraction AND the comparison constant TOGETHER at
+    each idiom-B/C site (0→None, 1→Xiph, 2→Fixed, 3→EBML); leaving a `==1` behind while switching
+    extraction to `flags & 0x06` would make Xiph silently never match. The pins catch exactly that.
+  - **AVI / MP4 / WMV rebuild paths** — coverage EXISTS: `SRSRebuilderTests` has own-SRS
+    create-then-rebuild round-trips for AVI (incl. multi-track), MP4, and WMV (incl. output-matches-
+    original). The documented known-limitations (#12/#13/#14) concern **pyrescene-created** SRS
+    (cross-implementation), which is out of scope for a value-preserving rename over this codebase's own
+    SRS. No extra pins needed for these — just confirm the existing round-trips stay green.
 - 0-warning build (both TFMs, `-p:BaseOutputPath=bin2/ --no-incremental`).
 
 ## Naming conventions
