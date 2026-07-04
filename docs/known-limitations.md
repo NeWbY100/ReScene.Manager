@@ -27,6 +27,19 @@ offset) and reads each track's data through a per-track chunk stream built from 
 chunk tables. Any normal multi-track (audio+video) MP4 sample interleaves chunks in `mdat`, so a
 pyrescene SRS rebuilds into a byte-scrambled `mdat`. Only single-track / synthetic MP4s round-trip.
 
+A related sub-case: a **multi-`mdat` (fragmented) MP4** cannot be represented at all by this
+single contiguous-track model — one `(offset, length)` pair cannot address track data split across
+non-adjacent `mdat`s (separated by `moof`/other boxes). Left unchecked the rebuild produces a wrong
+file: because an SRS keeps each `mdat` header's original (large) declared size while stripping the
+payload, `RebuildMP4Atoms` clamps `atomEnd` to EOF at the first `mdat` and drops every later atom,
+so the output never matches the original size/CRC (the CRC check already catches this — it is not
+silent). Rather than emit that file, multi-`mdat` is now refused cleanly with `NotSupportedException`
+on both sides via `MP4Atoms.CountMdatAtoms`: creation (`MP4ContainerHandler.Profile`, counting the
+sample with payloads present) refuses to author an un-rebuildable SRS, and rebuild
+(`MP4ContainerRebuilder.Rebuild`, counting the SRS with `mdatPayloadStripped: true`) refuses any
+multi-`mdat` SRS from another tool. Correct support would require the full `stco`/`stsc`/`stsz`
+chunk-stream model pyrescene uses.
+
 ### #14 — WMV / ASF (`ReScene.Lib/ReScene/SRS/SRSFile.cs` `ParseASF`, and the WMV rebuilder)
 `ParseASF` assumes the Data Object retains only its 26-byte header before the injected SRSF/SRST
 objects — matching only this codebase's own writer, which strips whole packets. pyrescene's
