@@ -44,7 +44,7 @@ Adopt/extend `EBMLIds`; delete the duplicates. Inventory §1a/§1b/§1c + §2.
 
 - [ ] **Step 2: Delete the 5 `EBMLHeaderStripping` private-const dups** (`:11-15` — `IdContentEncodings` etc.) and re-point their uses at `EBMLIds.ContentEncodings/ContentEncoding/ContentCompression/ContentCompAlgo/ContentCompSettings`.
 
-- [ ] **Step 3: Adopt `EBMLIds` at the raw EBML-ID sites** in `MKVContainerHandler`, `MKVContainerRebuilder` (`IsKnownMKVElementId`, the `0x465C`/`0x466E`/etc. reads), and `SRSFile.GetEBMLElementName` — per inventory §1a/§1b. **CAUTION:** `MKVContainerHandler._mKVSrsContainers` is a DISTINCT 4-element set {Cluster, BlockGroup, Attachments, AttachedFile}; RENAME its 4 hex literals to `EBMLIds.*` in place and KEEP the set — do NOT replace it with `EBMLIds.IsContainer` (a different, 10-element set).
+- [ ] **Step 3: Adopt `EBMLIds` at the raw EBML-ID sites** in `MKVContainerHandler`, `MKVContainerRebuilder` (`IsKnownMKVElementId`, the `0x465C`/`0x466E`/etc. reads), and `SRSFile.GetEBMLElementName` — per inventory §1a/§1b. **CAUTION:** `MKVContainerHandler._mKVSrsContainers` is a DISTINCT 4-element set {Cluster, BlockGroup, Attachments, AttachedFile}; RENAME its 4 hex literals to `EBMLIds.*` in place and KEEP the set — do NOT replace it with `EBMLIds.IsContainer` (a different, 10-element set). ALSO adopt `EBMLIds.ContentCompAlgoHeaderStripping` at the two `algo == 3` sites (`EBMLHeaderStripping.cs:114`, `MKVContainerHandler.cs:306`) — these are NOT ID sites, so don't miss them.
 
 - [ ] **Step 4: Build + full lib suite green (no new failures).** The MKV own-SRS round-trip (`SRSRebuilderTests`) + EBML tests guard this.
 
@@ -90,7 +90,7 @@ Reconcile the three lacing idioms onto `EBMLLaceType`, byte-exact. Inventory §4
 
 - [ ] **Step 2: Verify the pins fail if the mapping is wrong (optional sanity).** These pins are the guard; proceed only once all three lacing round-trips (Xiph existing + new Fixed/EBML) pass.
 
-- [ ] **Step 3: Normalise the idioms onto `EBMLLaceType`.** At each site, change extraction AND comparison TOGETHER: `flags & 0x06` → `(EBMLLaceType)(flags & MkvBlockFlags.LacingMask)` (add `MkvBlockFlags.LacingMask=0x06`); `(flags>>1)&0x03` sites → the same `EBMLLaceType` extraction, and their `==0/1/2/3` tests → `== EBMLLaceType.None/Xiph/Fixed/EBML` (0→None, 1→Xiph, 2→Fixed, 3→EBML). Verify `ReadLacingHeaderSize`'s `if (laceType==0)` → `== EBMLLaceType.None`, `==1`(Xiph), `==3`(EBML), the Fixed(2) fall-through, and `RebuildEBMLFromSRS`'s `laceType != 0` → `!= EBMLLaceType.None` all preserve the exact decision.
+- [ ] **Step 3: Normalise the idioms onto `EBMLLaceType`.** At each site, change extraction AND comparison TOGETHER: `flags & 0x06` → `(EBMLLaceType)(flags & MkvBlockFlags.LacingMask)` (add `MkvBlockFlags.LacingMask=0x06`); `(flags>>1)&0x03` sites → the same `EBMLLaceType` extraction, and their `==0/1/2/3` tests → `== EBMLLaceType.None/Xiph/Fixed/EBML` (0→None, 1→Xiph, 2→Fixed, 3→EBML). Verify `ReadLacingHeaderSize`'s `if (laceType==0)` → `== EBMLLaceType.None`, `==1`(Xiph), `==3`(EBML), the Fixed(2) fall-through, and `RebuildEBMLFromSRS`'s `laceType != 0` → `!= EBMLLaceType.None` all preserve the exact decision. Also the None-guard ternary at `MKVContainerRebuilder.cs:777` (`flagsByte >= 0 ? (flagsByte>>1)&0x03 : 0`) — its trailing `: 0` becomes `: EBMLLaceType.None` when the expression's type changes to `EBMLLaceType`.
 
 - [ ] **Step 4: Add the remaining MKV consts + adopt.** `MkvBlockLayout.FixedHeaderOverhead=3` (2 timecode + 1 flags; Handler `:175/414`, Rebuilder `:197/525/772`), `MKVContainerHandler.SignatureAsciiWindowSize=64` (`:517`), `MKVContainerHandler.AsciiBoundary=0x80` (`:555`), `MKVContainerRebuilder.PreTrackSkipMargin=4096` (`:595`), `TrackInfo.CompressionAlgoUnknown=-1` (Handler `:159`).
 
@@ -120,7 +120,7 @@ internal static class SrstLayout { public const int TrackNumberWidthThreshold = 
 internal static class SrsConstants { public const long BigFileSizeThreshold = 0x80000000L; }  // 2 GiB
 [Flags] internal enum SrstFlags { None = 0, BigFile = 0x4, BigTrackNumber = 0x8 }
 [Flags] internal enum SrsfFlags { None = 0, SimpleBlockFix = 0x1, AttachmentsRemoved = 0x2 } // write-only
-internal static class SrsFourCC { /* SrsFile "SRSF", SrsTrack "SRST", SrsPadding "SRSP", Strm "STRM" — match existing byte[]/u8 style */ }
+internal static class SrsFourCC { /* SrsFile "SRSF", SrsTrack "SRST", SrsPadding "SRSP" — match existing byte[]/u8 style. NOTE: the STREAM "STRM" marker is NOT here — it lives in StreamFourCC.Strm (Task 6), used by both the write site (StreamContainerHandler.cs:70) and detection (SRSFile.cs:117); do not create a second Strm const. */ }
 ```
 
 - [ ] **Step 2: Adopt `SrsBlockLayout.HeaderSize`** at the `8`/`4+4` SRS-block-header sites (inventory §2 first `8` row: `SRSFile`, `SRSPayloadSerializer:120/135`, `StreamHandler:72`, `MP3Rebuilder:49`) — NOT the MP4/RIFF/ASF `8`s (those are Tasks 5/6/7).
@@ -185,7 +185,7 @@ Inventory §1d, §2 (RIFF chunk header, Stream FourCCs).
 
 - [ ] **Step 1: Create the FourCC classes.** `RiffFourCC` (`Riff` "RIFF", `ChunkHeaderSize=8`, `SizeOffset=4`); `StreamFourCC` (`Strm` "STRM", `M2ts` "M2TS"). Match existing FourCC byte style.
 
-- [ ] **Step 2: Adopt** at inventory §1d/§2 RIFF+Stream rows (`RIFF` at `SRSFile:109`/`SRSWriter:269`; `ChunkHeaderSize=8` at `AVIHandler:83-87/183-186`, `AVIRebuilder:27/155/...`; `SizeOffset=4` at `AVIHandler:90`/`AVIRebuilder:91`; STRM/M2TS at `SRSFile:117/119`). Also adopt `SrsBlockLayout.HeaderSize` where the Stream SRS block header `8` appears (`StreamHandler`).
+- [ ] **Step 2: Adopt** at inventory §1d/§2 RIFF+Stream rows (`RIFF` at `SRSFile:109`/`SRSWriter:269`; `ChunkHeaderSize=8` at `AVIHandler:83-87/183-186`, `AVIRebuilder:27/155/...`; `SizeOffset=4` at `AVIHandler:90`/`AVIRebuilder:91`; `StreamFourCC.Strm` at BOTH `SRSFile:117` (detect) and `StreamContainerHandler.cs:70` (write); `StreamFourCC.M2ts` at `SRSFile:119`). Also adopt `SrsBlockLayout.HeaderSize` where the Stream SRS block header `8` appears (`StreamHandler:72`) AND the Stream embedded-size sentinel `8` at `SRSFile:118/120` (inventory §2 "sentinel reuse" — it equals the header size).
 
 - [ ] **Step 3: Build + full lib suite green.** AVI + Stream round-trips guard this.
 
