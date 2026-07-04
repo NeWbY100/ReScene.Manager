@@ -1196,7 +1196,7 @@ public partial class ReconstructorViewModel : ViewModelBase
 
         if (s is not null)
         {
-            Log(LogTarget.System, $"Restored SRR state: {_import.ArchiveFiles.Count} files, mtime={_import.FileTimestamps.Count}, CRCs={_import.ArchiveFileCrcs.Count}, CMT={(_import.CmtCompressedData?.Length ?? 0)} bytes");
+            Log(LogTarget.System, $"Restored SRR state: {_import.ArchiveFiles.Count} files, mtime={_import.FileTimestamps.Count}, CRCs={_import.ArchiveFileCrcs.Count}, CMT={_import.CmtCompressedData?.Length ?? 0} bytes");
         }
     }
 
