@@ -45,7 +45,7 @@
 
 - [ ] **Step 1: Read the OSO write path + a hashable fixture.** Read `SRRWriter.WriteOSOHashBlock` (~`SRRWriter.cs:445-460`) and how `CreateAsync` triggers it (the `ComputeOSOHashes`/OSO option). Find how existing tests build an SRR with a real RAR volume (e.g. `SRRWriterTests` create-path fixtures).
 
-- [ ] **Step 2: Write an OSO-write characterization test.** Drive `CreateAsync(..., ComputeOSOHashes: true)` (match the real option name) over a fixture that produces at least one OSO block, then reload and assert the OSO block's exact fields (file size, 8-byte hash, name) — pinning the `7+8+8+2` framing. If driving OSO computation end-to-end is impractical, assert `WriteOSOHashBlock`'s emitted bytes directly for a known input. Example shape (adapt to the real API):
+- [ ] **Step 2: Write an OSO-write characterization test.** Drive `CreateAsync(..., ComputeOSOHashes: true)` (match the real option name — the reviewer confirmed `SRRCreationOptions.ComputeOSOHashes` → `WriteOSOHashBlock`) over a fixture that produces at least one OSO block, then reload and assert the OSO block's exact fields (file size, 8-byte hash, name) — pinning the `7+8+8+2` framing. NOTE: OSO/ISDb hashing only emits a block when the archived content is large enough to hash — use an adequately-sized fixture (a too-small one yields no block and the `Assert.Single` will fail loudly, not vacuously pass). If driving OSO end-to-end is impractical, assert `WriteOSOHashBlock`'s bytes directly (may need `internal` visibility / `InternalsVisibleTo`). Example shape (adapt to the real API):
 
 ```csharp
 [Fact]
@@ -211,7 +211,11 @@ git commit -m "refactor(srr): reuse Rar4HeaderLayout for embedded RAR4 header pa
 **Interfaces:**
 - Produces: `PackerSentinelAllOnes`/`PackerSentinelMaxUint32` (next to `CustomPackerType`).
 
-- [ ] **Step 1: Name the custom-packer sentinels.** In `SRRBlock.cs`, next to `CustomPackerType`:
+- [ ] **Step 1: Name the custom-packer sentinels.** `CustomPackerType` is a `public enum`, so the
+  consts CANNOT live inside it. Put them in a host TYPE — either add them to `SrrBlockLayout` (created
+  in Task 3, the SRR constants home) or a new `internal static class SrrPackerSentinels` in
+  `SRRBlock.cs` next to `CustomPackerType`. Qualify the `SRRFileParser.cs` references to whichever host
+  you choose.
 
 ```csharp
 /// <summary>UNP_SIZE all-ones with LARGE flag (both 32-bit halves = 0xFFFFFFFF) — non-WinRAR packer.</summary>
