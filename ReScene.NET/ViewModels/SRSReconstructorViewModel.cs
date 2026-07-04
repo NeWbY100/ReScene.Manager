@@ -170,18 +170,9 @@ public partial class SRSReconstructorViewModel : OperationViewModelBase
             return;
         }
 
-        if (ISOMediaExtractor.IsISOFile(path))
-        {
-            IsISOSource = true;
-            ISOFilePath = path;
-            MediaFilePath = path;
-        }
-        else
-        {
-            IsISOSource = false;
-            ISOFilePath = string.Empty;
-            MediaFilePath = path;
-        }
+        // OnMediaFilePathChanged applies ISO detection + status for every entry path
+        // (Browse, typed, dropped), so the two cannot diverge.
+        MediaFilePath = path;
     }
 
     [RelayCommand]
@@ -515,6 +506,8 @@ public partial class SRSReconstructorViewModel : OperationViewModelBase
 
     partial void OnMediaFilePathChanged(string value)
     {
+        // Empty/invalid paths deliberately leave any existing ISO selection untouched — an ISO
+        // source can keep IsISOSource set while the media textbox is blank (rebuild reads the ISO).
         if (string.IsNullOrWhiteSpace(value))
         {
             MediaStatus = FieldStatus.None;
@@ -527,7 +520,21 @@ public partial class SRSReconstructorViewModel : OperationViewModelBase
             return;
         }
 
-        long mediaSize = new FileInfo(value).Length;
-        MediaStatus = FieldGuidance.EvaluateMediaAgainstSample(mediaSize, _expectedSampleSize);
+        // ISO detection/state lives here (not only in the Browse command) so typed and drag-dropped
+        // media paths are recognised as ISO sources — otherwise an .iso entered by text or drop is
+        // treated as a plain media file at rebuild time.
+        if (ISOMediaExtractor.IsISOFile(value))
+        {
+            IsISOSource = true;
+            ISOFilePath = value;
+            MediaStatus = FieldStatus.Info("ISO image — the matching VOB set is extracted during rebuild.");
+        }
+        else
+        {
+            IsISOSource = false;
+            ISOFilePath = string.Empty;
+            long mediaSize = new FileInfo(value).Length;
+            MediaStatus = FieldGuidance.EvaluateMediaAgainstSample(mediaSize, _expectedSampleSize);
+        }
     }
 }

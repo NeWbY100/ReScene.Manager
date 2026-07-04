@@ -143,6 +143,35 @@ public sealed class SRSCreatorViewModelTests : IDisposable
         Assert.Equal(movie, srs.LastMainFile);  // the movie reaches the creation service
     }
 
+    // ── ISO detection on text / drag-drop entry ─────────────
+
+    [Fact]
+    public void InputPath_TypedIsoPath_IsRecognisedAsIsoSource()
+    {
+        // Regression: ISO detection lived only in the Browse command, so an .iso set by text or
+        // drag-drop left IsISOSource false and was treated as a plain media file at creation time.
+        SRSCreatorViewModel vm = CreateVm(out _, out _);
+        string iso = CreateTempFile(".iso");
+
+        vm.InputPath = iso;
+
+        Assert.True(vm.IsISOSource);
+        Assert.Equal(iso, vm.ISOFilePath);
+    }
+
+    [Fact]
+    public void InputPath_SwitchedFromIsoToNonIso_ClearsIsoSource()
+    {
+        SRSCreatorViewModel vm = CreateVm(out _, out _);
+        vm.InputPath = CreateTempFile(".iso");
+        Assert.True(vm.IsISOSource);
+
+        vm.InputPath = CreateTempFile(".mkv");
+
+        Assert.False(vm.IsISOSource);
+        Assert.Equal(string.Empty, vm.ISOFilePath);
+    }
+
     // ── CanExecute notification wiring ──────────────────────
 
     [Fact]

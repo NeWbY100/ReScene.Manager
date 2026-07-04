@@ -135,6 +135,8 @@ public partial class SRSCreatorViewModel : OperationViewModelBase
 
     partial void OnInputPathChanged(string value)
     {
+        // Empty/invalid paths deliberately leave any existing ISO selection untouched — the ISO
+        // branch may keep a populated member list while the sample textbox is transiently blank.
         if (string.IsNullOrWhiteSpace(value))
         {
             SampleStatus = FieldStatus.None;
@@ -147,12 +149,14 @@ public partial class SRSCreatorViewModel : OperationViewModelBase
             return;
         }
 
-        if (Path.GetExtension(value).Equals(".iso", StringComparison.OrdinalIgnoreCase))
+        if (ISOMediaExtractor.IsISOFile(value))
         {
+            ApplyISOSource(value);
             SampleStatus = FieldStatus.Info("ISO image — choose the file inside the ISO below.");
         }
         else
         {
+            ClearISOSource();
             long size = new FileInfo(value).Length;
             SampleStatus = FieldGuidance.DescribeSample(Path.GetExtension(value), size);
         }
@@ -162,6 +166,35 @@ public partial class SRSCreatorViewModel : OperationViewModelBase
             OutputPath = FieldGuidance.SuggestSiblingPath(value, ".srs");
             OutputStatus = FieldStatus.Info("Auto-filled from the sample name. Change it if needed.");
         }
+    }
+
+    // ISO detection/state lives here (not only in the Browse command) so typed and drag-dropped
+    // sample paths populate the ISO member list exactly as Browse does — otherwise an .iso entered
+    // by text or drop is treated as a plain media file at creation time.
+    private void ApplyISOSource(string path)
+    {
+        IsISOSource = true;
+        ISOFilePath = path;
+        ISOMediaFiles.Clear();
+        SelectedISOMediaFile = null;
+
+        foreach (string file in ISOMediaExtractor.ListMediaFiles(path))
+        {
+            ISOMediaFiles.Add(file);
+        }
+
+        if (ISOMediaFiles.Count > 0)
+        {
+            SelectedISOMediaFile = ISOMediaFiles[0];
+        }
+    }
+
+    private void ClearISOSource()
+    {
+        IsISOSource = false;
+        ISOFilePath = string.Empty;
+        ISOMediaFiles.Clear();
+        SelectedISOMediaFile = null;
     }
 
     partial void OnOutputPathChanged(string value)
@@ -256,34 +289,9 @@ public partial class SRSCreatorViewModel : OperationViewModelBase
             return;
         }
 
-        if (ISOMediaExtractor.IsISOFile(path))
-        {
-            IsISOSource = true;
-            ISOFilePath = path;
-            InputPath = path;
-
-            ISOMediaFiles.Clear();
-            SelectedISOMediaFile = null;
-
-            IReadOnlyList<string> files = ISOMediaExtractor.ListMediaFiles(path);
-            foreach (string file in files)
-            {
-                ISOMediaFiles.Add(file);
-            }
-
-            if (ISOMediaFiles.Count > 0)
-            {
-                SelectedISOMediaFile = ISOMediaFiles[0];
-            }
-        }
-        else
-        {
-            IsISOSource = false;
-            ISOFilePath = string.Empty;
-            ISOMediaFiles.Clear();
-            SelectedISOMediaFile = null;
-            InputPath = path;
-        }
+        // OnInputPathChanged applies ISO detection + member population for every entry path
+        // (Browse, typed, dropped), so the wizard cannot diverge between them.
+        InputPath = path;
     }
 
     [RelayCommand]

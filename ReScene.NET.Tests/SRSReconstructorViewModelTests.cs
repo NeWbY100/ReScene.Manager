@@ -128,6 +128,39 @@ public sealed class SRSReconstructorViewModelTests : TempDirTestBase
     }
 
     [Fact]
+    // Regression: ISO detection lived only in the Browse command, so an .iso set by text or
+    // drag-drop left IsISOSource false and was treated as a plain media file at rebuild time.
+    public void MediaFilePath_TypedIsoPath_IsRecognisedAsIsoSource()
+    {
+        SRSReconstructorViewModel vm = CreateVm(new FakeReconstructionService(), new NoOpTempDirectoryService());
+        string iso = Path.Combine(TempDir, "disc.iso");
+        File.WriteAllText(iso, "x");
+
+        vm.MediaFilePath = iso;
+
+        Assert.True(vm.IsISOSource);
+        Assert.Equal(iso, vm.ISOFilePath);
+    }
+
+    [Fact]
+    public void MediaFilePath_SwitchedFromIsoToNonIso_ClearsIsoSource()
+    {
+        SRSReconstructorViewModel vm = CreateVm(new FakeReconstructionService(), new NoOpTempDirectoryService());
+        string iso = Path.Combine(TempDir, "disc.iso");
+        File.WriteAllText(iso, "x");
+        string mkv = Path.Combine(TempDir, "video.mkv");
+        File.WriteAllText(mkv, "x");
+
+        vm.MediaFilePath = iso;
+        Assert.True(vm.IsISOSource);
+
+        vm.MediaFilePath = mkv;
+
+        Assert.False(vm.IsISOSource);
+        Assert.Equal(string.Empty, vm.ISOFilePath);
+    }
+
+    [Fact]
     // Regression: IsISOSource gates CanRebuild but lacked [NotifyCanExecuteChangedFor], so toggling
     // it left the Rebuild button's enabled state stale (the same defect fixed in SRSCreatorViewModel).
     public void IsISOSource_Change_RaisesRebuildCommandCanExecuteChanged()
