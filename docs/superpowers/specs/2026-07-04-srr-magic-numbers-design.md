@@ -65,7 +65,8 @@ New file `ReScene/SRR/SrrBlockLayout.cs` (`internal static class`), the single s
 Then DELETE the duplicated private consts in `SRRVerifier`, `SrrBlockWriter`, `SRREditor` and point
 them (plus `SRRWriter`, `SRRFile`, `SRRFileParser`) at `SrrBlockLayout`. Adoption sites: sentinels at
 `SRRWriter.cs:424/441/455`, `SrrBlockWriter.cs:25`, `SRREditor.cs:237`; framing at `SRRWriter.cs:416/
-439/453`, `SRRFileParser.cs:125`, `SRRFile.cs:498/530`; OSO sizes at `SRRFileParser.cs:50/56`,
+439/453`, `SRRFileParser.cs:125`, `SRRFile.cs:498/530` (SRR `BaseHeaderSize`) and `SRRFile.cs:522`
+(the SRR ADD_SIZE read `+ 4` → `SrrBlockLayout.AddSizeFieldLength`); OSO sizes at `SRRFileParser.cs:50/56`,
 `SRRWriter.cs:453`.
 
 ### C. Reuse `Rar4HeaderLayout` for `SRRWriter`'s embedded RAR4 header parsing (cross-phase)
@@ -80,8 +81,12 @@ them (plus `SRRWriter`, `SRRFile`, `SRRFileParser`) at `SrrBlockLayout`. Adoptio
   `Rar4HeaderLayout.AsciiDigitZero`; `ToUInt16(headerBytes, 26)` (`:656/:675`) →
   `Rar4HeaderLayout.NameSize`; filename base `32` (`:657-658/:681`) → `Rar4HeaderLayout.FixedFieldsEnd`.
 - Marker lengths: `7` (`:508/:514`) → `RARUtils.Rar4Marker.Length`; `8` (`:694/:700`,
-  `SRRFileParser.cs:281/:282`) → `RARUtils.Rar5Marker.Length`. Base-header guards `7` (`:529/:542`;
-  `SRRFile.cs:498/:530`) → `Rar4HeaderLayout.BaseHeaderSize`.
+  `SRRFileParser.cs:281/:282`) → `RARUtils.Rar5Marker.Length`. RAR4 base-header guards `7`
+  (`SRRWriter.cs:529/:542`, inside `ProcessRar4Volume`) → `Rar4HeaderLayout.BaseHeaderSize`. NOTE:
+  `SRRFile.cs:498/:530` are SRR-BLOCK framing `7`s (in `SRRFile.Load`'s SRR walk), NOT RAR4 — they
+  belong to §B → `SrrBlockLayout.BaseHeaderSize`. Do not map them to `Rar4HeaderLayout` (both equal 7
+  and `SRRFile.cs` already imports `ReScene.RAR`, so a wrong mapping would compile silently — this is
+  the four-way-`7` trap).
 - CMT sub-type: `headerSize < 35` (`:670`) and the `3`/`"CMT"` length (`:676/:681`) → a method-local
   `const int CmtSubTypeLength = 3` (narrow scope); `35 = FixedFieldsEnd + CmtSubTypeLength`.
 - `headerSize < 26` guard (`:644`) → expressed via `Rar4HeaderLayout.Method` (need ≥ Method+1 bytes).
@@ -103,6 +108,11 @@ needs it). This is a small, in-scope extension of the Phase-1 layout; the RAR su
 - `1024 * 1024` sanity cap (`SRRFileParser.cs:518`) — implementation limit, not a format constant.
 - `i += 8` ulong stride in `OSOHashCalculator` — tied to `sizeof(ulong)`, not a format field.
 - Trivial `0/1/2`, loop counters, display/string literals (`"0x69"` in messages).
+- **Boundary for `NameLengthFieldLength=2`:** the const is introduced for the block-FRAMING
+  size expressions (writer + `SRRFileParser.cs:125`). The many inline name-length `+ 2` reads in the
+  parser (`SRRFileParser.cs:30,58,63,91,96,137,143,177,182`) are deliberately LEFT as raw `2` — they
+  are per-field read strides, not the framing constant. This split is intentional; a later `git grep`
+  of "replaced literals" that finds these `2`s is NOT an incompleteness.
 - `SRRFileParser.cs:317` `4 + 1` RAR5 framing approximation — low value/borderline; may name the `4`
   (`Rar5CrcFieldLength`) or leave; implementer's call, documented either way.
 - Anything outside `SRR/` except the small `Rar4HeaderLayout.Method` addition (C).
@@ -129,10 +139,20 @@ needs it). This is a small, in-scope extension of the Phase-1 layout; the RAR su
   count). SRR round-trip/parse tests (`SRRWriter`/`SRRFile`/`SRRFileParser`/`SRRVerifier`/`SRREditor`
   tests, incl. the Phase-1-added real-SRR-with-embedded-RAR round-trip and verifier tests) plus the RAR
   suites (which guard the `Rar4HeaderLayout.Method` addition) must stay green.
-- **Verification blind spot to check:** if any SRR path that a rename touches (e.g. the CMT
-  service-block detection, or the custom-packer sentinel branch) lacks a test, add a small
-  characterization test BEFORE renaming its constants (as Phase 1 did for EXT_TIME display). Identify
-  during planning by mapping each rename site to a covering test; pin the gaps.
+- **Verification blind spots — pin these BEFORE renaming (as Phase 1 did for EXT_TIME display):**
+  - **OSO write path** — `WriteOSOHashBlock` (the `7 + 8 + 8 + 2` framing at `SRRWriter.cs:453`) has
+    NO test asserting its emitted bytes (the existing OSO writer test asserts *no* block is emitted;
+    the OSO parse round-trip uses the test-local `SRRTestDataBuilder.AddOSOHash`, not production
+    `WriteOSOHashBlock`). Add a characterization test driving `CreateAsync(…, ComputeOSOHashes=true)`
+    over a hashable fixture (or asserting `WriteOSOHashBlock` bytes) — a mis-mapped OSO size const
+    here would otherwise be undetected.
+  - **CMT write detection** — `IsRar4CmtServiceBlock` (`SRRWriter.cs:667-683`, the `< 35` / `3` / `32`
+    reads) is only exercised on the *parse* path; add a create-time characterization test before
+    renaming its constants.
+  - Already covered (no new test needed): the custom-packer sentinel branch
+    (`0xFFFFFFFFFFFFFFFF`/`0xFFFFFFFF` at `SRRFileParser.cs:379/386`) is tested by `SRRFileTests`'
+    three `CustomPackerType` cases; the compressed-file/`headerBytes[25]`/`0x30` path by
+    `SRRWriterTests`; SRR framing/sentinels by `SRRVerifierTests` (incl. the real-embedded-RAR case).
 - 0-warning build (both TFMs, `-p:BaseOutputPath=bin2/ --no-incremental`).
 
 ## Naming conventions
