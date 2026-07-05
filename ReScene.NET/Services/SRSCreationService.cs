@@ -3,9 +3,9 @@ using ReScene.SRS;
 namespace ReScene.NET.Services;
 
 /// <summary>
-/// Default implementation of <see cref="ISrsCreationService"/> that delegates to <see cref="SRSWriter"/>.
+/// Default implementation of <see cref="ISRSCreationService"/> that delegates to <see cref="SRSWriter"/>.
 /// </summary>
-public class SRSCreationService : ISrsCreationService
+public class SRSCreationService : ISRSCreationService
 {
     private readonly SRSWriter _writer = new();
 

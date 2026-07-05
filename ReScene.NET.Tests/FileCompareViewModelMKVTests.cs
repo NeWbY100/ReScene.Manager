@@ -11,7 +11,7 @@ namespace ReScene.NET.Tests;
 /// End-to-end tests for MKV comparison through <see cref="FileCompareViewModel"/>: loading two MKV
 /// files must mark differing elements red (IsDifferent) in the structure trees.
 /// </summary>
-public class FileCompareViewModelMkvTests : TempDirTestBase
+public class FileCompareViewModelMKVTests : TempDirTestBase
 {
     #region Stub services
 
@@ -49,7 +49,7 @@ public class FileCompareViewModelMkvTests : TempDirTestBase
 
     #region EBML encoding helpers
 
-    private static byte[] IdEbml => [0x1A, 0x45, 0xDF, 0xA3];
+    private static byte[] IdEBML => [0x1A, 0x45, 0xDF, 0xA3];
     private static byte[] IdDocType => [0x42, 0x82];
     private static byte[] IdSegment => [0x18, 0x53, 0x80, 0x67];
     private static byte[] IdInfo => [0x15, 0x49, 0xA9, 0x66];
@@ -61,20 +61,20 @@ public class FileCompareViewModelMkvTests : TempDirTestBase
     /// <summary>
     /// Builds a minimal MKV: EBML header + Segment(Info(MuxingApp), Cluster(Timestamp, SimpleBlock)).
     /// </summary>
-    private static byte[] BuildMkv(string muxingApp, byte clusterFill)
+    private static byte[] BuildMKV(string muxingApp, byte clusterFill)
     {
-        byte[] ebml = EbmlTestWriter.Master(IdEbml, EbmlTestWriter.Str(IdDocType, "matroska"));
-        byte[] info = EbmlTestWriter.Master(IdInfo, EbmlTestWriter.Str(IdMuxingApp, muxingApp));
+        byte[] ebml = EBMLTestWriter.Master(IdEBML, EBMLTestWriter.Str(IdDocType, "matroska"));
+        byte[] info = EBMLTestWriter.Master(IdInfo, EBMLTestWriter.Str(IdMuxingApp, muxingApp));
         byte[] payload = new byte[64];
         Array.Fill(payload, clusterFill);
-        byte[] cluster = EbmlTestWriter.Master(IdCluster, EbmlTestWriter.Leaf(IdClusterTimestamp, [0x00]), EbmlTestWriter.Leaf(IdSimpleBlock, payload));
-        byte[] segment = EbmlTestWriter.Master(IdSegment, info, cluster);
-        return EbmlTestWriter.Concat(ebml, segment);
+        byte[] cluster = EBMLTestWriter.Master(IdCluster, EBMLTestWriter.Leaf(IdClusterTimestamp, [0x00]), EBMLTestWriter.Leaf(IdSimpleBlock, payload));
+        byte[] segment = EBMLTestWriter.Master(IdSegment, info, cluster);
+        return EBMLTestWriter.Concat(ebml, segment);
     }
 
     #endregion
 
-    private string WriteMkv(string name, byte[] bytes)
+    private string WriteMKV(string name, byte[] bytes)
     {
         string path = Path.Combine(TempDir, name);
         File.WriteAllBytes(path, bytes);
@@ -87,8 +87,8 @@ public class FileCompareViewModelMkvTests : TempDirTestBase
     [Fact]
     public async Task Compare_MetadataDiffers_MarksTreeNodesDifferent()
     {
-        string left = WriteMkv("left.mkv", BuildMkv("libebml", 0xAA));
-        string right = WriteMkv("right.mkv", BuildMkv("mkvmerge", 0xAA));
+        string left = WriteMKV("left.mkv", BuildMKV("libebml", 0xAA));
+        string right = WriteMKV("right.mkv", BuildMKV("mkvmerge", 0xAA));
 
         using FileCompareViewModel vm = CreateViewModel();
         await vm.LoadLeftFileAsync(left);
@@ -109,8 +109,8 @@ public class FileCompareViewModelMkvTests : TempDirTestBase
     {
         // Identical metadata; only the audio/video payload bytes inside the Cluster differ
         // (same length). This is the typical "rebuilt sample vs original sample" case.
-        string left = WriteMkv("left.mkv", BuildMkv("libebml", 0xAA));
-        string right = WriteMkv("right.mkv", BuildMkv("libebml", 0xBB));
+        string left = WriteMKV("left.mkv", BuildMKV("libebml", 0xAA));
+        string right = WriteMKV("right.mkv", BuildMKV("libebml", 0xBB));
 
         using FileCompareViewModel vm = CreateViewModel();
         await vm.LoadLeftFileAsync(left);
@@ -126,9 +126,9 @@ public class FileCompareViewModelMkvTests : TempDirTestBase
     [Fact]
     public async Task Compare_IdenticalFiles_ReportsIdentical()
     {
-        byte[] bytes = BuildMkv("libebml", 0xAA);
-        string left = WriteMkv("left.mkv", bytes);
-        string right = WriteMkv("right.mkv", bytes);
+        byte[] bytes = BuildMKV("libebml", 0xAA);
+        string left = WriteMKV("left.mkv", bytes);
+        string right = WriteMKV("right.mkv", bytes);
 
         using FileCompareViewModel vm = CreateViewModel();
         await vm.LoadLeftFileAsync(left);
@@ -141,7 +141,7 @@ public class FileCompareViewModelMkvTests : TempDirTestBase
     [Fact]
     public async Task IsComparing_TrueDuringLoad_FalseAfter()
     {
-        string path = WriteMkv("one.mkv", BuildMkv("libebml", 0xAA));
+        string path = WriteMKV("one.mkv", BuildMKV("libebml", 0xAA));
         var gated = new GatedCompareService();
         using var vm = new FileCompareViewModel(gated, new NoOpFileDialogService(), new StubHexDiffComputer());
 
@@ -161,7 +161,7 @@ public class FileCompareViewModelMkvTests : TempDirTestBase
     [Fact]
     public async Task LoadWhileComparing_IsIgnored()
     {
-        string path = WriteMkv("one.mkv", BuildMkv("libebml", 0xAA));
+        string path = WriteMKV("one.mkv", BuildMKV("libebml", 0xAA));
         var gated = new GatedCompareService();
         using var vm = new FileCompareViewModel(gated, new NoOpFileDialogService(), new StubHexDiffComputer());
 

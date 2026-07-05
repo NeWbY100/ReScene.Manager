@@ -17,7 +17,7 @@ namespace ReScene.NET.ViewModels.Inspection;
 /// </summary>
 internal static class InspectorTreeBuilder
 {
-    public static TreeNodeViewModel BuildMkv(MKVFileData mkv)
+    public static TreeNodeViewModel BuildMKV(MKVFileData mkv)
     {
         var root = new TreeNodeViewModel
         {
@@ -93,7 +93,7 @@ internal static class InspectorTreeBuilder
                 Text = $"OSO Hashes ({srr.OSOHashBlocks.Count})",
                 Tag = "container"
             };
-            foreach (SRROsoHashBlock oso in srr.OSOHashBlocks)
+            foreach (SRROSOHashBlock oso in srr.OSOHashBlocks)
             {
                 osoNode.Children.Add(new TreeNodeViewModel { Text = oso.FileName, Tag = oso });
             }
@@ -180,7 +180,7 @@ internal static class InspectorTreeBuilder
         return root;
     }
 
-    public static TreeNodeViewModel BuildSrs(SRSFile srs)
+    public static TreeNodeViewModel BuildSRS(SRSFile srs)
     {
         var root = new TreeNodeViewModel
         {
@@ -224,7 +224,7 @@ internal static class InspectorTreeBuilder
                 Text = $"Container Chunks ({srs.ContainerChunks.Count})",
                 Tag = "container"
             };
-            SrsChunkHierarchy.Build(chunksNode, srs.ContainerChunks, chunk => chunk);
+            SRSChunkHierarchy.Build(chunksNode, srs.ContainerChunks, chunk => chunk);
             root.Children.Add(chunksNode);
         }
 

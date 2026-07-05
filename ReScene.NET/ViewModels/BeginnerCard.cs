@@ -6,7 +6,7 @@ namespace ReScene.NET.ViewModels;
 public enum BeginnerCard
 {
     CreateSRR,
-    CreateSrs,
+    CreateSRS,
     Reconstruct,
     Restore,
     EditSRR,

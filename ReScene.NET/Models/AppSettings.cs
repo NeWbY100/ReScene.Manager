@@ -26,7 +26,7 @@ public sealed class AppSettings
     /// Gets or sets the maximum number of EBML elements parsed when opening an MKV/WebM file in
     /// the Inspector or Compare views. Higher values show more of huge files but load slower.
     /// </summary>
-    public int MkvMaxElements { get; set; } = ReScene.Core.Comparison.MKVFileData.DefaultMaxElements;
+    public int MKVMaxElements { get; set; } = ReScene.Core.Comparison.MKVFileData.DefaultMaxElements;
 
     /// <summary>
     /// Gets or sets the default WinRAR versions folder pre-filled into the RAR Reconstructor.

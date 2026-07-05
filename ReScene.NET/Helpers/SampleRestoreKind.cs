@@ -5,5 +5,5 @@ public enum SampleRestoreKind
 {
     Unknown,
     SRR,
-    Srs,
+    SRS,
 }

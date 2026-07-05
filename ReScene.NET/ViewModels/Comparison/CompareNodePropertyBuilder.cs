@@ -122,7 +122,7 @@ internal sealed class CompareNodePropertyBuilder(
                 break;
 
             case CompareNodeType.OSOHash:
-                if (nodeData.Data is SRROsoHashBlock oso)
+                if (nodeData.Data is SRROSOHashBlock oso)
                 {
                     ShowOSOHashProperties(oso);
                 }
@@ -604,7 +604,7 @@ internal sealed class CompareNodePropertyBuilder(
         _properties.Add(new PropertyItem { Name = "Total Size", Value = $"{chunk.BlockSize:N0} bytes ({FormatUtilities.FormatSize(chunk.BlockSize)})" });
     }
 
-    private void ShowOSOHashProperties(SRROsoHashBlock oso)
+    private void ShowOSOHashProperties(SRROSOHashBlock oso)
     {
         long p = oso.BlockPosition + 7; // skip base header (CRC + type + flags + headerSize)
 

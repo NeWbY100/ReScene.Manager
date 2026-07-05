@@ -76,7 +76,7 @@
                    TextWrapping="Wrap" Margin="6,0,6,6" />
         <UniformGrid Columns="2">
           <Button Style="{StaticResource HubCardButton}"
-                  Click="OnCardClick" Tag="{x:Static vm:BeginnerCard.CreateSrs}">
+                  Click="OnCardClick" Tag="{x:Static vm:BeginnerCard.CreateSRS}">
             <StackPanel>
               <TextBlock Text="&#x1F3AC;" FontSize="28" Margin="0,0,0,6" />
               <TextBlock Text="Create a sample SRS" FontSize="{DynamicResource FontSizeH2}" FontWeight="SemiBold" />

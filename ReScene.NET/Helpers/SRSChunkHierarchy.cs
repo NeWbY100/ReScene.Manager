@@ -10,7 +10,7 @@ namespace ReScene.NET.Helpers;
 /// tag is supplied per node via the <c>tagFactory</c> callback. The nesting, labels, and stack logic
 /// are otherwise identical to the previous inline copies.
 /// </summary>
-internal static class SrsChunkHierarchy
+internal static class SRSChunkHierarchy
 {
     /// <summary>Builds the nested chunk tree under <paramref name="root"/>, tagging each node via <paramref name="tagFactory"/>.</summary>
     public static void Build(TreeNodeViewModel root, IReadOnlyList<SRSContainerChunk> chunks, Func<SRSContainerChunk, object> tagFactory)

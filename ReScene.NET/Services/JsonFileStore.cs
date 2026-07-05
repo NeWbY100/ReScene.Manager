@@ -18,7 +18,10 @@ internal static class JsonFileStore
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "ReScene.NET");
 
-    private static readonly JsonSerializerOptions _serializerOptions = new() { WriteIndented = true };
+    // PropertyNameCaseInsensitive so files written by older builds still load after a property's
+    // acronym casing changes (e.g. the "MkvMaxElements" key now binds to MKVMaxElements).
+    private static readonly JsonSerializerOptions _serializerOptions =
+        new() { WriteIndented = true, PropertyNameCaseInsensitive = true };
 
     /// <summary>
     /// Returns the full path of <paramref name="fileName"/> within <see cref="AppDataDirectory"/>.
@@ -42,5 +45,5 @@ internal static class JsonFileStore
     /// existence check (callers decide when to read) and does not catch exceptions.
     /// </summary>
     public static T? Read<T>(string filePath)
-        => JsonSerializer.Deserialize<T>(File.ReadAllText(filePath));
+        => JsonSerializer.Deserialize<T>(File.ReadAllText(filePath), _serializerOptions);
 }

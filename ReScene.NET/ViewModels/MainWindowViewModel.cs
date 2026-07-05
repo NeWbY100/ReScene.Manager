@@ -157,7 +157,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
     }
 
-    public MainWindowViewModel(ISRRCreationService srrService, ISrsCreationService srsService, ISrsReconstructionService srsReconService, ISampleRestorerService sampleRestorerService, IBruteForceService bruteForceService, IFileCompareService fileCompareService, IFileDialogService fileDialog, IRecentFilesService recentFiles, ITempDirectoryService tempDir, ISRREditingService srrEditingService, ISRRVerifyService srrVerifyService, IPropertyExportService propertyExportService, IAppSettingsService appSettingsService, IHexDiffComputer hexDiffComputer, IUiDispatcher? uiDispatcher = null)
+    public MainWindowViewModel(ISRRCreationService srrService, ISRSCreationService srsService, ISRSReconstructionService srsReconService, ISampleRestorerService sampleRestorerService, IBruteForceService bruteForceService, IFileCompareService fileCompareService, IFileDialogService fileDialog, IRecentFilesService recentFiles, ITempDirectoryService tempDir, ISRREditingService srrEditingService, ISRRVerifyService srrVerifyService, IPropertyExportService propertyExportService, IAppSettingsService appSettingsService, IHexDiffComputer hexDiffComputer, IUiDispatcher? uiDispatcher = null)
     {
         _fileDialog = fileDialog;
         _recentFiles = recentFiles;

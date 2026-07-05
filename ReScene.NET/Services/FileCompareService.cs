@@ -24,7 +24,7 @@ public class FileCompareService(IAppSettingsService? settingsService = null) : I
             ".srr" => SRRFileData.Load(filePath),
             ".srs" => SRSFile.Load(filePath),
             ".mkv" or ".webm" => MKVFileData.Load(filePath,
-                _settingsService?.Load().MkvMaxElements ?? MKVFileData.DefaultMaxElements),
+                _settingsService?.Load().MKVMaxElements ?? MKVFileData.DefaultMaxElements),
             _ => RARFileData.Load(filePath)
         };
     }

@@ -21,9 +21,9 @@ public static class BeginnerWizardFactory
             case BeginnerCard.CreateSRR:
                 shell.CreateSRRWizard.Reset();
                 return BuildCreateSRR(shell.CreateSRRWizard);
-            case BeginnerCard.CreateSrs:
+            case BeginnerCard.CreateSRS:
                 shell.SRSCreator.Reset();
-                return BuildCreateSrs(shell.SRSCreator);
+                return BuildCreateSRS(shell.SRSCreator);
             case BeginnerCard.Reconstruct:
                 shell.Reconstructor.Reset();
                 return BuildReconstruct(shell.Reconstructor);
@@ -118,7 +118,7 @@ public static class BeginnerWizardFactory
         return (new WizardViewModel("Create an SRR", vm, steps), new CreateSRRWizardBody());
     }
 
-    private static (WizardViewModel, FrameworkElement) BuildCreateSrs(SRSCreatorViewModel vm)
+    private static (WizardViewModel, FrameworkElement) BuildCreateSRS(SRSCreatorViewModel vm)
     {
         var steps = new List<WizardStep>
         {
@@ -164,7 +164,7 @@ public static class BeginnerWizardFactory
             },
             new() { Title = "Create" },
         };
-        return (new WizardViewModel("Create a sample SRS", vm, steps), new CreateSrsWizardBody());
+        return (new WizardViewModel("Create a sample SRS", vm, steps), new CreateSRSWizardBody());
     }
 
     private static (WizardViewModel, FrameworkElement) BuildReconstruct(ReconstructorViewModel vm)

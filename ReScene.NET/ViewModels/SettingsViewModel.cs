@@ -19,7 +19,7 @@ public partial class SettingsViewModel : ViewModelBase
         DefaultAppName = settings.DefaultAppName;
         DefaultOutputDirectory = settings.DefaultOutputDirectory;
         RecentFilesLimit = settings.RecentFilesLimit;
-        MkvMaxElements = settings.MkvMaxElements;
+        MKVMaxElements = settings.MKVMaxElements;
         ReconstructWinRARPath = settings.ReconstructWinRARPath;
         ReconstructOutputPath = settings.ReconstructOutputPath;
         Mode = settings.Mode ?? UserMode.Advanced;
@@ -35,7 +35,7 @@ public partial class SettingsViewModel : ViewModelBase
     public partial int RecentFilesLimit { get; set; } = 10;
 
     [ObservableProperty]
-    public partial int MkvMaxElements { get; set; } = Core.Comparison.MKVFileData.DefaultMaxElements;
+    public partial int MKVMaxElements { get; set; } = Core.Comparison.MKVFileData.DefaultMaxElements;
 
     [ObservableProperty]
     public partial string ReconstructWinRARPath { get; set; } = string.Empty;
@@ -103,7 +103,7 @@ public partial class SettingsViewModel : ViewModelBase
             DefaultAppName = DefaultAppName,
             DefaultOutputDirectory = DefaultOutputDirectory,
             RecentFilesLimit = Math.Clamp(RecentFilesLimit, 1, 100),
-            MkvMaxElements = Math.Clamp(MkvMaxElements, 100, 1_000_000),
+            MKVMaxElements = Math.Clamp(MKVMaxElements, 100, 1_000_000),
             ReconstructWinRARPath = ReconstructWinRARPath,
             ReconstructOutputPath = ReconstructOutputPath,
             Mode = Mode,

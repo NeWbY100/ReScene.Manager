@@ -9,7 +9,7 @@ namespace ReScene.NET.Tests;
 /// Tests MKV support in the Inspector: loading an MKV must build the EBML element tree and
 /// selecting an element must populate the property grid with its details.
 /// </summary>
-public class InspectorViewModelMkvTests : TempDirTestBase
+public class InspectorViewModelMKVTests : TempDirTestBase
 {
     #region Stub services
 
@@ -39,13 +39,13 @@ public class InspectorViewModelMkvTests : TempDirTestBase
 
     #region EBML encoding helpers
 
-    private static byte[] BuildMkv()
+    private static byte[] BuildMKV()
     {
-        byte[] ebml = EbmlTestWriter.Master([0x1A, 0x45, 0xDF, 0xA3], EbmlTestWriter.Str([0x42, 0x82], "matroska"));
-        byte[] info = EbmlTestWriter.Master([0x15, 0x49, 0xA9, 0x66], EbmlTestWriter.Str([0x4D, 0x80], "libebml"));
-        byte[] cluster = EbmlTestWriter.Master([0x1F, 0x43, 0xB6, 0x75], EbmlTestWriter.Leaf([0xE7], [0x00]));
-        byte[] segment = EbmlTestWriter.Master([0x18, 0x53, 0x80, 0x67], info, cluster);
-        return EbmlTestWriter.Concat(ebml, segment);
+        byte[] ebml = EBMLTestWriter.Master([0x1A, 0x45, 0xDF, 0xA3], EBMLTestWriter.Str([0x42, 0x82], "matroska"));
+        byte[] info = EBMLTestWriter.Master([0x15, 0x49, 0xA9, 0x66], EBMLTestWriter.Str([0x4D, 0x80], "libebml"));
+        byte[] cluster = EBMLTestWriter.Master([0x1F, 0x43, 0xB6, 0x75], EBMLTestWriter.Leaf([0xE7], [0x00]));
+        byte[] segment = EBMLTestWriter.Master([0x18, 0x53, 0x80, 0x67], info, cluster);
+        return EBMLTestWriter.Concat(ebml, segment);
     }
 
     #endregion
@@ -62,10 +62,10 @@ public class InspectorViewModelMkvTests : TempDirTestBase
         new RecordingImagePreviewService());
 
     [Fact]
-    public void LoadFile_Mkv_BuildsElementTree()
+    public void LoadFile_MKV_BuildsElementTree()
     {
         string path = Path.Combine(TempDir, "sample.mkv");
-        File.WriteAllBytes(path, BuildMkv());
+        File.WriteAllBytes(path, BuildMKV());
 
         using InspectorViewModel vm = CreateViewModel();
         LoadInspector(vm, path);
@@ -83,7 +83,7 @@ public class InspectorViewModelMkvTests : TempDirTestBase
     public void SelectElement_ShowsPropertiesWithByteRanges()
     {
         string path = Path.Combine(TempDir, "sample.mkv");
-        File.WriteAllBytes(path, BuildMkv());
+        File.WriteAllBytes(path, BuildMKV());
 
         using InspectorViewModel vm = CreateViewModel();
         LoadInspector(vm, path);

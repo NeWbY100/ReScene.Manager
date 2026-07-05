@@ -48,7 +48,7 @@ public static class InspectCommand
                 rows.Add((stored.BlockPosition, "StoredFile", stored.HeaderSize + stored.AddSize, stored.FileName));
             }
 
-            foreach (SRROsoHashBlock oso in srr.OSOHashBlocks)
+            foreach (SRROSOHashBlock oso in srr.OSOHashBlocks)
             {
                 rows.Add((oso.BlockPosition, "OSOHash", oso.HeaderSize, oso.FileName));
             }

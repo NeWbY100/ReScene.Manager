@@ -21,7 +21,7 @@ public static class SampleRestoreRouter
 
         if (ext.Equals(".srs", StringComparison.OrdinalIgnoreCase))
         {
-            return SampleRestoreKind.Srs;
+            return SampleRestoreKind.SRS;
         }
 
         return SampleRestoreKind.Unknown;

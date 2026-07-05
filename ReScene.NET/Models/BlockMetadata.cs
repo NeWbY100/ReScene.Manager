@@ -21,7 +21,7 @@ public static class BlockMetadata
     {
         SRRHeaderBlock b => (b.BlockPosition, b.HeaderSize),
         SRRStoredFileBlock b => (b.BlockPosition, (long)b.HeaderSize + b.AddSize),
-        SRROsoHashBlock b => (b.BlockPosition, b.HeaderSize),
+        SRROSOHashBlock b => (b.BlockPosition, b.HeaderSize),
         SRRRARPaddingBlock b => (b.BlockPosition, (long)b.HeaderSize + b.AddSize),
         SRRRARFileBlock b => (b.BlockPosition, (long)b.HeaderSize + b.AddSize),
         RARDetailedBlock b => (b.StartOffset, b.TotalSize),
@@ -40,7 +40,7 @@ public static class BlockMetadata
     {
         SRRHeaderBlock => "SRR Header",
         SRRStoredFileBlock => "SRR Stored File",
-        SRROsoHashBlock => "SRR OSO Hash",
+        SRROSOHashBlock => "SRR OSO Hash",
         SRRRARPaddingBlock => "SRR RAR Padding",
         SRRRARFileBlock => "SRR RAR File",
         SRRFile => "SRR Archive",

@@ -1,4 +1,4 @@
-<UserControl x:Class="ReScene.NET.Views.Wizards.CreateSrsWizardBody"
+<UserControl x:Class="ReScene.NET.Views.Wizards.CreateSRSWizardBody"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:ReScene.NET.Controls">

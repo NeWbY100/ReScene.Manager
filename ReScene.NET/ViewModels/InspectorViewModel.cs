@@ -235,7 +235,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
             string ext = Path.GetExtension(filePath);
             bool isSRS = ext.Equals(".srs", StringComparison.OrdinalIgnoreCase);
             bool isRAR = ext.Equals(".rar", StringComparison.OrdinalIgnoreCase);
-            bool isMkv = ext.Equals(".mkv", StringComparison.OrdinalIgnoreCase)
+            bool isMKV = ext.Equals(".mkv", StringComparison.OrdinalIgnoreCase)
                 || ext.Equals(".webm", StringComparison.OrdinalIgnoreCase);
 
             _sRSData = null;
@@ -255,13 +255,13 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
             HexBlockOffset = 0;
             HexBlockLength = 0;
 
-            int mkvMaxElements = isMkv
-                ? (_settingsService?.Load().MkvMaxElements ?? MKVFileData.DefaultMaxElements)
+            int mkvMaxElements = isMKV
+                ? (_settingsService?.Load().MKVMaxElements ?? MKVFileData.DefaultMaxElements)
                 : MKVFileData.DefaultMaxElements;
 
             // Parse off the UI thread so a large SRS/RAR/MKV/SRR file does not freeze the UI.
             ParsedFileData parsed = await Task.Run(
-                () => ParseFileData(filePath, isSRS, isRAR, isMkv, mkvMaxElements));
+                () => ParseFileData(filePath, isSRS, isRAR, isMKV, mkvMaxElements));
 
             // A newer load (or CloseFile) started while we were parsing — discard this stale
             // result so we don't clobber the current file's state or leak its data source.
@@ -270,9 +270,9 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
                 return;
             }
 
-            _sRSData = parsed.Srs;
+            _sRSData = parsed.SRS;
             _rarDetailedBlocks = parsed.RAR;
-            _mkvData = parsed.Mkv;
+            _mkvData = parsed.MKV;
             _sRRData = parsed.SRR;
 
             LoadedFilePath = filePath;
@@ -308,7 +308,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
                     WarningMessage = "Custom RAR packer detected — file size fields may be unreliable. Known groups: RELOADED, HI2U, QCF.";
                 }
             }
-            else if (isMkv)
+            else if (isMKV)
             {
                 int elementCount = CountElements(_mkvData!.Elements);
                 StatusMessage = $"{Path.GetFileName(filePath)} | MKV | {_mkvData.TrackCount} track(s) | {elementCount:N0} elements | {_fileSize:N0} bytes";
@@ -360,13 +360,13 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
     // Runs on a background thread (via Task.Run in LoadFileAsync): all the heavy file parsing,
     // returning an immutable bundle the UI thread then applies. Keeps no VM state so it is safe
     // off-thread.
-    private static ParsedFileData ParseFileData(string filePath, bool isSRS, bool isRAR, bool isMkv, int mkvMaxElements)
+    private static ParsedFileData ParseFileData(string filePath, bool isSRS, bool isRAR, bool isMKV, int mkvMaxElements)
     {
         long fileSize = new FileInfo(filePath).Length;
 
         if (isSRS)
         {
-            return new ParsedFileData { Srs = SRSInspectorData.Load(filePath), FileSize = fileSize };
+            return new ParsedFileData { SRS = SRSInspectorData.Load(filePath), FileSize = fileSize };
         }
 
         if (isRAR)
@@ -374,9 +374,9 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
             return new ParsedFileData { RAR = RARDetailedParser.Parse(filePath), FileSize = fileSize };
         }
 
-        if (isMkv)
+        if (isMKV)
         {
-            return new ParsedFileData { Mkv = MKVFileData.Load(filePath, mkvMaxElements), FileSize = fileSize };
+            return new ParsedFileData { MKV = MKVFileData.Load(filePath, mkvMaxElements), FileSize = fileSize };
         }
 
         return new ParsedFileData { SRR = SRRFileData.Load(filePath), FileSize = fileSize };
@@ -384,9 +384,9 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
 
     private sealed class ParsedFileData
     {
-        public SRSInspectorData? Srs { get; init; }
+        public SRSInspectorData? SRS { get; init; }
         public IReadOnlyList<RARDetailedBlock>? RAR { get; init; }
-        public MKVFileData? Mkv { get; init; }
+        public MKVFileData? MKV { get; init; }
         public SRRFileData? SRR { get; init; }
         public long FileSize { get; init; }
     }
@@ -423,7 +423,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
             SetHexBlock(header.BlockPosition, header.HeaderSize);
             HasProperties = true;
         }
-        else if (value?.Tag is SRROsoHashBlock oso)
+        else if (value?.Tag is SRROSOHashBlock oso)
         {
             SetHexBlock(oso.BlockPosition, oso.HeaderSize);
             HasProperties = true;
@@ -877,7 +877,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
 
         if (_sRSData is not null)
         {
-            TreeRoots.Add(InspectorTreeBuilder.BuildSrs(_sRSData.SRSFile));
+            TreeRoots.Add(InspectorTreeBuilder.BuildSRS(_sRSData.SRSFile));
             return;
         }
 
@@ -889,7 +889,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
 
         if (_mkvData is not null)
         {
-            TreeRoots.Add(InspectorTreeBuilder.BuildMkv(_mkvData));
+            TreeRoots.Add(InspectorTreeBuilder.BuildMKV(_mkvData));
             return;
         }
 

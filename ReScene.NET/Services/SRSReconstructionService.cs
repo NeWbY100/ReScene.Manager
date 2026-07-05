@@ -2,7 +2,7 @@ using ReScene.SRS;
 
 namespace ReScene.NET.Services;
 
-public class SRSReconstructionService : ISrsReconstructionService
+public class SRSReconstructionService : ISRSReconstructionService
 {
     private readonly SRSRebuilder _rebuilder = new();
 

@@ -53,7 +53,7 @@ public sealed class CreatorViewModelTests : IDisposable
         }
     }
 
-    private sealed class FakeSrsCreationService : ISrsCreationService
+    private sealed class FakeSRSCreationService : ISRSCreationService
     {
         public event EventHandler<SRSCreationProgressEventArgs>? Progress { add { } remove { } }
         public event EventHandler<SRSScanProgressEventArgs>? ScanProgress { add { } remove { } }
@@ -102,7 +102,7 @@ public sealed class CreatorViewModelTests : IDisposable
     {
         srr = new FakeSRRCreationService();
         _dialog = new FakeFileDialogService();
-        var vm = new CreatorViewModel(srr, new FakeSrsCreationService(), _dialog,
+        var vm = new CreatorViewModel(srr, new FakeSRSCreationService(), _dialog,
             new FakeTempDirectoryService(_tempPaths), new NoOpAppSettingsService())
         {
             // Keep the build trivial and deterministic: no sample/vobsub/fix phases.
@@ -256,7 +256,7 @@ public sealed class CreatorViewModelTests : IDisposable
 
         vm.BuildSampleAndSubtitlePlaceholders();
 
-        var placeholder = Assert.Single(vm.StoredFiles, f => f.Kind == CreatorViewModel.StoredFileKind.GeneratedSrs);
+        var placeholder = Assert.Single(vm.StoredFiles, f => f.Kind == CreatorViewModel.StoredFileKind.GeneratedSRS);
         Assert.Equal("Sample/movie-sample.srs", placeholder.StoredName);
         Assert.Equal(string.Empty, placeholder.FullPath);    // nothing generated yet
         Assert.Equal(0, srr.Calls);                          // no creation happened
@@ -275,10 +275,10 @@ public sealed class CreatorViewModelTests : IDisposable
         vm.InputPath = Path.Combine(dirA, "movie.sfv");
         vm.AddStoredFiles([realFile]);
 
-        // A wizard sample placeholder has an empty FullPath (Kind = GeneratedSrs).
+        // A wizard sample placeholder has an empty FullPath (Kind = GeneratedSRS).
         vm.ExtraSampleFiles.Add(Path.Combine(dirA, "Sample", "movie-sample.mkv"));
         vm.BuildSampleAndSubtitlePlaceholders();
-        var placeholder = Assert.Single(vm.StoredFiles, f => f.Kind == CreatorViewModel.StoredFileKind.GeneratedSrs);
+        var placeholder = Assert.Single(vm.StoredFiles, f => f.Kind == CreatorViewModel.StoredFileKind.GeneratedSRS);
         Assert.Equal(string.Empty, placeholder.FullPath);
 
         // Changing the input path re-runs UpdateStoredNames over EVERY stored item, including the
@@ -330,7 +330,7 @@ public sealed class CreatorViewModelTests : IDisposable
         Assert.NotNull(srr.LastStoredFiles);
         Assert.Equal(["b.srs", "a.srs"], [.. srr.LastStoredFiles!.Select(e => e.StoredName)]);
         // Placeholders are non-destructive: they remain placeholders so a retry regenerates.
-        Assert.Equal(2, vm.StoredFiles.Count(f => f.Kind == CreatorViewModel.StoredFileKind.GeneratedSrs));
+        Assert.Equal(2, vm.StoredFiles.Count(f => f.Kind == CreatorViewModel.StoredFileKind.GeneratedSRS));
     }
 
     [Fact]
@@ -348,7 +348,7 @@ public sealed class CreatorViewModelTests : IDisposable
         await vm.CreateSRRCommand.ExecutionTask!;
         Assert.False(vm.BuildSucceeded);
         // The placeholder survives the failed run (not turned into a dead temp-path entry).
-        Assert.Contains(vm.StoredFiles, f => f.Kind == CreatorViewModel.StoredFileKind.GeneratedSrs);
+        Assert.Contains(vm.StoredFiles, f => f.Kind == CreatorViewModel.StoredFileKind.GeneratedSRS);
 
         srr.Succeed = true;
         vm.CreateSRRCommand.Execute(null);

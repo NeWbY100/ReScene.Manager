@@ -11,14 +11,14 @@ namespace ReScene.NET.ViewModels;
 
 public partial class SRSCreatorViewModel : OperationViewModelBase
 {
-    private readonly ISrsCreationService _sRSService;
+    private readonly ISRSCreationService _sRSService;
     private readonly IFileDialogService _fileDialog;
     private readonly ITempDirectoryService _tempDir;
     private readonly IAppSettingsService _settingsService;
     private readonly IUiDispatcher _uiDispatcher;
     private string? _extractedTempFile;
 
-    public SRSCreatorViewModel(ISrsCreationService srsService, IFileDialogService fileDialog, ITempDirectoryService tempDir, IAppSettingsService settingsService, IUiDispatcher? uiDispatcher = null)
+    public SRSCreatorViewModel(ISRSCreationService srsService, IFileDialogService fileDialog, ITempDirectoryService tempDir, IAppSettingsService settingsService, IUiDispatcher? uiDispatcher = null)
     {
         _sRSService = srsService;
         _fileDialog = fileDialog;

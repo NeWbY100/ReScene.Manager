@@ -28,10 +28,10 @@ public class BeginnerRestoreViewModelTests
     }
 
     [Fact]
-    public void SettingSrsInput_SelectsSingleFlow()
+    public void SettingSRSInput_SelectsSingleFlow()
     {
         var vm = new BeginnerRestoreViewModel(fileDialog: null!) { InputPath = @"C:\rel\movie.srs" };
-        Assert.Equal(SampleRestoreKind.Srs, vm.Kind);
+        Assert.Equal(SampleRestoreKind.SRS, vm.Kind);
         Assert.True(vm.IsSingle);
         Assert.False(vm.IsBulk);
     }

@@ -5,7 +5,7 @@ namespace ReScene.NET.Services;
 /// <summary>
 /// Service for creating SRS (Sample ReScene) files from media samples.
 /// </summary>
-public interface ISrsCreationService
+public interface ISRSCreationService
 {
     /// <summary>
     /// Raised to report progress during SRS creation.

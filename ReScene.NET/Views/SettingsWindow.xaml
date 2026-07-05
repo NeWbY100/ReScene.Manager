@@ -99,7 +99,7 @@
             <Run Text="— Elements parsed when opening an MKV file. Higher shows more of huge files but loads slower."
                  Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
           </TextBlock>
-          <TextBox Text="{Binding MkvMaxElements, UpdateSourceTrigger=PropertyChanged}"
+          <TextBox Text="{Binding MKVMaxElements, UpdateSourceTrigger=PropertyChanged}"
                    Width="80"
                    HorizontalAlignment="Left" />
         </StackPanel>

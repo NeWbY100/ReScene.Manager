@@ -35,7 +35,7 @@ internal sealed class InspectorPropertyBuilder
             case SRRHeaderBlock header:
                 ShowSRRHeaderProperties(header);
                 break;
-            case SRROsoHashBlock oso:
+            case SRROSOHashBlock oso:
                 ShowOSOHashProperties(oso);
                 break;
             case SRRRARPaddingBlock padding:
@@ -283,7 +283,7 @@ internal sealed class InspectorPropertyBuilder
             new ByteRange { Offset = p, Length = nameLen });
     }
 
-    private void ShowOSOHashProperties(SRROsoHashBlock oso)
+    private void ShowOSOHashProperties(SRROSOHashBlock oso)
     {
         long p = oso.BlockPosition;
 

@@ -16,11 +16,11 @@ public sealed class SRSReconstructorViewModelTests : TempDirTestBase
     // ── Fakes ───────────────────────────────────────────────
 
     /// <summary>
-    /// Scriptable <see cref="ISrsReconstructionService"/>. Either returns a canned
+    /// Scriptable <see cref="ISRSReconstructionService"/>. Either returns a canned
     /// <see cref="SRSReconstructionResult"/> or throws, depending on how it is configured.
     /// Records the call count and the arguments it was invoked with.
     /// </summary>
-    private sealed class FakeReconstructionService : ISrsReconstructionService
+    private sealed class FakeReconstructionService : ISRSReconstructionService
     {
         public event EventHandler<SRSReconstructionProgressEventArgs>? Progress { add { } remove { } }
         public event EventHandler<SRSScanProgressEventArgs>? ScanProgress { add { } remove { } }
@@ -79,7 +79,7 @@ public sealed class SRSReconstructorViewModelTests : TempDirTestBase
 
     [Fact]
     // Blank SRS path must disable the command even when output is set (non-ISO).
-    public void CanRebuild_False_WhenSrsPathBlank()
+    public void CanRebuild_False_WhenSRSPathBlank()
     {
         SRSReconstructorViewModel vm = CreateVm(new FakeReconstructionService(), new NoOpTempDirectoryService());
         vm.SRSFilePath = string.Empty;
@@ -265,14 +265,14 @@ public sealed class SRSReconstructorViewModelTests : TempDirTestBase
         SRSReconstructorViewModel vm = CreateVm(service, tempDir);
 
         // Bogus (non-SRS) file so ISOMediaExtractor.ExtractMatchingVobSetAsync throws on load.
-        string bogusSrs = Path.Combine(TempDir, "bogus.srs");
-        File.WriteAllText(bogusSrs, "not an srs file");
+        string bogusSRS = Path.Combine(TempDir, "bogus.srs");
+        File.WriteAllText(bogusSRS, "not an srs file");
         string bogusIso = Path.Combine(TempDir, "image.iso");
         File.WriteAllText(bogusIso, "not an iso");
 
         vm.IsISOSource = true;
         vm.ISOFilePath = bogusIso;
-        vm.SRSFilePath = bogusSrs;
+        vm.SRSFilePath = bogusSRS;
         vm.OutputPath = Path.Combine(TempDir, "out.vob");
 
         await vm.RebuildCommand.ExecuteAsync(null);

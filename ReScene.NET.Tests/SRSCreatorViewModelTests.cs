@@ -15,7 +15,7 @@ public sealed class SRSCreatorViewModelTests : IDisposable
 
     // ── Fakes ───────────────────────────────────────────────
 
-    private sealed class FakeSrsCreationService : ISrsCreationService
+    private sealed class FakeSRSCreationService : ISRSCreationService
     {
         public event EventHandler<SRSCreationProgressEventArgs>? Progress { add { } remove { } }
         public event EventHandler<SRSScanProgressEventArgs>? ScanProgress { add { } remove { } }
@@ -45,9 +45,9 @@ public sealed class SRSCreatorViewModelTests : IDisposable
         public override bool Confirm(string title, string message) => true;
     }
 
-    private static SRSCreatorViewModel CreateVm(out FakeSrsCreationService srs, out FakeFileDialogService dialog)
+    private static SRSCreatorViewModel CreateVm(out FakeSRSCreationService srs, out FakeFileDialogService dialog)
     {
-        srs = new FakeSrsCreationService();
+        srs = new FakeSRSCreationService();
         dialog = new FakeFileDialogService();
         return new SRSCreatorViewModel(srs, dialog, new NoOpTempDirectoryService(), new NoOpAppSettingsService());
     }
@@ -101,7 +101,7 @@ public sealed class SRSCreatorViewModelTests : IDisposable
     [Fact]
     public async Task Create_WithoutMovie_ConfirmDeclined_DoesNotCreate()
     {
-        SRSCreatorViewModel vm = CreateVm(out FakeSrsCreationService srs, out FakeFileDialogService dialog);
+        SRSCreatorViewModel vm = CreateVm(out FakeSRSCreationService srs, out FakeFileDialogService dialog);
         vm.InputPath = @"C:\rel\sample.mkv";
         vm.OutputPath = @"C:\rel\sample.srs";
         dialog.ConfirmResult = false;   // user declines the "signature-only?" warning
@@ -116,7 +116,7 @@ public sealed class SRSCreatorViewModelTests : IDisposable
     [Fact]
     public async Task Create_WithoutMovie_ConfirmAccepted_Creates()
     {
-        SRSCreatorViewModel vm = CreateVm(out FakeSrsCreationService srs, out FakeFileDialogService dialog);
+        SRSCreatorViewModel vm = CreateVm(out FakeSRSCreationService srs, out FakeFileDialogService dialog);
         vm.InputPath = @"C:\rel\sample.mkv";
         vm.OutputPath = @"C:\rel\sample.srs";
         dialog.ConfirmResult = true;
@@ -130,7 +130,7 @@ public sealed class SRSCreatorViewModelTests : IDisposable
     [Fact]
     public async Task Create_WithValidMovie_DoesNotWarn_AndPassesItToTheService()
     {
-        SRSCreatorViewModel vm = CreateVm(out FakeSrsCreationService srs, out FakeFileDialogService dialog);
+        SRSCreatorViewModel vm = CreateVm(out FakeSRSCreationService srs, out FakeFileDialogService dialog);
         string movie = CreateTempFile(".mkv");
         vm.InputPath = @"C:\rel\sample.mkv";
         vm.OutputPath = @"C:\rel\sample.srs";
@@ -208,7 +208,7 @@ public sealed class SRSCreatorViewModelTests : IDisposable
     [Fact]
     public async Task Create_WithSuppressFlag_SkipsWarning_AndConsumesFlag()
     {
-        SRSCreatorViewModel vm = CreateVm(out FakeSrsCreationService srs, out FakeFileDialogService dialog);
+        SRSCreatorViewModel vm = CreateVm(out FakeSRSCreationService srs, out FakeFileDialogService dialog);
         vm.InputPath = @"C:\rel\sample.mkv";
         vm.OutputPath = @"C:\rel\sample.srs";
         vm.SuppressNoMovieConfirm = true;   // e.g. the wizard already warned

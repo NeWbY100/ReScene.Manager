@@ -15,13 +15,13 @@ namespace ReScene.NET.ViewModels;
 public partial class CreatorViewModel : OperationViewModelBase
 {
     private readonly ISRRCreationService _sRRService;
-    private readonly ISrsCreationService _sRSService;
+    private readonly ISRSCreationService _sRSService;
     private readonly IFileDialogService _fileDialog;
     private readonly ITempDirectoryService _tempDir;
     private readonly IAppSettingsService _settingsService;
     private readonly IUiDispatcher _uiDispatcher;
 
-    public CreatorViewModel(ISRRCreationService srrService, ISrsCreationService srsService, IFileDialogService fileDialog, ITempDirectoryService tempDir, IAppSettingsService settingsService, IUiDispatcher? uiDispatcher = null)
+    public CreatorViewModel(ISRRCreationService srrService, ISRSCreationService srsService, IFileDialogService fileDialog, ITempDirectoryService tempDir, IAppSettingsService settingsService, IUiDispatcher? uiDispatcher = null)
     {
         _sRRService = srrService;
         _sRSService = srsService;
@@ -478,7 +478,7 @@ public partial class CreatorViewModel : OperationViewModelBase
             {
                 StoredName = GeneratedStoredName(releaseDir, sample, ".srs", "Sample"),
                 GenerateFromPath = sample,
-                Kind = StoredFileKind.GeneratedSrs,
+                Kind = StoredFileKind.GeneratedSRS,
             });
         }
 
@@ -514,7 +514,7 @@ public partial class CreatorViewModel : OperationViewModelBase
             placeholders,
             (item, index, token) => item.Kind switch
             {
-                StoredFileKind.GeneratedSrs => GenerateSrsFileAsync(item.GenerateFromPath!, tempDir, index, srsOptions, token),
+                StoredFileKind.GeneratedSRS => GenerateSRSFileAsync(item.GenerateFromPath!, tempDir, index, srsOptions, token),
                 StoredFileKind.GeneratedNestedSRR => GenerateNestedSRRFileAsync(item.GenerateFromPath!, tempDir, index, options, token),
                 _ => Task.FromResult<string?>(null),
             },
@@ -793,7 +793,7 @@ public partial class CreatorViewModel : OperationViewModelBase
 
         await GenerateAndRecordAsync(
             samples,
-            (sample, i, token) => GenerateSrsFileAsync(sample, tempDir, i, srsOptions, token),
+            (sample, i, token) => GenerateSRSFileAsync(sample, tempDir, i, srsOptions, token),
             (sample, srsPath) => StoredFiles.Add(new StoredFileItem
             {
                 FullPath = srsPath,
@@ -828,7 +828,7 @@ public partial class CreatorViewModel : OperationViewModelBase
     /// returns its path, or null on failure. The index keeps temp filenames unique so two samples
     /// sharing a basename don't overwrite each other (the prefix never reaches the SRR).
     /// </summary>
-    private async Task<string?> GenerateSrsFileAsync(string samplePath, string tempDir, int index, SRSCreationOptions srsOptions, CancellationToken ct)
+    private async Task<string?> GenerateSRSFileAsync(string samplePath, string tempDir, int index, SRSCreationOptions srsOptions, CancellationToken ct)
     {
         string sampleName = Path.GetFileName(samplePath);
         string srsPath = Path.Combine(tempDir, $"{index}_{Path.ChangeExtension(sampleName, ".srs")}");
@@ -1110,7 +1110,7 @@ public partial class CreatorViewModel : OperationViewModelBase
         Regular,
 
         /// <summary>A placeholder: an .srs to generate from a sample at creation time.</summary>
-        GeneratedSrs,
+        GeneratedSRS,
 
         /// <summary>A placeholder: a nested .srr to generate from a subtitle .sfv at creation time.</summary>
         GeneratedNestedSRR,

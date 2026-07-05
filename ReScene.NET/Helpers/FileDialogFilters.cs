@@ -150,7 +150,7 @@ internal static class FileDialogFilters
     /// <summary>
     /// SRR and SRS files — for Beginner restore input.
     /// </summary>
-    public static readonly string[] SRRAndSrs =
+    public static readonly string[] SRRAndSRS =
     [
         "ReScene Files|*.srr;*.srs",
         "SRR Files|*.srr",

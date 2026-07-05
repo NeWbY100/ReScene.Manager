@@ -477,7 +477,7 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
             offset = chunk.BlockPosition;
             length = chunk.BlockSize;
         }
-        else if (nodeData.Data is SRROsoHashBlock oso)
+        else if (nodeData.Data is SRROSOHashBlock oso)
         {
             offset = oso.BlockPosition;
             length = oso.HeaderSize;
@@ -703,11 +703,11 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
         }
         else if (data is SRSFile srsData)
         {
-            roots.Add(FileCompareTreeBuilder.BuildSrs(srsData, isLeft));
+            roots.Add(FileCompareTreeBuilder.BuildSRS(srsData, isLeft));
         }
         else if (data is MKVFileData mkv)
         {
-            roots.Add(FileCompareTreeBuilder.BuildMkv(mkv, isLeft));
+            roots.Add(FileCompareTreeBuilder.BuildMKV(mkv, isLeft));
         }
         else if (data is RARFileData rar)
         {

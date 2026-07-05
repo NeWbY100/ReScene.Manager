@@ -56,7 +56,7 @@ public partial class BeginnerRestoreViewModel(IFileDialogService fileDialog) : V
     public partial FieldStatus InputStatus { get; set; } = FieldStatus.None;
 
     public bool IsBulk => Kind == SampleRestoreKind.SRR;
-    public bool IsSingle => Kind == SampleRestoreKind.Srs;
+    public bool IsSingle => Kind == SampleRestoreKind.SRS;
     public bool ShowFlow => Kind != SampleRestoreKind.Unknown;
 
     partial void OnInputPathChanged(string value)
@@ -72,7 +72,7 @@ public partial class BeginnerRestoreViewModel(IFileDialogService fileDialog) : V
                 }
                 InputStatus = FieldStatus.Ok("SRR — will restore every embedded sample.");
                 break;
-            case SampleRestoreKind.Srs:
+            case SampleRestoreKind.SRS:
                 if (SingleRebuilder is not null)
                 {
                     SingleRebuilder.SRSFilePath = value;
@@ -105,7 +105,7 @@ public partial class BeginnerRestoreViewModel(IFileDialogService fileDialog) : V
     private async Task BrowseInputAsync()
     {
         string? path = await fileDialog.OpenFileAsync(
-            "Select an SRR or SRS file", FileDialogFilters.SRRAndSrs);
+            "Select an SRR or SRS file", FileDialogFilters.SRRAndSRS);
         if (path is not null)
         {
             InputPath = path;

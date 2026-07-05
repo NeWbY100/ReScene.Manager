@@ -2,7 +2,7 @@ using ReScene.SRS;
 
 namespace ReScene.NET.Services;
 
-public interface ISrsReconstructionService
+public interface ISRSReconstructionService
 {
     public event EventHandler<SRSReconstructionProgressEventArgs>? Progress;
 

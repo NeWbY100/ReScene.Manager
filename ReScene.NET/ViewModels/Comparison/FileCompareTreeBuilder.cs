@@ -161,7 +161,7 @@ internal static class FileCompareTreeBuilder
                 Tag = new CompareNodeData { NodeType = CompareNodeType.OSOHashes, Data = srr.OSOHashBlocks, IsLeft = isLeft }
             };
 
-            foreach (SRROsoHashBlock oso in srr.OSOHashBlocks)
+            foreach (SRROSOHashBlock oso in srr.OSOHashBlocks)
             {
                 osoNode.Children.Add(new TreeNodeViewModel
                 {
@@ -182,7 +182,7 @@ internal static class FileCompareTreeBuilder
         return rootNode;
     }
 
-    public static TreeNodeViewModel BuildSrs(SRSFile srs, bool isLeft)
+    public static TreeNodeViewModel BuildSRS(SRSFile srs, bool isLeft)
     {
         var rootNode = new TreeNodeViewModel
         {
@@ -233,7 +233,7 @@ internal static class FileCompareTreeBuilder
                 Text = $"Container Structure ({srs.ContainerChunks.Count})",
                 Tag = new CompareNodeData { NodeType = CompareNodeType.SRSContainerChunks, Data = srs.ContainerChunks, IsLeft = isLeft }
             };
-            SrsChunkHierarchy.Build(chunksNode, srs.ContainerChunks,
+            SRSChunkHierarchy.Build(chunksNode, srs.ContainerChunks,
                 chunk => new CompareNodeData { NodeType = CompareNodeType.SRSContainerChunks, Data = chunk, IsLeft = isLeft });
             rootNode.Children.Add(chunksNode);
         }
@@ -241,7 +241,7 @@ internal static class FileCompareTreeBuilder
         return rootNode;
     }
 
-    public static TreeNodeViewModel BuildMkv(MKVFileData mkv, bool isLeft)
+    public static TreeNodeViewModel BuildMKV(MKVFileData mkv, bool isLeft)
     {
         var rootNode = new TreeNodeViewModel
         {

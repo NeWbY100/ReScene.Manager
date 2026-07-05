@@ -2,10 +2,10 @@ namespace ReScene.NET.Tests;
 
 /// <summary>
 /// Primitive EBML byte encoders shared by the MKV-focused app tests. These build the low-level
-/// element framing (id + size + payload); each test keeps its own <c>BuildMkv</c> that composes
+/// element framing (id + size + payload); each test keeps its own <c>BuildMKV</c> that composes
 /// these into the specific document it needs.
 /// </summary>
-internal static class EbmlTestWriter
+internal static class EBMLTestWriter
 {
     /// <summary>Encodes a master element: id + size + concatenated children.</summary>
     public static byte[] Master(byte[] id, params byte[][] children)

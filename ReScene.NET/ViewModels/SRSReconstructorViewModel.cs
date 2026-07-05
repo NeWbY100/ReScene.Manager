@@ -10,13 +10,13 @@ namespace ReScene.NET.ViewModels;
 
 public partial class SRSReconstructorViewModel : OperationViewModelBase
 {
-    private readonly ISrsReconstructionService _service;
+    private readonly ISRSReconstructionService _service;
     private readonly IFileDialogService _fileDialog;
     private readonly ITempDirectoryService _tempDir;
     private readonly IUiDispatcher _uiDispatcher;
     private string? _extractedTempFile;
 
-    public SRSReconstructorViewModel(ISrsReconstructionService service, IFileDialogService fileDialog, ITempDirectoryService tempDir, IUiDispatcher? uiDispatcher = null)
+    public SRSReconstructorViewModel(ISRSReconstructionService service, IFileDialogService fileDialog, ITempDirectoryService tempDir, IUiDispatcher? uiDispatcher = null)
     {
         _service = service;
         _fileDialog = fileDialog;
