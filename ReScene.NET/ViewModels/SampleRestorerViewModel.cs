@@ -16,6 +16,14 @@ public partial class SampleRestorerViewModel : OperationViewModelBase
     private readonly IFileDialogService _fileDialog;
     private readonly IUiDispatcher _uiDispatcher;
 
+    // Monotonic counter identifying the latest SRR-entry load. Each LoadSRSEntriesAsync bumps it
+    // and applies its off-thread result only if still latest, so two overlapping loads (rapid
+    // SRRFilePath changes) can't interleave-append entries from two different SRRs.
+    private int _srsLoadGeneration;
+
+    // Same latest-wins guard for the media-directory scan (see _srsLoadGeneration).
+    private int _matchGeneration;
+
     public SampleRestorerViewModel(ISampleRestorerService service, IFileDialogService fileDialog, IUiDispatcher? uiDispatcher = null)
     {
         _service = service;
@@ -116,7 +124,7 @@ public partial class SampleRestorerViewModel : OperationViewModelBase
         }
 
         MediaDirectoryPath = path;
-        MatchMediaFiles();
+        await MatchMediaFilesAsync();
     }
 
     [RelayCommand]
@@ -241,8 +249,10 @@ public partial class SampleRestorerViewModel : OperationViewModelBase
     [RelayCommand]
     private Task SaveLogAsync() => SaveLogToFileAsync(_fileDialog);
 
-    private void LoadSRSEntries()
+    internal async Task LoadSRSEntriesAsync()
     {
+        int loadGeneration = ++_srsLoadGeneration;
+
         foreach (SRSFileEntry old in SRSEntries)
         {
             old.PropertyChanged -= OnEntryPropertyChanged;
@@ -250,9 +260,21 @@ public partial class SampleRestorerViewModel : OperationViewModelBase
 
         SRSEntries.Clear();
 
+        // Capture the path so a later SRRFilePath change can't retarget this in-flight read.
+        string srrPath = SRRFilePath;
+
         try
         {
-            List<SRSEntryInfo> entries = _service.GetSRSEntries(SRRFilePath);
+            // Parse the SRR off the UI thread so a large SRR doesn't freeze it; the continuation
+            // resumes on the UI thread (captured context) to populate the bound collection.
+            List<SRSEntryInfo> entries = await Task.Run(() => _service.GetSRSEntries(srrPath));
+
+            // A newer load started while we were parsing — discard this stale result so the
+            // collection isn't populated with entries from a superseded SRR.
+            if (loadGeneration != _srsLoadGeneration)
+            {
+                return;
+            }
 
             foreach (SRSEntryInfo info in entries)
             {
@@ -273,25 +295,65 @@ public partial class SampleRestorerViewModel : OperationViewModelBase
         }
         catch (Exception ex)
         {
+            if (loadGeneration != _srsLoadGeneration)
+            {
+                return;
+            }
+
             Log($"Error reading SRR: {ex.Message}");
             SRRStatus = FieldStatus.Error($"Could not read this SRR: {ex.Message}");
         }
     }
 
-    private void MatchMediaFiles()
+    private async Task MatchMediaFilesAsync()
     {
+        // Bump first, before the early-return, so clearing/invalidating the media directory while
+        // a scan is in flight still supersedes it (its continuation then discards its stale result).
+        int matchGeneration = ++_matchGeneration;
+
         if (string.IsNullOrWhiteSpace(MediaDirectoryPath) || !Directory.Exists(MediaDirectoryPath))
         {
             return;
         }
 
-        string[] mediaFiles = Directory.GetFiles(MediaDirectoryPath, "*.*", SearchOption.AllDirectories);
+        string mediaDir = MediaDirectoryPath;
 
-        // Build lookup: filename → full path
-        var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string file in mediaFiles)
+        Dictionary<string, string> byName;
+        try
         {
-            byName.TryAdd(Path.GetFileName(file), file);
+            // Enumerate the media tree off the UI thread — a large recursive folder would otherwise
+            // freeze it. Directory.Exists above is only a hint; GetFiles can still throw partway
+            // through (permissions, a path removed mid-scan), so this is guarded.
+            byName = await Task.Run(() =>
+            {
+                string[] mediaFiles = Directory.GetFiles(mediaDir, "*.*", SearchOption.AllDirectories);
+
+                // Build lookup: filename → full path
+                var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string file in mediaFiles)
+                {
+                    map.TryAdd(Path.GetFileName(file), file);
+                }
+
+                return map;
+            });
+        }
+        catch (Exception ex)
+        {
+            if (matchGeneration != _matchGeneration)
+            {
+                return;
+            }
+
+            Log($"Error scanning media directory: {ex.Message}");
+            MatchStatus = FieldStatus.Error($"Could not scan this folder: {ex.Message}");
+            return;
+        }
+
+        // A newer scan (or a superseding directory change) started while we enumerated — discard.
+        if (matchGeneration != _matchGeneration)
+        {
+            return;
         }
 
         int found = 0;
@@ -334,11 +396,16 @@ public partial class SampleRestorerViewModel : OperationViewModelBase
             return;
         }
 
-        LoadSRSEntries();
+        _ = LoadSrrEntriesAndMatchAsync();
+    }
+
+    private async Task LoadSrrEntriesAndMatchAsync()
+    {
+        await LoadSRSEntriesAsync();
 
         if (!string.IsNullOrWhiteSpace(MediaDirectoryPath))
         {
-            MatchMediaFiles();
+            await MatchMediaFilesAsync();
         }
     }
 
@@ -346,7 +413,9 @@ public partial class SampleRestorerViewModel : OperationViewModelBase
     {
         if (!string.IsNullOrWhiteSpace(value) && SRSEntries.Count > 0)
         {
-            MatchMediaFiles();
+            // Fire-and-forget: MatchMediaFilesAsync has its own try/catch, so no exception escapes
+            // to become unobserved. Its latest-wins guard handles overlap with an in-flight scan.
+            _ = MatchMediaFilesAsync();
         }
     }
 

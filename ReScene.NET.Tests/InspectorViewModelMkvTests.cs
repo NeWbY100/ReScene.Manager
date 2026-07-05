@@ -50,6 +50,12 @@ public class InspectorViewModelMkvTests : TempDirTestBase
 
     #endregion
 
+    // Drives the now-async InspectorViewModel.LoadFileAsync synchronously for tests. Wrapping in
+    // Task.Run detaches from any ambient synchronization context, so the internal `await Task.Run`
+    // continuation runs on the thread pool and GetResult cannot deadlock.
+    private static void LoadInspector(InspectorViewModel vm, string path)
+        => Task.Run(() => vm.LoadFileAsync(path)).GetAwaiter().GetResult();
+
     private static InspectorViewModel CreateViewModel() => new(
         new NoOpFileDialogService(), new StubSrrEditingService(),
         new StubSrrVerifyService(), new StubPropertyExportService(),
@@ -62,7 +68,7 @@ public class InspectorViewModelMkvTests : TempDirTestBase
         File.WriteAllBytes(path, BuildMkv());
 
         using InspectorViewModel vm = CreateViewModel();
-        vm.LoadFile(path);
+        LoadInspector(vm, path);
 
         Assert.True(vm.HasFile, $"status was '{vm.StatusMessage}'");
         Assert.Contains("MKV", vm.StatusMessage, StringComparison.Ordinal);
@@ -80,7 +86,7 @@ public class InspectorViewModelMkvTests : TempDirTestBase
         File.WriteAllBytes(path, BuildMkv());
 
         using InspectorViewModel vm = CreateViewModel();
-        vm.LoadFile(path);
+        LoadInspector(vm, path);
 
         TreeNodeViewModel muxing = vm.TreeRoots.Flatten()
             .First(n => n.Text.StartsWith("MuxingApp", StringComparison.Ordinal));

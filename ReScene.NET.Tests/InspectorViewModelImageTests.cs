@@ -58,11 +58,17 @@ public class InspectorViewModelImageTests : TempDirTestBase
     private static InspectorViewModel CreateVm(FakeReadEditingService editing, RecordingImagePreviewService preview) =>
         new(new NoOpFileDialogService(), editing, new StubVerifyService(), new StubPropertyExportService(), preview);
 
+    // Drives the now-async InspectorViewModel.LoadFileAsync synchronously for tests. Wrapping in
+    // Task.Run detaches from any ambient synchronization context, so the internal `await Task.Run`
+    // continuation runs on the thread pool and GetResult cannot deadlock.
+    private static void LoadInspector(InspectorViewModel vm, string path)
+        => Task.Run(() => vm.LoadFileAsync(path)).GetAwaiter().GetResult();
+
     private InspectorViewModel LoadWithStored(string storedName, FakeReadEditingService editing, RecordingImagePreviewService preview)
     {
         string srr = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "inspect.srr", storedName, [0x00]);
         InspectorViewModel vm = CreateVm(editing, preview);
-        vm.LoadFile(srr);
+        LoadInspector(vm, srr);
         vm.SelectedTreeNode = vm.TreeRoots.Flatten()
             .First(n => n.Tag is SRRStoredFileBlock b && b.FileName == storedName);
         return vm;
@@ -112,7 +118,7 @@ public class InspectorViewModelImageTests : TempDirTestBase
         using InspectorViewModel vm = new(
             new SaveToPathDialog(outPath), new FakeReadEditingService(),
             new StubVerifyService(), new StubPropertyExportService(), new RecordingImagePreviewService());
-        vm.LoadFile(srr);
+        LoadInspector(vm, srr);
         vm.SelectedTreeNode = vm.TreeRoots.Flatten()
             .First(n => n.Tag is SRRStoredFileBlock b && b.FileName == "song.srs");
 
@@ -135,7 +141,7 @@ public class InspectorViewModelImageTests : TempDirTestBase
             dialog, new FakeReadEditingService(),
             new StubVerifyService(), new StubPropertyExportService(), new RecordingImagePreviewService());
 
-        vm.LoadFile(bad);
+        LoadInspector(vm, bad);
 
         Assert.False(vm.HasFile);
         (string title, string message) = Assert.Single(dialog.Errors);
@@ -162,7 +168,7 @@ public class InspectorViewModelImageTests : TempDirTestBase
         string srr = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "note.srr", "note.nfo", payload);
 
         using InspectorViewModel vm = CreateVm(new FakeReadEditingService(), new RecordingImagePreviewService());
-        vm.LoadFile(srr);
+        LoadInspector(vm, srr);
         vm.SelectedTreeNode = vm.TreeRoots.Flatten()
             .First(n => n.Tag is SRRStoredFileBlock b && b.FileName == "note.nfo");
 
@@ -180,7 +186,7 @@ public class InspectorViewModelImageTests : TempDirTestBase
         string srr = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "enc.srr", "enc.bin", payload);
 
         using InspectorViewModel vm = CreateVm(new FakeReadEditingService(), new RecordingImagePreviewService());
-        vm.LoadFile(srr);
+        LoadInspector(vm, srr);
         vm.SelectedTreeNode = vm.TreeRoots.Flatten()
             .First(n => n.Tag is SRRStoredFileBlock b && b.FileName == "enc.bin");
         vm.IsTextViewActive = true;
@@ -200,7 +206,7 @@ public class InspectorViewModelImageTests : TempDirTestBase
         string srr = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "lazy.srr", "lazy.nfo", payload);
 
         using InspectorViewModel vm = CreateVm(new FakeReadEditingService(), new RecordingImagePreviewService());
-        vm.LoadFile(srr);
+        LoadInspector(vm, srr);
         vm.SelectedTreeNode = vm.TreeRoots.Flatten()
             .First(n => n.Tag is SRRStoredFileBlock b && b.FileName == "lazy.nfo");
 
@@ -217,7 +223,7 @@ public class InspectorViewModelImageTests : TempDirTestBase
         string srrB = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "second.srr", "b.nfo", b);
 
         using InspectorViewModel vm = CreateVm(new FakeReadEditingService(), new RecordingImagePreviewService());
-        vm.LoadFile(srrA);
+        LoadInspector(vm, srrA);
         vm.SelectedTreeNode = vm.TreeRoots.Flatten()
             .First(n => n.Tag is SRRStoredFileBlock s && s.FileName == "a.nfo");
         vm.IsTextViewActive = true;
@@ -225,7 +231,7 @@ public class InspectorViewModelImageTests : TempDirTestBase
 
         // Opening a second valid file while the Text view is active must not read the now-disposed
         // data source of the first file (which would throw and be reported as a load failure).
-        vm.LoadFile(srrB);
+        LoadInspector(vm, srrB);
 
         Assert.True(vm.HasFile, $"second load failed; status='{vm.StatusMessage}'");
 
@@ -259,7 +265,7 @@ public class InspectorViewModelImageTests : TempDirTestBase
         string srr = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "search.srr", "data.bin", payload);
 
         using InspectorViewModel vm = CreateVm(new FakeReadEditingService(), new RecordingImagePreviewService());
-        vm.LoadFile(srr);
+        LoadInspector(vm, srr);
 
         TreeNodeViewModel node = vm.TreeRoots.Flatten()
             .First(n => n.Tag is SRRStoredFileBlock b && b.FileName == "data.bin");

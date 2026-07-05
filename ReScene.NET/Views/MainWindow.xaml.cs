@@ -39,7 +39,7 @@ public partial class MainWindow : Window
         {
             if (DataContext is MainWindowViewModel vm)
             {
-                vm.OpenSceneFile(args[1]);
+                _ = vm.OpenSceneFileAsync(args[1]);
             }
         }
     }
@@ -101,7 +101,7 @@ public partial class MainWindow : Window
             {
                 if (DataContext is MainWindowViewModel vm)
                 {
-                    vm.OpenSceneFile(file);
+                    _ = vm.OpenSceneFileAsync(file);
                 }
 
                 break;

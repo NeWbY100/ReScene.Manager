@@ -33,6 +33,11 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
     private long _fileSize;
     private MemoryMappedDataSource? _fileDataSource;
 
+    // Monotonic counter identifying the current/latest file load. Bumped by each LoadFileAsync
+    // and by CloseFile; an off-thread parse applies its result only if its captured value still
+    // matches, so overlapping loads and close-during-load can't leave torn state or a leaked source.
+    private int _loadGeneration;
+
     [ObservableProperty]
     public partial string LoadedFilePath { get; set; } = string.Empty;
 
@@ -44,7 +49,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
 
         if (path is not null)
         {
-            LoadFile(path);
+            await LoadFileAsync(path);
         }
     }
 
@@ -53,6 +58,10 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
     [RelayCommand(CanExecute = nameof(CanCloseFile))]
     private void CloseFile()
     {
+        // Supersede any in-flight LoadFileAsync so its continuation won't resurrect the file
+        // after we've closed it.
+        _loadGeneration++;
+
         _fileDataSource?.Dispose();
         _fileDataSource = null;
 
@@ -213,8 +222,14 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
     [ObservableProperty]
     public partial bool IsVerifyResultVisible { get; set; }
 
-    public void LoadFile(string filePath)
+    public async Task LoadFileAsync(string filePath)
     {
+        // Bump the generation so any in-flight load (or a CloseFile) is superseded: when this
+        // load's off-thread parse returns, it applies its result only if it is still the latest.
+        // Without this, two overlapping loads race — the loser's continuation would overwrite the
+        // winner's _fileDataSource without disposing it (leaking a memory-mapped view + handle).
+        int loadGeneration = ++_loadGeneration;
+
         try
         {
             string ext = Path.GetExtension(filePath);
@@ -240,27 +255,29 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
             HexBlockOffset = 0;
             HexBlockLength = 0;
 
-            if (isSRS)
+            int mkvMaxElements = isMkv
+                ? (_settingsService?.Load().MkvMaxElements ?? MKVFileData.DefaultMaxElements)
+                : MKVFileData.DefaultMaxElements;
+
+            // Parse off the UI thread so a large SRS/RAR/MKV/SRR file does not freeze the UI.
+            ParsedFileData parsed = await Task.Run(
+                () => ParseFileData(filePath, isSRS, isRar, isMkv, mkvMaxElements));
+
+            // A newer load (or CloseFile) started while we were parsing — discard this stale
+            // result so we don't clobber the current file's state or leak its data source.
+            if (loadGeneration != _loadGeneration)
             {
-                _sRSData = SRSInspectorData.Load(filePath);
+                return;
             }
-            else if (isRar)
-            {
-                _rarDetailedBlocks = RARDetailedParser.Parse(filePath);
-            }
-            else if (isMkv)
-            {
-                _mkvData = MKVFileData.Load(filePath,
-                    _settingsService?.Load().MkvMaxElements ?? MKVFileData.DefaultMaxElements);
-            }
-            else
-            {
-                _sRRData = SRRFileData.Load(filePath);
-            }
+
+            _sRSData = parsed.Srs;
+            _rarDetailedBlocks = parsed.Rar;
+            _mkvData = parsed.Mkv;
+            _sRRData = parsed.Srr;
 
             LoadedFilePath = filePath;
             _loadedFilePathInternal = filePath;
-            _fileSize = new FileInfo(filePath).Length;
+            _fileSize = parsed.FileSize;
             _fileDataSource = new MemoryMappedDataSource(filePath);
 
             BuildTree();
@@ -321,6 +338,13 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
         }
         catch (Exception ex)
         {
+            // A newer load (or CloseFile) superseded this one — don't clobber the current state
+            // or pop a spurious error dialog for a file the user has already moved on from.
+            if (loadGeneration != _loadGeneration)
+            {
+                return;
+            }
+
             HasFile = false;
 
             // Surface the failure directly so the user isn't left wondering why the file
@@ -331,6 +355,40 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
                 "Could not open file",
                 $"{Path.GetFileName(filePath)} could not be opened.\n\n{ex.Message}");
         }
+    }
+
+    // Runs on a background thread (via Task.Run in LoadFileAsync): all the heavy file parsing,
+    // returning an immutable bundle the UI thread then applies. Keeps no VM state so it is safe
+    // off-thread.
+    private static ParsedFileData ParseFileData(string filePath, bool isSRS, bool isRar, bool isMkv, int mkvMaxElements)
+    {
+        long fileSize = new FileInfo(filePath).Length;
+
+        if (isSRS)
+        {
+            return new ParsedFileData { Srs = SRSInspectorData.Load(filePath), FileSize = fileSize };
+        }
+
+        if (isRar)
+        {
+            return new ParsedFileData { Rar = RARDetailedParser.Parse(filePath), FileSize = fileSize };
+        }
+
+        if (isMkv)
+        {
+            return new ParsedFileData { Mkv = MKVFileData.Load(filePath, mkvMaxElements), FileSize = fileSize };
+        }
+
+        return new ParsedFileData { Srr = SRRFileData.Load(filePath), FileSize = fileSize };
+    }
+
+    private sealed class ParsedFileData
+    {
+        public SRSInspectorData? Srs { get; init; }
+        public IReadOnlyList<RARDetailedBlock>? Rar { get; init; }
+        public MKVFileData? Mkv { get; init; }
+        public SRRFileData? Srr { get; init; }
+        public long FileSize { get; init; }
     }
 
     partial void OnSelectedTreeNodeChanged(TreeNodeViewModel? value)
@@ -628,7 +686,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
                 [(storedName, filePath)]);
 
             StatusMessage = $"Added stored file: {storedName}";
-            LoadFile(_loadedFilePathInternal!);
+            await LoadFileAsync(_loadedFilePathInternal!);
         }
         catch (Exception ex)
         {
@@ -668,7 +726,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
         }
         finally
         {
-            LoadFile(srrPath);
+            await LoadFileAsync(srrPath);
         }
     }
 
@@ -714,7 +772,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
         }
         finally
         {
-            LoadFile(srrPath);
+            await LoadFileAsync(srrPath);
         }
     }
 
@@ -727,7 +785,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
     private bool CanVerifyIntegrity() => IsSRRFileLoaded();
 
     [RelayCommand(CanExecute = nameof(CanRemoveStoredFile))]
-    private void RemoveStoredFileFromSRR()
+    private async Task RemoveStoredFileFromSRRAsync()
     {
         if (!IsSRRFileLoaded() || SelectedTreeNode?.Tag is not SRRStoredFileBlock stored)
         {
@@ -741,7 +799,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
                 [stored.FileName]);
 
             StatusMessage = $"Removed stored file: {stored.FileName}";
-            LoadFile(_loadedFilePathInternal!);
+            await LoadFileAsync(_loadedFilePathInternal!);
         }
         catch (Exception ex)
         {

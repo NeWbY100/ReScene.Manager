@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Reflection;
 using System.Windows.Shell;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -198,7 +199,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         Home = new HomeViewModel(
             recentFiles,
-            openFile: OpenSceneFile,
+            openFile: path => _ = OpenSceneFileAsync(path),
             switchToCreator: () => SelectedTabIndex = 2,
             openDialog: OpenFileAsync,
             fileDialog: fileDialog);
@@ -262,7 +263,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (path is not null)
         {
-            OpenSceneFile(path);
+            await OpenSceneFileAsync(path);
         }
     }
 
@@ -272,16 +273,26 @@ public partial class MainWindowViewModel : ViewModelBase
     /// <param name="filePath">
     /// Absolute path to the scene file.
     /// </param>
-    public void OpenSceneFile(string filePath)
+    public async Task OpenSceneFileAsync(string filePath)
     {
         Mode = UserMode.Advanced;
-        Inspector.LoadFile(filePath);
-        SelectedTabIndex = 1; // Switch to Inspector tab
+        SelectedTabIndex = 1; // Switch to Inspector tab immediately so the load is visible
         WindowTitle = $"ReScene.NET - {Path.GetFileName(filePath)}";
+
+        await Inspector.LoadFileAsync(filePath);
         StatusMessage = Inspector.StatusMessage;
 
-        _recentFiles.AddEntry(filePath);
-        Home.LoadRecentFiles();
+        // Recording the recent file is best-effort: a failure here (e.g. a locked settings file)
+        // must not surface as an error or fault this method, which some callers fire-and-forget.
+        try
+        {
+            _recentFiles.AddEntry(filePath);
+            Home.LoadRecentFiles();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to update recent files: {ex.Message}");
+        }
     }
 
     private void UpdateIsBusy()
