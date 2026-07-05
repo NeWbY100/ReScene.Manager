@@ -111,7 +111,17 @@ public partial class MainWindow : Window
 
     private void OnHyperlinkRequestNavigate(object _, RequestNavigateEventArgs e)
     {
-        Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+        // A missing URL handler or malformed URI throws Win32Exception; opening a link should
+        // never crash the app (or pop the generic unhandled-exception dialog).
+        try
+        {
+            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to open link {e.Uri.AbsoluteUri}: {ex.Message}");
+        }
+
         e.Handled = true;
     }
 

@@ -55,7 +55,34 @@ public class ReconstructorViewModelArchiveSetTests
         }
     }
 
-    private static ReconstructorViewModel CreateVm(string fixturePath)
+    /// <summary>
+    /// <see cref="ITempDirectoryService"/> that creates real temp directories and records every
+    /// create/cleanup so a test can assert the SFV extract is tracked and released.
+    /// </summary>
+    private sealed class RecordingTempDirectoryService : ITempDirectoryService
+    {
+        public List<string> Created { get; } = [];
+        public List<string?> Cleaned { get; } = [];
+
+        public string CreateTempDirectory()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ReScene.NET.Tests", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            Created.Add(dir);
+            return dir;
+        }
+
+        public void Cleanup(string? tempDir)
+        {
+            Cleaned.Add(tempDir);
+            if (!string.IsNullOrEmpty(tempDir) && Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    private static ReconstructorViewModel CreateVm(string fixturePath, ITempDirectoryService? tempDir = null)
     {
         string srrPath = Path.Combine(AppContext.BaseDirectory, "TestData", fixturePath);
         Assert.True(File.Exists(srrPath), $"Fixture not found: {srrPath}");
@@ -64,7 +91,8 @@ public class ReconstructorViewModelArchiveSetTests
             new InertBruteForceService(),
             new FixtureDialogService(srrPath),
             settingsService: null,
-            uiDispatcher: new InlineUiDispatcher());
+            uiDispatcher: new InlineUiDispatcher(),
+            tempDir: tempDir);
     }
 
     private static async Task ImportAsync(ReconstructorViewModel vm)
@@ -94,5 +122,29 @@ public class ReconstructorViewModelArchiveSetTests
         await ImportAsync(vm);
 
         Assert.Equal(FieldState.None, vm.ArchiveSetStatus.State);
+    }
+
+    [Fact]
+    public async Task ImportSRR_ExtractsStoredSfvToTrackedTemp_AndCleanupDeletesIt()
+    {
+        var temp = new RecordingTempDirectoryService();
+        ReconstructorViewModel vm = CreateVm(
+            @"cleanup_script\007.A.View.To.A.Kill.1985.UE.iNTERNAL.DVDRip.XviD-iNCiTE.fine_2cd.srr",
+            temp);
+
+        await ImportAsync(vm);
+
+        // The stored SFV is extracted into a directory obtained from the temp service (not a raw
+        // %TEMP% path), and that directory survives the import because VerificationPath points into it.
+        string sfvDir = Assert.Single(temp.Created);
+        Assert.False(string.IsNullOrEmpty(vm.VerificationPath));
+        Assert.StartsWith(sfvDir, vm.VerificationPath, StringComparison.Ordinal);
+        Assert.True(Directory.Exists(sfvDir));
+
+        vm.Cleanup();
+
+        // Shutdown cleanup deletes it — no temp directory leaks per SRR import.
+        Assert.Contains(sfvDir, temp.Cleaned);
+        Assert.False(Directory.Exists(sfvDir));
     }
 }

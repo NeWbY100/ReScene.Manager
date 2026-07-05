@@ -7,7 +7,9 @@ namespace ReScene.NET.Views;
 
 public partial class FileCompareView : UserControl
 {
-    private static readonly string[] _supportedExtensions = [".srr", ".srs", ".rar"];
+    // Keep in sync with FileDialogFilters.CompareFiles: the Browse picker offers these formats,
+    // so drag-and-drop must accept the same set (Compare supports MKV/WebM too).
+    private static readonly string[] _supportedExtensions = [".srr", ".srs", ".rar", ".mkv", ".webm"];
 
     private static readonly Brush _activeDropBrush = new SolidColorBrush(Color.FromArgb(0x60, 0x00, 0x78, 0xD4));
     private static readonly Brush _inactiveDropBrush = new SolidColorBrush(Color.FromArgb(0x30, 0x00, 0x78, 0xD4));

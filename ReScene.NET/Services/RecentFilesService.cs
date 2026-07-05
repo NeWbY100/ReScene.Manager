@@ -2,9 +2,10 @@ using ReScene.NET.Models;
 
 namespace ReScene.NET.Services;
 
-public class RecentFilesService(IAppSettingsService appSettingsService) : IRecentFilesService
+public class RecentFilesService(IAppSettingsService appSettingsService, string? filePath = null) : IRecentFilesService
 {
-    private static readonly string _filePath = JsonFileStore.GetPath("recent.json");
+    // filePath is a seam for tests; production uses the default per-user store path.
+    private readonly string _filePath = filePath ?? JsonFileStore.GetPath("recent.json");
 
     public List<RecentFileEntry> LoadEntries()
     {
@@ -36,7 +37,9 @@ public class RecentFilesService(IAppSettingsService appSettingsService) : IRecen
             LastOpened = DateTime.Now
         });
 
-        int maxEntries = appSettingsService.Load().RecentFilesLimit;
+        // Clamp the persisted limit (settings.json can be hand-edited): 0 or a negative value
+        // would otherwise wipe the whole list or throw in RemoveRange. Range mirrors SettingsViewModel.Save.
+        int maxEntries = Math.Clamp(appSettingsService.Load().RecentFilesLimit, 1, 100);
 
         if (entries.Count > maxEntries)
         {
@@ -55,7 +58,7 @@ public class RecentFilesService(IAppSettingsService appSettingsService) : IRecen
 
     public void Clear() => Save([]);
 
-    private static void Save(List<RecentFileEntry> entries)
+    private void Save(List<RecentFileEntry> entries)
     {
         try
         {

@@ -175,7 +175,7 @@ public partial class MainWindowViewModel : ViewModelBase
         // advanced Creator tab; the SRS Creator and the wizard below get their own.
         Creator = new CreatorViewModel(srrService, srsService, fileDialog, tempDir, appSettingsService, dispatcher);
         SRSCreator = new SRSCreatorViewModel(new SRSCreationService(), fileDialog, tempDir, appSettingsService, dispatcher);
-        Reconstructor = new ReconstructorViewModel(bruteForceService, fileDialog, appSettingsService, dispatcher);
+        Reconstructor = new ReconstructorViewModel(bruteForceService, fileDialog, appSettingsService, dispatcher, tempDir);
         SRSReconstructor = new SRSReconstructorViewModel(srsReconService, fileDialog, tempDir, dispatcher);
         SampleRestorer = new SampleRestorerViewModel(sampleRestorerService, fileDialog, dispatcher);
         FileCompare = new FileCompareViewModel(fileCompareService, fileDialog, hexDiffComputer, dispatcher);
@@ -322,5 +322,6 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         Inspector.Dispose();
         FileCompare.Dispose();
+        Reconstructor.Cleanup();
     }
 }

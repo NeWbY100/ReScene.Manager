@@ -23,7 +23,12 @@ public partial class ReconstructorViewModel : ViewModelBase
     private readonly IFileDialogService _fileDialog;
     private readonly IAppSettingsService? _settingsService;
     private readonly IUiDispatcher _uiDispatcher;
+    private readonly ITempDirectoryService _tempDir;
     private CancellationTokenSource? _cts;
+
+    // Temp directory holding the SFV extracted from the last imported SRR (VerificationPath points
+    // into it, so it must outlive the import). Replaced on the next import and deleted on Cleanup.
+    private string? _sfvTempDir;
 
     // Elapsed timer — ticks every second so the clock doesn't freeze between progress events
     private readonly DispatcherTimer _elapsedTimer;
@@ -42,12 +47,13 @@ public partial class ReconstructorViewModel : ViewModelBase
     // the original for those files.
     private readonly List<TimestampPreservationFailedEventArgs> _timestampFailures = [];
 
-    public ReconstructorViewModel(IBruteForceService bruteForceService, IFileDialogService fileDialog, IAppSettingsService? settingsService = null, IUiDispatcher? uiDispatcher = null)
+    public ReconstructorViewModel(IBruteForceService bruteForceService, IFileDialogService fileDialog, IAppSettingsService? settingsService = null, IUiDispatcher? uiDispatcher = null, ITempDirectoryService? tempDir = null)
     {
         _bruteForceService = bruteForceService;
         _fileDialog = fileDialog;
         _settingsService = settingsService;
         _uiDispatcher = uiDispatcher ?? new WpfDispatcher();
+        _tempDir = tempDir ?? new TempDirectoryService();
 
         _bruteForceService.Progress += OnProgress;
         _bruteForceService.StatusChanged += OnStatusChanged;
@@ -2568,23 +2574,52 @@ public partial class ReconstructorViewModel : ViewModelBase
             return;
         }
 
+        // Delete the SFV temp from a previous import before starting a new one so at most one
+        // is ever on disk. If the current VerificationPath points into that dir (i.e. it was the
+        // previous import's auto-extracted SFV, not a user-chosen path), clear it too so it never
+        // dangles at a file we just deleted.
+        if (_sfvTempDir is not null
+            && VerificationPath.StartsWith(_sfvTempDir, StringComparison.Ordinal))
+        {
+            VerificationPath = string.Empty;
+        }
+
+        _tempDir.Cleanup(_sfvTempDir);
+        _sfvTempDir = null;
+
+        string? tempDir = null;
         try
         {
-            string tempDir = Path.Combine(Path.GetTempPath(), "ReScene.NET", "srr-import",
-                $"{Path.GetFileNameWithoutExtension(srrFilePath)}_{Guid.NewGuid():N}");
+            tempDir = _tempDir.CreateTempDirectory();
 
             string? extracted = srr.ExtractStoredFile(srrFilePath, tempDir,
                 fileName => Path.GetExtension(fileName).Equals(".sfv", StringComparison.OrdinalIgnoreCase));
 
             if (!string.IsNullOrEmpty(extracted))
             {
+                _sfvTempDir = tempDir;
                 VerificationPath = extracted;
                 Log(LogTarget.System, $"Stored SFV extracted: {Path.GetFileName(extracted)}");
+            }
+            else
+            {
+                // Nothing extracted — don't leave the empty temp dir behind.
+                _tempDir.Cleanup(tempDir);
             }
         }
         catch (Exception ex)
         {
+            _tempDir.Cleanup(tempDir);
             Log(LogTarget.System, $"Failed to extract stored SFV: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Releases the temp directory holding the last import's extracted SFV. Called on app shutdown.
+    /// </summary>
+    public void Cleanup()
+    {
+        _tempDir.Cleanup(_sfvTempDir);
+        _sfvTempDir = null;
     }
 }
