@@ -53,12 +53,12 @@ public static class InspectCommand
                 rows.Add((oso.BlockPosition, "OSOHash", oso.HeaderSize, oso.FileName));
             }
 
-            foreach (SRRRarFileBlock rarFile in srr.RARFiles)
+            foreach (SRRRARFileBlock rarFile in srr.RARFiles)
             {
                 rows.Add((rarFile.BlockPosition, "RARFile", rarFile.HeaderSize + rarFile.AddSize, rarFile.FileName));
             }
 
-            foreach (SRRRarPaddingBlock padding in srr.RARPaddingBlocks)
+            foreach (SRRRARPaddingBlock padding in srr.RARPaddingBlocks)
             {
                 rows.Add((padding.BlockPosition, "RARPadding", padding.HeaderSize + padding.AddSize, padding.RARFileName));
             }
