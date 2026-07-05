@@ -22,13 +22,22 @@ scoped to a single type.
 
 ## Naming
 
-**Spell the `SRR`, `SRS`, and `RAR` acronyms in all-caps** wherever they appear in an
-identifier — `SRRFile`, `RARCommandLineBuilder`, `ISRRVerifyService`, `OriginalRARFileNames`
-— to match the `SRR`/`SRS`/`RAR` namespaces and the core `SRRFile`/`RARArchive` types. Do
-**not** use mixed case (`Srr`, `Rar`): the two casings do not encode any file-vs-format
-distinction, so keeping them consistent avoids confusion. The one exception is a leading
-acronym in a camelCase local, which stays lowercase by normal convention (`srrPath`,
-`rarVersion`). This is not analyzer-enforced.
+**Spell format acronyms in all-caps** wherever they appear in an identifier —
+`SRRFile`, `RARCommandLineBuilder`, `ISRRVerifyService`, `OriginalRARFileNames`,
+`MP3TagReader`, `SRSFourCC`, `MKVBlockLayout`, `SRROSOHashBlock` — to match the `SRR`/`RAR`
+namespaces and the core `SRRFile`/`RARArchive` types. The all-caps acronyms are:
+**SRR, SRS, SRST, SRSF, RAR, MP3, MP4, MKV, ASF, WMV, EBML, OSO**. Do **not** use mixed
+case (`Srr`, `Rar`, `Mkv`, `Srs`): the casings do not encode any file-vs-format distinction,
+so keeping them consistent avoids confusion.
+
+- **Exceptions — `Flac`, `Riff`, `Vob` stay PascalCase** (`FlacMetadataReader`, `RiffFourCC`,
+  `VobSub`). These are established that way across the codebase and were left as-is.
+- A leading acronym in a camelCase local stays lowercase by normal convention (`srrPath`,
+  `rarVersion`).
+
+This is not analyzer-enforced. Note that persisted-JSON models (settings, config) deserialize
+with `PropertyNameCaseInsensitive`, so renaming a property's acronym casing does not break
+files written by older builds.
 
 > .NET's Framework Design Guidelines technically prefer PascalCase for 3-letter acronyms
 > (`Srr`), but this codebase standardized on all-caps to match its namespaces.
