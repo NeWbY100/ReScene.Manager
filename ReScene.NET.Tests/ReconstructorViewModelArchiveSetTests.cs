@@ -95,10 +95,7 @@ public class ReconstructorViewModelArchiveSetTests
             tempDir: tempDir);
     }
 
-    private static async Task ImportAsync(ReconstructorViewModel vm)
-    {
-        await ((IAsyncRelayCommand)vm.ImportSRRCommand).ExecuteAsync(null);
-    }
+    private static async Task ImportAsync(ReconstructorViewModel vm) => await ((IAsyncRelayCommand)vm.ImportSRRCommand).ExecuteAsync(null);
 
     // ── Tests ───────────────────────────────────────────────
 

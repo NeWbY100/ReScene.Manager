@@ -328,7 +328,7 @@ public sealed class CreatorViewModelTests : IDisposable
         await vm.CreateSRRCommand.ExecutionTask!;
 
         Assert.NotNull(srr.LastStoredFiles);
-        Assert.Equal(["b.srs", "a.srs"], srr.LastStoredFiles!.Select(e => e.StoredName).ToArray());
+        Assert.Equal(["b.srs", "a.srs"], [.. srr.LastStoredFiles!.Select(e => e.StoredName)]);
         // Placeholders are non-destructive: they remain placeholders so a retry regenerates.
         Assert.Equal(2, vm.StoredFiles.Count(f => f.Kind == CreatorViewModel.StoredFileKind.GeneratedSrs));
     }
@@ -377,7 +377,7 @@ public sealed class CreatorViewModelTests : IDisposable
         var srs = vm.StoredFiles
             .Where(f => f.StoredName.EndsWith(".srs", StringComparison.OrdinalIgnoreCase))
             .ToList();
-        Assert.Equal(["CD1/sample.srs", "CD2/sample.srs"], srs.Select(f => f.StoredName).Order().ToArray());
+        Assert.Equal(["CD1/sample.srs", "CD2/sample.srs"], [.. srs.Select(f => f.StoredName).Order()]);
         // Distinct temp paths — without the index prefix both would be <temp>\sample.srs.
         Assert.Equal(2, srs.Select(f => f.FullPath).Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
@@ -553,7 +553,7 @@ public sealed class CreatorViewModelTests : IDisposable
         await vm.CreateSRRCommand.ExecutionTask!;
 
         Assert.NotNull(srr.LastStoredFiles);
-        Assert.Equal(["a.nfo", "c.nfo", "b.nfo"], srr.LastStoredFiles!.Select(e => e.StoredName).ToArray());
+        Assert.Equal(["a.nfo", "c.nfo", "b.nfo"], [.. srr.LastStoredFiles!.Select(e => e.StoredName)]);
     }
 
     [Fact]

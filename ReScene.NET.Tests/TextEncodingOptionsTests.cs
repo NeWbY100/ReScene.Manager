@@ -27,10 +27,7 @@ public class TextEncodingOptionsTests
     }
 
     [Fact]
-    public void AllEntries_HaveNonNullEncoding()
-    {
-        Assert.All(TextEncodingOptions.All, e => Assert.NotNull(e.Encoding));
-    }
+    public void AllEntries_HaveNonNullEncoding() => Assert.All(TextEncodingOptions.All, e => Assert.NotNull(e.Encoding));
 
     [Fact]
     public void ToString_ReturnsDisplayName()

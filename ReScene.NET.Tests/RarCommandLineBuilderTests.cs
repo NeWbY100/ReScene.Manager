@@ -214,7 +214,7 @@ public sealed class RarCommandLineBuilderTests
 
         List<RARCommandLineArgument[]> result = RarCommandLineBuilder.BuildCommandLineArguments(settings);
 
-        string[] args = result[0].Select(a => a.Argument).ToArray();
+        string[] args = [.. result[0].Select(a => a.Argument)];
         Assert.Contains("-s", args);
         Assert.DoesNotContain("-s-", args);
         Assert.Equal(["a", "-r", "-ds", "-s"], args);
@@ -226,7 +226,7 @@ public sealed class RarCommandLineBuilderTests
         // Defense in depth: even if both reach the builder, only -s is emitted.
         var settings = new RarSwitchSettings { Version2 = true, SwitchS = true, SwitchSDash = true };
 
-        string[] args = RarCommandLineBuilder.BuildCommandLineArguments(settings)[0].Select(a => a.Argument).ToArray();
+        string[] args = [.. RarCommandLineBuilder.BuildCommandLineArguments(settings)[0].Select(a => a.Argument)];
         Assert.Contains("-s", args);
         Assert.DoesNotContain("-s-", args);
     }

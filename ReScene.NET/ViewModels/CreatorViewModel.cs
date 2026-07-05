@@ -446,14 +446,12 @@ public partial class CreatorViewModel : OperationViewModelBase
         }
 
         string releaseDir = Path.GetDirectoryName(InputPath) ?? ".";
-        List<string> samples = ReleaseFileScanner.FindSampleFiles(releaseDir)
+        List<string> samples = [.. ReleaseFileScanner.FindSampleFiles(releaseDir)
             .Concat(ExtraSampleFiles)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        List<string> subtitleSfvs = ReleaseFileScanner.FindSubtitleSFVFiles(releaseDir)
+            .Distinct(StringComparer.OrdinalIgnoreCase)];
+        List<string> subtitleSfvs = [.. ReleaseFileScanner.FindSubtitleSFVFiles(releaseDir)
             .Concat(ExtraSubtitleSfvFiles)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            .Distinct(StringComparer.OrdinalIgnoreCase)];
 
         // Keep existing placeholders (and the user's ordering) when the source set hasn't changed.
         var existing = StoredFiles
@@ -510,7 +508,7 @@ public partial class CreatorViewModel : OperationViewModelBase
         };
 
         var materialized = new Dictionary<StoredFileItem, string>();
-        List<StoredFileItem> placeholders = StoredFiles.Where(f => f.Kind != StoredFileKind.Regular).ToList();
+        List<StoredFileItem> placeholders = [.. StoredFiles.Where(f => f.Kind != StoredFileKind.Regular)];
 
         await GenerateAndRecordAsync(
             placeholders,
@@ -784,10 +782,9 @@ public partial class CreatorViewModel : OperationViewModelBase
     private async Task CreateSRSForSamplesAsync(string releaseDir, string tempDir, CancellationToken ct)
     {
         // Auto-detected samples plus any added manually on the wizard's Samples step.
-        List<string> samples = ReleaseFileScanner.FindSampleFiles(releaseDir)
+        List<string> samples = [.. ReleaseFileScanner.FindSampleFiles(releaseDir)
             .Concat(ExtraSampleFiles)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            .Distinct(StringComparer.OrdinalIgnoreCase)];
 
         var srsOptions = new SRSCreationOptions
         {
@@ -809,10 +806,9 @@ public partial class CreatorViewModel : OperationViewModelBase
 
     private async Task CreateVobsubSrrsAsync(string releaseDir, SRRCreationOptions options, string tempDir, CancellationToken ct)
     {
-        List<string> subtitleSfvs = ReleaseFileScanner.FindSubtitleSFVFiles(releaseDir)
+        List<string> subtitleSfvs = [.. ReleaseFileScanner.FindSubtitleSFVFiles(releaseDir)
             .Concat(ExtraSubtitleSfvFiles)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            .Distinct(StringComparer.OrdinalIgnoreCase)];
 
         await GenerateAndRecordAsync(
             subtitleSfvs,

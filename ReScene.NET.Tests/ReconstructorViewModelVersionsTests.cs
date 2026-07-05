@@ -92,7 +92,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
     ];
 
     private static int[] Ticked(ReconstructorViewModel vm) =>
-        vm.VersionGroups.SelectMany(g => g.Leaves).Where(l => l.IsChecked).Select(l => l.Version).OrderBy(v => v).ToArray();
+        [.. vm.VersionGroups.SelectMany(g => g.Leaves).Where(l => l.IsChecked).Select(l => l.Version).OrderBy(v => v)];
 
     [Fact]
     public void ApplyScanResult_ImportIntent_TicksAllInstalledInEnabledMajors()

@@ -361,8 +361,8 @@ public sealed class ReconstructorConfigMapperTests
         ReconstructorConfigMapper.Apply(vm, config);          // sets pending
         vm.ApplyScanResult(InstalledVersions, folderScanned: true);
 
-        int[] ticked = vm.VersionGroups.SelectMany(g => g.Leaves)
-            .Where(l => l.IsChecked).Select(l => l.Version).OrderBy(v => v).ToArray();
+        int[] ticked = [.. vm.VersionGroups.SelectMany(g => g.Leaves)
+            .Where(l => l.IsChecked).Select(l => l.Version).OrderBy(v => v)];
         Assert.Equal(new[] { 500, 624 }, ticked);
     }
 
@@ -379,8 +379,8 @@ public sealed class ReconstructorConfigMapperTests
         ReconstructorConfigMapper.Apply(vm, config);          // pending stays null
         vm.ApplyScanResult(InstalledVersions, folderScanned: true);
 
-        int[] ticked = vm.VersionGroups.SelectMany(g => g.Leaves)
-            .Where(l => l.IsChecked).Select(l => l.Version).OrderBy(v => v).ToArray();
+        int[] ticked = [.. vm.VersionGroups.SelectMany(g => g.Leaves)
+            .Where(l => l.IsChecked).Select(l => l.Version).OrderBy(v => v)];
         Assert.Equal(new[] { 500, 560, 624 }, ticked);        // all installed in enabled majors
     }
 

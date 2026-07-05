@@ -13,10 +13,7 @@ public class FieldGuidanceTests
     }
 
     [Fact]
-    public void SuggestSiblingPath_EmptyInput_ReturnsEmpty()
-    {
-        Assert.Equal(string.Empty, FieldGuidance.SuggestSiblingPath("", ".srr"));
-    }
+    public void SuggestSiblingPath_EmptyInput_ReturnsEmpty() => Assert.Equal(string.Empty, FieldGuidance.SuggestSiblingPath("", ".srr"));
 
     [Fact]
     public void EvaluateMediaAgainstSample_LargerMedia_IsOk()
@@ -106,8 +103,5 @@ public class FieldGuidanceTests
     }
 
     [Fact]
-    public void SuggestSaveFileName_NothingToSuggest_ReturnsNull()
-    {
-        Assert.Null(FieldGuidance.SuggestSaveFileName("", "", ".srs"));
-    }
+    public void SuggestSaveFileName_NothingToSuggest_ReturnsNull() => Assert.Null(FieldGuidance.SuggestSaveFileName("", "", ".srs"));
 }

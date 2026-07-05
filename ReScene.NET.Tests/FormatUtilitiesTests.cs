@@ -22,8 +22,5 @@ public class FormatUtilitiesTests
     }
 
     [Fact]
-    public void NormalizeAppName_CustomValue_IsUnchanged()
-    {
-        Assert.Equal("MyGroup", FormatUtilities.NormalizeAppName("MyGroup"));
-    }
+    public void NormalizeAppName_CustomValue_IsUnchanged() => Assert.Equal("MyGroup", FormatUtilities.NormalizeAppName("MyGroup"));
 }

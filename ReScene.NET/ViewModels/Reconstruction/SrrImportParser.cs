@@ -37,7 +37,7 @@ internal static class SrrImportParser
             FileCreationTimes = new Dictionary<string, DateTime>(srr.ArchivedFileCreationTimes, StringComparer.OrdinalIgnoreCase),
             FileAccessTimes = new Dictionary<string, DateTime>(srr.ArchivedFileAccessTimes, StringComparer.OrdinalIgnoreCase),
             ArchiveFileCrcs = new Dictionary<string, string>(srr.ArchivedFileCrcs, StringComparer.OrdinalIgnoreCase),
-            OriginalRarFileNames = srr.RARFiles.Select(r => r.FileName).ToList(),
+            OriginalRarFileNames = [.. srr.RARFiles.Select(r => r.FileName)],
             ArchiveSets = srr.ArchiveSets,
             ArchiveComment = srr.ArchiveComment,
             ArchiveCommentBytes = srr.ArchiveCommentBytes?.ToArray(),

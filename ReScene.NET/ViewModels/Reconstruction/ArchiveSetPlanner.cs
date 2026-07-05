@@ -250,7 +250,7 @@ internal static class ArchiveSetPlanner
             // nothing and always fall back to the full matrix.
             RAROptions = CloneWith(full.RAROptions,
                 versions: [new VersionRange(combo.Version, combo.Version + 1)],
-                args: [combo.Args.ToArray()]),
+                args: [[.. combo.Args]]),
         };
 
         foreach (string h in full.Hashes)

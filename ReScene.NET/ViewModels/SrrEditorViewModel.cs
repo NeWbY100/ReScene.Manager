@@ -298,7 +298,7 @@ public partial class SrrEditorViewModel(ISrrEditingService srrEditing, IFileDial
             return;
         }
 
-        List<string> names = SelectedStoredFiles.Select(f => f.Name).ToList();
+        List<string> names = [.. SelectedStoredFiles.Select(f => f.Name)];
 
         try
         {
@@ -378,7 +378,7 @@ public partial class SrrEditorViewModel(ISrrEditingService srrEditing, IFileDial
             return;
         }
 
-        List<string> names = SelectedStoredFiles.Select(f => f.Name).ToList();
+        List<string> names = [.. SelectedStoredFiles.Select(f => f.Name)];
         string? folder = await _fileDialog.OpenFolderAsync(
             names.Count == 1 ? "Choose where to save the file" : "Choose where to save the files");
         if (folder is null)

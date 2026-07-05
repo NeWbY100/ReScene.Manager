@@ -392,7 +392,7 @@ internal static partial class ReleaseFileScanner
     {
         // pyrescene order: NFO, m3u, proof images, log, cue, SRS, vobsub SRR,
         // subtitle SFVs (in subdirs), main SFV (root) last
-        return files.OrderBy(f =>
+        return [.. files.OrderBy(f =>
         {
             string ext = Path.GetExtension(f.FullPath).ToLowerInvariant();
             bool isInSubDir = f.StoredName.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal)
@@ -412,6 +412,6 @@ internal static partial class ReleaseFileScanner
                 ".sfv" => 9,
                 _ => 4
             };
-        }).ThenBy(f => f.StoredName, StringComparer.OrdinalIgnoreCase).ToList();
+        }).ThenBy(f => f.StoredName, StringComparer.OrdinalIgnoreCase)];
     }
 }

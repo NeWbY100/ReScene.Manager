@@ -563,10 +563,9 @@ public partial class ReconstructorViewModel : ViewModelBase
         VersionGroups.Clear();
         foreach (IGrouping<int, InstalledRarVersion> majorGroup in installed.GroupBy(v => v.Version / 100).OrderBy(g => g.Key))
         {
-            List<RarVersionLeaf> leaves = majorGroup
+            List<RarVersionLeaf> leaves = [.. majorGroup
                 .OrderBy(v => v.Version)
-                .Select(v => new RarVersionLeaf(v.Version, v.FolderName, v.Tag) { IsChecked = ticked.Contains(v.Version) })
-                .ToList();
+                .Select(v => new RarVersionLeaf(v.Version, v.FolderName, v.Tag) { IsChecked = ticked.Contains(v.Version) })];
             RarVersionGroup group = new(majorGroup.Key, leaves);
             group.SelectionChanged += OnGroupSelectionChanged;
             VersionGroups.Add(group);
@@ -2289,13 +2288,11 @@ public partial class ReconstructorViewModel : ViewModelBase
         });
     }
 
-    private void OnTimestampPreservationFailed(object? _, TimestampPreservationFailedEventArgs e)
-    {
+    private void OnTimestampPreservationFailed(object? _, TimestampPreservationFailedEventArgs e) =>
         // The library already logs a Warning via its logger (routed through
         // OnLogMessage). Track the failure here so we can show a single
         // summary MessageBox when the run finishes.
         _timestampFailures.Add(e);
-    }
 
     private void ShowTimestampFailureWarningIfAny()
     {

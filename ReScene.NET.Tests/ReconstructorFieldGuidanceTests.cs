@@ -6,10 +6,7 @@ namespace ReScene.NET.Tests;
 public class ReconstructorFieldGuidanceTests : TempDirTestBase
 {
     [Fact]
-    public void PathsNeedAttention_AllEmpty_IsTrue()
-    {
-        Assert.True(ReconstructorFieldGuidance.PathsNeedAttention("", "", "", ""));
-    }
+    public void PathsNeedAttention_AllEmpty_IsTrue() => Assert.True(ReconstructorFieldGuidance.PathsNeedAttention("", "", "", ""));
 
     [Fact]
     public void PathsNeedAttention_OutputEmpty_IsTrue()
@@ -52,46 +49,25 @@ public class ReconstructorFieldGuidanceTests : TempDirTestBase
     }
 
     [Fact]
-    public void EvaluateWinRarPath_Empty_IsWarning()
-    {
-        Assert.Equal(FieldState.Warning, ReconstructorFieldGuidance.EvaluateWinRarPath("").State);
-    }
+    public void EvaluateWinRarPath_Empty_IsWarning() => Assert.Equal(FieldState.Warning, ReconstructorFieldGuidance.EvaluateWinRarPath("").State);
 
     [Fact]
-    public void EvaluateReleasePath_Empty_IsWarning()
-    {
-        Assert.Equal(FieldState.Warning, ReconstructorFieldGuidance.EvaluateReleasePath("").State);
-    }
+    public void EvaluateReleasePath_Empty_IsWarning() => Assert.Equal(FieldState.Warning, ReconstructorFieldGuidance.EvaluateReleasePath("").State);
 
     [Fact]
-    public void EvaluateVerificationPath_Empty_IsWarning()
-    {
-        Assert.Equal(FieldState.Warning, ReconstructorFieldGuidance.EvaluateVerificationPath("").State);
-    }
+    public void EvaluateVerificationPath_Empty_IsWarning() => Assert.Equal(FieldState.Warning, ReconstructorFieldGuidance.EvaluateVerificationPath("").State);
 
     [Fact]
-    public void EvaluateOutputPath_Empty_IsWarning()
-    {
-        Assert.Equal(FieldState.Warning, ReconstructorFieldGuidance.EvaluateOutputPath("").State);
-    }
+    public void EvaluateOutputPath_Empty_IsWarning() => Assert.Equal(FieldState.Warning, ReconstructorFieldGuidance.EvaluateOutputPath("").State);
 
     [Fact]
-    public void EvaluateOutputPath_Whitespace_IsWarning()
-    {
-        Assert.Equal(FieldState.Warning, ReconstructorFieldGuidance.EvaluateOutputPath("   ").State);
-    }
+    public void EvaluateOutputPath_Whitespace_IsWarning() => Assert.Equal(FieldState.Warning, ReconstructorFieldGuidance.EvaluateOutputPath("   ").State);
 
     [Fact]
-    public void EvaluateOutputPath_Set_IsOk()
-    {
-        Assert.Equal(FieldState.Ok, ReconstructorFieldGuidance.EvaluateOutputPath(TempDir).State);
-    }
+    public void EvaluateOutputPath_Set_IsOk() => Assert.Equal(FieldState.Ok, ReconstructorFieldGuidance.EvaluateOutputPath(TempDir).State);
 
     [Fact]
-    public void PathsOverlap_SamePath_IsTrue()
-    {
-        Assert.True(ReconstructorFieldGuidance.PathsOverlap(TempDir, TempDir));
-    }
+    public void PathsOverlap_SamePath_IsTrue() => Assert.True(ReconstructorFieldGuidance.PathsOverlap(TempDir, TempDir));
 
     [Fact]
     public void PathsOverlap_OutputNestedInRelease_IsTrue()
@@ -125,22 +101,13 @@ public class ReconstructorFieldGuidanceTests : TempDirTestBase
     }
 
     [Fact]
-    public void PathsOverlap_EmptyPathA_IsFalse()
-    {
-        Assert.False(ReconstructorFieldGuidance.PathsOverlap("", TempDir));
-    }
+    public void PathsOverlap_EmptyPathA_IsFalse() => Assert.False(ReconstructorFieldGuidance.PathsOverlap("", TempDir));
 
     [Fact]
-    public void PathsOverlap_EmptyPathB_IsFalse()
-    {
-        Assert.False(ReconstructorFieldGuidance.PathsOverlap(TempDir, ""));
-    }
+    public void PathsOverlap_EmptyPathB_IsFalse() => Assert.False(ReconstructorFieldGuidance.PathsOverlap(TempDir, ""));
 
     [Fact]
-    public void PathsOverlap_DiffersOnlyByCase_IsTrue()
-    {
-        Assert.True(ReconstructorFieldGuidance.PathsOverlap(TempDir.ToUpperInvariant(), TempDir.ToLowerInvariant()));
-    }
+    public void PathsOverlap_DiffersOnlyByCase_IsTrue() => Assert.True(ReconstructorFieldGuidance.PathsOverlap(TempDir.ToUpperInvariant(), TempDir.ToLowerInvariant()));
 
     [Fact]
     public void EvaluateReleasePath_OverlapsOutput_IsError()

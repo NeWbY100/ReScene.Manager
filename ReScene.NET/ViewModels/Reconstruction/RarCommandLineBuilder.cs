@@ -20,11 +20,10 @@ internal static class RarCommandLineBuilder
         // the broad major-version ranges so behaviour matches the pre-tree UI.
         if (s.HasScannedVersions)
         {
-            return s.SelectedRarVersions
+            return [.. s.SelectedRarVersions
                 .Distinct()
                 .OrderBy(v => v)
-                .Select(v => new VersionRange(v, v + 1))
-                .ToList();
+                .Select(v => new VersionRange(v, v + 1))];
         }
 
         List<VersionRange> rarVersions = [];

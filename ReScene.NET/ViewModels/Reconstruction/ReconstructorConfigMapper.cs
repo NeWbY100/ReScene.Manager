@@ -28,7 +28,7 @@ internal static class ReconstructorConfigMapper
         // Only persist an explicit list when a real folder scan produced the tree; otherwise write
         // null so re-import falls back to the enabled-major ticking (an empty [] would wrongly
         // suppress all versions, because an explicit empty selection wins over the majors).
-        SelectedRarVersions = vm.HasScannedVersions ? vm.SelectedLeafVersions.ToList() : null,
+        SelectedRarVersions = vm.HasScannedVersions ? [.. vm.SelectedLeafVersions] : null,
 
         SwitchM0 = vm.SwitchM0,
         SwitchM1 = vm.SwitchM1,

@@ -67,10 +67,7 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     }
 
     /// <summary>Stops the elapsed stopwatch (run finished/cancelled/errored).</summary>
-    public void StopRun()
-    {
-        _stopwatch.Stop();
-    }
+    public void StopRun() => _stopwatch.Stop();
 
     /// <summary>
     /// Sets the archive-set label that will be stamped onto new version rows. The view-model calls

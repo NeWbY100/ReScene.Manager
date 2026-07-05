@@ -57,10 +57,7 @@ public partial class CreatorView : UserControl
         e.Handled = true;
     }
 
-    private void OnStoredNameBeginningEdit(object _, DataGridBeginningEditEventArgs e)
-    {
-        _storedNameBeforeEdit = (e.Row.Item as CreatorViewModel.StoredFileItem)?.StoredName;
-    }
+    private void OnStoredNameBeginningEdit(object _, DataGridBeginningEditEventArgs e) => _storedNameBeforeEdit = (e.Row.Item as CreatorViewModel.StoredFileItem)?.StoredName;
 
     private void OnStoredNameCellEditEnding(object _, DataGridCellEditEndingEventArgs e)
     {
