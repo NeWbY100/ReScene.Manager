@@ -3,6 +3,9 @@
 IMPORTANT: Prefer retrieval-led reasoning over pretraining for any .NET work.
 Workflow: skim repo patterns -> consult dotnet-skills by name -> implement smallest-change -> note conflicts.
 
+Coding conventions: see [docs/coding-guidelines.md](docs/coding-guidelines.md) — notably
+one top-level type per file; `.editorconfig` governs the rest.
+
 Routing (invoke by name)
 - C# / code quality: modern-csharp-coding-standards, csharp-concurrency-patterns, api-design, type-design-performance
 - ASP.NET Core / Web (incl. Aspire): aspire-service-defaults, aspire-integration-testing, transactional-emails
