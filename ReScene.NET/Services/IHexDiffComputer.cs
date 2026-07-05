@@ -3,38 +3,6 @@ using ReScene.Hex;
 namespace ReScene.NET.Services;
 
 /// <summary>
-/// Outcome of a byte-level diff between two hex data slices.
-/// </summary>
-/// <param name="Left">
-/// Coalesced ranges of bytes on the left side that differ from the right side
-/// (or that have no counterpart because the left slice is longer).
-/// </param>
-/// <param name="Right">
-/// Coalesced ranges of bytes on the right side that differ from the left side
-/// (or that have no counterpart because the right slice is longer).
-/// </param>
-public sealed record HexDiffResult(
-    IReadOnlyList<HexMatchRange> Left,
-    IReadOnlyList<HexMatchRange> Right);
-
-/// <summary>
-/// Periodic update emitted while a diff computation is running.
-/// </summary>
-/// <param name="Percent">
-/// Approximate completion percentage (0 to 100).
-/// </param>
-/// <param name="Left">
-/// Snapshot of left-side diff ranges produced so far.
-/// </param>
-/// <param name="Right">
-/// Snapshot of right-side diff ranges produced so far.
-/// </param>
-public sealed record HexDiffProgress(
-    double Percent,
-    IReadOnlyList<HexMatchRange> Left,
-    IReadOnlyList<HexMatchRange> Right);
-
-/// <summary>
 /// Computes byte-level differences between two slices of hex data, position-aligned.
 /// </summary>
 public interface IHexDiffComputer

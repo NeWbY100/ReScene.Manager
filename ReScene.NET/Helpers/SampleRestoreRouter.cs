@@ -1,13 +1,5 @@
 namespace ReScene.NET.Helpers;
 
-/// <summary>Which restore flow an input file maps to.</summary>
-public enum SampleRestoreKind
-{
-    Unknown,
-    Srr,
-    Srs,
-}
-
 /// <summary>
 /// Routes a chosen file to the right Beginner restore flow: an .srr triggers bulk restore of
 /// every embedded sample; a standalone .srs triggers a single sample rebuild.
