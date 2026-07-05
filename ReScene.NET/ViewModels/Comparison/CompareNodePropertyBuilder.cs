@@ -90,9 +90,9 @@ internal sealed class CompareNodePropertyBuilder(
                 break;
 
             case CompareNodeType.RARVolume:
-                if (nodeData.Data is SRRRarFileBlock rarFile)
+                if (nodeData.Data is SRRRARFileBlock rarFile)
                 {
-                    ShowRarVolumeProperties(rarFile);
+                    ShowRARVolumeProperties(rarFile);
                 }
 
                 break;
@@ -467,7 +467,7 @@ internal sealed class CompareNodePropertyBuilder(
         });
     }
 
-    private void ShowRarVolumeProperties(SRRRarFileBlock rarFile)
+    private void ShowRARVolumeProperties(SRRRARFileBlock rarFile)
     {
         long p = rarFile.BlockPosition;
         int nameLen = Encoding.UTF8.GetByteCount(rarFile.FileName);

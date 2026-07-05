@@ -8,10 +8,10 @@ namespace ReScene.NET.Helpers;
 /// these inline with copy-pasted logic (including the literal RAR5 marker bytes); centralizing
 /// them keeps the output byte-for-byte identical while removing the duplication.
 /// </summary>
-internal static class RarBlockLabel
+internal static class RARBlockLabel
 {
     /// <summary>The RAR 5.x marker prefix as it appears in a Signature block's first field value.</summary>
-    private const string Rar5SignaturePrefix = "52 61 72 21 1A 07 01";
+    private const string RAR5SignaturePrefix = "52 61 72 21 1A 07 01";
 
     /// <summary>
     /// Formats a detailed RAR block as a tree-node label, matching the previous inline logic:
@@ -37,11 +37,11 @@ internal static class RarBlockLabel
     /// Returns true when the detailed blocks describe a RAR 5.x archive: a leading Signature block
     /// whose first field value starts with the RAR5 marker bytes.
     /// </summary>
-    public static bool IsRar5Signature(IReadOnlyList<RARDetailedBlock> blocks)
+    public static bool IsRAR5Signature(IReadOnlyList<RARDetailedBlock> blocks)
     {
         return blocks.Count > 0
             && blocks[0].BlockType == "Signature"
             && blocks[0].Fields.Count > 0
-            && blocks[0].Fields[0].Value.StartsWith(Rar5SignaturePrefix, StringComparison.Ordinal);
+            && blocks[0].Fields[0].Value.StartsWith(RAR5SignaturePrefix, StringComparison.Ordinal);
     }
 }

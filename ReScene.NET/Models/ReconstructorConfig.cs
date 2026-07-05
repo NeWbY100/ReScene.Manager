@@ -8,7 +8,7 @@ public sealed class ReconstructorConfig
     public int Version { get; set; } = 1;
 
     // Paths
-    public string WinRarPath { get; set; } = string.Empty;
+    public string WinRARPath { get; set; } = string.Empty;
     public string ReleasePath { get; set; } = string.Empty;
     public string VerificationPath { get; set; } = string.Empty;
     public string OutputPath { get; set; } = string.Empty;
@@ -23,7 +23,7 @@ public sealed class ReconstructorConfig
 
     /// <summary>Explicit per-sub-version selection. Null in configs written before this feature —
     /// such configs fall back to ticking all installed versions in the enabled majors.</summary>
-    public List<int>? SelectedRarVersions { get; set; }
+    public List<int>? SelectedRARVersions { get; set; }
 
     // Compression Method
     public bool SwitchM0 { get; set; }
@@ -109,5 +109,5 @@ public sealed class ReconstructorConfig
     /// Snapshot of the SRR-imported state (timestamps, CRCs, comment, detected flags, …).
     /// Null when no SRR has been imported yet.
     /// </summary>
-    public ImportedSrrState? ImportedSrr { get; set; }
+    public ImportedSRRState? ImportedSRR { get; set; }
 }

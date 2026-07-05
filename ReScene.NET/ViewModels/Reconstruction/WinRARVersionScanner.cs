@@ -4,20 +4,20 @@ namespace ReScene.NET.ViewModels.Reconstruction;
 
 /// <summary>
 /// Enumerates the installed WinRAR sub-versions in the WinRAR versions folder, applying the same
-/// rules the engine uses (GetValidRarDirectories): an immediate subfolder
+/// rules the engine uses (GetValidRARDirectories): an immediate subfolder
 /// counts only if it contains <c>rar.exe</c> and its name parses to a version. Pure and
 /// I/O-only; the view-model calls it off the UI thread.
 /// </summary>
-public static class WinRarVersionScanner
+public static class WinRARVersionScanner
 {
-    public static IReadOnlyList<InstalledRarVersion> Scan(string? folder)
+    public static IReadOnlyList<InstalledRARVersion> Scan(string? folder)
     {
         if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
         {
             return [];
         }
 
-        List<InstalledRarVersion> found = [];
+        List<InstalledRARVersion> found = [];
         foreach (string dir in Directory.GetDirectories(folder))
         {
             if (!File.Exists(Path.Combine(dir, "rar.exe")))
@@ -31,7 +31,7 @@ public static class WinRarVersionScanner
                 continue;
             }
 
-            found.Add(new InstalledRarVersion(version, name, dir, variantTag));
+            found.Add(new InstalledRARVersion(version, name, dir, variantTag));
         }
 
         return found.OrderBy(v => v.Version).ToList();

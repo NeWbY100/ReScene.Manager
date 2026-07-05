@@ -235,7 +235,7 @@ internal static partial class ReleaseFileScanner
     /// <returns>
     /// A list of existing RAR file paths referenced by the SFV.
     /// </returns>
-    public static List<string> FindRarFilesFromSFV(string sfvPath)
+    public static List<string> FindRARFilesFromSFV(string sfvPath)
     {
         string dir = Path.GetDirectoryName(sfvPath) ?? ".";
         var rarFiles = new List<string>();
@@ -256,7 +256,7 @@ internal static partial class ReleaseFileScanner
             string fileName = line[..lastSpace].Trim();
             string ext = Path.GetExtension(fileName);
 
-            if (SceneFileTypes.IsRarVolumeExtension(ext))
+            if (SceneFileTypes.IsRARVolumeExtension(ext))
             {
                 string fullPath = Path.Combine(dir, fileName);
                 if (File.Exists(fullPath))

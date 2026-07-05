@@ -38,14 +38,14 @@ internal sealed class InspectorPropertyBuilder
             case SRROsoHashBlock oso:
                 ShowOSOHashProperties(oso);
                 break;
-            case SRRRarPaddingBlock padding:
-                ShowRarPaddingProperties(padding);
+            case SRRRARPaddingBlock padding:
+                ShowRARPaddingProperties(padding);
                 break;
             case SRRStoredFileBlock stored:
                 ShowStoredFileProperties(stored);
                 break;
-            case SRRRarFileBlock rar:
-                ShowRarFileProperties(rar);
+            case SRRRARFileBlock rar:
+                ShowRARFileProperties(rar);
                 break;
             case SRRFile srr:
                 ShowArchiveInfoProperties(srr);
@@ -254,7 +254,7 @@ internal sealed class InspectorPropertyBuilder
         }
     }
 
-    private void ShowRarFileProperties(SRRRarFileBlock rar)
+    private void ShowRARFileProperties(SRRRARFileBlock rar)
     {
         long p = rar.BlockPosition;
 
@@ -320,7 +320,7 @@ internal sealed class InspectorPropertyBuilder
             new ByteRange { Offset = p, Length = nameLen });
     }
 
-    private void ShowRarPaddingProperties(SRRRarPaddingBlock padding)
+    private void ShowRARPaddingProperties(SRRRARPaddingBlock padding)
     {
         long p = padding.BlockPosition;
 

@@ -157,7 +157,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
     }
 
-    public MainWindowViewModel(ISrrCreationService srrService, ISrsCreationService srsService, ISrsReconstructionService srsReconService, ISampleRestorerService sampleRestorerService, IBruteForceService bruteForceService, IFileCompareService fileCompareService, IFileDialogService fileDialog, IRecentFilesService recentFiles, ITempDirectoryService tempDir, ISrrEditingService srrEditingService, ISrrVerifyService srrVerifyService, IPropertyExportService propertyExportService, IAppSettingsService appSettingsService, IHexDiffComputer hexDiffComputer, IUiDispatcher? uiDispatcher = null)
+    public MainWindowViewModel(ISRRCreationService srrService, ISrsCreationService srsService, ISrsReconstructionService srsReconService, ISampleRestorerService sampleRestorerService, IBruteForceService bruteForceService, IFileCompareService fileCompareService, IFileDialogService fileDialog, IRecentFilesService recentFiles, ITempDirectoryService tempDir, ISRREditingService srrEditingService, ISRRVerifyService srrVerifyService, IPropertyExportService propertyExportService, IAppSettingsService appSettingsService, IHexDiffComputer hexDiffComputer, IUiDispatcher? uiDispatcher = null)
     {
         _fileDialog = fileDialog;
         _recentFiles = recentFiles;
@@ -190,11 +190,11 @@ public partial class MainWindowViewModel : ViewModelBase
             // A dedicated CreatorViewModel (not the Advanced tab's shared one) so the wizard's
             // state and build never collide with the Advanced SRR Creator tab. It also gets its
             // own creation-service instances so progress never crosses over to another VM.
-            CreateSrrWizard = new CreatorViewModel(new SRRCreationService(), new SRSCreationService(), fileDialog, tempDir, appSettingsService, dispatcher),
+            CreateSRRWizard = new CreatorViewModel(new SRRCreationService(), new SRSCreationService(), fileDialog, tempDir, appSettingsService, dispatcher),
             SRSCreator = SRSCreator,
             Reconstructor = Reconstructor,
             Restore = beginnerRestore,
-            SrrEditor = new SrrEditorViewModel(srrEditingService, fileDialog, tempDir, filePreviewService),
+            SRREditor = new SRREditorViewModel(srrEditingService, fileDialog, tempDir, filePreviewService),
         };
 
         Home = new HomeViewModel(

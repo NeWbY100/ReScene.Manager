@@ -9,7 +9,7 @@ namespace ReScene.NET.Tests;
 
 /// <summary>
 /// Pins the scalar option mapping in <see cref="ReconstructorConfigMapper"/> (Capture/Apply over
-/// ~60 bound fields) and the import-snapshot mapping in <see cref="ImportedSrrStateMapper"/>.
+/// ~60 bound fields) and the import-snapshot mapping in <see cref="ImportedSRRStateMapper"/>.
 /// Both mappers are pure (no WPF binding, no I/O), so the view-model is driven through its
 /// internal fakes without a UI thread.
 /// </summary>
@@ -51,7 +51,7 @@ public sealed class ReconstructorConfigMapperTests
     /// </summary>
     private static void StampDistinctiveValues(ReconstructorViewModel vm)
     {
-        vm.WinRarPath = "WR-PATH";
+        vm.WinRARPath = "WR-PATH";
         vm.ReleasePath = "REL-PATH";
         vm.VerificationPath = "VER-PATH";
         vm.OutputPath = "OUT-PATH";
@@ -99,7 +99,7 @@ public sealed class ReconstructorConfigMapperTests
     /// </summary>
     private static void StampOppositeValues(ReconstructorViewModel vm)
     {
-        vm.WinRarPath = "X"; vm.ReleasePath = "X"; vm.VerificationPath = "X"; vm.OutputPath = "X";
+        vm.WinRARPath = "X"; vm.ReleasePath = "X"; vm.VerificationPath = "X"; vm.OutputPath = "X";
 
         vm.Version2 = false; vm.Version3 = false; vm.Version4 = false;
         vm.Version5 = false; vm.Version6 = false; vm.Version7 = false;
@@ -159,7 +159,7 @@ public sealed class ReconstructorConfigMapperTests
         ReconstructorConfigMapper.Apply(vm, config);
 
         // Paths (strings).
-        Assert.Equal("WR-PATH", vm.WinRarPath);
+        Assert.Equal("WR-PATH", vm.WinRARPath);
         Assert.Equal("REL-PATH", vm.ReleasePath);
         Assert.Equal("VER-PATH", vm.VerificationPath);
         Assert.Equal("OUT-PATH", vm.OutputPath);
@@ -248,7 +248,7 @@ public sealed class ReconstructorConfigMapperTests
         Assert.True(vm.SwitchTSA3); Assert.False(vm.SwitchTSA4);
     }
 
-    // ── ImportedSrrStateMapper ────────────────────────────────
+    // ── ImportedSRRStateMapper ────────────────────────────────
 
     /// <summary>
     /// Apply(null) means "no SRR imported": it must yield a brand-new empty state with all
@@ -257,7 +257,7 @@ public sealed class ReconstructorConfigMapperTests
     [Fact]
     public void ApplyNull_YieldsAllEmptyState()
     {
-        ReconstructionImportState state = ImportedSrrStateMapper.Apply(null);
+        ReconstructionImportState state = ImportedSRRStateMapper.Apply(null);
 
         Assert.NotNull(state);
         Assert.Empty(state.ArchiveFiles);
@@ -265,7 +265,7 @@ public sealed class ReconstructorConfigMapperTests
         Assert.Empty(state.FileTimestamps);
         Assert.Empty(state.DirTimestamps);
         Assert.Empty(state.ArchiveFileCrcs);
-        Assert.Empty(state.OriginalRarFileNames);
+        Assert.Empty(state.OriginalRARFileNames);
         Assert.Null(state.SRRFilePath);
         Assert.Null(state.ArchiveComment);
         Assert.Null(state.CmtCompressedData);
@@ -279,9 +279,9 @@ public sealed class ReconstructorConfigMapperTests
     [Fact]
     public void Apply_WithUnknownCustomPackerType_FallsBackToNone()
     {
-        var dto = new ImportedSrrState { SRRFilePath = "x.srr", CustomPackerType = "Bogus" };
+        var dto = new ImportedSRRState { SRRFilePath = "x.srr", CustomPackerType = "Bogus" };
 
-        ReconstructionImportState state = ImportedSrrStateMapper.Apply(dto);
+        ReconstructionImportState state = ImportedSRRStateMapper.Apply(dto);
 
         Assert.Equal(CustomPackerType.None, state.CustomPackerType);
     }
@@ -293,13 +293,13 @@ public sealed class ReconstructorConfigMapperTests
     [Fact]
     public void Apply_WithKnownCustomPackerType_ParsesToEnumMember()
     {
-        var dto = new ImportedSrrState
+        var dto = new ImportedSRRState
         {
             SRRFilePath = "x.srr",
             CustomPackerType = nameof(CustomPackerType.MaxUint32WithoutLargeFlag)
         };
 
-        ReconstructionImportState state = ImportedSrrStateMapper.Apply(dto);
+        ReconstructionImportState state = ImportedSRRStateMapper.Apply(dto);
 
         Assert.Equal(CustomPackerType.MaxUint32WithoutLargeFlag, state.CustomPackerType);
     }
@@ -313,7 +313,7 @@ public sealed class ReconstructorConfigMapperTests
     public void Apply_RestoredCollections_UseCaseInsensitiveComparer()
     {
         DateTime ts = new(2026, 6, 14, 10, 30, 0, DateTimeKind.Utc);
-        var dto = new ImportedSrrState
+        var dto = new ImportedSRRState
         {
             SRRFilePath = "x.srr",
             FileTimestamps = { ["Folder/File.RAR"] = ts },
@@ -321,7 +321,7 @@ public sealed class ReconstructorConfigMapperTests
             ArchiveFiles = { "Folder/File.RAR" },
         };
 
-        ReconstructionImportState state = ImportedSrrStateMapper.Apply(dto);
+        ReconstructionImportState state = ImportedSRRStateMapper.Apply(dto);
 
         // Lookups by a DIFFERENT case must succeed on every rebuilt collection.
         Assert.True(state.FileTimestamps.TryGetValue("folder/file.rar", out DateTime got));
@@ -331,9 +331,9 @@ public sealed class ReconstructorConfigMapperTests
         Assert.Contains("folder/FILE.rar", state.ArchiveFiles);
     }
 
-    // ── SelectedRarVersions round-trip ───────────────────────────
+    // ── SelectedRARVersions round-trip ───────────────────────────
 
-    private static readonly IReadOnlyList<InstalledRarVersion> InstalledVersions =
+    private static readonly IReadOnlyList<InstalledRARVersion> InstalledVersions =
     [
         new(500, "winrar-500", "p500"),
         new(560, "winrar-560", "p560"),
@@ -349,14 +349,14 @@ public sealed class ReconstructorConfigMapperTests
 
         ReconstructorConfig config = ReconstructorConfigMapper.Capture(vm);
 
-        Assert.Equal(new[] { 560, 624 }, config.SelectedRarVersions!.OrderBy(v => v).ToArray());
+        Assert.Equal(new[] { 560, 624 }, config.SelectedRARVersions!.OrderBy(v => v).ToArray());
     }
 
     [Fact]
     public void Apply_WithSelectedVersions_TicksThoseAfterScan()
     {
         ReconstructorViewModel vm = CreateVm();
-        var config = new ReconstructorConfig { SelectedRarVersions = [500, 624] };
+        var config = new ReconstructorConfig { SelectedRARVersions = [500, 624] };
 
         ReconstructorConfigMapper.Apply(vm, config);          // sets pending
         vm.ApplyScanResult(InstalledVersions, folderScanned: true);
@@ -370,7 +370,7 @@ public sealed class ReconstructorConfigMapperTests
     public void Apply_OldConfigWithoutSelectedVersions_FallsBackToEnabledMajors()
     {
         ReconstructorViewModel vm = CreateVm();
-        var config = new ReconstructorConfig  // SelectedRarVersions == null (old config)
+        var config = new ReconstructorConfig  // SelectedRARVersions == null (old config)
         {
             Version2 = false, Version3 = false, Version4 = false,
             Version5 = true, Version6 = true, Version7 = false,
@@ -409,7 +409,7 @@ public sealed class ReconstructorConfigMapperTests
     {
         byte[] commentBytes = [1, 2, 3];
         byte[] cmtData = [9, 8, 7, 6];
-        var dto = new ImportedSrrState
+        var dto = new ImportedSRRState
         {
             SRRFilePath = "rel.srr",
             ArchiveComment = "hello",
@@ -420,10 +420,10 @@ public sealed class ReconstructorConfigMapperTests
             DetectedFileAttributes = 0x20u,
             DetectedLargeFlag = true,
             DetectedHighPackSize = 5u,
-            OriginalRarFileNames = ["cd1.rar", "cd2.rar"],
+            OriginalRARFileNames = ["cd1.rar", "cd2.rar"],
         };
 
-        ReconstructionImportState state = ImportedSrrStateMapper.Apply(dto);
+        ReconstructionImportState state = ImportedSRRStateMapper.Apply(dto);
 
         Assert.Equal("rel.srr", state.SRRFilePath);
         Assert.Equal("hello", state.ArchiveComment);
@@ -434,6 +434,6 @@ public sealed class ReconstructorConfigMapperTests
         Assert.Equal(0x20u, state.DetectedFileAttributes);
         Assert.True(state.DetectedLargeFlag);
         Assert.Equal(5u, state.DetectedHighPackSize);
-        Assert.Equal(new[] { "cd1.rar", "cd2.rar" }, state.OriginalRarFileNames);
+        Assert.Equal(new[] { "cd1.rar", "cd2.rar" }, state.OriginalRARFileNames);
     }
 }

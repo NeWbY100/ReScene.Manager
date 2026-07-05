@@ -10,7 +10,7 @@ public class SRREditingServiceImageTests : TempDirTestBase
     /// block (0x6A) carrying <paramref name="data"/>. Mirrors the on-disk layout the
     /// library parser expects.
     /// </summary>
-    internal static string WriteMinimalSrr(string dir, string srrName, string storedName, byte[] data)
+    internal static string WriteMinimalSRR(string dir, string srrName, string storedName, byte[] data)
     {
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
@@ -43,7 +43,7 @@ public class SRREditingServiceImageTests : TempDirTestBase
     public async Task ReadStoredFileBytesAsync_ReturnsStoredBytes()
     {
         byte[] data = [0xAA, 0xBB, 0xCC, 0xDD];
-        string srr = WriteMinimalSrr(TempDir, "svc.srr", "proof.jpg", data);
+        string srr = WriteMinimalSRR(TempDir, "svc.srr", "proof.jpg", data);
 
         var service = new SRREditingService();
         byte[]? bytes = await service.ReadStoredFileBytesAsync(srr, "proof.jpg");
@@ -55,7 +55,7 @@ public class SRREditingServiceImageTests : TempDirTestBase
     [Fact]
     public async Task ReadStoredFileBytesAsync_NoMatch_ReturnsNull()
     {
-        string srr = WriteMinimalSrr(TempDir, "svc2.srr", "proof.jpg", [0x01]);
+        string srr = WriteMinimalSRR(TempDir, "svc2.srr", "proof.jpg", [0x01]);
 
         var service = new SRREditingService();
         byte[]? bytes = await service.ReadStoredFileBytesAsync(srr, "absent.png");

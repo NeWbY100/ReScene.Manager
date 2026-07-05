@@ -31,8 +31,8 @@ internal sealed class ReconstructionImportState
     public bool? DetectedLargeFlag { get; set; }
     public uint? DetectedHighPackSize { get; set; }
     public uint? DetectedHighUnpSize { get; set; }
-    public List<string> OriginalRarFileNames { get; set; } = [];
-    public IReadOnlyList<SrrArchiveSet> ArchiveSets { get; set; } = [];
+    public List<string> OriginalRARFileNames { get; set; } = [];
+    public IReadOnlyList<SRRArchiveSet> ArchiveSets { get; set; } = [];
     public CustomPackerType CustomPackerType { get; set; } = CustomPackerType.None;
     public string? SRRFilePath { get; set; }
 
@@ -60,7 +60,7 @@ internal sealed class ReconstructionImportState
         DetectedLargeFlag = null;
         DetectedHighPackSize = null;
         DetectedHighUnpSize = null;
-        OriginalRarFileNames = [];
+        OriginalRARFileNames = [];
         ArchiveSets = [];
         CustomPackerType = CustomPackerType.None;
         SRRFilePath = null;

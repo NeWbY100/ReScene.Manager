@@ -4,12 +4,12 @@ using ReScene.NET.ViewModels;
 
 namespace ReScene.NET.Tests;
 
-// NOTE: the grid's code-behind handlers in EditSrrWizardBody.xaml.cs — SelectionChanged
+// NOTE: the grid's code-behind handlers in EditSRRWizardBody.xaml.cs — SelectionChanged
 // (forwards DataGrid.SelectedItems to vm.SetSelection) and PreviewMouseDown (clears the
 // selection on an empty-space left-click) — require a live WPF visual tree and are not
 // covered here. These tests drive vm.SetSelection directly, which is exactly what the
 // SelectionChanged handler forwards, so the VM-side selection logic is fully exercised.
-public class SrrEditorViewModelTests
+public class SRREditorViewModelTests
 {
     // ── Fakes ───────────────────────────────────────────────
 
@@ -18,7 +18,7 @@ public class SrrEditorViewModelTests
     /// list from <see cref="StoredFileNames"/>, so the ViewModel orchestration can be
     /// verified without any real SRR file or file I/O.
     /// </summary>
-    private sealed class FakeSrrEditingService : ISrrEditingService
+    private sealed class FakeSRREditingService : ISRREditingService
     {
         // Internal list of names; sizes default to 0 for fakes that don't care about size.
         public List<string> StoredFileNames { get; } = [];
@@ -29,10 +29,10 @@ public class SrrEditorViewModelTests
         public IReadOnlyList<string>? LastRemoved { get; private set; }
         public (string Path, string Old, string New)? LastRenamed { get; private set; }
         public (string Path, string Name, int Offset)? LastMoved { get; private set; }
-        public (string SrrPath, string OutputDir, string StoredName)? LastExtracted { get; private set; }
+        public (string SRRPath, string OutputDir, string StoredName)? LastExtracted { get; private set; }
 
         /// <summary>Every extraction call, in order — lets multi-select extraction be verified.</summary>
-        public List<(string SrrPath, string OutputDir, string StoredName)> Extractions { get; } = [];
+        public List<(string SRRPath, string OutputDir, string StoredName)> Extractions { get; } = [];
 
         /// <summary>Scripted return value for <see cref="ExtractStoredFileAsync"/>. Null simulates not found.</summary>
         public string? ExtractResult { get; set; }
@@ -156,8 +156,8 @@ public class SrrEditorViewModelTests
     /// Test ViewModel that overrides the working-copy seam to return a dummy path with no I/O,
     /// so the orchestration runs against the fake service without touching disk.
     /// </summary>
-    private sealed class TestSrrEditorViewModel(ISrrEditingService srrEditing, IFileDialogService fileDialog, ITempDirectoryService tempDir, IFilePreviewService filePreview)
-        : SrrEditorViewModel(srrEditing, fileDialog, tempDir, filePreview)
+    private sealed class TestSRREditorViewModel(ISRREditingService srrEditing, IFileDialogService fileDialog, ITempDirectoryService tempDir, IFilePreviewService filePreview)
+        : SRREditorViewModel(srrEditing, fileDialog, tempDir, filePreview)
     {
         public const string DummyWorkingPath = @"X:\__working__\copy.srr";
 
@@ -178,13 +178,13 @@ public class SrrEditorViewModelTests
         }
     }
 
-    private static TestSrrEditorViewModel CreateVm(
-        out FakeSrrEditingService editing,
+    private static TestSRREditorViewModel CreateVm(
+        out FakeSRREditingService editing,
         out FakeFileDialogService dialog)
     {
-        editing = new FakeSrrEditingService();
+        editing = new FakeSRREditingService();
         dialog = new FakeFileDialogService();
-        return new TestSrrEditorViewModel(editing, dialog, new NoOpTempDirectoryService(), new RecordingFilePreviewService());
+        return new TestSRREditorViewModel(editing, dialog, new NoOpTempDirectoryService(), new RecordingFilePreviewService());
     }
 
     // ── StoredFileInfo model ────────────────────────────────
@@ -209,39 +209,39 @@ public class SrrEditorViewModelTests
     [Fact]
     public void FreshVm_SourceStatusIsNone()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out _);
+        TestSRREditorViewModel vm = CreateVm(out _, out _);
         Assert.Equal(FieldState.None, vm.SourceStatus.State);
     }
 
     [Fact]
     public void ClearingSource_SetsNone()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out _);
+        TestSRREditorViewModel vm = CreateVm(out _, out _);
         vm.SourcePath = @"C:\rel\movie.srr";   // non-existent path → Error, but a definite change
         vm.SourcePath = string.Empty;          // exercises the empty branch of OnSourcePathChanged
         Assert.Equal(FieldState.None, vm.SourceStatus.State);
     }
 
     [Fact]
-    public void NonSrrSource_SetsError()
+    public void NonSRRSource_SetsError()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out _);
+        TestSRREditorViewModel vm = CreateVm(out _, out _);
         vm.SourcePath = @"C:\rel\movie.txt";
         Assert.Equal(FieldState.Error, vm.SourceStatus.State);
     }
 
     [Fact]
-    public void MissingSrrSource_SetsError()
+    public void MissingSRRSource_SetsError()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out _);
+        TestSRREditorViewModel vm = CreateVm(out _, out _);
         vm.SourcePath = @"C:\does\not\exist.srr";
         Assert.Equal(FieldState.Error, vm.SourceStatus.State);
     }
 
     [Fact]
-    public void ExistingSrrSource_SetsOk_AndAutoFillsOutput()
+    public void ExistingSRRSource_SetsOk_AndAutoFillsOutput()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out _);
+        TestSRREditorViewModel vm = CreateVm(out _, out _);
         string srr = Path.Combine(Path.GetTempPath(), $"srr-edit-{Guid.NewGuid():N}.srr");
         File.WriteAllText(srr, "x");
         try
@@ -262,7 +262,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void OutputAutoFill_DoesNotClobberUserValue()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out _);
+        TestSRREditorViewModel vm = CreateVm(out _, out _);
         string srr = Path.Combine(Path.GetTempPath(), $"srr-edit-{Guid.NewGuid():N}.srr");
         File.WriteAllText(srr, "x");
         try
@@ -281,7 +281,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void ClearingOutput_HidesStatus()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out _);
+        TestSRREditorViewModel vm = CreateVm(out _, out _);
         vm.OutputPath = @"D:\mine\custom.srr";
         vm.OutputPath = string.Empty;
         Assert.Equal(FieldState.None, vm.OutputStatus.State);
@@ -292,7 +292,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public async Task BrowseOutput_PrefillsCurrentOutputPathAsDefaultFileName()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out FakeFileDialogService dialog);
+        TestSRREditorViewModel vm = CreateVm(out _, out FakeFileDialogService dialog);
         vm.OutputPath = @"D:\rel\movie (edited).srr";
         dialog.SaveFileResult = @"D:\chosen\out.srr";
 
@@ -305,7 +305,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public async Task BrowseOutput_FallsBackToSiblingName_WhenOutputCleared()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out FakeFileDialogService dialog);
+        TestSRREditorViewModel vm = CreateVm(out _, out FakeFileDialogService dialog);
         string srr = Path.Combine(Path.GetTempPath(), $"srr-edit-{Guid.NewGuid():N}.srr");
         File.WriteAllText(srr, "x");
         try
@@ -330,7 +330,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void EnsureWorkingCopy_PopulatesListFromService()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out _);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out _);
         editing.StoredFileNames.AddRange(["a.nfo", "b.sfv"]);
         vm.SourcePath = @"C:\rel\movie.srr";
 
@@ -338,13 +338,13 @@ public class SrrEditorViewModelTests
 
         Assert.Equal(1, vm.CreateWorkingCopyCalls);
         Assert.Equal(["a.nfo", "b.sfv"], vm.StoredFiles.Select(f => f.Name));
-        Assert.Equal(TestSrrEditorViewModel.DummyWorkingPath, editing.LastPath);
+        Assert.Equal(TestSRREditorViewModel.DummyWorkingPath, editing.LastPath);
     }
 
     [Fact]
     public void EnsureWorkingCopy_IsIdempotentForSameSource()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out _);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out _);
         editing.StoredFileNames.Add("a.nfo");
         vm.SourcePath = @"C:\rel\movie.srr";
 
@@ -357,7 +357,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void EnsureWorkingCopy_RecreatesWhenSourceChanges()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out _);
+        TestSRREditorViewModel vm = CreateVm(out _, out _);
         vm.SourcePath = @"C:\rel\one.srr";
         vm.EnsureWorkingCopy();
 
@@ -372,15 +372,15 @@ public class SrrEditorViewModelTests
     [Fact]
     public void AddStoredFiles_CallsServiceAndReloads()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out FakeFileDialogService dialog);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out FakeFileDialogService dialog);
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
         dialog.OpenFilesResult = [@"C:\rel\new.nfo"];
 
         vm.AddStoredFilesCommand.Execute(null);
 
-        Assert.Contains(nameof(FakeSrrEditingService.AddStoredFiles), editing.Calls);
-        Assert.Equal(TestSrrEditorViewModel.DummyWorkingPath, editing.LastPath);
+        Assert.Contains(nameof(FakeSRREditingService.AddStoredFiles), editing.Calls);
+        Assert.Equal(TestSRREditorViewModel.DummyWorkingPath, editing.LastPath);
         Assert.NotNull(editing.LastAdded);
         Assert.Equal("new.nfo", editing.LastAdded![0].StoredName);
         Assert.Contains("new.nfo", vm.StoredFiles.Select(f => f.Name));
@@ -389,21 +389,21 @@ public class SrrEditorViewModelTests
     [Fact]
     public void AddStoredFiles_NoOpWhenDialogCancelled()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out FakeFileDialogService dialog);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out FakeFileDialogService dialog);
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
         dialog.OpenFilesResult = [];   // user cancelled / picked nothing
 
         vm.AddStoredFilesCommand.Execute(null);
 
-        Assert.DoesNotContain(nameof(FakeSrrEditingService.AddStoredFiles), editing.Calls);
+        Assert.DoesNotContain(nameof(FakeSRREditingService.AddStoredFiles), editing.Calls);
         Assert.Null(editing.LastAdded);
     }
 
     [Fact]
     public void RemoveStoredFile_CallsServiceWithSelectionAndReloads()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out _);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out _);
         editing.StoredFileNames.AddRange(["a.nfo", "b.sfv"]);
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -412,7 +412,7 @@ public class SrrEditorViewModelTests
         vm.RemoveStoredFileCommand.Execute(null);
 
         Assert.Equal(["a.nfo"], editing.LastRemoved);
-        Assert.Equal(TestSrrEditorViewModel.DummyWorkingPath, editing.LastPath);
+        Assert.Equal(TestSRREditorViewModel.DummyWorkingPath, editing.LastPath);
         Assert.DoesNotContain("a.nfo", vm.StoredFiles.Select(f => f.Name));
         Assert.Contains("b.sfv", vm.StoredFiles.Select(f => f.Name));
     }
@@ -420,7 +420,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void RenameStoredFile_CallsServiceAndPreservesSelection()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out FakeFileDialogService dialog);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out FakeFileDialogService dialog);
         editing.StoredFileNames.Add("old.nfo");
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -430,7 +430,7 @@ public class SrrEditorViewModelTests
         vm.RenameStoredFileCommand.Execute(null);
 
         Assert.NotNull(editing.LastRenamed);
-        Assert.Equal((TestSrrEditorViewModel.DummyWorkingPath, "old.nfo", "new.nfo"), editing.LastRenamed!.Value);
+        Assert.Equal((TestSRREditorViewModel.DummyWorkingPath, "old.nfo", "new.nfo"), editing.LastRenamed!.Value);
         Assert.Equal("old.nfo", dialog.LastPromptInitialValue);
         Assert.Contains("new.nfo", vm.StoredFiles.Select(f => f.Name));
         Assert.Equal("new.nfo", vm.SelectedStoredFile?.Name);
@@ -439,7 +439,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void RenameStoredFile_NoOpWhenPromptCancelled()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out FakeFileDialogService dialog);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out FakeFileDialogService dialog);
         editing.StoredFileNames.Add("old.nfo");
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -455,7 +455,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void RenameStoredFile_NoOpWhenNewNameEqualsOld()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out FakeFileDialogService dialog);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out FakeFileDialogService dialog);
         editing.StoredFileNames.Add("same.nfo");
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -465,14 +465,14 @@ public class SrrEditorViewModelTests
         vm.RenameStoredFileCommand.Execute(null);
 
         Assert.Null(editing.LastRenamed);
-        Assert.DoesNotContain(nameof(FakeSrrEditingService.RenameStoredFileAsync), editing.Calls);
+        Assert.DoesNotContain(nameof(FakeSRREditingService.RenameStoredFileAsync), editing.Calls);
         Assert.Contains("same.nfo", vm.StoredFiles.Select(f => f.Name));
     }
 
     [Fact]
     public void MoveStoredFileUp_CallsServiceWithNegativeOffsetAndPreservesSelection()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out _);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out _);
         editing.StoredFileNames.AddRange(["a.nfo", "b.sfv"]);
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -481,7 +481,7 @@ public class SrrEditorViewModelTests
         vm.MoveStoredFileUpCommand.Execute(null);
 
         Assert.NotNull(editing.LastMoved);
-        Assert.Equal((TestSrrEditorViewModel.DummyWorkingPath, "b.sfv", -1), editing.LastMoved!.Value);
+        Assert.Equal((TestSRREditorViewModel.DummyWorkingPath, "b.sfv", -1), editing.LastMoved!.Value);
         Assert.Equal(["b.sfv", "a.nfo"], vm.StoredFiles.Select(f => f.Name));
         Assert.Equal("b.sfv", vm.SelectedStoredFile?.Name);
     }
@@ -489,7 +489,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void MoveStoredFileDown_CallsServiceWithPositiveOffset()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out _);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out _);
         editing.StoredFileNames.AddRange(["a.nfo", "b.sfv"]);
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -498,7 +498,7 @@ public class SrrEditorViewModelTests
         vm.MoveStoredFileDownCommand.Execute(null);
 
         Assert.NotNull(editing.LastMoved);
-        Assert.Equal((TestSrrEditorViewModel.DummyWorkingPath, "a.nfo", +1), editing.LastMoved!.Value);
+        Assert.Equal((TestSRREditorViewModel.DummyWorkingPath, "a.nfo", +1), editing.LastMoved!.Value);
         Assert.Equal(["b.sfv", "a.nfo"], vm.StoredFiles.Select(f => f.Name));
         Assert.Equal("a.nfo", vm.SelectedStoredFile?.Name);
     }
@@ -508,7 +508,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public async Task ExtractStoredFile_CallsServiceAndSetsOkStatus()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out FakeFileDialogService dialog);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out FakeFileDialogService dialog);
         editing.StoredFileNames.Add("readme.nfo");
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -519,7 +519,7 @@ public class SrrEditorViewModelTests
         await vm.ExtractStoredFileCommand.ExecuteAsync(null);
 
         Assert.NotNull(editing.LastExtracted);
-        Assert.Equal(TestSrrEditorViewModel.DummyWorkingPath, editing.LastExtracted!.Value.SrrPath);
+        Assert.Equal(TestSRREditorViewModel.DummyWorkingPath, editing.LastExtracted!.Value.SRRPath);
         Assert.Equal(@"D:\Output", editing.LastExtracted.Value.OutputDir);
         Assert.Equal("readme.nfo", editing.LastExtracted.Value.StoredName);
         Assert.Equal(FieldState.Ok, vm.ManageStatus.State);
@@ -529,7 +529,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public async Task ExtractStoredFile_WhenFolderDialogCancelled_DoesNothing()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out FakeFileDialogService dialog);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out FakeFileDialogService dialog);
         editing.StoredFileNames.Add("readme.nfo");
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -538,7 +538,7 @@ public class SrrEditorViewModelTests
 
         await vm.ExtractStoredFileCommand.ExecuteAsync(null);
 
-        Assert.DoesNotContain(nameof(FakeSrrEditingService.ExtractStoredFileAsync), editing.Calls);
+        Assert.DoesNotContain(nameof(FakeSRREditingService.ExtractStoredFileAsync), editing.Calls);
         Assert.Null(editing.LastExtracted);
         Assert.Equal(FieldState.None, vm.ManageStatus.State);
     }
@@ -546,7 +546,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void ExtractStoredFileCommand_DisabledWithoutSelection()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out _);
+        TestSRREditorViewModel vm = CreateVm(out _, out _);
         vm.SetSelection([]);
 
         Assert.False(vm.ExtractStoredFileCommand.CanExecute(null));
@@ -555,7 +555,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public async Task Reset_ClearsManageStatus()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out FakeFileDialogService dialog);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out FakeFileDialogService dialog);
         editing.StoredFileNames.Add("readme.nfo");
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -575,7 +575,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void EditCommands_DisabledWithoutSelection()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out _);
+        TestSRREditorViewModel vm = CreateVm(out _, out _);
         vm.SetSelection([]);
 
         Assert.False(vm.RemoveStoredFileCommand.CanExecute(null));
@@ -589,7 +589,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void EditCommands_EnabledWithSingleSelection()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out _);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out _);
         editing.StoredFileNames.Add("a.nfo");
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -607,7 +607,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void MultiSelection_EnablesRemoveAndExtract_ButDisablesSingleOnlyCommands()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out _);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out _);
         editing.StoredFileNames.AddRange(["a.nfo", "b.sfv"]);
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -632,7 +632,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void RemoveStoredFile_RemovesAllSelectedFiles()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out _);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out _);
         editing.StoredFileNames.AddRange(["a.nfo", "b.sfv", "c.txt"]);
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -650,7 +650,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public async Task ExtractStoredFile_ExtractsAllSelectedFiles()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out FakeFileDialogService dialog);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out FakeFileDialogService dialog);
         editing.StoredFileNames.AddRange(["a.nfo", "b.sfv"]);
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -663,7 +663,7 @@ public class SrrEditorViewModelTests
         Assert.Equal(2, editing.Extractions.Count);
         Assert.Equal(["a.nfo", "b.sfv"], editing.Extractions.Select(e => e.StoredName));
         Assert.All(editing.Extractions, e => Assert.Equal(@"D:\Output", e.OutputDir));
-        Assert.All(editing.Extractions, e => Assert.Equal(TestSrrEditorViewModel.DummyWorkingPath, e.SrrPath));
+        Assert.All(editing.Extractions, e => Assert.Equal(TestSRREditorViewModel.DummyWorkingPath, e.SRRPath));
         Assert.Equal(FieldState.Ok, vm.ManageStatus.State);
         Assert.Contains("Saved 2 files", vm.ManageStatus.Message, StringComparison.Ordinal);
     }
@@ -671,7 +671,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public async Task ExtractStoredFile_WhenSomeSelectedMissing_SetsWarningStatus()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out FakeFileDialogService dialog);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out FakeFileDialogService dialog);
         editing.StoredFileNames.AddRange(["a.nfo", "b.sfv"]);
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -689,7 +689,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public async Task ExtractStoredFile_WhenAllSelectedMissing_SetsErrorStatus()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out FakeFileDialogService dialog);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out FakeFileDialogService dialog);
         editing.StoredFileNames.AddRange(["a.nfo", "b.sfv"]);
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -706,7 +706,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void SetSelection_ReplacesPreviousSelection()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out _);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out _);
         editing.StoredFileNames.AddRange(["a.nfo", "b.sfv"]);
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -722,7 +722,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void SetSelection_Empty_ClearsSelection_AndDisablesCommands()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out _);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out _);
         editing.StoredFileNames.Add("a.nfo");
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
@@ -746,7 +746,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void Save_CopiesWorkingCopyToOutput_AndReportsSuccess()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out _);
+        TestSRREditorViewModel vm = CreateVm(out _, out _);
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
         vm.OutputPath = @"C:\rel\movie (edited).srr";
@@ -763,7 +763,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void Save_WithoutWorkingCopy_ReportsFailure_AndDoesNotCopy()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out _);
+        TestSRREditorViewModel vm = CreateVm(out _, out _);
         vm.OutputPath = @"C:\rel\movie (edited).srr";   // no EnsureWorkingCopy
 
         vm.Save();
@@ -779,7 +779,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void Reset_ClearsAllState()
     {
-        TestSrrEditorViewModel vm = CreateVm(out FakeSrrEditingService editing, out _);
+        TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out _);
         editing.StoredFileNames.Add("a.nfo");
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.OutputPath = @"C:\rel\movie (edited).srr";
@@ -804,7 +804,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public void Reset_AfterEnsureWorkingCopy_RebuildsOnNextEnsure()
     {
-        TestSrrEditorViewModel vm = CreateVm(out _, out _);
+        TestSRREditorViewModel vm = CreateVm(out _, out _);
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
 
@@ -817,19 +817,19 @@ public class SrrEditorViewModelTests
         Assert.Equal(2, vm.CreateWorkingCopyCalls);
     }
 
-    private static TestSrrEditorViewModel CreateImageVm(
-        out FakeSrrEditingService editing,
+    private static TestSRREditorViewModel CreateImageVm(
+        out FakeSRREditingService editing,
         out RecordingFilePreviewService preview)
     {
-        editing = new FakeSrrEditingService();
+        editing = new FakeSRREditingService();
         preview = new RecordingFilePreviewService();
-        return new TestSrrEditorViewModel(editing, new FakeFileDialogService(), new NoOpTempDirectoryService(), preview);
+        return new TestSRREditorViewModel(editing, new FakeFileDialogService(), new NoOpTempDirectoryService(), preview);
     }
 
-    private static TestSrrEditorViewModel WithSelectedStored(
-        string storedName, out FakeSrrEditingService editing, out RecordingFilePreviewService preview)
+    private static TestSRREditorViewModel WithSelectedStored(
+        string storedName, out FakeSRREditingService editing, out RecordingFilePreviewService preview)
     {
-        TestSrrEditorViewModel vm = CreateImageVm(out editing, out preview);
+        TestSRREditorViewModel vm = CreateImageVm(out editing, out preview);
         editing.StoredFileNames.Add(storedName);
         vm.SourcePath = @"X:\src.srr";
         vm.EnsureWorkingCopy();              // builds the dummy working copy + reloads the list
@@ -842,21 +842,21 @@ public class SrrEditorViewModelTests
     [Fact]
     public void PreviewCommand_SingleImageSelected_IsEnabled()
     {
-        TestSrrEditorViewModel vm = WithSelectedStored("proof.jpg", out _, out _);
+        TestSRREditorViewModel vm = WithSelectedStored("proof.jpg", out _, out _);
         Assert.True(vm.PreviewStoredFileCommand.CanExecute(null));
     }
 
     [Fact]
     public void PreviewCommand_SingleNonImageSelected_IsEnabled()
     {
-        TestSrrEditorViewModel vm = WithSelectedStored("readme.nfo", out _, out _);
+        TestSRREditorViewModel vm = WithSelectedStored("readme.nfo", out _, out _);
         Assert.True(vm.PreviewStoredFileCommand.CanExecute(null));
     }
 
     [Fact]
     public void PreviewCommand_MultipleSelected_IsDisabled()
     {
-        TestSrrEditorViewModel vm = CreateImageVm(out FakeSrrEditingService editing, out _);
+        TestSRREditorViewModel vm = CreateImageVm(out FakeSRREditingService editing, out _);
         editing.StoredFileNames.Add("a.jpg");
         editing.StoredFileNames.Add("b.jpg");
         vm.SourcePath = @"X:\src.srr";
@@ -869,7 +869,7 @@ public class SrrEditorViewModelTests
     [Fact]
     public async Task PreviewCommand_ForwardsBytesAndName()
     {
-        TestSrrEditorViewModel vm = WithSelectedStored("readme.nfo", out FakeSrrEditingService editing, out RecordingFilePreviewService preview);
+        TestSRREditorViewModel vm = WithSelectedStored("readme.nfo", out FakeSRREditingService editing, out RecordingFilePreviewService preview);
         editing.BytesToReturn = [0x09, 0x08, 0x07];
 
         await vm.PreviewStoredFileCommand.ExecuteAsync(null);
@@ -878,6 +878,6 @@ public class SrrEditorViewModelTests
         Assert.Equal(new byte[] { 0x09, 0x08, 0x07 }, data);
         Assert.Equal("readme.nfo", fileName);
         Assert.NotNull(editing.LastRead);
-        Assert.Equal((TestSrrEditorViewModel.DummyWorkingPath, "readme.nfo"), editing.LastRead.Value);
+        Assert.Equal((TestSRREditorViewModel.DummyWorkingPath, "readme.nfo"), editing.LastRead.Value);
     }
 }

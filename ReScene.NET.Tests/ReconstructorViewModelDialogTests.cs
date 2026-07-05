@@ -101,12 +101,12 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
     /// version scan so it cannot race StartAsync's version guards. The scan is fire-and-forget in
     /// production (marshalled to the UI thread); in tests we await LastVersionScan for determinism.
     /// </summary>
-    private async Task SetWinRarWithVersionAsync(ReconstructorViewModel vm)
+    private async Task SetWinRARWithVersionAsync(ReconstructorViewModel vm)
     {
         string dir = NewTempDir();
         Directory.CreateDirectory(Path.Combine(dir, "winrar-500"));
         File.WriteAllText(Path.Combine(dir, "winrar-500", "rar.exe"), "stub");
-        vm.WinRarPath = dir;
+        vm.WinRARPath = dir;
         if (vm.LastVersionScan is { } scan)
         {
             await scan;
@@ -116,10 +116,10 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
     // ── Tests ───────────────────────────────────────────────
 
     [Fact]
-    public async Task Start_WithMissingWinRarPath_ShowsValidationError_AndDoesNotRun()
+    public async Task Start_WithMissingWinRARPath_ShowsValidationError_AndDoesNotRun()
     {
         ReconstructorViewModel vm = CreateVm(out RecordingFileDialogService dialog, out FakeBruteForceService brute);
-        // WinRarPath is blank -> first validation branch fires.
+        // WinRARPath is blank -> first validation branch fires.
         vm.ReleasePath = NewTempDir();
         vm.OutputPath = NewTempDir();
 
@@ -134,7 +134,7 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
     public async Task Start_WithNonExistentReleasePath_ShowsReleaseError()
     {
         ReconstructorViewModel vm = CreateVm(out RecordingFileDialogService dialog, out FakeBruteForceService brute);
-        await SetWinRarWithVersionAsync(vm);
+        await SetWinRARWithVersionAsync(vm);
         vm.ReleasePath = @"C:\does\not\exist\release";
         vm.OutputPath = NewTempDir();
 
@@ -148,7 +148,7 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
     public async Task Start_WithMissingVerificationFile_ShowsVerificationError()
     {
         ReconstructorViewModel vm = CreateVm(out RecordingFileDialogService dialog, out FakeBruteForceService brute);
-        await SetWinRarWithVersionAsync(vm);
+        await SetWinRARWithVersionAsync(vm);
         vm.ReleasePath = NewTempDir();   // empty dir -> no subdir warning, no missing-input warning
         vm.OutputPath = NewTempDir();
         // VerificationPath left blank -> verification validation branch fires.
@@ -163,7 +163,7 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
     public async Task Start_WithSubdirectoriesAndNoTimestamps_AbortsWhenConfirmDeclined()
     {
         ReconstructorViewModel vm = CreateVm(out RecordingFileDialogService dialog, out FakeBruteForceService brute);
-        await SetWinRarWithVersionAsync(vm);
+        await SetWinRARWithVersionAsync(vm);
 
         string release = NewTempDir();
         Directory.CreateDirectory(Path.Combine(release, "subdir"));   // triggers the modified-date warning
@@ -181,19 +181,19 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
     }
 
     [Fact]
-    public void SettingsChanged_FillsEmptyWinRarPath_WithoutRestart()
+    public void SettingsChanged_FillsEmptyWinRARPath_WithoutRestart()
     {
         var settings = new FakeAppSettingsService(); // default settings: empty paths
         var brute = new FakeBruteForceService();
         var dialog = new RecordingFileDialogService();
         var vm = new ReconstructorViewModel(brute, dialog, settings, new SynchronousUiDispatcher());
 
-        Assert.Equal(string.Empty, vm.WinRarPath); // nothing to fill at construction
+        Assert.Equal(string.Empty, vm.WinRARPath); // nothing to fill at construction
 
-        settings.Settings = new AppSettings { ReconstructWinRarPath = @"C:\winrar-versions" };
+        settings.Settings = new AppSettings { ReconstructWinRARPath = @"C:\winrar-versions" };
         settings.RaiseChanged();
 
-        Assert.Equal(@"C:\winrar-versions", vm.WinRarPath);
+        Assert.Equal(@"C:\winrar-versions", vm.WinRARPath);
     }
 
     [Fact]
@@ -220,7 +220,7 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
         ReconstructorViewModel vm = CreateVm(out _, out _);
         string release = NewTempDir();
 
-        vm.WinRarPath = NewTempDir();
+        vm.WinRARPath = NewTempDir();
         vm.ReleasePath = release;
         vm.OutputPath = release; // overlap
 
@@ -236,7 +236,7 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
     {
         ReconstructorViewModel vm = CreateVm(out _, out _);
         string release = NewTempDir();
-        vm.WinRarPath = NewTempDir();
+        vm.WinRARPath = NewTempDir();
         vm.ReleasePath = release;
         vm.OutputPath = release; // overlap
         Assert.False(vm.PathsReadyToStart);
@@ -249,7 +249,7 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
     public void PathsReadyToStart_FalseWhenAPathMissing()
     {
         ReconstructorViewModel vm = CreateVm(out _, out _);
-        vm.WinRarPath = NewTempDir();
+        vm.WinRARPath = NewTempDir();
         vm.ReleasePath = NewTempDir();
         // OutputPath left empty
         Assert.False(vm.PathsReadyToStart);
@@ -264,7 +264,7 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
         string releaseFile = Path.Combine(shared, "movie.mkv");
         File.WriteAllText(releaseFile, "release contents");
 
-        await SetWinRarWithVersionAsync(vm);
+        await SetWinRARWithVersionAsync(vm);
         vm.ReleasePath = shared;
         vm.OutputPath = shared; // same folder as release
 

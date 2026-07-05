@@ -396,10 +396,10 @@ public partial class SampleRestorerViewModel : OperationViewModelBase
             return;
         }
 
-        _ = LoadSrrEntriesAndMatchAsync();
+        _ = LoadSRREntriesAndMatchAsync();
     }
 
-    private async Task LoadSrrEntriesAndMatchAsync()
+    private async Task LoadSRREntriesAndMatchAsync()
     {
         await LoadSRSEntriesAsync();
 

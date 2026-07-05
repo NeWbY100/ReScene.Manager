@@ -5,7 +5,7 @@ namespace ReScene.NET.Services;
 /// <summary>
 /// Service for creating SRR files from RAR volumes or SFV file listings.
 /// </summary>
-public interface ISrrCreationService
+public interface ISRRCreationService
 {
     /// <summary>
     /// Raised to report progress during SRR creation.
@@ -33,7 +33,7 @@ public interface ISrrCreationService
     /// <returns>
     /// The creation result including success status and statistics.
     /// </returns>
-    public Task<SRRCreationResult> CreateFromRarAsync(
+    public Task<SRRCreationResult> CreateFromRARAsync(
         string outputPath,
         IReadOnlyList<string> rarVolumePaths,
         IReadOnlyList<StoredFileEntry>? storedFiles,

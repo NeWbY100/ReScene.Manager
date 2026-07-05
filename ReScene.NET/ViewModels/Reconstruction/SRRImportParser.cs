@@ -9,21 +9,21 @@ namespace ReScene.NET.ViewModels.Reconstruction;
 /// any bound option — the view-model performs those steps when it applies the result, preserving
 /// the exact log/dialog ordering.
 /// </summary>
-internal static class SrrImportParser
+internal static class SRRImportParser
 {
-    public static ImportedSrrInfo Parse(SRRFile srr, string path)
+    public static ImportedSRRInfo Parse(SRRFile srr, string path)
     {
-        bool hasRarReconstructionInfo = srr.RARFiles.Count > 0
+        bool hasRARReconstructionInfo = srr.RARFiles.Count > 0
             || srr.ArchivedFiles.Count > 0
             || srr.CompressionMethod.HasValue;
 
         (CustomPackerType packerType, string? packerWarning) = DescribeCustomPacker(srr);
 
-        return new ImportedSrrInfo
+        return new ImportedSRRInfo
         {
-            Srr = srr,
-            SrrFilePath = path,
-            HasRarReconstructionInfo = hasRarReconstructionInfo,
+            SRR = srr,
+            SRRFilePath = path,
+            HasRARReconstructionInfo = hasRARReconstructionInfo,
 
             CustomPackerType = packerType,
             CustomPackerWarning = packerWarning,
@@ -37,7 +37,7 @@ internal static class SrrImportParser
             FileCreationTimes = new Dictionary<string, DateTime>(srr.ArchivedFileCreationTimes, StringComparer.OrdinalIgnoreCase),
             FileAccessTimes = new Dictionary<string, DateTime>(srr.ArchivedFileAccessTimes, StringComparer.OrdinalIgnoreCase),
             ArchiveFileCrcs = new Dictionary<string, string>(srr.ArchivedFileCrcs, StringComparer.OrdinalIgnoreCase),
-            OriginalRarFileNames = [.. srr.RARFiles.Select(r => r.FileName)],
+            OriginalRARFileNames = [.. srr.RARFiles.Select(r => r.FileName)],
             ArchiveSets = srr.ArchiveSets,
             ArchiveComment = srr.ArchiveComment,
             ArchiveCommentBytes = srr.ArchiveCommentBytes?.ToArray(),
@@ -55,7 +55,7 @@ internal static class SrrImportParser
 
             DisplayName = Path.GetFileName(path),
             DisplayAppName = DescribeAppName(srr),
-            DisplayRarVolumeText = srr.RARFiles.Count == 1 ? "1 volume" : $"{srr.RARFiles.Count} volumes",
+            DisplayRARVolumeText = srr.RARFiles.Count == 1 ? "1 volume" : $"{srr.RARFiles.Count} volumes",
             DisplayArchivedFilesText = srr.ArchivedFiles.Count == 1 ? "1 file" : $"{srr.ArchivedFiles.Count} files",
             DisplayCompressionText = DescribeCompression(srr.CompressionMethod),
             DisplayStoredFilesText = DescribeStoredFiles(srr),

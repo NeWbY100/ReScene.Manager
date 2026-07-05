@@ -15,13 +15,13 @@ using ReScene.SRS;
 
 namespace ReScene.NET.ViewModels;
 
-public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditingService srrEditingService, ISrrVerifyService verifyService, IPropertyExportService propertyExportService, IImagePreviewService imagePreviewService, IAppSettingsService? settingsService = null) : ViewModelBase, IDisposable
+public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditingService srrEditingService, ISRRVerifyService verifyService, IPropertyExportService propertyExportService, IImagePreviewService imagePreviewService, IAppSettingsService? settingsService = null) : ViewModelBase, IDisposable
 {
     private const int ExportBufferSize = 80 * 1024;
 
     private readonly IFileDialogService _fileDialog = fileDialog;
-    private readonly ISrrEditingService _sRREditingService = srrEditingService;
-    private readonly ISrrVerifyService _verifyService = verifyService;
+    private readonly ISRREditingService _sRREditingService = srrEditingService;
+    private readonly ISRRVerifyService _verifyService = verifyService;
     private readonly IPropertyExportService _propertyExportService = propertyExportService;
     private readonly IImagePreviewService _imagePreviewService = imagePreviewService;
     private readonly IAppSettingsService? _settingsService = settingsService;
@@ -234,7 +234,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
         {
             string ext = Path.GetExtension(filePath);
             bool isSRS = ext.Equals(".srs", StringComparison.OrdinalIgnoreCase);
-            bool isRar = ext.Equals(".rar", StringComparison.OrdinalIgnoreCase);
+            bool isRAR = ext.Equals(".rar", StringComparison.OrdinalIgnoreCase);
             bool isMkv = ext.Equals(".mkv", StringComparison.OrdinalIgnoreCase)
                 || ext.Equals(".webm", StringComparison.OrdinalIgnoreCase);
 
@@ -261,7 +261,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
 
             // Parse off the UI thread so a large SRS/RAR/MKV/SRR file does not freeze the UI.
             ParsedFileData parsed = await Task.Run(
-                () => ParseFileData(filePath, isSRS, isRar, isMkv, mkvMaxElements));
+                () => ParseFileData(filePath, isSRS, isRAR, isMkv, mkvMaxElements));
 
             // A newer load (or CloseFile) started while we were parsing — discard this stale
             // result so we don't clobber the current file's state or leak its data source.
@@ -271,9 +271,9 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
             }
 
             _sRSData = parsed.Srs;
-            _rarDetailedBlocks = parsed.Rar;
+            _rarDetailedBlocks = parsed.RAR;
             _mkvData = parsed.Mkv;
-            _sRRData = parsed.Srr;
+            _sRRData = parsed.SRR;
 
             LoadedFilePath = filePath;
             _loadedFilePathInternal = filePath;
@@ -295,15 +295,15 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
                 int blockCount = (srs.FileData is not null ? 1 : 0) + srs.Tracks.Count + srs.ContainerChunks.Count;
                 StatusMessage = $"{Path.GetFileName(filePath)} | {srs.ContainerType} | {blockCount} blocks | {_fileSize:N0} bytes";
             }
-            else if (isRar)
+            else if (isRAR)
             {
                 int blockCount = _rarDetailedBlocks!.Count;
-                bool isRAR5 = RarBlockLabel.IsRar5Signature(_rarDetailedBlocks);
+                bool isRAR5 = RARBlockLabel.IsRAR5Signature(_rarDetailedBlocks);
                 string format = isRAR5 ? "RAR 5.x" : "RAR 4.x";
                 StatusMessage = $"{Path.GetFileName(filePath)} | {format} | {blockCount} blocks | {_fileSize:N0} bytes";
 
                 // Detect custom packer sentinels in RAR file headers
-                if (DetectCustomPackerInRarBlocks(_rarDetailedBlocks))
+                if (DetectCustomPackerInRARBlocks(_rarDetailedBlocks))
                 {
                     WarningMessage = "Custom RAR packer detected — file size fields may be unreliable. Known groups: RELOADED, HI2U, QCF.";
                 }
@@ -360,7 +360,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
     // Runs on a background thread (via Task.Run in LoadFileAsync): all the heavy file parsing,
     // returning an immutable bundle the UI thread then applies. Keeps no VM state so it is safe
     // off-thread.
-    private static ParsedFileData ParseFileData(string filePath, bool isSRS, bool isRar, bool isMkv, int mkvMaxElements)
+    private static ParsedFileData ParseFileData(string filePath, bool isSRS, bool isRAR, bool isMkv, int mkvMaxElements)
     {
         long fileSize = new FileInfo(filePath).Length;
 
@@ -369,9 +369,9 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
             return new ParsedFileData { Srs = SRSInspectorData.Load(filePath), FileSize = fileSize };
         }
 
-        if (isRar)
+        if (isRAR)
         {
-            return new ParsedFileData { Rar = RARDetailedParser.Parse(filePath), FileSize = fileSize };
+            return new ParsedFileData { RAR = RARDetailedParser.Parse(filePath), FileSize = fileSize };
         }
 
         if (isMkv)
@@ -379,15 +379,15 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
             return new ParsedFileData { Mkv = MKVFileData.Load(filePath, mkvMaxElements), FileSize = fileSize };
         }
 
-        return new ParsedFileData { Srr = SRRFileData.Load(filePath), FileSize = fileSize };
+        return new ParsedFileData { SRR = SRRFileData.Load(filePath), FileSize = fileSize };
     }
 
     private sealed class ParsedFileData
     {
         public SRSInspectorData? Srs { get; init; }
-        public IReadOnlyList<RARDetailedBlock>? Rar { get; init; }
+        public IReadOnlyList<RARDetailedBlock>? RAR { get; init; }
         public MKVFileData? Mkv { get; init; }
-        public SRRFileData? Srr { get; init; }
+        public SRRFileData? SRR { get; init; }
         public long FileSize { get; init; }
     }
 
@@ -428,7 +428,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
             SetHexBlock(oso.BlockPosition, oso.HeaderSize);
             HasProperties = true;
         }
-        else if (value?.Tag is SRRRarPaddingBlock padding)
+        else if (value?.Tag is SRRRARPaddingBlock padding)
         {
             SetHexBlock(padding.BlockPosition, padding.HeaderSize + padding.AddSize);
             HasProperties = true;
@@ -438,7 +438,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
             SetHexBlock(stored.BlockPosition, stored.HeaderSize + stored.AddSize);
             HasProperties = true;
         }
-        else if (value?.Tag is SRRRarFileBlock rar)
+        else if (value?.Tag is SRRRARFileBlock rar)
         {
             SetHexBlock(rar.BlockPosition, rar.HeaderSize + rar.AddSize);
             HasProperties = true;
@@ -883,7 +883,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
 
         if (_rarDetailedBlocks is not null)
         {
-            TreeRoots.Add(InspectorTreeBuilder.BuildRar(_rarDetailedBlocks));
+            TreeRoots.Add(InspectorTreeBuilder.BuildRAR(_rarDetailedBlocks));
             return;
         }
 
@@ -898,7 +898,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
             return;
         }
 
-        TreeRoots.Add(InspectorTreeBuilder.BuildSrr(_sRRData));
+        TreeRoots.Add(InspectorTreeBuilder.BuildSRR(_sRRData));
     }
 
     private static int CountElements(IReadOnlyList<EBMLElement> elements)
@@ -912,7 +912,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISrrEditi
         return count;
     }
 
-    private static bool DetectCustomPackerInRarBlocks(IReadOnlyList<RARDetailedBlock> blocks)
+    private static bool DetectCustomPackerInRARBlocks(IReadOnlyList<RARDetailedBlock> blocks)
     {
         foreach (RARDetailedBlock block in blocks)
         {

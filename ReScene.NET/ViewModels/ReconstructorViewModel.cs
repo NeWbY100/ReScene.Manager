@@ -106,9 +106,9 @@ public partial class ReconstructorViewModel : ViewModelBase
         }
 
         AppSettings settings = _settingsService.Load();
-        if (string.IsNullOrWhiteSpace(WinRarPath) && !string.IsNullOrWhiteSpace(settings.ReconstructWinRarPath))
+        if (string.IsNullOrWhiteSpace(WinRARPath) && !string.IsNullOrWhiteSpace(settings.ReconstructWinRARPath))
         {
-            WinRarPath = settings.ReconstructWinRarPath;
+            WinRARPath = settings.ReconstructWinRARPath;
         }
 
         if (string.IsNullOrWhiteSpace(OutputPath) && !string.IsNullOrWhiteSpace(settings.ReconstructOutputPath))
@@ -127,18 +127,18 @@ public partial class ReconstructorViewModel : ViewModelBase
 
     /// <summary>True once an SRR has been successfully imported (drives the Beginner wizard's step gating).</summary>
     [ObservableProperty]
-    public partial bool HasImportedSrr { get; set; }
+    public partial bool HasImportedSRR { get; set; }
 
     // ── Imported SRR details (shown after import) ──
 
     [ObservableProperty]
-    public partial string ImportedSrrName { get; set; } = string.Empty;
+    public partial string ImportedSRRName { get; set; } = string.Empty;
 
     [ObservableProperty]
-    public partial string ImportedSrrAppName { get; set; } = string.Empty;
+    public partial string ImportedSRRAppName { get; set; } = string.Empty;
 
     [ObservableProperty]
-    public partial string ImportedRarVolumeText { get; set; } = string.Empty;
+    public partial string ImportedRARVolumeText { get; set; } = string.Empty;
 
     [ObservableProperty]
     public partial string ImportedArchivedFilesText { get; set; } = string.Empty;
@@ -154,7 +154,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     [NotifyPropertyChangedFor(nameof(PathsNeedAttention))]
-    public partial string WinRarPath { get; set; } = string.Empty;
+    public partial string WinRARPath { get; set; } = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
@@ -173,7 +173,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     // ── Path status ──
 
     [ObservableProperty]
-    public partial FieldStatus WinRarStatus { get; set; } = FieldStatus.None;
+    public partial FieldStatus WinRARStatus { get; set; } = FieldStatus.None;
 
     [ObservableProperty]
     public partial FieldStatus ReleaseStatus { get; set; } = FieldStatus.None;
@@ -187,14 +187,14 @@ public partial class ReconstructorViewModel : ViewModelBase
     [ObservableProperty]
     public partial FieldStatus ArchiveSetStatus { get; set; } = FieldStatus.None;
 
-    partial void OnWinRarPathChanged(string value)
+    partial void OnWinRARPathChanged(string value)
     {
-        WinRarStatus = ReconstructorFieldGuidance.EvaluateWinRarPath(value);
+        WinRARStatus = ReconstructorFieldGuidance.EvaluateWinRARPath(value);
 
         // The folder changed, so the previous folder's scan no longer describes the current path.
         // Mark the tree as not-yet-scanned (and invalidate any in-flight scan) BEFORE kicking off the
         // async scan for this folder. Otherwise a config's pending version selection applied right
-        // after this (the mapper sets WinRarPath, then LoadPendingVersionSelection) would be consumed
+        // after this (the mapper sets WinRARPath, then LoadPendingVersionSelection) would be consumed
         // by ApplyReconcile against the STALE previous scan and lost before the new folder's scan
         // lands, clearing the restored major toggles too. See audit #39.
         HasScannedVersions = false;
@@ -227,7 +227,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// </summary>
     private void RefreshPathStatuses()
     {
-        WinRarStatus = ReconstructorFieldGuidance.EvaluateWinRarPath(WinRarPath);
+        WinRARStatus = ReconstructorFieldGuidance.EvaluateWinRARPath(WinRARPath);
         VerifyStatus = ReconstructorFieldGuidance.EvaluateVerificationPath(VerificationPath);
         RefreshReleaseOutputStatuses();
     }
@@ -237,7 +237,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// drives the warning glyph on the Paths sub-tab header.
     /// </summary>
     public bool PathsNeedAttention =>
-        ReconstructorFieldGuidance.PathsNeedAttention(WinRarPath, ReleasePath, VerificationPath, OutputPath);
+        ReconstructorFieldGuidance.PathsNeedAttention(WinRARPath, ReleasePath, VerificationPath, OutputPath);
 
     // ── Progress ──
 
@@ -415,7 +415,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     // ── Per-sub-version selection (tree over the installed WinRAR versions) ──
 
     /// <summary>Installed-version tree grouped by major; the checked leaves drive the brute-force.</summary>
-    public ObservableCollection<RarVersionGroup> VersionGroups { get; } = [];
+    public ObservableCollection<RARVersionGroup> VersionGroups { get; } = [];
 
     /// <summary>True once a folder scan has completed for an existing folder (even if it had no versions).</summary>
     [ObservableProperty]
@@ -426,7 +426,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     public partial bool ShowNoVersionsHint { get; set; }
 
     /// <summary>Last folder scan result, reused by import/config reconcile without re-hitting disk.</summary>
-    private IReadOnlyList<InstalledRarVersion> _lastScan = [];
+    private IReadOnlyList<InstalledRARVersion> _lastScan = [];
 
     /// <summary>Explicit version list from a config load, consumed by the next scanned reconcile.</summary>
     private List<int>? _pendingVersionSelection;
@@ -462,9 +462,9 @@ public partial class ReconstructorViewModel : ViewModelBase
     private void SetAllLeaves(bool value)
     {
         _suppressGroupSync = true;
-        foreach (RarVersionGroup group in VersionGroups)
+        foreach (RARVersionGroup group in VersionGroups)
         {
-            foreach (RarVersionLeaf leaf in group.Leaves)
+            foreach (RARVersionLeaf leaf in group.Leaves)
             {
                 leaf.IsChecked = value;
             }
@@ -482,7 +482,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// deterministic), otherwise off-thread with a latest-wins token.</summary>
     private void TriggerVersionScan()
     {
-        string folder = WinRarPath;
+        string folder = WinRARPath;
         if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
         {
             // Bump the token so a still-running async scan of a previous folder cannot land later
@@ -499,10 +499,10 @@ public partial class ReconstructorViewModel : ViewModelBase
     private async Task RunVersionScanAsync(string folder)
     {
         int token = ++_scanToken;
-        IReadOnlyList<InstalledRarVersion> installed;
+        IReadOnlyList<InstalledRARVersion> installed;
         try
         {
-            installed = await Task.Run(() => WinRarVersionScanner.Scan(folder)).ConfigureAwait(false);
+            installed = await Task.Run(() => WinRARVersionScanner.Scan(folder)).ConfigureAwait(false);
         }
         catch
         {
@@ -521,7 +521,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     }
 
     /// <summary>Stores a scan result and reconciles the tree. Also the test seam for the async scan.</summary>
-    internal void ApplyScanResult(IReadOnlyList<InstalledRarVersion> installed, bool folderScanned)
+    internal void ApplyScanResult(IReadOnlyList<InstalledRARVersion> installed, bool folderScanned)
     {
         _lastScan = installed;
         HasScannedVersions = folderScanned;
@@ -551,22 +551,22 @@ public partial class ReconstructorViewModel : ViewModelBase
         ShowNoVersionsHint = VersionGroups.Count == 0;
     }
 
-    private void RebuildVersionGroups(IReadOnlyList<InstalledRarVersion> installed, HashSet<int> ticked)
+    private void RebuildVersionGroups(IReadOnlyList<InstalledRARVersion> installed, HashSet<int> ticked)
     {
         _suppressGroupSync = true;
-        foreach (RarVersionGroup group in VersionGroups)
+        foreach (RARVersionGroup group in VersionGroups)
         {
             group.SelectionChanged -= OnGroupSelectionChanged;
             group.Detach();
         }
 
         VersionGroups.Clear();
-        foreach (IGrouping<int, InstalledRarVersion> majorGroup in installed.GroupBy(v => v.Version / 100).OrderBy(g => g.Key))
+        foreach (IGrouping<int, InstalledRARVersion> majorGroup in installed.GroupBy(v => v.Version / 100).OrderBy(g => g.Key))
         {
-            List<RarVersionLeaf> leaves = [.. majorGroup
+            List<RARVersionLeaf> leaves = [.. majorGroup
                 .OrderBy(v => v.Version)
-                .Select(v => new RarVersionLeaf(v.Version, v.FolderName, v.Tag) { IsChecked = ticked.Contains(v.Version) })];
-            RarVersionGroup group = new(majorGroup.Key, leaves);
+                .Select(v => new RARVersionLeaf(v.Version, v.FolderName, v.Tag) { IsChecked = ticked.Contains(v.Version) })];
+            RARVersionGroup group = new(majorGroup.Key, leaves);
             group.SelectionChanged += OnGroupSelectionChanged;
             VersionGroups.Add(group);
         }
@@ -800,20 +800,20 @@ public partial class ReconstructorViewModel : ViewModelBase
         }
 
         // Paths
-        WinRarPath = string.Empty;
+        WinRARPath = string.Empty;
         ReleasePath = string.Empty;
         VerificationPath = string.Empty;
         OutputPath = string.Empty;
 
         // Import gating + warning
-        HasImportedSrr = false;
+        HasImportedSRR = false;
         CustomPackerWarning = null;
         LastRunSucceeded = false;
 
         // Imported SRR details
-        ImportedSrrName = string.Empty;
-        ImportedSrrAppName = string.Empty;
-        ImportedRarVolumeText = string.Empty;
+        ImportedSRRName = string.Empty;
+        ImportedSRRAppName = string.Empty;
+        ImportedRARVolumeText = string.Empty;
         ImportedArchivedFilesText = string.Empty;
         ImportedCompressionText = string.Empty;
         ImportedStoredFilesText = string.Empty;
@@ -853,12 +853,12 @@ public partial class ReconstructorViewModel : ViewModelBase
     // ── Browse Commands ──
 
     [RelayCommand]
-    private async Task BrowseWinRarAsync()
+    private async Task BrowseWinRARAsync()
     {
         string? path = await _fileDialog.OpenFolderAsync("Select WinRAR Installations Directory");
         if (path is not null)
         {
-            WinRarPath = path;
+            WinRARPath = path;
         }
     }
 
@@ -905,7 +905,7 @@ public partial class ReconstructorViewModel : ViewModelBase
             return;
         }
 
-        HasImportedSrr = false;
+        HasImportedSRR = false;
 
         try
         {
@@ -915,13 +915,13 @@ public partial class ReconstructorViewModel : ViewModelBase
             Log(LogTarget.System, "SRR loaded successfully");
 
             // Pure parse: imported/detected state, custom-packer detection, and display strings.
-            ImportedSrrInfo info = SrrImportParser.Parse(srr, path);
+            ImportedSRRInfo info = SRRImportParser.Parse(srr, path);
 
             // Detect SRRs that carry no RAR reconstruction information
             // (no RAR volume entries, no archived-file metadata, no detected
             // compression method). These can't drive automatic option setup,
             // so warn the user that they'll need to configure things manually.
-            if (!info.HasRarReconstructionInfo)
+            if (!info.HasRARReconstructionInfo)
             {
                 Log(LogTarget.System,
                     "WARNING: SRR contains no RAR reconstruction information.");
@@ -966,7 +966,7 @@ public partial class ReconstructorViewModel : ViewModelBase
             _import.FileCreationTimes = info.FileCreationTimes;
             _import.FileAccessTimes = info.FileAccessTimes;
             _import.ArchiveFileCrcs = info.ArchiveFileCrcs;
-            _import.OriginalRarFileNames = info.OriginalRarFileNames;
+            _import.OriginalRARFileNames = info.OriginalRARFileNames;
             _import.ArchiveSets = info.ArchiveSets;
             ArchiveSetStatus = _import.ArchiveSets.Count > 1
                 ? FieldStatus.Info($"This release has {_import.ArchiveSets.Count} archive sets " +
@@ -1010,9 +1010,9 @@ public partial class ReconstructorViewModel : ViewModelBase
             {
                 Log(LogTarget.System, $"Host OS: {srr.DetectedHostOSName} (0x{srr.DetectedHostOS:X2})");
                 bool isCurrentWindows = Environment.OSVersion.Platform == PlatformID.Win32NT;
-                bool isRarUnix = srr.DetectedHostOS == 3;
-                bool isRarWindows = srr.DetectedHostOS == 2;
-                if ((isCurrentWindows && isRarUnix) || (!isCurrentWindows && isRarWindows))
+                bool isRARUnix = srr.DetectedHostOS == 3;
+                bool isRARWindows = srr.DetectedHostOS == 2;
+                if ((isCurrentWindows && isRARUnix) || (!isCurrentWindows && isRARWindows))
                 {
                     EnableHostOSPatching = true;
                     Log(LogTarget.System, "Host OS patching enabled (platform mismatch)");
@@ -1021,7 +1021,7 @@ public partial class ReconstructorViewModel : ViewModelBase
 
             // Pure switch mapping: only the toggles the SRR actually specifies (partial diff —
             // unspecified groups stay null and the corresponding toggles are left untouched).
-            SrrSwitchMapper.SwitchDiff switches = SrrSwitchMapper.Map(srr);
+            SRRSwitchMapper.SwitchDiff switches = SRRSwitchMapper.Map(srr);
             ApplySwitchDiff(switches);
 
             // Timestamp precision
@@ -1101,8 +1101,8 @@ public partial class ReconstructorViewModel : ViewModelBase
 
             Log(LogTarget.System, "=== SRR Import Complete ===");
 
-            PopulateImportedSrrDetails(info);
-            HasImportedSrr = true;
+            PopulateImportedSRRDetails(info);
+            HasImportedSRR = true;
         }
         catch (Exception ex)
         {
@@ -1111,11 +1111,11 @@ public partial class ReconstructorViewModel : ViewModelBase
     }
 
     /// <summary>Maps the parsed SRR summary onto the bound display properties shown on the wizard's import step.</summary>
-    private void PopulateImportedSrrDetails(ImportedSrrInfo info)
+    private void PopulateImportedSRRDetails(ImportedSRRInfo info)
     {
-        ImportedSrrName = info.DisplayName;
-        ImportedSrrAppName = info.DisplayAppName;
-        ImportedRarVolumeText = info.DisplayRarVolumeText;
+        ImportedSRRName = info.DisplayName;
+        ImportedSRRAppName = info.DisplayAppName;
+        ImportedRARVolumeText = info.DisplayRARVolumeText;
         ImportedArchivedFilesText = info.DisplayArchivedFilesText;
         ImportedCompressionText = info.DisplayCompressionText;
         ImportedStoredFilesText = info.DisplayStoredFilesText;
@@ -1123,7 +1123,10 @@ public partial class ReconstructorViewModel : ViewModelBase
 
     // ── Import / Export Configuration ──
 
-    private static readonly System.Text.Json.JsonSerializerOptions _configSerializerOptions = new() { WriteIndented = true };
+    // PropertyNameCaseInsensitive so configs exported by older builds (which used mixed SRR/SRR,
+    // RAR/RAR property casing) still import after the identifiers were normalized to SRR/RAR.
+    private static readonly System.Text.Json.JsonSerializerOptions _configSerializerOptions =
+        new() { WriteIndented = true, PropertyNameCaseInsensitive = true };
 
     [RelayCommand]
     private async Task ImportConfigAsync()
@@ -1138,7 +1141,7 @@ public partial class ReconstructorViewModel : ViewModelBase
         try
         {
             string json = await File.ReadAllTextAsync(path);
-            var config = System.Text.Json.JsonSerializer.Deserialize<ReconstructorConfig>(json);
+            var config = System.Text.Json.JsonSerializer.Deserialize<ReconstructorConfig>(json, _configSerializerOptions);
             if (config is null)
             {
                 Log(LogTarget.System, "Failed to import configuration: file is empty or invalid");
@@ -1180,23 +1183,23 @@ public partial class ReconstructorViewModel : ViewModelBase
     private ReconstructorConfig CaptureConfig()
     {
         ReconstructorConfig config = ReconstructorConfigMapper.Capture(this);
-        config.ImportedSrr = CaptureImportedSrrState();
+        config.ImportedSRR = CaptureImportedSRRState();
         return config;
     }
 
-    private ImportedSrrState? CaptureImportedSrrState() =>
-        ImportedSrrStateMapper.Capture(_import, CustomPackerWarning);
+    private ImportedSRRState? CaptureImportedSRRState() =>
+        ImportedSRRStateMapper.Capture(_import, CustomPackerWarning);
 
     private void ApplyConfig(ReconstructorConfig c)
     {
         ReconstructorConfigMapper.Apply(this, c);
-        ApplyImportedSrrState(c.ImportedSrr);
+        ApplyImportedSRRState(c.ImportedSRR);
     }
 
-    private void ApplyImportedSrrState(ImportedSrrState? s)
+    private void ApplyImportedSRRState(ImportedSRRState? s)
     {
         // Always reset — an absent block means "no SRR imported"
-        _import = ImportedSrrStateMapper.Apply(s);
+        _import = ImportedSRRStateMapper.Apply(s);
         CustomPackerWarning = s?.CustomPackerWarning;
 
         if (s is not null)
@@ -1213,7 +1216,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// "Files &amp; folders" step. Centralised so the two callers cannot drift apart.
     /// </summary>
     public bool PathsReadyToStart =>
-        !string.IsNullOrWhiteSpace(WinRarPath)
+        !string.IsNullOrWhiteSpace(WinRARPath)
         && !string.IsNullOrWhiteSpace(ReleasePath)
         && !string.IsNullOrWhiteSpace(OutputPath)
         && !ReconstructorFieldGuidance.PathsOverlap(ReleasePath, OutputPath);
@@ -1232,14 +1235,14 @@ public partial class ReconstructorViewModel : ViewModelBase
 
         // ── Path validation ──
 
-        if (string.IsNullOrWhiteSpace(WinRarPath))
+        if (string.IsNullOrWhiteSpace(WinRARPath))
         {
             Log(LogTarget.System, "Invalid WinRAR directory.");
             _fileDialog.ShowError("Validation Error", "Invalid WinRAR directory.");
             return;
         }
 
-        if (!Directory.Exists(WinRarPath))
+        if (!Directory.Exists(WinRARPath))
         {
             Log(LogTarget.System, "WinRAR directory does not exist.");
             _fileDialog.ShowError("Validation Error", "WinRAR directory does not exist.");
@@ -1471,7 +1474,7 @@ public partial class ReconstructorViewModel : ViewModelBase
         try
         {
             Log(LogTarget.System, "Starting brute-force...");
-            Log(LogTarget.System, $"WinRAR: {WinRarPath}");
+            Log(LogTarget.System, $"WinRAR: {WinRARPath}");
             Log(LogTarget.System, $"Release: {ReleasePath}");
             Log(LogTarget.System, $"Output: {OutputPath}");
 
@@ -1543,11 +1546,11 @@ public partial class ReconstructorViewModel : ViewModelBase
         // For the legacy / no-SRR single flat set the original RAR names may be empty; fall back to
         // the verification SFV's RAR-volume entries so output renaming still works (matches the old
         // ResolveOutputRenameNames behaviour). When an SRR was imported its names take precedence.
-        IReadOnlyList<string> flatNames = _import.OriginalRarFileNames.Count > 0
-            ? _import.OriginalRarFileNames
+        IReadOnlyList<string> flatNames = _import.OriginalRARFileNames.Count > 0
+            ? _import.OriginalRARFileNames
             : ResolveSfvVolumeNames();
 
-        IReadOnlyList<SrrArchiveSet> sets = ArchiveSetPlanner.ResolveSets(
+        IReadOnlyList<SRRArchiveSet> sets = ArchiveSetPlanner.ResolveSets(
             _import.ArchiveSets, _import.SRRFilePath, flatNames, _import.ArchiveFiles);
 
         SFVFile? userSfv = TryLoadUserSfv(VerificationPath);
@@ -1562,7 +1565,7 @@ public partial class ReconstructorViewModel : ViewModelBase
 
         for (int i = 0; i < sets.Count; i++)
         {
-            SrrArchiveSet set = sets[i];
+            SRRArchiveSet set = sets[i];
             string label = string.IsNullOrEmpty(set.Key) ? "(release)" : set.Key;
             if (sets.Count > 1)
             {
@@ -1660,26 +1663,26 @@ public partial class ReconstructorViewModel : ViewModelBase
     }
 
     /// <summary>One archive set's reconstruction outcome.</summary>
-    private readonly record struct SetOutcome(SrrArchiveSet Set, string Label, bool Success, bool Skipped);
+    private readonly record struct SetOutcome(SRRArchiveSet Set, string Label, bool Success, bool Skipped);
 
     /// <summary>Captures the non-per-set toggles, version ranges, command-line matrix, and release-wide SRR data.</summary>
     internal SharedReconstructionSettings BuildSharedSettings()
     {
-        RarSwitchSettings switches = BuildSwitchSettings();
+        RARSwitchSettings switches = BuildSwitchSettings();
         HashType hashType = Path.GetExtension(VerificationPath).Equals(".sha1", StringComparison.OrdinalIgnoreCase)
             ? HashType.SHA1
             : HashType.CRC32;
 
         return new SharedReconstructionSettings
         {
-            WinRarPath = WinRarPath,
+            WinRARPath = WinRARPath,
             ReleasePath = ReleasePath,
             OutputPath = OutputPath,
-            RarVersions = RarCommandLineBuilder.BuildVersionRanges(switches),
+            RARVersions = RARCommandLineBuilder.BuildVersionRanges(switches),
             // Only folder-filter when a real scan produced the tree; the no-scan fallback uses broad
             // major-version ranges and must NOT be restricted to specific folder names.
             SelectedVersionFolders = HasScannedVersions ? SelectedLeafFolders : [],
-            CommandLineArguments = RarCommandLineBuilder.BuildCommandLineArguments(switches),
+            CommandLineArguments = RARCommandLineBuilder.BuildCommandLineArguments(switches),
             HashType = hashType,
             VerificationHashes = LoadVerificationHashes(hashType),
             SetFileArchiveAttribute = ToTriState(FileA),
@@ -1769,7 +1772,7 @@ public partial class ReconstructorViewModel : ViewModelBase
         {
             return [.. SFVFile.ReadFile(VerificationPath).Entries
                 .Select(e => e.FileName)
-                .Where(RARVolumeIdentifier.IsRarVolume)];
+                .Where(RARVolumeIdentifier.IsRARVolume)];
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
@@ -1786,7 +1789,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// (handles a flat "aln-re4a.sfv" matched to key "DVD1/aln-re4a"). Returns null when no SRR
     /// was imported or no stored .sfv matches.
     /// </summary>
-    private byte[]? LoadEmbeddedSfvBytes(SrrArchiveSet set)
+    private byte[]? LoadEmbeddedSfvBytes(SRRArchiveSet set)
     {
         string? srrPath = _import.SRRFilePath;
         if (string.IsNullOrWhiteSpace(srrPath) || !File.Exists(srrPath))
@@ -1810,7 +1813,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// Whether a stored file is the .sfv for the given set. See <see cref="LoadEmbeddedSfvBytes"/>
     /// for the matching rules. Shared with the embedded-SFV resolution test so both use one predicate.
     /// </summary>
-    internal static bool EmbeddedSfvMatchesSet(string storedName, SrrArchiveSet set)
+    internal static bool EmbeddedSfvMatchesSet(string storedName, SRRArchiveSet set)
     {
         if (!storedName.EndsWith(".sfv", StringComparison.OrdinalIgnoreCase))
         {
@@ -1845,7 +1848,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// True if relocation succeeded (or was a no-op for a single set); false if an I/O or
     /// authorization error prevented the move so the caller can record the set as failed.
     /// </returns>
-    private bool RelocateVerifiedOutput(string workRoot, SrrArchiveSet set, int setCount)
+    private bool RelocateVerifiedOutput(string workRoot, SRRArchiveSet set, int setCount)
     {
         if (setCount <= 1)
         {
@@ -1894,7 +1897,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// Removes an in-flight multi-set's scratch dir and any partial final subfolder so a cancelled
     /// or failed set leaves no half-written output behind. No-op for a single root set.
     /// </summary>
-    private void CleanupWorkRoot(string workRoot, SrrArchiveSet set, int setCount)
+    private void CleanupWorkRoot(string workRoot, SRRArchiveSet set, int setCount)
     {
         if (setCount <= 1)
         {
@@ -2066,8 +2069,8 @@ public partial class ReconstructorViewModel : ViewModelBase
 
     // ── Build Options ──
 
-    /// <summary>Captures the current RAR switch toggles for <see cref="RarCommandLineBuilder"/>.</summary>
-    private RarSwitchSettings BuildSwitchSettings() => new()
+    /// <summary>Captures the current RAR switch toggles for <see cref="RARCommandLineBuilder"/>.</summary>
+    private RARSwitchSettings BuildSwitchSettings() => new()
     {
         Version2 = Version2,
         Version3 = Version3,
@@ -2075,7 +2078,7 @@ public partial class ReconstructorViewModel : ViewModelBase
         Version5 = Version5,
         Version6 = Version6,
         Version7 = Version7,
-        SelectedRarVersions = SelectedLeafVersions,
+        SelectedRARVersions = SelectedLeafVersions,
         HasScannedVersions = HasScannedVersions,
 
         SwitchM0 = SwitchM0,
@@ -2380,40 +2383,40 @@ public partial class ReconstructorViewModel : ViewModelBase
         }
         else
         {
-            bool isRar2 = unpVer <= 29;
-            bool isRar3 = unpVer is >= 20 and <= 36;
-            bool isRar4 = unpVer is >= 26 and <= 36;
+            bool isRAR2 = unpVer <= 29;
+            bool isRAR3 = unpVer is >= 20 and <= 36;
+            bool isRAR4 = unpVer is >= 26 and <= 36;
 
             if (srr.HasFirstVolumeFlag == true || srr.HasUnicodeNames == true)
             {
-                isRar2 = false;
+                isRAR2 = false;
             }
 
             if (unpVer == 36)
             {
-                isRar2 = false;
-                isRar3 = true;
-                isRar4 = true;
+                isRAR2 = false;
+                isRAR3 = true;
+                isRAR4 = true;
             }
 
-            Version2 = isRar2;
-            Version3 = isRar3;
-            Version4 = isRar4;
+            Version2 = isRAR2;
+            Version3 = isRAR3;
+            Version4 = isRAR4;
             Version5 = true; // Can create RAR4 format with -ma4
             Version6 = true;
 
             List<string> selected = [];
-            if (isRar2)
+            if (isRAR2)
             {
                 selected.Add("2.x");
             }
 
-            if (isRar3)
+            if (isRAR3)
             {
                 selected.Add("3.x");
             }
 
-            if (isRar4)
+            if (isRAR4)
             {
                 selected.Add("4.x");
             }
@@ -2435,12 +2438,12 @@ public partial class ReconstructorViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Applies the partial switch diff produced by <see cref="SrrSwitchMapper"/> onto the bound
+    /// Applies the partial switch diff produced by <see cref="SRRSwitchMapper"/> onto the bound
     /// option toggles, emitting the same log lines in the same order as the original inline mapping.
     /// Groups left null by the mapper (no SRR information) are skipped, so their toggles keep their
     /// current values rather than being reset.
     /// </summary>
-    private void ApplySwitchDiff(SrrSwitchMapper.SwitchDiff diff)
+    private void ApplySwitchDiff(SRRSwitchMapper.SwitchDiff diff)
     {
         // Compression method
         if (diff.Compression is { } compression)
@@ -2465,25 +2468,25 @@ public partial class ReconstructorViewModel : ViewModelBase
 
             switch (dictionary.Switch)
             {
-                case SrrSwitchMapper.DictionarySwitch.MD64K:
+                case SRRSwitchMapper.DictionarySwitch.MD64K:
                     SwitchMD64K = true;
                     break;
-                case SrrSwitchMapper.DictionarySwitch.MD128K:
+                case SRRSwitchMapper.DictionarySwitch.MD128K:
                     SwitchMD128K = true;
                     break;
-                case SrrSwitchMapper.DictionarySwitch.MD256K:
+                case SRRSwitchMapper.DictionarySwitch.MD256K:
                     SwitchMD256K = true;
                     break;
-                case SrrSwitchMapper.DictionarySwitch.MD512K:
+                case SRRSwitchMapper.DictionarySwitch.MD512K:
                     SwitchMD512K = true;
                     break;
-                case SrrSwitchMapper.DictionarySwitch.MD1024K:
+                case SRRSwitchMapper.DictionarySwitch.MD1024K:
                     SwitchMD1024K = true;
                     break;
-                case SrrSwitchMapper.DictionarySwitch.MD2048K:
+                case SRRSwitchMapper.DictionarySwitch.MD2048K:
                     SwitchMD2048K = true;
                     break;
-                case SrrSwitchMapper.DictionarySwitch.MD4096K:
+                case SRRSwitchMapper.DictionarySwitch.MD4096K:
                     SwitchMD4096K = true;
                     break;
             }

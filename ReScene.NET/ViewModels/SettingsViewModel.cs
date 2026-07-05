@@ -20,7 +20,7 @@ public partial class SettingsViewModel : ViewModelBase
         DefaultOutputDirectory = settings.DefaultOutputDirectory;
         RecentFilesLimit = settings.RecentFilesLimit;
         MkvMaxElements = settings.MkvMaxElements;
-        ReconstructWinRarPath = settings.ReconstructWinRarPath;
+        ReconstructWinRARPath = settings.ReconstructWinRARPath;
         ReconstructOutputPath = settings.ReconstructOutputPath;
         Mode = settings.Mode ?? UserMode.Advanced;
     }
@@ -38,7 +38,7 @@ public partial class SettingsViewModel : ViewModelBase
     public partial int MkvMaxElements { get; set; } = Core.Comparison.MKVFileData.DefaultMaxElements;
 
     [ObservableProperty]
-    public partial string ReconstructWinRarPath { get; set; } = string.Empty;
+    public partial string ReconstructWinRARPath { get; set; } = string.Empty;
 
     [ObservableProperty]
     public partial string ReconstructOutputPath { get; set; } = string.Empty;
@@ -74,13 +74,13 @@ public partial class SettingsViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task BrowseReconstructWinRarAsync()
+    private async Task BrowseReconstructWinRARAsync()
     {
         string? path = await _fileDialog.OpenFolderAsync("Select WinRAR versions folder");
 
         if (path is not null)
         {
-            ReconstructWinRarPath = path;
+            ReconstructWinRARPath = path;
         }
     }
 
@@ -104,7 +104,7 @@ public partial class SettingsViewModel : ViewModelBase
             DefaultOutputDirectory = DefaultOutputDirectory,
             RecentFilesLimit = Math.Clamp(RecentFilesLimit, 1, 100),
             MkvMaxElements = Math.Clamp(MkvMaxElements, 100, 1_000_000),
-            ReconstructWinRarPath = ReconstructWinRarPath,
+            ReconstructWinRARPath = ReconstructWinRARPath,
             ReconstructOutputPath = ReconstructOutputPath,
             Mode = Mode,
         });

@@ -10,7 +10,7 @@ namespace ReScene.NET.ViewModels.Reconstruction;
 /// The non-per-set reconstruction settings shared across every archive set in a run: the global
 /// switch toggles, version ranges, command-line matrix, the release-wide comment/CMT data, and the
 /// paths. Per-set data (content, volume names, CRCs, detected metadata) is read from each
-/// <see cref="SrrArchiveSet"/> instead.
+/// <see cref="SRRArchiveSet"/> instead.
 /// </summary>
 /// <summary>
 /// Pure planner for the multi-archive-set reconstruction loop: resolves the sets to reconstruct,
@@ -26,8 +26,8 @@ internal static class ArchiveSetPlanner
     /// else re-parses the SRR at <paramref name="srrFilePath"/>; else synthesizes one flat set from
     /// the flat names/files (legacy / no-SRR single-set path).
     /// </summary>
-    public static IReadOnlyList<SrrArchiveSet> ResolveSets(
-        IReadOnlyList<SrrArchiveSet> archiveSets,
+    public static IReadOnlyList<SRRArchiveSet> ResolveSets(
+        IReadOnlyList<SRRArchiveSet> archiveSets,
         string? srrFilePath,
         IReadOnlyList<string> flatOriginalNames,
         IReadOnlyCollection<string> flatArchiveFiles)
@@ -39,14 +39,14 @@ internal static class ArchiveSetPlanner
 
         if (!string.IsNullOrWhiteSpace(srrFilePath) && File.Exists(srrFilePath))
         {
-            IReadOnlyList<SrrArchiveSet> reloaded = SRRFile.Load(srrFilePath).ArchiveSets;
+            IReadOnlyList<SRRArchiveSet> reloaded = SRRFile.Load(srrFilePath).ArchiveSets;
             if (reloaded.Count > 0)
             {
                 return reloaded;
             }
         }
 
-        var flat = new SrrArchiveSet { Key = "", Directory = "" };
+        var flat = new SRRArchiveSet { Key = "", Directory = "" };
         foreach (string v in flatOriginalNames)
         {
             flat.VolumeNames.Add(v);
@@ -65,7 +65,7 @@ internal static class ArchiveSetPlanner
     /// first (when present), else the user verification SFV, filtered to this set's volume base names.
     /// </summary>
     public static Dictionary<string, string> BuildExpectedVolumeCrcs(
-        SrrArchiveSet set, byte[]? embeddedSfvBytes, SFVFile? userSfv)
+        SRRArchiveSet set, byte[]? embeddedSfvBytes, SFVFile? userSfv)
     {
         var wanted = new HashSet<string>(set.VolumeNames.Select(Path.GetFileName)!, StringComparer.OrdinalIgnoreCase);
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -97,11 +97,11 @@ internal static class ArchiveSetPlanner
 
     /// <summary>Builds the brute-force options for one set, using only its content/names/metadata.</summary>
     public static BruteForceOptions BuildOptionsForSet(
-        SrrArchiveSet set,
+        SRRArchiveSet set,
         SharedReconstructionSettings shared,
         Dictionary<string, string> expectedVolumeCrcs)
     {
-        var options = new BruteForceOptions(shared.WinRarPath, shared.ReleasePath, WorkRootFor(shared, set))
+        var options = new BruteForceOptions(shared.WinRARPath, shared.ReleasePath, WorkRootFor(shared, set))
         {
             HashType = shared.HashType,
             RAROptions = new RAROptions
@@ -109,14 +109,14 @@ internal static class ArchiveSetPlanner
                 SetFileArchiveAttribute = shared.SetFileArchiveAttribute,
                 SetFileNotContentIndexedAttribute = shared.SetFileNotContentIndexedAttribute,
                 CommandLineArguments = [.. shared.CommandLineArguments],
-                RARVersions = [.. shared.RarVersions],
+                RARVersions = [.. shared.RARVersions],
                 AllowedVersionFolders = [.. shared.SelectedVersionFolders],
                 DeleteRARFiles = shared.DeleteRARFiles,
                 DeleteDuplicateCRCFiles = shared.DeleteDuplicateCRCFiles,
                 StopOnFirstMatch = shared.StopOnFirstMatch,
                 CompleteAllVolumes = shared.CompleteAllVolumes,
                 RenameToOriginalNames = shared.RenameToReleaseNames,
-                OriginalRarFileNames = [.. set.VolumeNames],
+                OriginalRARFileNames = [.. set.VolumeNames],
                 ArchiveFileCrcs = new Dictionary<string, string>(set.ArchivedFileCrcs, StringComparer.OrdinalIgnoreCase),
                 ArchiveFilePaths = new HashSet<string>(set.ArchivedFiles, StringComparer.OrdinalIgnoreCase),
                 ArchiveDirectoryPaths = new HashSet<string>(shared.ArchiveDirectories, StringComparer.OrdinalIgnoreCase),
@@ -179,7 +179,7 @@ internal static class ArchiveSetPlanner
         => completeAllVolumes && hashType == HashType.CRC32 && expectedCrcCount > 0 && expectedCrcCount < volumeCount;
 
     /// <summary>The working directory for a set's run: OutputPath for a single root set, else an isolated subdir.</summary>
-    public static string WorkRootFor(SharedReconstructionSettings shared, SrrArchiveSet set) =>
+    public static string WorkRootFor(SharedReconstructionSettings shared, SRRArchiveSet set) =>
         string.IsNullOrEmpty(set.Key)
             ? shared.OutputPath
             : Path.Combine(shared.OutputPath, ".rescene-work", Sanitize(set.Key));
@@ -191,7 +191,7 @@ internal static class ArchiveSetPlanner
         {
             HashType = full.HashType,
             // VersionRange end is exclusive (InRange is `>= Start && < End`), so a single version
-            // is [v, v+1) — matching RarCommandLineBuilder.BuildVersionRanges. A [v, v) range is
+            // is [v, v+1) — matching RARCommandLineBuilder.BuildVersionRanges. A [v, v) range is
             // empty and would exclude the winning version's own folder, making the seed run test
             // nothing and always fall back to the full matrix.
             RAROptions = CloneWith(full.RAROptions,
@@ -227,7 +227,7 @@ internal static class ArchiveSetPlanner
             StopOnFirstMatch = src.StopOnFirstMatch,
             CompleteAllVolumes = src.CompleteAllVolumes,
             RenameToOriginalNames = src.RenameToOriginalNames,
-            OriginalRarFileNames = [.. src.OriginalRarFileNames],
+            OriginalRARFileNames = [.. src.OriginalRARFileNames],
             ArchiveFileCrcs = new Dictionary<string, string>(src.ArchiveFileCrcs, StringComparer.OrdinalIgnoreCase),
             ArchiveFilePaths = new HashSet<string>(src.ArchiveFilePaths, StringComparer.OrdinalIgnoreCase),
             ArchiveDirectoryPaths = new HashSet<string>(src.ArchiveDirectoryPaths, StringComparer.OrdinalIgnoreCase),

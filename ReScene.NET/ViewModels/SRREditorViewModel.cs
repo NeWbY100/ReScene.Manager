@@ -13,9 +13,9 @@ namespace ReScene.NET.ViewModels;
 /// <see cref="SourcePath"/> is never modified — edits are applied to a temp working
 /// copy and written to a user-chosen <see cref="OutputPath"/> on Save.
 /// </summary>
-public partial class SrrEditorViewModel(ISrrEditingService srrEditing, IFileDialogService fileDialog, ITempDirectoryService tempDir, IFilePreviewService filePreview) : ViewModelBase
+public partial class SRREditorViewModel(ISRREditingService srrEditing, IFileDialogService fileDialog, ITempDirectoryService tempDir, IFilePreviewService filePreview) : ViewModelBase
 {
-    private readonly ISrrEditingService _srrEditing = srrEditing;
+    private readonly ISRREditingService _srrEditing = srrEditing;
     private readonly IFileDialogService _fileDialog = fileDialog;
     private readonly ITempDirectoryService _tempDir = tempDir;
     private readonly IFilePreviewService _filePreview = filePreview;

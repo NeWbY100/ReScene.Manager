@@ -5,4 +5,4 @@ namespace ReScene.NET.ViewModels.Reconstruction;
 /// is the variant part of the folder name after the version digits (e.g. "beta1"; empty when none) —
 /// it distinguishes folders that parse to the same version.
 /// </summary>
-public sealed record InstalledRarVersion(int Version, string FolderName, string Path, string Tag = "");
+public sealed record InstalledRARVersion(int Version, string FolderName, string Path, string Tag = "");

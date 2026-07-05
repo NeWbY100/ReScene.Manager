@@ -16,7 +16,7 @@ public static class SampleRestoreRouter
         string ext = Path.GetExtension(path);
         if (ext.Equals(".srr", StringComparison.OrdinalIgnoreCase))
         {
-            return SampleRestoreKind.Srr;
+            return SampleRestoreKind.SRR;
         }
 
         if (ext.Equals(".srs", StringComparison.OrdinalIgnoreCase))

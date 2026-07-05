@@ -92,7 +92,7 @@ public static class FieldGuidance
         foreach (string file in Directory.EnumerateFiles(directory))
         {
             string ext = Path.GetExtension(file);
-            if (SceneFileTypes.IsRarVolumeExtension(ext))
+            if (SceneFileTypes.IsRARVolumeExtension(ext))
             {
                 count++;
             }

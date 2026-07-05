@@ -31,7 +31,7 @@ public sealed class AppSettings
     /// <summary>
     /// Gets or sets the default WinRAR versions folder pre-filled into the RAR Reconstructor.
     /// </summary>
-    public string ReconstructWinRarPath { get; set; } = string.Empty;
+    public string ReconstructWinRARPath { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the default output folder pre-filled into the RAR Reconstructor. Deliberately

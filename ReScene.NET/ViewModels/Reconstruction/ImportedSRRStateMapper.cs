@@ -5,17 +5,17 @@ namespace ReScene.NET.ViewModels.Reconstruction;
 
 /// <summary>
 /// Maps the in-memory <see cref="ReconstructionImportState"/> to and from the serializable
-/// <see cref="ImportedSrrState"/> DTO used by import/export configuration. Pure: it copies data
+/// <see cref="ImportedSRRState"/> DTO used by import/export configuration. Pure: it copies data
 /// only and never touches WPF binding (the bound <c>CustomPackerWarning</c> is handled by the
 /// view-model).
 /// </summary>
-internal static class ImportedSrrStateMapper
+internal static class ImportedSRRStateMapper
 {
     /// <summary>
     /// Captures the state as a DTO, or returns null when no meaningful SRR state has been imported.
     /// The bound custom-packer warning is supplied separately by the caller.
     /// </summary>
-    public static ImportedSrrState? Capture(ReconstructionImportState state, string? customPackerWarning)
+    public static ImportedSRRState? Capture(ReconstructionImportState state, string? customPackerWarning)
     {
         bool hasState = state.ArchiveFiles.Count > 0
             || state.ArchiveDirectories.Count > 0
@@ -29,7 +29,7 @@ internal static class ImportedSrrStateMapper
             return null;
         }
 
-        return new ImportedSrrState
+        return new ImportedSRRState
         {
             SRRFilePath = state.SRRFilePath,
             ArchiveFiles = [.. state.ArchiveFiles],
@@ -41,7 +41,7 @@ internal static class ImportedSrrStateMapper
             FileCreationTimes = new Dictionary<string, DateTime>(state.FileCreationTimes),
             FileAccessTimes = new Dictionary<string, DateTime>(state.FileAccessTimes),
             ArchiveFileCrcs = new Dictionary<string, string>(state.ArchiveFileCrcs),
-            OriginalRarFileNames = [.. state.OriginalRarFileNames],
+            OriginalRARFileNames = [.. state.OriginalRARFileNames],
             ArchiveComment = state.ArchiveComment,
             ArchiveCommentBytes = state.ArchiveCommentBytes,
             CmtCompressedData = state.CmtCompressedData,
@@ -63,7 +63,7 @@ internal static class ImportedSrrStateMapper
     /// Builds an import state from a DTO (or a fully-empty state when the DTO is null, meaning
     /// "no SRR imported"). The caller applies the bound custom-packer warning and any logging.
     /// </summary>
-    public static ReconstructionImportState Apply(ImportedSrrState? s)
+    public static ReconstructionImportState Apply(ImportedSRRState? s)
     {
         if (s is null)
         {
@@ -82,7 +82,7 @@ internal static class ImportedSrrStateMapper
             FileCreationTimes = ToCi(s.FileCreationTimes),
             FileAccessTimes = ToCi(s.FileAccessTimes),
             ArchiveFileCrcs = new Dictionary<string, string>(s.ArchiveFileCrcs, StringComparer.OrdinalIgnoreCase),
-            OriginalRarFileNames = s.OriginalRarFileNames is { } names ? [.. names] : [],
+            OriginalRARFileNames = s.OriginalRARFileNames is { } names ? [.. names] : [],
             ArchiveComment = s.ArchiveComment,
             ArchiveCommentBytes = s.ArchiveCommentBytes,
             CmtCompressedData = s.CmtCompressedData,

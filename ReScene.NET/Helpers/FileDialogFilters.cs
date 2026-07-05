@@ -45,7 +45,7 @@ internal static class FileDialogFilters
     /// <summary>
     /// SRR Creator input — SFV or RAR files.
     /// </summary>
-    public static readonly string[] SFVAndRar =
+    public static readonly string[] SFVAndRAR =
     [
         "SFV Files|*.sfv",
         "RAR Files|*.rar",
@@ -150,7 +150,7 @@ internal static class FileDialogFilters
     /// <summary>
     /// SRR and SRS files — for Beginner restore input.
     /// </summary>
-    public static readonly string[] SrrAndSrs =
+    public static readonly string[] SRRAndSrs =
     [
         "ReScene Files|*.srr;*.srs",
         "SRR Files|*.srr",

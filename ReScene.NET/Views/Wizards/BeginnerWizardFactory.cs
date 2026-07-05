@@ -14,13 +14,13 @@ public static class BeginnerWizardFactory
         // Reset the relevant task VM before building so the wizard opens with clean state.
         // Reset() is a no-op while that VM is mid-operation (IsCreating/IsRunning), so an active
         // run is never disrupted. Most cards reuse the Advanced tab's app-lifetime VM (a shared
-        // singleton); the CreateSrr card uses a DEDICATED CreatorViewModel (see
+        // singleton); the CreateSRR card uses a DEDICATED CreatorViewModel (see
         // MainWindowViewModel) so its state never collides with the Advanced SRR Creator tab.
         switch (card)
         {
-            case BeginnerCard.CreateSrr:
-                shell.CreateSrrWizard.Reset();
-                return BuildCreateSrr(shell.CreateSrrWizard);
+            case BeginnerCard.CreateSRR:
+                shell.CreateSRRWizard.Reset();
+                return BuildCreateSRR(shell.CreateSRRWizard);
             case BeginnerCard.CreateSrs:
                 shell.SRSCreator.Reset();
                 return BuildCreateSrs(shell.SRSCreator);
@@ -30,15 +30,15 @@ public static class BeginnerWizardFactory
             case BeginnerCard.Restore:
                 shell.Restore.Reset();
                 return BuildRestore(shell.Restore);
-            case BeginnerCard.EditSrr:
-                shell.SrrEditor.Reset();
-                return BuildEditSrr(shell.SrrEditor);
+            case BeginnerCard.EditSRR:
+                shell.SRREditor.Reset();
+                return BuildEditSRR(shell.SRREditor);
             default:
                 throw new ArgumentOutOfRangeException(nameof(card));
         }
     }
 
-    private static (WizardViewModel, FrameworkElement) BuildCreateSrr(CreatorViewModel vm)
+    private static (WizardViewModel, FrameworkElement) BuildCreateSRR(CreatorViewModel vm)
     {
         // The wizard lists sample SRS / subtitle SRRs as placeholders on the Manage step (built on
         // leaving the samples step) and generates the actual files at create time, so turn off the
@@ -115,7 +115,7 @@ public static class BeginnerWizardFactory
                 CanGoBack = () => !vm.IsCreating && !vm.BuildSucceeded,
             },
         };
-        return (new WizardViewModel("Create an SRR", vm, steps), new CreateSrrWizardBody());
+        return (new WizardViewModel("Create an SRR", vm, steps), new CreateSRRWizardBody());
     }
 
     private static (WizardViewModel, FrameworkElement) BuildCreateSrs(SRSCreatorViewModel vm)
@@ -175,7 +175,7 @@ public static class BeginnerWizardFactory
 
         var steps = new List<WizardStep>
         {
-            new() { Title = "Import the SRR", CanAdvance = () => vm.HasImportedSrr && !vm.HasCustomPackerWarning },
+            new() { Title = "Import the SRR", CanAdvance = () => vm.HasImportedSRR && !vm.HasCustomPackerWarning },
             new()
             {
                 Title = "Files & folders",
@@ -285,7 +285,7 @@ public static class BeginnerWizardFactory
         return (new WizardViewModel("Restore a sample", vm, steps), new RestoreWizardBody());
     }
 
-    private static (WizardViewModel, FrameworkElement) BuildEditSrr(SrrEditorViewModel vm)
+    private static (WizardViewModel, FrameworkElement) BuildEditSRR(SRREditorViewModel vm)
     {
         var steps = new List<WizardStep>
         {
@@ -313,6 +313,6 @@ public static class BeginnerWizardFactory
             },
             new() { Title = "Done" },
         };
-        return (new WizardViewModel("Edit an SRR", vm, steps), new EditSrrWizardBody());
+        return (new WizardViewModel("Edit an SRR", vm, steps), new EditSRRWizardBody());
     }
 }

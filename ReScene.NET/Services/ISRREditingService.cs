@@ -5,7 +5,7 @@ namespace ReScene.NET.Services;
 /// <summary>
 /// Service for editing existing SRR files by adding or removing stored files.
 /// </summary>
-public interface ISrrEditingService
+public interface ISRREditingService
 {
     /// <summary>
     /// Adds one or more stored files to an existing SRR file.

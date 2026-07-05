@@ -4,6 +4,6 @@ namespace ReScene.NET.Helpers;
 public enum SampleRestoreKind
 {
     Unknown,
-    Srr,
+    SRR,
     Srs,
 }

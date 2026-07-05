@@ -2,33 +2,33 @@ using ReScene.NET.ViewModels.Reconstruction;
 
 namespace ReScene.NET.Tests;
 
-public sealed class RarVersionTreeTests
+public sealed class RARVersionTreeTests
 {
-    private static RarVersionGroup MakeGroup(int major, params (int v, bool ticked)[] leaves)
+    private static RARVersionGroup MakeGroup(int major, params (int v, bool ticked)[] leaves)
     {
         var list = leaves
-            .Select(l => new RarVersionLeaf(l.v, $"winrar-{l.v}") { IsChecked = l.ticked })
+            .Select(l => new RARVersionLeaf(l.v, $"winrar-{l.v}") { IsChecked = l.ticked })
             .ToList();
-        return new RarVersionGroup(major, list);
+        return new RARVersionGroup(major, list);
     }
 
     [Fact]
     public void Leaf_LabelDerivedFromVersion()
     {
-        Assert.Equal("5.60", new RarVersionLeaf(560, "winrar-560").Label);
-        Assert.Equal("7.00", new RarVersionLeaf(700, "winrar-700").Label);
-        Assert.Equal("6.24", new RarVersionLeaf(624, "winrar-624").Label);
+        Assert.Equal("5.60", new RARVersionLeaf(560, "winrar-560").Label);
+        Assert.Equal("7.00", new RARVersionLeaf(700, "winrar-700").Label);
+        Assert.Equal("6.24", new RARVersionLeaf(624, "winrar-624").Label);
     }
 
     [Fact]
     public void Leaf_LabelWithTag_AppendsTagOnlyWhenPresent()
     {
-        Assert.Equal("2.50", new RarVersionLeaf(250, "winrar-250").LabelWithTag);
-        Assert.Equal("2.50 beta1", new RarVersionLeaf(250, "winrar-250-beta1", "beta1").LabelWithTag);
+        Assert.Equal("2.50", new RARVersionLeaf(250, "winrar-250").LabelWithTag);
+        Assert.Equal("2.50 beta1", new RARVersionLeaf(250, "winrar-250-beta1", "beta1").LabelWithTag);
     }
 
     [Fact]
-    public void Leaf_FolderDisplay_WrapsFolderNameInParentheses() => Assert.Equal("(winrar-250-beta1)", new RarVersionLeaf(250, "winrar-250-beta1", "beta1").FolderDisplay);
+    public void Leaf_FolderDisplay_WrapsFolderNameInParentheses() => Assert.Equal("(winrar-250-beta1)", new RARVersionLeaf(250, "winrar-250-beta1", "beta1").FolderDisplay);
 
     [Fact]
     public void Group_IsExpanded_InitialisedFromTickState()
@@ -40,7 +40,7 @@ public sealed class RarVersionTreeTests
     [Fact]
     public void Group_IsExpanded_UserToggleIsWritable()
     {
-        RarVersionGroup g = MakeGroup(2, (200, false));
+        RARVersionGroup g = MakeGroup(2, (200, false));
 
         g.IsExpanded = true;
 
@@ -61,7 +61,7 @@ public sealed class RarVersionTreeTests
     [Fact]
     public void Group_LeafToggle_RaisesSelectionChangedAndRecomputes()
     {
-        RarVersionGroup g = MakeGroup(5, (500, false), (560, false));
+        RARVersionGroup g = MakeGroup(5, (500, false), (560, false));
         int raised = 0;
         g.SelectionChanged += (_, _) => raised++;
 
@@ -75,7 +75,7 @@ public sealed class RarVersionTreeTests
     [Fact]
     public void Group_ToggleAll_FromUncheckedChecksAll_FromCheckedUnchecksAll()
     {
-        RarVersionGroup g = MakeGroup(5, (500, false), (560, false));
+        RARVersionGroup g = MakeGroup(5, (500, false), (560, false));
 
         g.ToggleAllCommand.Execute(null);          // unchecked -> all checked
         Assert.True(g.IsChecked);
@@ -89,7 +89,7 @@ public sealed class RarVersionTreeTests
     [Fact]
     public void Group_ToggleAll_FromIndeterminateChecksAll()
     {
-        RarVersionGroup g = MakeGroup(5, (500, true), (560, false));  // indeterminate
+        RARVersionGroup g = MakeGroup(5, (500, true), (560, false));  // indeterminate
 
         g.ToggleAllCommand.Execute(null);
 

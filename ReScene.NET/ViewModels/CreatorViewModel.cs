@@ -14,14 +14,14 @@ namespace ReScene.NET.ViewModels;
 /// </summary>
 public partial class CreatorViewModel : OperationViewModelBase
 {
-    private readonly ISrrCreationService _sRRService;
+    private readonly ISRRCreationService _sRRService;
     private readonly ISrsCreationService _sRSService;
     private readonly IFileDialogService _fileDialog;
     private readonly ITempDirectoryService _tempDir;
     private readonly IAppSettingsService _settingsService;
     private readonly IUiDispatcher _uiDispatcher;
 
-    public CreatorViewModel(ISrrCreationService srrService, ISrsCreationService srsService, IFileDialogService fileDialog, ITempDirectoryService tempDir, IAppSettingsService settingsService, IUiDispatcher? uiDispatcher = null)
+    public CreatorViewModel(ISRRCreationService srrService, ISrsCreationService srsService, IFileDialogService fileDialog, ITempDirectoryService tempDir, IAppSettingsService settingsService, IUiDispatcher? uiDispatcher = null)
     {
         _sRRService = srrService;
         _sRSService = srsService;
@@ -111,7 +111,7 @@ public partial class CreatorViewModel : OperationViewModelBase
     public partial bool CreateVobsubSRR { get; set; } = true;
 
     [ObservableProperty]
-    public partial bool StoreFixRar { get; set; } = true;
+    public partial bool StoreFixRAR { get; set; } = true;
 
     [ObservableProperty]
     public partial bool ComputeOSOHashes { get; set; }
@@ -172,7 +172,7 @@ public partial class CreatorViewModel : OperationViewModelBase
         AutoIncludeFiles = true;
         AutoCreateSRS = true;
         CreateVobsubSRR = true;
-        StoreFixRar = true;
+        StoreFixRAR = true;
         ComputeOSOHashes = false;
         GenerateLanguagesDiz = true;
 
@@ -190,7 +190,7 @@ public partial class CreatorViewModel : OperationViewModelBase
     private async Task BrowseInputAsync()
     {
         string? path = await _fileDialog.OpenFileAsync("Select Input File",
-            FileDialogFilters.SFVAndRar);
+            FileDialogFilters.SFVAndRAR);
 
         if (path is not null)
         {
@@ -488,7 +488,7 @@ public partial class CreatorViewModel : OperationViewModelBase
             {
                 StoredName = GeneratedStoredName(releaseDir, sfv, ".srr", "Subs"),
                 GenerateFromPath = sfv,
-                Kind = StoredFileKind.GeneratedNestedSrr,
+                Kind = StoredFileKind.GeneratedNestedSRR,
             });
         }
     }
@@ -515,7 +515,7 @@ public partial class CreatorViewModel : OperationViewModelBase
             (item, index, token) => item.Kind switch
             {
                 StoredFileKind.GeneratedSrs => GenerateSrsFileAsync(item.GenerateFromPath!, tempDir, index, srsOptions, token),
-                StoredFileKind.GeneratedNestedSrr => GenerateNestedSrrFileAsync(item.GenerateFromPath!, tempDir, index, options, token),
+                StoredFileKind.GeneratedNestedSRR => GenerateNestedSRRFileAsync(item.GenerateFromPath!, tempDir, index, options, token),
                 _ => Task.FromResult<string?>(null),
             },
             (item, generated) => materialized[item] = generated,
@@ -623,13 +623,13 @@ public partial class CreatorViewModel : OperationViewModelBase
             // Phase 2: Create nested SRRs for subtitle archives
             if (CreateVobsubSRR)
             {
-                await CreateVobsubSrrsAsync(releaseDir, options, tempDir ??= _tempDir.CreateTempDirectory(), _cts.Token);
+                await CreateVobsubSRRsAsync(releaseDir, options, tempDir ??= _tempDir.CreateTempDirectory(), _cts.Token);
             }
 
             // Phase 3: Store fix RAR if applicable
-            if (StoreFixRar)
+            if (StoreFixRAR)
             {
-                StoreFixRarFile(releaseDir);
+                StoreFixRARFile(releaseDir);
             }
 
             // Phase 4: Create the main SRR
@@ -683,10 +683,10 @@ public partial class CreatorViewModel : OperationViewModelBase
             }
             else
             {
-                List<string> volumes = DiscoverRarVolumes(InputPath);
+                List<string> volumes = DiscoverRARVolumes(InputPath);
                 Log($"Found {volumes.Count} volume(s).");
 
-                result = await _sRRService.CreateFromRarAsync(
+                result = await _sRRService.CreateFromRARAsync(
                     OutputPath, volumes,
                     storedFiles.Count > 0 ? storedFiles : null,
                     options, _cts.Token);
@@ -804,7 +804,7 @@ public partial class CreatorViewModel : OperationViewModelBase
 
     // ── Vobsub nested SRR (Advanced tab: scan + generate at create time) ──
 
-    private async Task CreateVobsubSrrsAsync(string releaseDir, SRRCreationOptions options, string tempDir, CancellationToken ct)
+    private async Task CreateVobsubSRRsAsync(string releaseDir, SRRCreationOptions options, string tempDir, CancellationToken ct)
     {
         List<string> subtitleSfvs = [.. ReleaseFileScanner.FindSubtitleSFVFiles(releaseDir)
             .Concat(ExtraSubtitleSfvFiles)
@@ -812,7 +812,7 @@ public partial class CreatorViewModel : OperationViewModelBase
 
         await GenerateAndRecordAsync(
             subtitleSfvs,
-            (sfv, i, token) => GenerateNestedSrrFileAsync(sfv, tempDir, i, options, token),
+            (sfv, i, token) => GenerateNestedSRRFileAsync(sfv, tempDir, i, options, token),
             (sfv, srrPath) => StoredFiles.Add(new StoredFileItem
             {
                 FullPath = srrPath,
@@ -857,7 +857,7 @@ public partial class CreatorViewModel : OperationViewModelBase
     /// Creates one nested .srr from the subtitle <paramref name="sfvPath"/> (and any .nfo beside it)
     /// into <paramref name="tempDir"/> and returns its path, or null on failure.
     /// </summary>
-    private async Task<string?> GenerateNestedSrrFileAsync(string sfvPath, string tempDir, int index, SRRCreationOptions options, CancellationToken ct)
+    private async Task<string?> GenerateNestedSRRFileAsync(string sfvPath, string tempDir, int index, SRRCreationOptions options, CancellationToken ct)
     {
         string sfvName = Path.GetFileName(sfvPath);
         string srrPath = Path.Combine(tempDir, $"{index}_{Path.ChangeExtension(sfvName, ".srr")}");
@@ -919,7 +919,7 @@ public partial class CreatorViewModel : OperationViewModelBase
 
     // ── Fix release detection ───────────────────────────────
 
-    private void StoreFixRarFile(string releaseDir)
+    private void StoreFixRARFile(string releaseDir)
     {
         string releaseName = Path.GetFileName(releaseDir) ?? string.Empty;
         if (!ReleaseFileScanner.IsFixRelease(releaseName))
@@ -935,7 +935,7 @@ public partial class CreatorViewModel : OperationViewModelBase
         }
 
         // Find RAR files referenced by the SFV
-        List<string> rarFiles = ReleaseFileScanner.FindRarFilesFromSFV(sfvFiles[0]);
+        List<string> rarFiles = ReleaseFileScanner.FindRARFilesFromSFV(sfvFiles[0]);
         if (rarFiles.Count != 1)
         {
             return;
@@ -1034,10 +1034,10 @@ public partial class CreatorViewModel : OperationViewModelBase
         return Path.ChangeExtension(name, newExtension);
     }
 
-    private static List<string> DiscoverRarVolumes(string firstRarPath)
+    private static List<string> DiscoverRARVolumes(string firstRARPath)
     {
-        string dir = Path.GetDirectoryName(firstRarPath) ?? ".";
-        string baseName = Path.GetFileNameWithoutExtension(firstRarPath);
+        string dir = Path.GetDirectoryName(firstRARPath) ?? ".";
+        string baseName = Path.GetFileNameWithoutExtension(firstRARPath);
 
         var volumes = new List<string>();
 
@@ -1051,14 +1051,14 @@ public partial class CreatorViewModel : OperationViewModelBase
         }
         else
         {
-            volumes.Add(firstRarPath);
+            volumes.Add(firstRARPath);
 
             // Old-style continuation volumes: .r00, .r01, … .r99, .s00, … .z99. Enumerate the
             // directory rather than walking the sequence, so a gap in the numbering doesn't
             // silently truncate the set (the loop here previously stopped at the first missing one).
             foreach (string file in Directory.GetFiles(dir, baseName + ".*"))
             {
-                if (SceneFileTypes.IsOldStyleRarVolumeExtension(Path.GetExtension(file)))
+                if (SceneFileTypes.IsOldStyleRARVolumeExtension(Path.GetExtension(file)))
                 {
                     volumes.Add(file);
                 }
@@ -1113,6 +1113,6 @@ public partial class CreatorViewModel : OperationViewModelBase
         GeneratedSrs,
 
         /// <summary>A placeholder: a nested .srr to generate from a subtitle .sfv at creation time.</summary>
-        GeneratedNestedSrr,
+        GeneratedNestedSRR,
     }
 }

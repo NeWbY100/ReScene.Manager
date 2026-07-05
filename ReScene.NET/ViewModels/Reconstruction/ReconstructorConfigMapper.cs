@@ -13,7 +13,7 @@ internal static class ReconstructorConfigMapper
     /// <summary>Copies all scalar option fields from the view-model into a fresh config.</summary>
     public static ReconstructorConfig Capture(ReconstructorViewModel vm) => new()
     {
-        WinRarPath = vm.WinRarPath,
+        WinRARPath = vm.WinRARPath,
         ReleasePath = vm.ReleasePath,
         VerificationPath = vm.VerificationPath,
         OutputPath = vm.OutputPath,
@@ -28,7 +28,7 @@ internal static class ReconstructorConfigMapper
         // Only persist an explicit list when a real folder scan produced the tree; otherwise write
         // null so re-import falls back to the enabled-major ticking (an empty [] would wrongly
         // suppress all versions, because an explicit empty selection wins over the majors).
-        SelectedRarVersions = vm.HasScannedVersions ? [.. vm.SelectedLeafVersions] : null,
+        SelectedRARVersions = vm.HasScannedVersions ? [.. vm.SelectedLeafVersions] : null,
 
         SwitchM0 = vm.SwitchM0,
         SwitchM1 = vm.SwitchM1,
@@ -101,7 +101,7 @@ internal static class ReconstructorConfigMapper
     /// <summary>Writes all scalar option fields from a config onto the view-model.</summary>
     public static void Apply(ReconstructorViewModel vm, ReconstructorConfig c)
     {
-        vm.WinRarPath = c.WinRarPath;
+        vm.WinRARPath = c.WinRARPath;
         vm.ReleasePath = c.ReleasePath;
         vm.VerificationPath = c.VerificationPath;
         vm.OutputPath = c.OutputPath;
@@ -182,8 +182,8 @@ internal static class ReconstructorConfigMapper
 
         vm.EnableHostOSPatching = c.EnableHostOSPatching;
 
-        // Set the pending explicit selection last; the next folder scan (triggered by WinRarPath
+        // Set the pending explicit selection last; the next folder scan (triggered by WinRARPath
         // above, or the tab's initial scan) consumes it. A null list keeps the enabled-major fallback.
-        vm.LoadPendingVersionSelection(c.SelectedRarVersions);
+        vm.LoadPendingVersionSelection(c.SelectedRARVersions);
     }
 }

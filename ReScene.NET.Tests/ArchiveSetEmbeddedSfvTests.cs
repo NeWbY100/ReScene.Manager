@@ -28,7 +28,7 @@ public class ArchiveSetEmbeddedSfvTests
 
         var crcMaps = new Dictionary<string, Dictionary<string, string>>();
 
-        foreach (SrrArchiveSet set in srr.ArchiveSets)
+        foreach (SRRArchiveSet set in srr.ArchiveSets)
         {
             // Resolve THIS set's embedded SFV using the exact predicate the fix uses.
             byte[]? embedded = srr.ReadStoredFile(FixturePath, name => ReconstructorViewModel.EmbeddedSfvMatchesSet(name, set));
@@ -53,8 +53,8 @@ public class ArchiveSetEmbeddedSfvTests
 
         // No cross-contamination: set A's map must not contain any of set B's volume names, and
         // vice-versa. This is what proves disc B got disc B's CRCs (the silently-broken behaviour).
-        SrrArchiveSet setA = srr.ArchiveSets[0];
-        SrrArchiveSet setB = srr.ArchiveSets[1];
+        SRRArchiveSet setA = srr.ArchiveSets[0];
+        SRRArchiveSet setB = srr.ArchiveSets[1];
         Dictionary<string, string> mapA = crcMaps[setA.Key];
         Dictionary<string, string> mapB = crcMaps[setB.Key];
 

@@ -17,10 +17,10 @@ public class BeginnerRestoreViewModelTests
     }
 
     [Fact]
-    public void SettingSrrInput_SelectsBulkFlow()
+    public void SettingSRRInput_SelectsBulkFlow()
     {
         var vm = new BeginnerRestoreViewModel(fileDialog: null!) { InputPath = @"C:\rel\movie.srr" };
-        Assert.Equal(SampleRestoreKind.Srr, vm.Kind);
+        Assert.Equal(SampleRestoreKind.SRR, vm.Kind);
         Assert.True(vm.IsBulk);
         Assert.False(vm.IsSingle);
         Assert.True(vm.ShowFlow);

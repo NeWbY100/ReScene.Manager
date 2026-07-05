@@ -10,7 +10,7 @@ namespace ReScene.NET.Tests;
 public class InspectorViewModelImageTests : TempDirTestBase
 {
     // Editing service that only serves ReadStoredFileBytesAsync; other members are unused here.
-    private sealed class FakeReadEditingService : ISrrEditingService
+    private sealed class FakeReadEditingService : ISRREditingService
     {
         public byte[]? BytesToReturn { get; set; }
         public (string Path, string Name)? LastRead { get; private set; }
@@ -29,7 +29,7 @@ public class InspectorViewModelImageTests : TempDirTestBase
         }
     }
 
-    private sealed class StubVerifyService : ISrrVerifyService
+    private sealed class StubVerifyService : ISRRVerifyService
     {
         public Task<SRRVerifyResult> VerifyAsync(string srrFilePath, CancellationToken ct = default) => throw new NotSupportedException();
     }
@@ -66,7 +66,7 @@ public class InspectorViewModelImageTests : TempDirTestBase
 
     private InspectorViewModel LoadWithStored(string storedName, FakeReadEditingService editing, RecordingImagePreviewService preview)
     {
-        string srr = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "inspect.srr", storedName, [0x00]);
+        string srr = SRREditingServiceImageTests.WriteMinimalSRR(TempDir, "inspect.srr", storedName, [0x00]);
         InspectorViewModel vm = CreateVm(editing, preview);
         LoadInspector(vm, srr);
         vm.SelectedTreeNode = vm.TreeRoots.Flatten()
@@ -108,11 +108,11 @@ public class InspectorViewModelImageTests : TempDirTestBase
     }
 
     [Fact]
-    public async Task ExportBlock_StoredFile_WritesPayloadWithoutSrrHeader()
+    public async Task ExportBlock_StoredFile_WritesPayloadWithoutSRRHeader()
     {
         // A distinctive payload so we can prove only it (not the wrapping SRR block header) is written.
         byte[] payload = [0x66, 0x4C, 0x61, 0x43, 0x73, 0x00, 0x01, 0x02]; // "fLaCs"…
-        string srr = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "wrap.srr", "song.srs", payload);
+        string srr = SRREditingServiceImageTests.WriteMinimalSRR(TempDir, "wrap.srr", "song.srs", payload);
         string outPath = Path.Combine(TempDir, "exported.srs");
 
         using InspectorViewModel vm = new(
@@ -165,7 +165,7 @@ public class InspectorViewModelImageTests : TempDirTestBase
     public void TextView_WhenActivated_DecodesSelectedBlock()
     {
         byte[] payload = Encoding.ASCII.GetBytes("MARKER_TEXT_12345");
-        string srr = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "note.srr", "note.nfo", payload);
+        string srr = SRREditingServiceImageTests.WriteMinimalSRR(TempDir, "note.srr", "note.nfo", payload);
 
         using InspectorViewModel vm = CreateVm(new FakeReadEditingService(), new RecordingImagePreviewService());
         LoadInspector(vm, srr);
@@ -183,7 +183,7 @@ public class InspectorViewModelImageTests : TempDirTestBase
     {
         // 0xC9 → CP437 '╔' (U+2554) vs Latin-1 'É' (U+00C9): proves a re-decode on encoding change.
         byte[] payload = [0xC9];
-        string srr = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "enc.srr", "enc.bin", payload);
+        string srr = SRREditingServiceImageTests.WriteMinimalSRR(TempDir, "enc.srr", "enc.bin", payload);
 
         using InspectorViewModel vm = CreateVm(new FakeReadEditingService(), new RecordingImagePreviewService());
         LoadInspector(vm, srr);
@@ -203,7 +203,7 @@ public class InspectorViewModelImageTests : TempDirTestBase
     public void TextView_InactiveByDefault_DoesNotDecodeOnSelection()
     {
         byte[] payload = Encoding.ASCII.GetBytes("SHOULD_NOT_DECODE");
-        string srr = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "lazy.srr", "lazy.nfo", payload);
+        string srr = SRREditingServiceImageTests.WriteMinimalSRR(TempDir, "lazy.srr", "lazy.nfo", payload);
 
         using InspectorViewModel vm = CreateVm(new FakeReadEditingService(), new RecordingImagePreviewService());
         LoadInspector(vm, srr);
@@ -219,8 +219,8 @@ public class InspectorViewModelImageTests : TempDirTestBase
     {
         byte[] a = Encoding.ASCII.GetBytes("AAA_FILE_ONE");
         byte[] b = Encoding.ASCII.GetBytes("BBB_FILE_TWO");
-        string srrA = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "first.srr", "a.nfo", a);
-        string srrB = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "second.srr", "b.nfo", b);
+        string srrA = SRREditingServiceImageTests.WriteMinimalSRR(TempDir, "first.srr", "a.nfo", a);
+        string srrB = SRREditingServiceImageTests.WriteMinimalSRR(TempDir, "second.srr", "b.nfo", b);
 
         using InspectorViewModel vm = CreateVm(new FakeReadEditingService(), new RecordingImagePreviewService());
         LoadInspector(vm, srrA);
@@ -262,7 +262,7 @@ public class InspectorViewModelImageTests : TempDirTestBase
         // file offset — not the slice-relative one — so the address column, status bar, highlight
         // ranges, and Export all stay coordinate-consistent.
         byte[] payload = [0x11, 0x22, 0xDE, 0xAD, 0xBE, 0xEF, 0x33];
-        string srr = SRREditingServiceImageTests.WriteMinimalSrr(TempDir, "search.srr", "data.bin", payload);
+        string srr = SRREditingServiceImageTests.WriteMinimalSRR(TempDir, "search.srr", "data.bin", payload);
 
         using InspectorViewModel vm = CreateVm(new FakeReadEditingService(), new RecordingImagePreviewService());
         LoadInspector(vm, srr);

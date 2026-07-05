@@ -27,7 +27,7 @@ public class ReconstructorFieldGuidanceTests : TempDirTestBase
     }
 
     [Fact]
-    public void PathsNeedAttention_NonexistentWinRar_IsTrue()
+    public void PathsNeedAttention_NonexistentWinRAR_IsTrue()
     {
         string verify = Path.Combine(TempDir, "verify.sfv");
         File.WriteAllText(verify, "");
@@ -49,7 +49,7 @@ public class ReconstructorFieldGuidanceTests : TempDirTestBase
     }
 
     [Fact]
-    public void EvaluateWinRarPath_Empty_IsWarning() => Assert.Equal(FieldState.Warning, ReconstructorFieldGuidance.EvaluateWinRarPath("").State);
+    public void EvaluateWinRARPath_Empty_IsWarning() => Assert.Equal(FieldState.Warning, ReconstructorFieldGuidance.EvaluateWinRARPath("").State);
 
     [Fact]
     public void EvaluateReleasePath_Empty_IsWarning() => Assert.Equal(FieldState.Warning, ReconstructorFieldGuidance.EvaluateReleasePath("").State);

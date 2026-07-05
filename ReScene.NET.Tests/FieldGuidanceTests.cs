@@ -43,7 +43,7 @@ public class FieldGuidanceTests
     }
 
     [Fact]
-    public void CountReleaseArchives_CountsRarAndOldStyleVolumes()
+    public void CountReleaseArchives_CountsRARAndOldStyleVolumes()
     {
         string dir = Path.Combine(Path.GetTempPath(), "fg_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);

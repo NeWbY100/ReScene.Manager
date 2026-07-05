@@ -4,7 +4,7 @@ namespace ReScene.NET.Tests;
 
 public sealed class VersionSelectionReconcilerTests
 {
-    private static readonly IReadOnlyList<InstalledRarVersion> Installed =
+    private static readonly IReadOnlyList<InstalledRARVersion> Installed =
     [
         new(500, "winrar-500", "p500"),
         new(560, "winrar-560", "p560"),

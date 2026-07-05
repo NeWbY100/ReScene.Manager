@@ -12,10 +12,10 @@ internal static class ArchiveSetPlannerTestData
 {
     public static SharedReconstructionSettings SharedSettings() => new()
     {
-        WinRarPath = "C:\\winrar",
+        WinRARPath = "C:\\winrar",
         ReleasePath = "C:\\release",
         OutputPath = "C:\\out",
-        RarVersions = [new VersionRange(300, 400)],
+        RARVersions = [new VersionRange(300, 400)],
         CommandLineArguments = [[new RARCommandLineArgument("a", 200)]],
         HashType = HashType.CRC32,
         SetFileArchiveAttribute = TriState.Unchecked,
@@ -33,7 +33,7 @@ internal static class ArchiveSetPlannerTestData
     {
         SharedReconstructionSettings shared = SharedSettings() with
         {
-            RarVersions = [new VersionRange(300, 400), new VersionRange(400, 500)],
+            RARVersions = [new VersionRange(300, 400), new VersionRange(400, 500)],
             CommandLineArguments =
             [
                 [new RARCommandLineArgument("a", 200), new RARCommandLineArgument("-m0", 300)],
@@ -41,7 +41,7 @@ internal static class ArchiveSetPlannerTestData
             ],
         };
 
-        var set = new SrrArchiveSet { Key = "DVD1/x", Directory = "DVD1" };
+        var set = new SRRArchiveSet { Key = "DVD1/x", Directory = "DVD1" };
         set.VolumeNames.Add("DVD1\\x.rar");
         set.ArchivedFiles.Add("x.iso");
         set.ArchivedFileCrcs["x.iso"] = "00000000";

@@ -699,7 +699,7 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
         }
         else if (data is ReScene.Core.Comparison.SRRFileData srrData)
         {
-            roots.Add(FileCompareTreeBuilder.BuildSrr(srrData, isLeft));
+            roots.Add(FileCompareTreeBuilder.BuildSRR(srrData, isLeft));
         }
         else if (data is SRSFile srsData)
         {
@@ -711,7 +711,7 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
         }
         else if (data is RARFileData rar)
         {
-            roots.Add(FileCompareTreeBuilder.BuildRar(rar, isLeft));
+            roots.Add(FileCompareTreeBuilder.BuildRAR(rar, isLeft));
         }
     }
 

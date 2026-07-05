@@ -131,7 +131,7 @@
         <CheckBox Content="Vobsub SRR — Create nested SRR files for subtitle archives found in Subs/ directories."
                   IsChecked="{Binding CreateVobsubSRR}" Margin="0,1" />
         <CheckBox Content="Store fix RAR — For fix/patch releases, store the main RAR file as proof."
-                  IsChecked="{Binding StoreFixRar}" Margin="0,1" />
+                  IsChecked="{Binding StoreFixRAR}" Margin="0,1" />
         <CheckBox Content="Allow compressed — Accept RAR volumes that use compression (method != Store)."
                   IsChecked="{Binding AllowCompressed}" Margin="0,1" />
         <CheckBox Content="OSO hashes — Compute and store OpenSubtitles OSO hashes for archived files."

@@ -19,8 +19,8 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
     }
 
     /// <summary>Creates a real WinRAR versions folder containing one "winrar-NNN" subfolder (with a
-    /// rar.exe stub) per version, so setting WinRarPath drives the actual async folder scan.</summary>
-    private string MakeWinRarFolder(params int[] versions)
+    /// rar.exe stub) per version, so setting WinRARPath drives the actual async folder scan.</summary>
+    private string MakeWinRARFolder(params int[] versions)
     {
         string root = Path.Combine(Path.GetTempPath(), "rvm-versions-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -83,7 +83,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
         => new(new InertBruteForceService(), new NoOpFileDialogService(),
                settingsService: null, uiDispatcher: new InlineUiDispatcher());
 
-    private static readonly IReadOnlyList<InstalledRarVersion> Installed =
+    private static readonly IReadOnlyList<InstalledRARVersion> Installed =
     [
         new(500, "winrar-500", "p500"),
         new(560, "winrar-560", "p560"),
@@ -145,7 +145,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
         vm.Version5 = true; vm.Version6 = true;
         vm.ApplyScanResult(Installed, folderScanned: true);
 
-        foreach (RarVersionLeaf leaf in vm.VersionGroups.First(g => g.Major == 6).Leaves)
+        foreach (RARVersionLeaf leaf in vm.VersionGroups.First(g => g.Major == 6).Leaves)
         {
             leaf.IsChecked = false;   // untick all of 6.x
         }
@@ -165,22 +165,22 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
     }
 
     [Fact]
-    public async Task ChangingWinRarPath_ResetsScannedState_SoConfigSelectionSurvivesNewScan()
+    public async Task ChangingWinRARPath_ResetsScannedState_SoConfigSelectionSurvivesNewScan()
     {
         // Folder A is already scanned (mirrors the automatic startup scan from settings); folder B is
-        // a config's target with a disjoint set of versions. Both are real dirs so the WinRarPath
-        // changes drive the actual OnWinRarPathChanged / async-scan path — where the pending selection
+        // a config's target with a disjoint set of versions. Both are real dirs so the WinRARPath
+        // changes drive the actual OnWinRARPathChanged / async-scan path — where the pending selection
         // used to be lost. A queueing dispatcher makes each scan's landing deterministic (pumped on
         // the test thread), so no assertion races the scan continuation.
-        string folderA = MakeWinRarFolder(400);          // major 4 only
-        string folderB = MakeWinRarFolder(560, 624);     // majors 5 and 6
+        string folderA = MakeWinRARFolder(400);          // major 4 only
+        string folderB = MakeWinRARFolder(560, 624);     // majors 5 and 6
 
         var dispatcher = new QueueingUiDispatcher();
         ReconstructorViewModel vm = new(new InertBruteForceService(), new NoOpFileDialogService(),
             settingsService: null, uiDispatcher: dispatcher);
 
         // Folder A scanned: run the scan Task, then pump its queued ApplyScanResult onto this thread.
-        vm.WinRarPath = folderA;
+        vm.WinRARPath = folderA;
         await vm.LastVersionScan!;
         dispatcher.Pump();
         Assert.True(vm.HasScannedVersions);
@@ -188,7 +188,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
         // Changing to a different folder must SYNCHRONOUSLY mark the tree as not-yet-scanned; B's scan
         // continuation is only queued (not yet pumped), so this reads the fix's direct effect.
         // Without the fix this stays true (folder A's stale scanned state).
-        vm.WinRarPath = folderB;
+        vm.WinRARPath = folderB;
         Assert.False(vm.HasScannedVersions);
 
         // Mirror ConfigMapper.Apply's ordering: the pending selection is applied while B's scan is
@@ -216,7 +216,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
     }
 
     /// <summary>Two folders that both parse to version 390, distinguished only by folder name.</summary>
-    private static readonly IReadOnlyList<InstalledRarVersion> SameVersionVariants =
+    private static readonly IReadOnlyList<InstalledRARVersion> SameVersionVariants =
     [
         new(390, "winrar-390", "path-390"),
         new(390, "winrar-390-beta1", "path-390-beta1", "beta1"),
@@ -231,7 +231,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
         vm.Version3 = true;                                  // major 3 enabled → both 390 leaves tick
         vm.ApplyScanResult(SameVersionVariants, folderScanned: true);
 
-        RarVersionLeaf beta = vm.VersionGroups.SelectMany(g => g.Leaves).Single(l => l.FolderName == "winrar-390-beta1");
+        RARVersionLeaf beta = vm.VersionGroups.SelectMany(g => g.Leaves).Single(l => l.FolderName == "winrar-390-beta1");
         beta.IsChecked = false;                             // untick the beta variant only
 
         SharedReconstructionSettings shared = vm.BuildSharedSettings();
@@ -239,7 +239,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
         Assert.Equal(["winrar-390"], shared.SelectedVersionFolders);
 
         // And the folder allow-list flows through the planner into the engine options.
-        var set = new SrrArchiveSet { Key = "", Directory = "" };
+        var set = new SRRArchiveSet { Key = "", Directory = "" };
         set.VolumeNames.Add("x.rar");
         BruteForceOptions opts = ArchiveSetPlanner.BuildOptionsForSet(set, shared,
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));

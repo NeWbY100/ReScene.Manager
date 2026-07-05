@@ -9,23 +9,23 @@ namespace ReScene.NET.ViewModels.Reconstruction;
 /// display-only tri-state; clicking it checks all leaves unless all are already checked, in which
 /// case it unchecks all. Raises <see cref="SelectionChanged"/> on any post-construction change.
 /// </summary>
-public sealed partial class RarVersionGroup : ObservableObject
+public sealed partial class RARVersionGroup : ObservableObject
 {
     public int Major { get; }
     public string Header { get; }
-    public IReadOnlyList<RarVersionLeaf> Leaves { get; }
+    public IReadOnlyList<RARVersionLeaf> Leaves { get; }
 
     public event EventHandler? SelectionChanged;
 
     private bool _bulkUpdating;
 
-    public RarVersionGroup(int major, IReadOnlyList<RarVersionLeaf> leaves)
+    public RARVersionGroup(int major, IReadOnlyList<RARVersionLeaf> leaves)
     {
         Major = major;
         Header = $"{major}.x";
         Leaves = leaves;
         IsExpanded = leaves.Any(l => l.IsChecked);
-        foreach (RarVersionLeaf leaf in Leaves)
+        foreach (RARVersionLeaf leaf in Leaves)
         {
             leaf.PropertyChanged += OnLeafChanged;
         }
@@ -60,7 +60,7 @@ public sealed partial class RarVersionGroup : ObservableObject
     {
         bool target = IsChecked != true;  // all-checked -> uncheck; unchecked/indeterminate -> check
         _bulkUpdating = true;
-        foreach (RarVersionLeaf leaf in Leaves)
+        foreach (RARVersionLeaf leaf in Leaves)
         {
             leaf.IsChecked = target;
         }
@@ -72,7 +72,7 @@ public sealed partial class RarVersionGroup : ObservableObject
     /// <summary>Unsubscribes leaf handlers before the group is discarded on rebuild.</summary>
     public void Detach()
     {
-        foreach (RarVersionLeaf leaf in Leaves)
+        foreach (RARVersionLeaf leaf in Leaves)
         {
             leaf.PropertyChanged -= OnLeafChanged;
         }
@@ -80,7 +80,7 @@ public sealed partial class RarVersionGroup : ObservableObject
 
     private void OnLeafChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(RarVersionLeaf.IsChecked) || _bulkUpdating)
+        if (e.PropertyName != nameof(RARVersionLeaf.IsChecked) || _bulkUpdating)
         {
             return;
         }

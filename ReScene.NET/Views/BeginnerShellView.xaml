@@ -49,7 +49,7 @@
                    TextWrapping="Wrap" Margin="6,0,6,6" />
         <UniformGrid Columns="2">
           <Button Style="{StaticResource HubCardButton}"
-                  Click="OnCardClick" Tag="{x:Static vm:BeginnerCard.CreateSrr}">
+                  Click="OnCardClick" Tag="{x:Static vm:BeginnerCard.CreateSRR}">
             <StackPanel>
               <TextBlock Text="&#x1F4E6;" FontSize="28" Margin="0,0,0,6" />
               <TextBlock Text="Create an SRR" FontSize="{DynamicResource FontSizeH2}" FontWeight="SemiBold" />
@@ -58,7 +58,7 @@
             </StackPanel>
           </Button>
           <Button Style="{StaticResource HubCardButton}"
-                  Click="OnCardClick" Tag="{x:Static vm:BeginnerCard.EditSrr}">
+                  Click="OnCardClick" Tag="{x:Static vm:BeginnerCard.EditSRR}">
             <StackPanel>
               <TextBlock Text="&#x270E;" FontSize="28" Margin="0,0,0,6" />
               <TextBlock Text="Edit an SRR" FontSize="{DynamicResource FontSizeH2}" FontWeight="SemiBold" />

@@ -117,11 +117,11 @@
           <DockPanel Margin="0,0,0,10">
             <Button DockPanel.Dock="Right"
                     Content="Browse..."
-                    Command="{Binding BrowseReconstructWinRarCommand}"
+                    Command="{Binding BrowseReconstructWinRARCommand}"
                     Style="{StaticResource GhostButton}"
                     MinWidth="75"
                     Margin="4,0,0,0" />
-            <TextBox Text="{Binding ReconstructWinRarPath, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBox Text="{Binding ReconstructWinRARPath, UpdateSourceTrigger=PropertyChanged}" />
           </DockPanel>
 
           <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">

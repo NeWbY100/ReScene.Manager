@@ -97,12 +97,12 @@
                         </TextBlock>
                         <DockPanel Margin="0,0,0,2">
                             <Button DockPanel.Dock="Right" Content="Browse"
-                                    Command="{Binding BrowseWinRarCommand}"
+                                    Command="{Binding BrowseWinRARCommand}"
                                     Style="{StaticResource GhostButton}"
                                     Margin="4,0,0,0" MinWidth="75" />
-                            <TextBox x:Name="WinRarTextBox" Text="{Binding WinRarPath}" />
+                            <TextBox x:Name="WinRARTextBox" Text="{Binding WinRARPath}" />
                         </DockPanel>
-                        <c:FieldStatusLine Status="{Binding WinRarStatus}" Margin="0,1,0,2" />
+                        <c:FieldStatusLine Status="{Binding WinRARStatus}" Margin="0,1,0,2" />
 
                         <TextBlock TextWrapping="Wrap" Margin="0,8,0,2">
                             <Run Text="Release " FontWeight="SemiBold" />

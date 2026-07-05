@@ -7,7 +7,7 @@ namespace ReScene.NET.ViewModels.Reconstruction;
 internal static class VersionSelectionReconciler
 {
     public static HashSet<int> ComputeTicked(
-        IReadOnlyList<InstalledRarVersion> installed,
+        IReadOnlyList<InstalledRARVersion> installed,
         IReadOnlyList<int>? pendingExplicit,
         IReadOnlySet<int> enabledMajors)
     {

@@ -55,7 +55,7 @@ public partial class BeginnerRestoreViewModel(IFileDialogService fileDialog) : V
     [ObservableProperty]
     public partial FieldStatus InputStatus { get; set; } = FieldStatus.None;
 
-    public bool IsBulk => Kind == SampleRestoreKind.Srr;
+    public bool IsBulk => Kind == SampleRestoreKind.SRR;
     public bool IsSingle => Kind == SampleRestoreKind.Srs;
     public bool ShowFlow => Kind != SampleRestoreKind.Unknown;
 
@@ -65,7 +65,7 @@ public partial class BeginnerRestoreViewModel(IFileDialogService fileDialog) : V
 
         switch (Kind)
         {
-            case SampleRestoreKind.Srr:
+            case SampleRestoreKind.SRR:
                 if (BulkRestorer is not null)
                 {
                     BulkRestorer.SRRFilePath = value;
@@ -105,7 +105,7 @@ public partial class BeginnerRestoreViewModel(IFileDialogService fileDialog) : V
     private async Task BrowseInputAsync()
     {
         string? path = await fileDialog.OpenFileAsync(
-            "Select an SRR or SRS file", FileDialogFilters.SrrAndSrs);
+            "Select an SRR or SRS file", FileDialogFilters.SRRAndSrs);
         if (path is not null)
         {
             InputPath = path;

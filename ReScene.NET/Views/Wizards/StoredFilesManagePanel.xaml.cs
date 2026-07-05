@@ -10,7 +10,7 @@ namespace ReScene.NET.Views.Wizards;
 
 /// <summary>
 /// The stored-file management UI (grid + toolbar) shared by the Edit-an-SRR and Create-an-SRR
-/// wizards. Its <see cref="FrameworkElement.DataContext"/> is a <see cref="SrrEditorViewModel"/>.
+/// wizards. Its <see cref="FrameworkElement.DataContext"/> is a <see cref="SRREditorViewModel"/>.
 /// </summary>
 public partial class StoredFilesManagePanel : UserControl
 {
@@ -19,7 +19,7 @@ public partial class StoredFilesManagePanel : UserControl
     // DataGrid.SelectedItems isn't bindable, so the view forwards the multi-selection to the VM.
     private void StoredFilesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (sender is DataGrid grid && DataContext is SrrEditorViewModel vm)
+        if (sender is DataGrid grid && DataContext is SRREditorViewModel vm)
         {
             vm.SetSelection(grid.SelectedItems.OfType<StoredFileInfo>().ToList());
         }
@@ -55,7 +55,7 @@ public partial class StoredFilesManagePanel : UserControl
             return;
         }
 
-        if (DataContext is SrrEditorViewModel vm && vm.PreviewStoredFileCommand.CanExecute(null))
+        if (DataContext is SRREditorViewModel vm && vm.PreviewStoredFileCommand.CanExecute(null))
         {
             vm.PreviewStoredFileCommand.Execute(null);
             e.Handled = true;

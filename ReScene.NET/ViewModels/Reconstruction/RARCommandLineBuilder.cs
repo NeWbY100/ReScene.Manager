@@ -5,22 +5,22 @@ namespace ReScene.NET.ViewModels.Reconstruction;
 
 /// <summary>
 /// Builds the RAR version ranges and the brute-force command-line argument matrix from a
-/// <see cref="RarSwitchSettings"/> snapshot. Pure: no WPF binding, no I/O — output matches the
+/// <see cref="RARSwitchSettings"/> snapshot. Pure: no WPF binding, no I/O — output matches the
 /// view-model's previous inline computation exactly.
 /// </summary>
-internal static class RarCommandLineBuilder
+internal static class RARCommandLineBuilder
 {
     private const long DefaultVolumeSizeKb = 15000;
 
     /// <summary>Builds the enabled RAR version ranges, in the same order the UI lists them.</summary>
-    public static List<VersionRange> BuildVersionRanges(RarSwitchSettings s)
+    public static List<VersionRange> BuildVersionRanges(RARSwitchSettings s)
     {
         // A completed folder scan makes the per-version selection authoritative: one tight range
         // per chosen version. Before any scan (beginner wizard / pre-folder editing) fall back to
         // the broad major-version ranges so behaviour matches the pre-tree UI.
         if (s.HasScannedVersions)
         {
-            return [.. s.SelectedRarVersions
+            return [.. s.SelectedRARVersions
                 .Distinct()
                 .OrderBy(v => v)
                 .Select(v => new VersionRange(v, v + 1))];
@@ -61,7 +61,7 @@ internal static class RarCommandLineBuilder
     }
 
     /// <summary>Builds the cartesian-product matrix of RAR argument sets to brute-force.</summary>
-    public static List<RARCommandLineArgument[]> BuildCommandLineArguments(RarSwitchSettings s)
+    public static List<RARCommandLineArgument[]> BuildCommandLineArguments(RARSwitchSettings s)
     {
         List<RARCommandLineArgument> compressionLevels = [];
         if (s.SwitchM0)
@@ -367,7 +367,7 @@ internal static class RarCommandLineBuilder
         return result;
     }
 
-    public static string BuildVolumeArgument(RarSwitchSettings s)
+    public static string BuildVolumeArgument(RARSwitchSettings s)
     {
         if (!long.TryParse(s.VolumeSize, out long sizeValue))
         {

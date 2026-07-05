@@ -3,10 +3,10 @@ using ReScene.SRR;
 
 namespace ReScene.NET.Tests;
 
-public class SrrImportParserArchiveSetTests
+public class SRRImportParserArchiveSetTests
 {
     [Fact]
-    public void Parse_MultiSetSrr_ExposesArchiveSets()
+    public void Parse_MultiSetSRR_ExposesArchiveSets()
     {
         string srrPath = Path.Combine(AppContext.BaseDirectory, "TestData",
             "cleanup_script",
@@ -15,7 +15,7 @@ public class SrrImportParserArchiveSetTests
         Assert.True(File.Exists(srrPath), $"Fixture not found: {srrPath}");
 
         SRRFile srr = SRRFile.Load(srrPath);
-        ImportedSrrInfo info = SrrImportParser.Parse(srr, srrPath);
+        ImportedSRRInfo info = SRRImportParser.Parse(srr, srrPath);
 
         Assert.Equal(2, info.ArchiveSets.Count);
     }

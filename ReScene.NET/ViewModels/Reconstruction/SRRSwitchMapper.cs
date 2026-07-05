@@ -10,7 +10,7 @@ namespace ReScene.NET.ViewModels.Reconstruction;
 /// The mapper neither logs nor mutates bound state; the view-model applies the diff and emits the
 /// import log lines, preserving their exact text and ordering.
 /// </summary>
-internal static class SrrSwitchMapper
+internal static class SRRSwitchMapper
 {
     /// <summary>Compression method (-m0..-m5) the SRR specifies, plus its log label.</summary>
     public readonly record struct CompressionMap(int Method, string LogName);

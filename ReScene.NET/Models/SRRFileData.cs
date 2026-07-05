@@ -37,7 +37,7 @@ public class SRRFileData
             try
             {
                 using FileStream fs = File.OpenRead(filePath);
-                foreach (SRRRarFileBlock rarFile in srrFile.RARFiles)
+                foreach (SRRRARFileBlock rarFile in srrFile.RARFiles)
                 {
                     try
                     {

@@ -3,10 +3,10 @@ namespace ReScene.NET.ViewModels.Reconstruction;
 /// <summary>
 /// Immutable snapshot of the user-selected RAR switch toggles on the Reconstructor tab. The
 /// view-model populates this from its bound properties and hands it to
-/// <see cref="RarCommandLineBuilder"/>; keeping the values here (rather than reading the
+/// <see cref="RARCommandLineBuilder"/>; keeping the values here (rather than reading the
 /// view-model directly) keeps the builder free of any WPF binding concerns.
 /// </summary>
-internal sealed record RarSwitchSettings
+internal sealed record RARSwitchSettings
 {
     // RAR versions
     public bool Version2 { get; init; }
@@ -17,8 +17,8 @@ internal sealed record RarSwitchSettings
     public bool Version7 { get; init; }
 
     // Per-sub-version selection (materialised from a folder scan). When HasScannedVersions is
-    // true, SelectedRarVersions is authoritative and the major bools above are ignored.
-    public IReadOnlyList<int> SelectedRarVersions { get; init; } = [];
+    // true, SelectedRARVersions is authoritative and the major bools above are ignored.
+    public IReadOnlyList<int> SelectedRARVersions { get; init; } = [];
     public bool HasScannedVersions { get; init; }
 
     // Compression method

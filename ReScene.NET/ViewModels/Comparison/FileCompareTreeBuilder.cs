@@ -19,7 +19,7 @@ internal static class FileCompareTreeBuilder
 {
     public static TreeNodeViewModel BuildDetailed(IReadOnlyList<RARDetailedBlock> blocks, bool isLeft)
     {
-        bool isRAR5 = RarBlockLabel.IsRar5Signature(blocks);
+        bool isRAR5 = RARBlockLabel.IsRAR5Signature(blocks);
 
         string rootName = isRAR5 ? $"RAR 5.x Archive ({blocks.Count} blocks)" : $"RAR 4.x Archive ({blocks.Count} blocks)";
 
@@ -35,7 +35,7 @@ internal static class FileCompareTreeBuilder
             RARDetailedBlock block = blocks[i];
             rootNode.Children.Add(new TreeNodeViewModel
             {
-                Text = RarBlockLabel.FormatBlockLabel(i, block),
+                Text = RARBlockLabel.FormatBlockLabel(i, block),
                 Tag = new CompareNodeData
                 {
                     NodeType = CompareNodeType.DetailedBlock,
@@ -49,7 +49,7 @@ internal static class FileCompareTreeBuilder
         return rootNode;
     }
 
-    public static TreeNodeViewModel BuildSrr(SRRFileData srrData, bool isLeft)
+    public static TreeNodeViewModel BuildSRR(SRRFileData srrData, bool isLeft)
     {
         SRRFile srr = srrData.SRRFile;
 
@@ -74,7 +74,7 @@ internal static class FileCompareTreeBuilder
                 Tag = new CompareNodeData { NodeType = CompareNodeType.RARVolumes, Data = srr.RARFiles, IsLeft = isLeft }
             };
 
-            foreach (SRRRarFileBlock rar in srr.RARFiles)
+            foreach (SRRRARFileBlock rar in srr.RARFiles)
             {
                 var volNode = new TreeNodeViewModel
                 {
@@ -89,7 +89,7 @@ internal static class FileCompareTreeBuilder
                         RARDetailedBlock block = detailedBlocks[i];
                         volNode.Children.Add(new TreeNodeViewModel
                         {
-                            Text = RarBlockLabel.FormatBlockLabel(i, block),
+                            Text = RARBlockLabel.FormatBlockLabel(i, block),
                             Tag = new CompareNodeData
                             {
                                 NodeType = CompareNodeType.DetailedBlock,
@@ -299,7 +299,7 @@ internal static class FileCompareTreeBuilder
         }
     }
 
-    public static TreeNodeViewModel BuildRar(RARFileData rar, bool isLeft)
+    public static TreeNodeViewModel BuildRAR(RARFileData rar, bool isLeft)
     {
         int fileCount = rar.IsRAR5 ? rar.RAR5FileInfos.Count : rar.FileHeaders.Count;
         int blockCount = 2 + fileCount + 1 + (string.IsNullOrEmpty(rar.Comment) ? 0 : 1);

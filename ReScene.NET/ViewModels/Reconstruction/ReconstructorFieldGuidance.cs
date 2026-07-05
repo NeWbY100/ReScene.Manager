@@ -13,7 +13,7 @@ internal static class ReconstructorFieldGuidance
     /// Status for the WinRAR installations directory: the folder containing per-version WinRAR
     /// subfolders (a directory, not a path to rar.exe).
     /// </summary>
-    public static FieldStatus EvaluateWinRarPath(string value)
+    public static FieldStatus EvaluateWinRARPath(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -98,9 +98,9 @@ internal static class ReconstructorFieldGuidance
     /// warning glyph on the Paths sub-tab header.
     /// </summary>
     public static bool PathsNeedAttention(
-        string winRarPath, string releasePath, string verificationPath, string outputPath)
+        string winRARPath, string releasePath, string verificationPath, string outputPath)
     {
-        return NeedsAttention(EvaluateWinRarPath(winRarPath))
+        return NeedsAttention(EvaluateWinRARPath(winRARPath))
             || NeedsAttention(EvaluateReleasePath(releasePath))
             || NeedsAttention(EvaluateVerificationPath(verificationPath))
             || NeedsAttention(EvaluateOutputPath(outputPath))

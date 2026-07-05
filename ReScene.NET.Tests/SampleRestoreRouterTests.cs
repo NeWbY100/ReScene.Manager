@@ -5,8 +5,8 @@ namespace ReScene.NET.Tests;
 public class SampleRestoreRouterTests
 {
     [Theory]
-    [InlineData(@"C:\rel\movie.srr", SampleRestoreKind.Srr)]
-    [InlineData(@"C:\rel\movie.SRR", SampleRestoreKind.Srr)]
+    [InlineData(@"C:\rel\movie.srr", SampleRestoreKind.SRR)]
+    [InlineData(@"C:\rel\movie.SRR", SampleRestoreKind.SRR)]
     [InlineData(@"C:\rel\movie.sample.srs", SampleRestoreKind.Srs)]
     [InlineData(@"C:\rel\movie.SRS", SampleRestoreKind.Srs)]
     [InlineData(@"C:\rel\movie.mkv", SampleRestoreKind.Unknown)]

@@ -8,16 +8,16 @@ namespace ReScene.NET.ViewModels.Reconstruction;
 /// fields, bound option properties, and bound display properties — this type carries no WPF
 /// binding concerns of its own.
 /// </summary>
-internal sealed class ImportedSrrInfo
+internal sealed class ImportedSRRInfo
 {
-    public required SRRFile Srr { get; init; }
-    public required string SrrFilePath { get; init; }
+    public required SRRFile SRR { get; init; }
+    public required string SRRFilePath { get; init; }
 
     /// <summary>
     /// True when the SRR carries no RAR reconstruction information (no volume entries, archived
     /// files, or compression metadata) — the user must configure options manually.
     /// </summary>
-    public bool HasRarReconstructionInfo { get; init; }
+    public bool HasRARReconstructionInfo { get; init; }
 
     // ── Custom packer ──
     public CustomPackerType CustomPackerType { get; init; } = CustomPackerType.None;
@@ -35,8 +35,8 @@ internal sealed class ImportedSrrInfo
     public Dictionary<string, DateTime> FileCreationTimes { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, DateTime> FileAccessTimes { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> ArchiveFileCrcs { get; init; } = new(StringComparer.OrdinalIgnoreCase);
-    public List<string> OriginalRarFileNames { get; init; } = [];
-    public IReadOnlyList<SrrArchiveSet> ArchiveSets { get; init; } = [];
+    public List<string> OriginalRARFileNames { get; init; } = [];
+    public IReadOnlyList<SRRArchiveSet> ArchiveSets { get; init; } = [];
     public string? ArchiveComment { get; init; }
     public byte[]? ArchiveCommentBytes { get; init; }
     public byte[]? CmtCompressedData { get; init; }
@@ -55,7 +55,7 @@ internal sealed class ImportedSrrInfo
     // ── Display strings (wizard import step) ──
     public string DisplayName { get; init; } = string.Empty;
     public string DisplayAppName { get; init; } = string.Empty;
-    public string DisplayRarVolumeText { get; init; } = string.Empty;
+    public string DisplayRARVolumeText { get; init; } = string.Empty;
     public string DisplayArchivedFilesText { get; init; } = string.Empty;
     public string DisplayCompressionText { get; init; } = string.Empty;
     public string DisplayStoredFilesText { get; init; } = string.Empty;

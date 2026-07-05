@@ -3,7 +3,7 @@ namespace ReScene.NET.Models;
 /// <summary>
 /// Persisted snapshot of state captured by Import-from-SRR.
 /// </summary>
-public sealed class ImportedSrrState
+public sealed class ImportedSRRState
 {
     public string? SRRFilePath { get; set; }
 
@@ -19,7 +19,7 @@ public sealed class ImportedSrrState
 
     public Dictionary<string, string> ArchiveFileCrcs { get; set; } = [];
 
-    public List<string> OriginalRarFileNames { get; set; } = [];
+    public List<string> OriginalRARFileNames { get; set; } = [];
 
     public string? ArchiveComment { get; set; }
     public byte[]? ArchiveCommentBytes { get; set; }

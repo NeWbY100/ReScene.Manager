@@ -17,7 +17,7 @@ public sealed class CreatorViewModelTests : IDisposable
 
     // ── Fakes ───────────────────────────────────────────────
 
-    private sealed class FakeSrrCreationService : ISrrCreationService
+    private sealed class FakeSRRCreationService : ISRRCreationService
     {
         public event EventHandler<SRRCreationProgressEventArgs>? Progress { add { } remove { } }
 
@@ -27,7 +27,7 @@ public sealed class CreatorViewModelTests : IDisposable
 
         public IReadOnlyList<StoredFileEntry>? LastStoredFiles { get; private set; }
 
-        public Task<SRRCreationResult> CreateFromRarAsync(string outputPath, IReadOnlyList<string> rarVolumePaths,
+        public Task<SRRCreationResult> CreateFromRARAsync(string outputPath, IReadOnlyList<string> rarVolumePaths,
             IReadOnlyList<StoredFileEntry>? storedFiles, SRRCreationOptions options, CancellationToken ct)
         {
             LastStoredFiles = storedFiles;
@@ -98,9 +98,9 @@ public sealed class CreatorViewModelTests : IDisposable
 
     private FakeFileDialogService _dialog = new();
 
-    private CreatorViewModel CreateVm(out FakeSrrCreationService srr, bool autoInclude = false)
+    private CreatorViewModel CreateVm(out FakeSRRCreationService srr, bool autoInclude = false)
     {
-        srr = new FakeSrrCreationService();
+        srr = new FakeSRRCreationService();
         _dialog = new FakeFileDialogService();
         var vm = new CreatorViewModel(srr, new FakeSrsCreationService(), _dialog,
             new FakeTempDirectoryService(_tempPaths), new NoOpAppSettingsService())
@@ -108,7 +108,7 @@ public sealed class CreatorViewModelTests : IDisposable
             // Keep the build trivial and deterministic: no sample/vobsub/fix phases.
             AutoCreateSRS = false,
             CreateVobsubSRR = false,
-            StoreFixRar = false,
+            StoreFixRAR = false,
             AutoIncludeFiles = autoInclude,
         };
         return vm;
@@ -171,7 +171,7 @@ public sealed class CreatorViewModelTests : IDisposable
     public async Task CreateSRR_Success_SetsBuildSucceeded_AndConsumesSuppressFlag()
     {
         string dir = CreateTempRelease("movie.sfv");
-        CreatorViewModel vm = CreateVm(out FakeSrrCreationService srr);
+        CreatorViewModel vm = CreateVm(out FakeSRRCreationService srr);
         vm.InputPath = Path.Combine(dir, "movie.sfv");
         vm.OutputPath = Path.Combine(dir, "movie.srr");
         vm.SuppressOverwriteConfirm = true;
@@ -189,7 +189,7 @@ public sealed class CreatorViewModelTests : IDisposable
     public async Task CreateSRR_Failure_LeavesBuildSucceededFalse()
     {
         string dir = CreateTempRelease("movie.sfv");
-        CreatorViewModel vm = CreateVm(out FakeSrrCreationService srr);
+        CreatorViewModel vm = CreateVm(out FakeSRRCreationService srr);
         srr.Succeed = false;
         vm.InputPath = Path.Combine(dir, "movie.sfv");
         vm.OutputPath = Path.Combine(dir, "movie.srr");
@@ -225,7 +225,7 @@ public sealed class CreatorViewModelTests : IDisposable
     public async Task CreateSRR_BackslashAndSlashName_TreatedAsOneEntry()
     {
         string dir = CreateTempRelease("movie.sfv");
-        CreatorViewModel vm = CreateVm(out FakeSrrCreationService srr);
+        CreatorViewModel vm = CreateVm(out FakeSRRCreationService srr);
         vm.InputPath = Path.Combine(dir, "movie.sfv");
         vm.OutputPath = Path.Combine(dir, "movie.srr");
         vm.AddStoredFiles([@"X:\a\one.idx", @"Y:\b\two.idx"]);
@@ -250,7 +250,7 @@ public sealed class CreatorViewModelTests : IDisposable
     public void BuildPlaceholders_AddsPlaceholderRowsWithoutGenerating()
     {
         string dir = CreateTempRelease("movie.sfv");
-        CreatorViewModel vm = CreateVm(out FakeSrrCreationService srr);
+        CreatorViewModel vm = CreateVm(out FakeSRRCreationService srr);
         vm.InputPath = Path.Combine(dir, "movie.sfv");
         vm.ExtraSampleFiles.Add(Path.Combine(dir, "Sample", "movie-sample.mkv"));
 
@@ -313,7 +313,7 @@ public sealed class CreatorViewModelTests : IDisposable
     public async Task CreateSRR_MaterializesPlaceholders_InListOrder()
     {
         string dir = CreateTempRelease("movie.sfv");
-        CreatorViewModel vm = CreateVm(out FakeSrrCreationService srr);
+        CreatorViewModel vm = CreateVm(out FakeSRRCreationService srr);
         vm.InputPath = Path.Combine(dir, "movie.sfv");
         vm.OutputPath = Path.Combine(dir, "movie.srr");
         vm.ExtraSampleFiles.Add(Path.Combine(dir, "a.mkv"));
@@ -337,7 +337,7 @@ public sealed class CreatorViewModelTests : IDisposable
     public async Task CreateSRR_RetryAfterFailure_RematerializesPlaceholders()
     {
         string dir = CreateTempRelease("movie.sfv");
-        CreatorViewModel vm = CreateVm(out FakeSrrCreationService srr);
+        CreatorViewModel vm = CreateVm(out FakeSRRCreationService srr);
         vm.InputPath = Path.Combine(dir, "movie.sfv");
         vm.OutputPath = Path.Combine(dir, "movie.srr");
         vm.ExtraSampleFiles.Add(Path.Combine(dir, "a.mkv"));
@@ -542,7 +542,7 @@ public sealed class CreatorViewModelTests : IDisposable
     public async Task CreateSRR_PassesStoredFilesToLibInCollectionOrder()
     {
         string dir = CreateTempRelease("movie.sfv", "a.nfo", "b.nfo", "c.nfo");
-        CreatorViewModel vm = CreateVm(out FakeSrrCreationService srr);
+        CreatorViewModel vm = CreateVm(out FakeSRRCreationService srr);
         vm.InputPath = Path.Combine(dir, "movie.sfv");
         vm.OutputPath = Path.Combine(dir, "movie.srr");
         vm.AddStoredFiles([Path.Combine(dir, "a.nfo"), Path.Combine(dir, "b.nfo"), Path.Combine(dir, "c.nfo")]);

@@ -13,7 +13,7 @@ public class InspectorViewModelMkvTests : TempDirTestBase
 {
     #region Stub services
 
-    private sealed class StubSrrEditingService : ISrrEditingService
+    private sealed class StubSRREditingService : ISRREditingService
     {
         public void AddStoredFiles(string srrFilePath, IReadOnlyList<(string StoredName, string FilePath)> files) => throw new NotSupportedException();
         public void RemoveStoredFiles(string srrFilePath, IReadOnlyList<string> storedNames) => throw new NotSupportedException();
@@ -24,7 +24,7 @@ public class InspectorViewModelMkvTests : TempDirTestBase
         public Task<byte[]?> ReadStoredFileBytesAsync(string srrFilePath, string storedName, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
-    private sealed class StubSrrVerifyService : ISrrVerifyService
+    private sealed class StubSRRVerifyService : ISRRVerifyService
     {
         public Task<SRRVerifyResult> VerifyAsync(string srrFilePath, CancellationToken ct = default) => throw new NotSupportedException();
     }
@@ -57,8 +57,8 @@ public class InspectorViewModelMkvTests : TempDirTestBase
         => Task.Run(() => vm.LoadFileAsync(path)).GetAwaiter().GetResult();
 
     private static InspectorViewModel CreateViewModel() => new(
-        new NoOpFileDialogService(), new StubSrrEditingService(),
-        new StubSrrVerifyService(), new StubPropertyExportService(),
+        new NoOpFileDialogService(), new StubSRREditingService(),
+        new StubSRRVerifyService(), new StubPropertyExportService(),
         new RecordingImagePreviewService());
 
     [Fact]

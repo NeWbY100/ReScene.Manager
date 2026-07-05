@@ -54,9 +54,9 @@ internal static class InspectorTreeBuilder
         }
     }
 
-    public static TreeNodeViewModel BuildRar(IReadOnlyList<RARDetailedBlock> blocks)
+    public static TreeNodeViewModel BuildRAR(IReadOnlyList<RARDetailedBlock> blocks)
     {
-        bool isRAR5 = RarBlockLabel.IsRar5Signature(blocks);
+        bool isRAR5 = RARBlockLabel.IsRAR5Signature(blocks);
 
         string rootName = isRAR5 ? $"RAR 5.x Archive ({blocks.Count} blocks)" : $"RAR 4.x Archive ({blocks.Count} blocks)";
 
@@ -64,13 +64,13 @@ internal static class InspectorTreeBuilder
 
         for (int i = 0; i < blocks.Count; i++)
         {
-            root.Children.Add(new TreeNodeViewModel { Text = RarBlockLabel.FormatBlockLabel(i, blocks[i]), Tag = blocks[i] });
+            root.Children.Add(new TreeNodeViewModel { Text = RARBlockLabel.FormatBlockLabel(i, blocks[i]), Tag = blocks[i] });
         }
 
         return root;
     }
 
-    public static TreeNodeViewModel BuildSrr(SRRFileData srrData)
+    public static TreeNodeViewModel BuildSRR(SRRFileData srrData)
     {
         SRRFile srr = srrData.SRRFile;
 
@@ -108,7 +108,7 @@ internal static class InspectorTreeBuilder
                 Text = $"RAR Padding ({srr.RARPaddingBlocks.Count})",
                 Tag = "container"
             };
-            foreach (SRRRarPaddingBlock padding in srr.RARPaddingBlocks)
+            foreach (SRRRARPaddingBlock padding in srr.RARPaddingBlocks)
             {
                 paddingNode.Children.Add(new TreeNodeViewModel { Text = padding.RARFileName, Tag = padding });
             }
@@ -123,7 +123,7 @@ internal static class InspectorTreeBuilder
                 Text = $"RAR Volumes ({srr.RARFiles.Count})",
                 Tag = "container"
             };
-            foreach (SRRRarFileBlock rar in srr.RARFiles)
+            foreach (SRRRARFileBlock rar in srr.RARFiles)
             {
                 var volNode = new TreeNodeViewModel { Text = rar.FileName, Tag = rar };
 
@@ -131,7 +131,7 @@ internal static class InspectorTreeBuilder
                 {
                     for (int i = 0; i < detailedBlocks.Count; i++)
                     {
-                        volNode.Children.Add(new TreeNodeViewModel { Text = RarBlockLabel.FormatBlockLabel(i, detailedBlocks[i]), Tag = detailedBlocks[i] });
+                        volNode.Children.Add(new TreeNodeViewModel { Text = RARBlockLabel.FormatBlockLabel(i, detailedBlocks[i]), Tag = detailedBlocks[i] });
                     }
                 }
 

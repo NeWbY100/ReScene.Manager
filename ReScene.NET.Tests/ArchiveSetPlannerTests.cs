@@ -9,9 +9,9 @@ namespace ReScene.NET.Tests;
 
 public class ArchiveSetPlannerTests
 {
-    private static SrrArchiveSet MakeSet(string key, string dir, string[] volumes, (string file, string crc)[] content)
+    private static SRRArchiveSet MakeSet(string key, string dir, string[] volumes, (string file, string crc)[] content)
     {
-        var set = new SrrArchiveSet { Key = key, Directory = dir };
+        var set = new SRRArchiveSet { Key = key, Directory = dir };
         foreach (string v in volumes)
         {
             set.VolumeNames.Add(v);
@@ -75,7 +75,7 @@ public class ArchiveSetPlannerTests
 
         Assert.Contains("aln-re4a.iso", opts.RAROptions.ArchiveFilePaths);
         Assert.DoesNotContain("aln-re4b.iso", opts.RAROptions.ArchiveFilePaths);
-        Assert.Equal(["DVD1\\aln-re4a.rar", "DVD1\\aln-re4a.r00"], opts.RAROptions.OriginalRarFileNames);
+        Assert.Equal(["DVD1\\aln-re4a.rar", "DVD1\\aln-re4a.r00"], opts.RAROptions.OriginalRARFileNames);
         Assert.True(opts.ExpectedVolumeCrcs.ContainsKey("aln-re4a.rar"));
         Assert.Contains("f1a3ec0d", opts.Hashes);
     }
@@ -189,7 +189,7 @@ public class ArchiveSetPlannerTests
     {
         var existing = MakeSet("DVD1/x", "DVD1", ["DVD1\\x.rar"], [("x.iso", "00000000")]);
 
-        IReadOnlyList<SrrArchiveSet> sets = ArchiveSetPlanner.ResolveSets(
+        IReadOnlyList<SRRArchiveSet> sets = ArchiveSetPlanner.ResolveSets(
             archiveSets: [existing], srrFilePath: null,
             flatOriginalNames: ["ignored.rar"], flatArchiveFiles: ["ignored.iso"]);
 
@@ -198,7 +198,7 @@ public class ArchiveSetPlannerTests
     }
 
     [Fact]
-    public void RealMultiSetSrr_ProducesIsolatedPerSetOptions()
+    public void RealMultiSetSRR_ProducesIsolatedPerSetOptions()
     {
         string srrPath = Path.Combine(AppContext.BaseDirectory, "TestData",
             "cleanup_script",
@@ -211,13 +211,13 @@ public class ArchiveSetPlannerTests
         SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings();
 
         var allArchiveFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (SrrArchiveSet set in srr.ArchiveSets)
+        foreach (SRRArchiveSet set in srr.ArchiveSets)
         {
             BruteForceOptions opts = ArchiveSetPlanner.BuildOptionsForSet(set, shared,
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
 
             // Each set's options carry only that set's own volume names and archived content.
-            Assert.Equal(set.VolumeNames, opts.RAROptions.OriginalRarFileNames);
+            Assert.Equal(set.VolumeNames, opts.RAROptions.OriginalRARFileNames);
             Assert.Equal(set.ArchivedFiles.Count, opts.RAROptions.ArchiveFilePaths.Count);
 
             foreach (string f in opts.RAROptions.ArchiveFilePaths)
@@ -231,9 +231,9 @@ public class ArchiveSetPlannerTests
     }
 
     [Fact]
-    public void ResolveSets_NoArchiveSets_NoSrr_SynthesizesSingleFlatSet()
+    public void ResolveSets_NoArchiveSets_NoSRR_SynthesizesSingleFlatSet()
     {
-        IReadOnlyList<SrrArchiveSet> sets = ArchiveSetPlanner.ResolveSets(archiveSets: [], srrFilePath: null,
+        IReadOnlyList<SRRArchiveSet> sets = ArchiveSetPlanner.ResolveSets(archiveSets: [], srrFilePath: null,
             flatOriginalNames: ["x.rar", "x.r00"], flatArchiveFiles: ["x.iso"]);
         Assert.Single(sets);
         Assert.Equal("", sets[0].Directory);

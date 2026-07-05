@@ -35,16 +35,16 @@ internal static class SceneFileTypes
     /// followed by two digits (e.g. <c>.r00</c>, <c>.s01</c>). Mirrors the library's
     /// internal <c>RARVolumeIdentifier</c> old-style rule.
     /// </summary>
-    public static bool IsRarVolumeExtension(string extension)
+    public static bool IsRARVolumeExtension(string extension)
         => extension.Equals(".rar", StringComparison.OrdinalIgnoreCase)
-            || IsOldStyleRarVolumeExtension(extension);
+            || IsOldStyleRARVolumeExtension(extension);
 
     /// <summary>
     /// Returns <see langword="true"/> for an old-style RAR continuation-volume extension only:
     /// a dot, a letter, then two digits (e.g. <c>.r00</c>, <c>.s01</c>). Excludes the first
     /// volume's <c>.rar</c>. Mirrors the library's internal <c>RARVolumeIdentifier</c> old-style rule.
     /// </summary>
-    public static bool IsOldStyleRarVolumeExtension(string extension)
+    public static bool IsOldStyleRARVolumeExtension(string extension)
         => extension.Length == 4
             && extension[0] == '.'
             && char.IsLetter(extension[1])

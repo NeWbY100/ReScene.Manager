@@ -25,7 +25,7 @@ public partial class ReconstructorView : UserControl
             return;
         }
 
-        TextBoxDropHelper.SetupFolderDrop(WinRarTextBox, path => vm.WinRarPath = path);
+        TextBoxDropHelper.SetupFolderDrop(WinRARTextBox, path => vm.WinRARPath = path);
         TextBoxDropHelper.SetupFolderDrop(ReleaseTextBox, path => vm.ReleasePath = path);
         TextBoxDropHelper.SetupFileDrop(VerifyTextBox, path => vm.VerificationPath = path);
         TextBoxDropHelper.SetupFolderDrop(OutputTextBox, path => vm.OutputPath = path);

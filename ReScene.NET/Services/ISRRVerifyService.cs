@@ -5,7 +5,7 @@ namespace ReScene.NET.Services;
 /// <summary>
 /// Wraps <see cref="SRRVerifier"/> for ViewModel consumption with async semantics.
 /// </summary>
-public interface ISrrVerifyService
+public interface ISRRVerifyService
 {
     /// <summary>
     /// Verifies the structural integrity of the SRR file at the given path.

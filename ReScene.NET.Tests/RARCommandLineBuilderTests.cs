@@ -6,20 +6,20 @@ namespace ReScene.NET.Tests;
 
 /// <summary>
 /// Verifies the RAR version-range and command-line argument matrix produced by
-/// <see cref="RarCommandLineBuilder"/>. This logic was previously inlined in the reconstructor
+/// <see cref="RARCommandLineBuilder"/>. This logic was previously inlined in the reconstructor
 /// view-model and therefore untestable; the tests assert the concrete argument strings, version
 /// constraints, and matrix sizes for representative switch combinations.
 /// </summary>
-public sealed class RarCommandLineBuilderTests
+public sealed class RARCommandLineBuilderTests
 {
     // ── BuildVersionRanges ───────────────────────────────────────────────
 
     [Fact]
     public void BuildVersionRanges_NothingSelected_ReturnsEmpty()
     {
-        var settings = new RarSwitchSettings();
+        var settings = new RARSwitchSettings();
 
-        List<VersionRange> ranges = RarCommandLineBuilder.BuildVersionRanges(settings);
+        List<VersionRange> ranges = RARCommandLineBuilder.BuildVersionRanges(settings);
 
         Assert.Empty(ranges);
     }
@@ -27,7 +27,7 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildVersionRanges_AllVersions_ReturnsExpectedRangesInOrder()
     {
-        var settings = new RarSwitchSettings
+        var settings = new RARSwitchSettings
         {
             Version2 = true,
             Version3 = true,
@@ -37,7 +37,7 @@ public sealed class RarCommandLineBuilderTests
             Version7 = true,
         };
 
-        List<VersionRange> ranges = RarCommandLineBuilder.BuildVersionRanges(settings);
+        List<VersionRange> ranges = RARCommandLineBuilder.BuildVersionRanges(settings);
 
         Assert.Equal(6, ranges.Count);
         Assert.Equal((200, 300), (ranges[0].Start, ranges[0].End));
@@ -51,9 +51,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildVersionRanges_SingleVersion_ReturnsOnlyThatRange()
     {
-        var settings = new RarSwitchSettings { Version5 = true };
+        var settings = new RARSwitchSettings { Version5 = true };
 
-        List<VersionRange> ranges = RarCommandLineBuilder.BuildVersionRanges(settings);
+        List<VersionRange> ranges = RARCommandLineBuilder.BuildVersionRanges(settings);
 
         VersionRange range = Assert.Single(ranges);
         Assert.Equal((500, 600), (range.Start, range.End));
@@ -64,9 +64,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildCommandLineArguments_NoSwitches_ReturnsSingleAddOnlyCombination()
     {
-        var settings = new RarSwitchSettings();
+        var settings = new RARSwitchSettings();
 
-        List<RARCommandLineArgument[]> matrix = RarCommandLineBuilder.BuildCommandLineArguments(settings);
+        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
 
         RARCommandLineArgument[] only = Assert.Single(matrix);
         RARCommandLineArgument add = Assert.Single(only);
@@ -77,9 +77,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildCommandLineArguments_SingleCompressionLevel_AppendsAfterAddCommand()
     {
-        var settings = new RarSwitchSettings { SwitchM5 = true };
+        var settings = new RARSwitchSettings { SwitchM5 = true };
 
-        List<RARCommandLineArgument[]> matrix = RarCommandLineBuilder.BuildCommandLineArguments(settings);
+        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
 
         RARCommandLineArgument[] combo = Assert.Single(matrix);
         Assert.Equal(["a", "-m5"], combo.Select(c => c.Argument));
@@ -88,9 +88,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildCommandLineArguments_MultipleCompressionLevels_ProducesOneCombinationEach()
     {
-        var settings = new RarSwitchSettings { SwitchM0 = true, SwitchM3 = true, SwitchM5 = true };
+        var settings = new RARSwitchSettings { SwitchM0 = true, SwitchM3 = true, SwitchM5 = true };
 
-        List<RARCommandLineArgument[]> matrix = RarCommandLineBuilder.BuildCommandLineArguments(settings);
+        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
 
         Assert.Equal(3, matrix.Count);
         // Each combination is "a" followed by exactly one compression level.
@@ -102,7 +102,7 @@ public sealed class RarCommandLineBuilderTests
     public void BuildCommandLineArguments_CartesianProduct_MultipliesIndependentDimensions()
     {
         // 2 compression levels × 2 archive formats × 3 dict sizes = 12 combinations.
-        var settings = new RarSwitchSettings
+        var settings = new RARSwitchSettings
         {
             SwitchM0 = true,
             SwitchM5 = true,
@@ -113,7 +113,7 @@ public sealed class RarCommandLineBuilderTests
             SwitchMD256K = true,
         };
 
-        List<RARCommandLineArgument[]> matrix = RarCommandLineBuilder.BuildCommandLineArguments(settings);
+        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
 
         Assert.Equal(2 * 2 * 3, matrix.Count);
     }
@@ -121,9 +121,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildCommandLineArguments_ThreadRange_ProducesOneComboPerThreadCount()
     {
-        var settings = new RarSwitchSettings { SwitchMT = true, SwitchMTStart = 2, SwitchMTEnd = 4 };
+        var settings = new RARSwitchSettings { SwitchMT = true, SwitchMTStart = 2, SwitchMTEnd = 4 };
 
-        List<RARCommandLineArgument[]> matrix = RarCommandLineBuilder.BuildCommandLineArguments(settings);
+        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
 
         Assert.Equal(3, matrix.Count);   // -mt2, -mt3, -mt4
         Assert.All(matrix, combo => Assert.Contains(combo, c => c.Argument is "-mt2" or "-mt3" or "-mt4"));
@@ -134,9 +134,9 @@ public sealed class RarCommandLineBuilderTests
     {
         // Start > End (a typo or swapped imported config) must not collapse the whole matrix to
         // zero combinations and a silent "No match found".
-        var settings = new RarSwitchSettings { SwitchMT = true, SwitchMTStart = 4, SwitchMTEnd = 2 };
+        var settings = new RARSwitchSettings { SwitchMT = true, SwitchMTStart = 4, SwitchMTEnd = 2 };
 
-        List<RARCommandLineArgument[]> matrix = RarCommandLineBuilder.BuildCommandLineArguments(settings);
+        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
 
         Assert.Equal(3, matrix.Count);   // normalised to 2..4
         Assert.Contains(matrix, combo => combo.Any(c => c.Argument == "-mt2"));
@@ -146,9 +146,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildCommandLineArguments_ArchiveFormatSwitch_CarriesVersionRange()
     {
-        var settings = new RarSwitchSettings { SwitchMA5 = true };
+        var settings = new RARSwitchSettings { SwitchMA5 = true };
 
-        RARCommandLineArgument[] combo = Assert.Single(RarCommandLineBuilder.BuildCommandLineArguments(settings));
+        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings));
 
         RARCommandLineArgument ma5 = Assert.Single(combo, c => c.Argument == "-ma5");
         Assert.Equal(500, ma5.MinimumVersion);
@@ -158,9 +158,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildCommandLineArguments_DictSize_CarriesArchiveVersionConstraint()
     {
-        var settings = new RarSwitchSettings { SwitchMD8M = true };
+        var settings = new RARSwitchSettings { SwitchMD8M = true };
 
-        RARCommandLineArgument[] combo = Assert.Single(RarCommandLineBuilder.BuildCommandLineArguments(settings));
+        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings));
 
         RARCommandLineArgument md8m = Assert.Single(combo, c => c.Argument == "-md8m");
         Assert.Equal(500, md8m.MinimumVersion);
@@ -170,9 +170,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildCommandLineArguments_SwitchAi_DoublesMatrixAndAddsAiToFirstHalf()
     {
-        var settings = new RarSwitchSettings { SwitchAI = true };
+        var settings = new RARSwitchSettings { SwitchAI = true };
 
-        List<RARCommandLineArgument[]> matrix = RarCommandLineBuilder.BuildCommandLineArguments(settings);
+        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
 
         // The -ai dimension iterates twice: once with -ai present, once without.
         Assert.Equal(2, matrix.Count);
@@ -186,9 +186,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildCommandLineArguments_MultiThreadRange_AddsOneCombinationPerThreadCount()
     {
-        var settings = new RarSwitchSettings { SwitchMT = true, SwitchMTStart = 1, SwitchMTEnd = 4 };
+        var settings = new RARSwitchSettings { SwitchMT = true, SwitchMTStart = 1, SwitchMTEnd = 4 };
 
-        List<RARCommandLineArgument[]> matrix = RarCommandLineBuilder.BuildCommandLineArguments(settings);
+        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
 
         // z runs from Start (1) through End (4) inclusive → 4 combinations.
         Assert.Equal(4, matrix.Count);
@@ -200,9 +200,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildCommandLineArguments_SimpleSwitches_AppearInExpectedOrder()
     {
-        var settings = new RarSwitchSettings { SwitchR = true, SwitchDS = true, SwitchSDash = true };
+        var settings = new RARSwitchSettings { SwitchR = true, SwitchDS = true, SwitchSDash = true };
 
-        RARCommandLineArgument[] combo = Assert.Single(RarCommandLineBuilder.BuildCommandLineArguments(settings));
+        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings));
 
         Assert.Equal(["a", "-r", "-ds", "-s-"], combo.Select(c => c.Argument));
     }
@@ -210,9 +210,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildCommandLineArguments_SwitchS_EmitsSolidNotDisable()
     {
-        var settings = new RarSwitchSettings { Version2 = true, SwitchR = true, SwitchDS = true, SwitchS = true };
+        var settings = new RARSwitchSettings { Version2 = true, SwitchR = true, SwitchDS = true, SwitchS = true };
 
-        List<RARCommandLineArgument[]> result = RarCommandLineBuilder.BuildCommandLineArguments(settings);
+        List<RARCommandLineArgument[]> result = RARCommandLineBuilder.BuildCommandLineArguments(settings);
 
         string[] args = [.. result[0].Select(a => a.Argument)];
         Assert.Contains("-s", args);
@@ -224,9 +224,9 @@ public sealed class RarCommandLineBuilderTests
     public void BuildCommandLineArguments_SwitchS_TakesPrecedenceOverSwitchSDash()
     {
         // Defense in depth: even if both reach the builder, only -s is emitted.
-        var settings = new RarSwitchSettings { Version2 = true, SwitchS = true, SwitchSDash = true };
+        var settings = new RARSwitchSettings { Version2 = true, SwitchS = true, SwitchSDash = true };
 
-        string[] args = [.. RarCommandLineBuilder.BuildCommandLineArguments(settings)[0].Select(a => a.Argument)];
+        string[] args = [.. RARCommandLineBuilder.BuildCommandLineArguments(settings)[0].Select(a => a.Argument)];
         Assert.Contains("-s", args);
         Assert.DoesNotContain("-s-", args);
     }
@@ -234,7 +234,7 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildCommandLineArguments_VolumeWithOldNaming_AddsVolumeAndVnSwitch()
     {
-        var settings = new RarSwitchSettings
+        var settings = new RARSwitchSettings
         {
             SwitchV = true,
             VolumeSize = "100",
@@ -242,7 +242,7 @@ public sealed class RarCommandLineBuilderTests
             UseOldVolumeNaming = true,
         };
 
-        RARCommandLineArgument[] combo = Assert.Single(RarCommandLineBuilder.BuildCommandLineArguments(settings));
+        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings));
 
         Assert.Contains(combo, c => c.Argument == "-v100");
         RARCommandLineArgument vn = Assert.Single(combo, c => c.Argument == "-vn");
@@ -253,7 +253,7 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildCommandLineArguments_VolumeWithoutOldNaming_OmitsVnSwitch()
     {
-        var settings = new RarSwitchSettings
+        var settings = new RARSwitchSettings
         {
             SwitchV = true,
             VolumeSize = "100",
@@ -261,7 +261,7 @@ public sealed class RarCommandLineBuilderTests
             UseOldVolumeNaming = false,
         };
 
-        RARCommandLineArgument[] combo = Assert.Single(RarCommandLineBuilder.BuildCommandLineArguments(settings));
+        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings));
 
         Assert.DoesNotContain(combo, c => c.Argument == "-vn");
     }
@@ -278,9 +278,9 @@ public sealed class RarCommandLineBuilderTests
     [InlineData(6, "1", "-v1048576k")]          // GiB → KiB (×1024×1024)
     public void BuildVolumeArgument_FormatsBySizeUnit(int unitIndex, string size, string expected)
     {
-        var settings = new RarSwitchSettings { VolumeSize = size, VolumeSizeUnitIndex = unitIndex };
+        var settings = new RARSwitchSettings { VolumeSize = size, VolumeSizeUnitIndex = unitIndex };
 
-        string arg = RarCommandLineBuilder.BuildVolumeArgument(settings);
+        string arg = RARCommandLineBuilder.BuildVolumeArgument(settings);
 
         Assert.Equal(expected, arg);
     }
@@ -288,9 +288,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildVolumeArgument_InvalidSize_FallsBackToDefaultKilobytes()
     {
-        var settings = new RarSwitchSettings { VolumeSize = "not-a-number", VolumeSizeUnitIndex = 1 };
+        var settings = new RARSwitchSettings { VolumeSize = "not-a-number", VolumeSizeUnitIndex = 1 };
 
-        string arg = RarCommandLineBuilder.BuildVolumeArgument(settings);
+        string arg = RARCommandLineBuilder.BuildVolumeArgument(settings);
 
         // Default of 15000 KB is used when the size string cannot be parsed.
         Assert.Equal("-v15000", arg);
@@ -299,9 +299,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildVolumeArgument_UnknownUnitIndex_FallsBackToKilobyteFormat()
     {
-        var settings = new RarSwitchSettings { VolumeSize = "100", VolumeSizeUnitIndex = 99 };
+        var settings = new RARSwitchSettings { VolumeSize = "100", VolumeSizeUnitIndex = 99 };
 
-        string arg = RarCommandLineBuilder.BuildVolumeArgument(settings);
+        string arg = RARCommandLineBuilder.BuildVolumeArgument(settings);
 
         Assert.Equal("-v100", arg);
     }
@@ -309,13 +309,13 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildVersionRanges_Scanned_TightRangePerSelectedVersion()
     {
-        var settings = new RarSwitchSettings
+        var settings = new RARSwitchSettings
         {
             HasScannedVersions = true,
-            SelectedRarVersions = [560, 624],
+            SelectedRARVersions = [560, 624],
         };
 
-        List<VersionRange> ranges = RarCommandLineBuilder.BuildVersionRanges(settings);
+        List<VersionRange> ranges = RARCommandLineBuilder.BuildVersionRanges(settings);
 
         Assert.Equal(2, ranges.Count);
         Assert.Equal((560, 561), (ranges[0].Start, ranges[0].End));
@@ -325,13 +325,13 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildVersionRanges_Scanned_DedupsAndSorts()
     {
-        var settings = new RarSwitchSettings
+        var settings = new RARSwitchSettings
         {
             HasScannedVersions = true,
-            SelectedRarVersions = [560, 560, 500],
+            SelectedRARVersions = [560, 560, 500],
         };
 
-        List<VersionRange> ranges = RarCommandLineBuilder.BuildVersionRanges(settings);
+        List<VersionRange> ranges = RARCommandLineBuilder.BuildVersionRanges(settings);
 
         Assert.Equal(new[] { 500, 560 }, ranges.Select(r => r.Start).ToArray());
     }
@@ -339,9 +339,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildVersionRanges_Scanned_EmptySelection_ReturnsEmpty()
     {
-        var settings = new RarSwitchSettings { HasScannedVersions = true, Version5 = true };
+        var settings = new RARSwitchSettings { HasScannedVersions = true, Version5 = true };
 
-        List<VersionRange> ranges = RarCommandLineBuilder.BuildVersionRanges(settings);
+        List<VersionRange> ranges = RARCommandLineBuilder.BuildVersionRanges(settings);
 
         Assert.Empty(ranges);  // scanned + nothing ticked -> no versions (Start guard blocks the run)
     }
@@ -349,9 +349,9 @@ public sealed class RarCommandLineBuilderTests
     [Fact]
     public void BuildVersionRanges_NotScanned_FallsBackToBroadMajorRanges()
     {
-        var settings = new RarSwitchSettings { HasScannedVersions = false, Version5 = true, Version6 = true };
+        var settings = new RARSwitchSettings { HasScannedVersions = false, Version5 = true, Version6 = true };
 
-        List<VersionRange> ranges = RarCommandLineBuilder.BuildVersionRanges(settings);
+        List<VersionRange> ranges = RARCommandLineBuilder.BuildVersionRanges(settings);
 
         Assert.Equal(2, ranges.Count);
         Assert.Equal((500, 600), (ranges[0].Start, ranges[0].End));

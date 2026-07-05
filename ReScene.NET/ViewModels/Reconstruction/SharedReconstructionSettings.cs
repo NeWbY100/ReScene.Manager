@@ -9,14 +9,14 @@ namespace ReScene.NET.ViewModels.Reconstruction;
 /// The non-per-set reconstruction settings shared across every archive set in a run: the global
 /// switch toggles, version ranges, command-line matrix, the release-wide comment/CMT data, and the
 /// paths. Per-set data (content, volume names, CRCs, detected metadata) is read from each
-/// <see cref="SrrArchiveSet"/> instead.
+/// <see cref="SRRArchiveSet"/> instead.
 /// </summary>
 internal sealed record SharedReconstructionSettings
 {
-    public required string WinRarPath { get; init; }
+    public required string WinRARPath { get; init; }
     public required string ReleasePath { get; init; }
     public required string OutputPath { get; init; }
-    public required IReadOnlyList<VersionRange> RarVersions { get; init; }
+    public required IReadOnlyList<VersionRange> RARVersions { get; init; }
 
     /// <summary>
     /// The WinRAR version folder NAMES the user ticked in the version tree (e.g. "winrar-390-beta1").

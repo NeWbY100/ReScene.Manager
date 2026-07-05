@@ -7,7 +7,7 @@ namespace ReScene.NET.ViewModels.Reconstruction;
 /// variant part of the folder name (e.g. "beta1"; empty when none) so same-version folders stay
 /// visually distinct.
 /// </summary>
-public sealed partial class RarVersionLeaf(int version, string folderName, string tag = "") : ObservableObject
+public sealed partial class RARVersionLeaf(int version, string folderName, string tag = "") : ObservableObject
 {
     public int Version { get; } = version;
     public string FolderName { get; } = folderName;

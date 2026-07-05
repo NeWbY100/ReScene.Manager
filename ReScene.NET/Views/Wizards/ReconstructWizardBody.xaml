@@ -17,7 +17,7 @@
               ToolTip="Pick the release's .srr file. Compression, version, dictionary and timestamps are configured automatically." />
 
       <!-- Details of the imported SRR -->
-      <Border Visibility="{Binding HasImportedSrr, Converter={StaticResource BoolToVisibility}}"
+      <Border Visibility="{Binding HasImportedSRR, Converter={StaticResource BoolToVisibility}}"
               BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1"
               Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
               CornerRadius="3" Margin="0,12,0,0" Padding="12,10">
@@ -36,17 +36,17 @@
           </Grid.RowDefinitions>
 
           <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
-                     Text="{Binding ImportedSrrName}" FontWeight="SemiBold"
+                     Text="{Binding ImportedSRRName}" FontWeight="SemiBold"
                      TextWrapping="Wrap" Margin="0,0,0,8" />
 
           <TextBlock Grid.Row="1" Grid.Column="0" Text="Created with"
                      Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,16,4" />
-          <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ImportedSrrAppName}"
+          <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ImportedSRRAppName}"
                      TextWrapping="Wrap" Margin="0,0,0,4" />
 
           <TextBlock Grid.Row="2" Grid.Column="0" Text="RAR volumes"
                      Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,16,4" />
-          <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ImportedRarVolumeText}" Margin="0,0,0,4" />
+          <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ImportedRARVolumeText}" Margin="0,0,0,4" />
 
           <TextBlock Grid.Row="3" Grid.Column="0" Text="Archived files"
                      Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,16,4" />
@@ -87,11 +87,11 @@
                  Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,2" />
       <DockPanel Margin="0,0,0,2">
-        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseWinRarCommand}"
+        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseWinRARCommand}"
                 Style="{StaticResource GhostButton}" Margin="4,0,0,0" MinWidth="75" />
-        <TextBox Text="{Binding WinRarPath}" />
+        <TextBox Text="{Binding WinRARPath}" />
       </DockPanel>
-      <c:FieldStatusLine Status="{Binding WinRarStatus}" />
+      <c:FieldStatusLine Status="{Binding WinRARStatus}" />
 
       <TextBlock Text="Extracted release files" FontWeight="SemiBold" Margin="0,12,0,2" />
       <TextBlock Text="The folder with the release's already-extracted files — the originals that were inside the .rar archives (the movie, sample, subtitles, …)."

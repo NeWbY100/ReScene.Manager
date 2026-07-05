@@ -3,9 +3,9 @@ using ReScene.SRR;
 namespace ReScene.NET.Services;
 
 /// <summary>
-/// Default implementation of <see cref="ISrrCreationService"/> that delegates to <see cref="SRRWriter"/>.
+/// Default implementation of <see cref="ISRRCreationService"/> that delegates to <see cref="SRRWriter"/>.
 /// </summary>
-public class SRRCreationService : ISrrCreationService
+public class SRRCreationService : ISRRCreationService
 {
     private readonly SRRWriter _writer = new();
 
@@ -17,7 +17,7 @@ public class SRRCreationService : ISrrCreationService
     }
 
     /// <inheritdoc />
-    public Task<SRRCreationResult> CreateFromRarAsync(
+    public Task<SRRCreationResult> CreateFromRARAsync(
         string outputPath,
         IReadOnlyList<string> rarVolumePaths,
         IReadOnlyList<StoredFileEntry>? storedFiles,
