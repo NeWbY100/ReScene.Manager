@@ -2,6 +2,48 @@
 
 All notable changes to ReScene.NET are documented here. Releases follow [SemVer](https://semver.org/) and this file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.9.0] — 2026-07-05
+
+### Added
+
+- **The WinRAR versions you tick are the ones actually tried.** The RAR Reconstructor now
+  passes your selected version folders through to the brute-force engine, so unticking versions
+  genuinely narrows (and speeds up) the search instead of the engine still trying every installed
+  version. This completes the version picker added in 1.8.0.
+
+### Fixed
+
+- **Large files no longer freeze the window.** Opening a big archive in the Inspector, and scanning
+  a media folder in the Sample Restorer, now parse off the UI thread — the app stays responsive
+  instead of locking up on large inputs.
+- **RAR Reconstructor reliability.** Fixed cross-set seeding that never ran, a reversed
+  multithreading (`-mt`) switch, a stale version switch carried over between runs, a folder-scan
+  race, a hang when cancelling during CRC verification, an ISO flag leaking between runs, and a
+  wizard crash.
+- **More accurate reconstruction and rebuilds** (via ReScene.Lib): byte-exact RAR fixes
+  (EXT_TIME field, Unicode filename patching, 64-bit pack sizes), FLAC samples that carry a leading
+  ID3v2 tag now rebuild, MP3 samples with stacked tags rebuild correctly (and no longer hang on a
+  zero-size block), MKV lacing headers over 256 bytes are measured correctly, and fragmented
+  (multi-`mdat`) MP4 is refused cleanly on both sides instead of producing a bad result.
+- **Editing SRRs is safe again.** Fixed cases where the SRR editor/verifier could mis-parse
+  embedded RAR headers as SRR blocks and lose data on commit.
+- **Verification and comparison fixes.** Correct SHA-1/CRC-32 verification, a resilient brute-force
+  loop, support for releases with more than 101 volumes, correct stored-file content comparison,
+  and several Inspector/Compare fixes (hex-search coordinates, stale hex selection, a Compare
+  side-cross, shared-service state bleeding between tabs).
+- **ISO sample sources are detected from typed or dropped paths**, not only via the file picker.
+- Hardened against path-traversal (Zip-Slip) when reconstructing from an SRR.
+- Smaller fixes: recent-files limit clamped, a temporary-directory leak closed, link opening no
+  longer crashes on a bad handler, and drag-and-drop parity across tabs.
+
+### Changed
+
+- Settings and reconstructor-config files now load case-insensitively, so files written by older
+  versions keep working after internal property renames.
+- Large internal cleanup with no behavior change: one top-level type per file across the codebase,
+  format-acronym casing normalized to all-caps (`SRR`/`RAR`/`MP3`/`MP4`/`SRS`/`MKV`/…), and magic
+  numbers replaced with named constants.
+
 ## [1.8.0] — 2026-07-02
 
 ### Added
