@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ReScene.App.Core.Services;
@@ -24,6 +23,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     private readonly IAppSettingsService? _settingsService;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly ITempDirectoryService _tempDir;
+    private readonly ILauncherService _launcher;
     private CancellationTokenSource? _cts;
 
     // Temp directory holding the SFV extracted from the last imported SRR (VerificationPath points
@@ -47,7 +47,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     // the original for those files.
     private readonly List<TimestampPreservationFailedEventArgs> _timestampFailures = [];
 
-    public ReconstructorViewModel(IBruteForceService bruteForceService, IFileDialogService fileDialog, IUiDispatcher uiDispatcher, IUiTimerFactory timerFactory, IAppSettingsService? settingsService = null, ITempDirectoryService? tempDir = null)
+    public ReconstructorViewModel(IBruteForceService bruteForceService, IFileDialogService fileDialog, IUiDispatcher uiDispatcher, IUiTimerFactory timerFactory, IAppSettingsService? settingsService = null, ITempDirectoryService? tempDir = null, ILauncherService? launcher = null)
     {
         ArgumentNullException.ThrowIfNull(timerFactory);
 
@@ -56,6 +56,7 @@ public partial class ReconstructorViewModel : ViewModelBase
         _settingsService = settingsService;
         _uiDispatcher = uiDispatcher;
         _tempDir = tempDir ?? new TempDirectoryService();
+        _launcher = launcher ?? new SystemLauncherService();
 
         _bruteForceService.Progress += OnProgress;
         _bruteForceService.StatusChanged += OnStatusChanged;
@@ -2000,7 +2001,7 @@ public partial class ReconstructorViewModel : ViewModelBase
 
             if (Directory.Exists(folder))
             {
-                Process.Start(new ProcessStartInfo { FileName = folder, UseShellExecute = true });
+                _launcher.RevealPath(folder);
             }
         }
         catch (Exception ex)

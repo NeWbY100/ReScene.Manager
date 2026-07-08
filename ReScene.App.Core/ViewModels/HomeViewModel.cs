@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ReScene.App.Core.Models;
@@ -14,6 +13,7 @@ public partial class HomeViewModel : ViewModelBase
     private readonly Action _switchToCreator;
     private readonly Func<Task> _openDialog;
     private readonly IFileDialogService _fileDialog;
+    private readonly ILauncherService _launcher;
 
     public ObservableCollection<RecentFileEntry> RecentFiles { get; } = [];
 
@@ -25,13 +25,15 @@ public partial class HomeViewModel : ViewModelBase
         Action<string> openFile,
         Action switchToCreator,
         Func<Task> openDialog,
-        IFileDialogService fileDialog)
+        IFileDialogService fileDialog,
+        ILauncherService? launcher = null)
     {
         _recentFiles = recentFiles;
         _openFile = openFile;
         _switchToCreator = switchToCreator;
         _openDialog = openDialog;
         _fileDialog = fileDialog;
+        _launcher = launcher ?? new SystemLauncherService();
 
         LoadRecentFiles();
     }
@@ -83,12 +85,5 @@ public partial class HomeViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private static void OpenUrl(string url)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
-        }
-        catch { }
-    }
+    private void OpenUrl(string url) => _launcher.OpenUrl(url);
 }

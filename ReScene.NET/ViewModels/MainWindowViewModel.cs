@@ -166,6 +166,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
         IUiDispatcher dispatcher = uiDispatcher ?? new WpfDispatcher();
 
+        // Platform-aware URL/folder launcher; no WPF-specific implementation is needed (it lives
+        // entirely in App.Core, mirroring ReScene.Lib's RarExecutable platform-detection style).
+        var launcher = new SystemLauncherService();
+
         var imagePreviewService = new ImagePreviewService(fileDialog);
         var filePreviewService = new FilePreviewService(new WpfImageLoader());
         Inspector = new InspectorViewModel(fileDialog, srrEditingService, srrVerifyService, propertyExportService, imagePreviewService, appSettingsService);
@@ -176,7 +180,7 @@ public partial class MainWindowViewModel : ViewModelBase
         // advanced Creator tab; the SRS Creator and the wizard below get their own.
         Creator = new CreatorViewModel(srrService, srsService, fileDialog, tempDir, appSettingsService, dispatcher);
         SRSCreator = new SRSCreatorViewModel(new SRSCreationService(), fileDialog, tempDir, appSettingsService, dispatcher);
-        Reconstructor = new ReconstructorViewModel(bruteForceService, fileDialog, dispatcher, new WpfUiTimerFactory(), appSettingsService, tempDir);
+        Reconstructor = new ReconstructorViewModel(bruteForceService, fileDialog, dispatcher, new WpfUiTimerFactory(), appSettingsService, tempDir, launcher);
         SRSReconstructor = new SRSReconstructorViewModel(srsReconService, fileDialog, tempDir, dispatcher);
         SampleRestorer = new SampleRestorerViewModel(sampleRestorerService, fileDialog, dispatcher);
         FileCompare = new FileCompareViewModel(fileCompareService, fileDialog, hexDiffComputer, dispatcher);
@@ -203,7 +207,8 @@ public partial class MainWindowViewModel : ViewModelBase
             openFile: path => _ = OpenSceneFileAsync(path),
             switchToCreator: () => SelectedTabIndex = 2,
             openDialog: OpenFileAsync,
-            fileDialog: fileDialog);
+            fileDialog: fileDialog,
+            launcher: launcher);
 
         Inspector.PropertyChanged += (_, e) =>
         {
