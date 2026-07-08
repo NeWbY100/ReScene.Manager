@@ -1,0 +1,119 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       ReScene.NET Design Tokens — Dark Professional Theme
+       (ported from ReScene.NET/Resources/Tokens.xaml)
+       ═══════════════════════════════════════════════════════════ -->
+
+  <!-- ── Typography ──────────────────────────────────────────── -->
+  <FontFamily x:Key="UIFontFamily">Inter, $Default</FontFamily>
+  <FontFamily x:Key="MonoFontFamily">Cascadia Mono, Cascadia Code, Consolas, DejaVu Sans Mono, Menlo, monospace</FontFamily>
+  <x:Double x:Key="FontSizeH1">20</x:Double>
+  <x:Double x:Key="FontSizeH2">16</x:Double>
+  <x:Double x:Key="FontSizeBody">14</x:Double>
+  <x:Double x:Key="FontSizeCaption">13</x:Double>
+  <x:Double x:Key="MonoFontSize">14</x:Double>
+  <x:Double x:Key="SectionHeaderFontSize">15</x:Double>
+  <x:Double x:Key="StatusBarFontSize">13</x:Double>
+  <x:Double x:Key="EmptyStateFontSize">14</x:Double>
+  <x:Double x:Key="EmptyStateSubtitleFontSize">13</x:Double>
+
+  <!-- ── Spacing ─────────────────────────────────────────────── -->
+  <Thickness x:Key="SpacingXS">2</Thickness>
+  <Thickness x:Key="SpacingSM">4</Thickness>
+  <Thickness x:Key="SpacingMD">8</Thickness>
+  <Thickness x:Key="SpacingLG">12</Thickness>
+  <Thickness x:Key="SpacingXL">16</Thickness>
+  <Thickness x:Key="SpacingXXL">24</Thickness>
+
+  <Thickness x:Key="PanelPadding">4</Thickness>
+  <Thickness x:Key="SectionPadding">6</Thickness>
+  <Thickness x:Key="PageMargin">12</Thickness>
+
+  <Thickness x:Key="TreeFilterMargin">2</Thickness>
+  <Thickness x:Key="TreeViewMargin">2,0,2,2</Thickness>
+
+  <!-- ── Corner radii ──────────────────────────────────────── -->
+  <CornerRadius x:Key="SmallRadius">2</CornerRadius>
+  <CornerRadius x:Key="MediumRadius">3</CornerRadius>
+  <CornerRadius x:Key="LargeRadius">4</CornerRadius>
+
+  <!-- ══ Base Surfaces ═══════════════════════════════════════ -->
+  <SolidColorBrush x:Key="WindowBackground" Color="#FF1E1E1E" />
+  <SolidColorBrush x:Key="PanelBackground" Color="#FF252526" />
+  <SolidColorBrush x:Key="SurfaceBackground" Color="#FF2D2D30" />
+  <SolidColorBrush x:Key="InputBackground" Color="#FF3C3C3C" />
+  <SolidColorBrush x:Key="HoverBackground" Color="#FF3E3E42" />
+  <SolidColorBrush x:Key="ActiveBackground" Color="#FF094771" />
+  <SolidColorBrush x:Key="SelectedItemBackground" Color="#FF37373D" />
+
+  <!-- ══ Text ════════════════════════════════════════════════ -->
+  <SolidColorBrush x:Key="ForegroundPrimary" Color="#FFD4D4D4" />
+  <SolidColorBrush x:Key="ForegroundSecondary" Color="#FF9E9E9E" />
+  <SolidColorBrush x:Key="ForegroundDisabled" Color="#FF5A5A5A" />
+  <SolidColorBrush x:Key="HeaderForeground" Color="#FFE0E0E0" />
+
+  <!-- ══ Accent ══════════════════════════════════════════════ -->
+  <SolidColorBrush x:Key="AccentPrimary" Color="#FF0078D4" />
+  <SolidColorBrush x:Key="AccentHover" Color="#FF1C8AE6" />
+  <SolidColorBrush x:Key="AccentPressed" Color="#FF005A9E" />
+  <SolidColorBrush x:Key="AccentSuccess" Color="#FF1ABC9C" />
+  <SolidColorBrush x:Key="AccentWarning" Color="#FFFFC107" />
+  <SolidColorBrush x:Key="AccentError" Color="#FFF44747" />
+
+  <!-- ══ Links ══════════════════════════════════════════════ -->
+  <SolidColorBrush x:Key="HyperlinkForeground" Color="#FF4FC1FF" />
+  <SolidColorBrush x:Key="HyperlinkHoverForeground" Color="#FF80D4FF" />
+
+  <!-- ══ Borders ═════════════════════════════════════════════ -->
+  <SolidColorBrush x:Key="BorderSubtle" Color="#FF3C3C3C" />
+  <SolidColorBrush x:Key="BorderMedium" Color="#FF4D4D4D" />
+  <SolidColorBrush x:Key="BorderFocused" Color="#FF0078D4" />
+  <SolidColorBrush x:Key="BorderSeparator" Color="#FF333333" />
+
+  <!-- ══ Hex View Colors (Retro Technical) ═══════════════════ -->
+  <SolidColorBrush x:Key="HexOffsetForeground" Color="#FFFFB000" />
+  <SolidColorBrush x:Key="HexBytesForeground" Color="#FF66FF66" />
+  <SolidColorBrush x:Key="HexAsciiForeground" Color="#FF00CCCC" />
+  <SolidColorBrush x:Key="HexSelectionBrush" Color="#44FFFF00" />
+  <SolidColorBrush x:Key="HexMatchHighlightBrush" Color="#33FF8C00" />
+  <SolidColorBrush x:Key="HexDiffHighlightBrush" Color="#55F44747" />
+
+  <!-- ══ Log Terminal ════════════════════════════════════════ -->
+  <SolidColorBrush x:Key="LogTerminalForeground" Color="#FF4EC9B0" />
+
+  <!-- ══ Compare diff highlight ═════════════════════════════ -->
+  <SolidColorBrush x:Key="DiffRowBackground" Color="#33F44747" />
+
+  <!-- ══ Inspector colors ════════════════════════════════════ -->
+  <SolidColorBrush x:Key="PropertyHighlightBrush" Color="#FF094771" />
+  <SolidColorBrush x:Key="HexHeaderBrush" Color="#FF2D2D30" />
+
+  <!-- ══ Borders (legacy keys) ═══════════════════════════════ -->
+  <SolidColorBrush x:Key="PanelBorderBrush" Color="#FF3C3C3C" />
+  <SolidColorBrush x:Key="StatusSeparatorBrush" Color="#FF333333" />
+
+  <!-- ── Panel headers ───────────────────────────────────────── -->
+  <Thickness x:Key="PanelHeaderPadding">4,2</Thickness>
+  <SolidColorBrush x:Key="PanelHeaderSeparatorBrush" Color="#FF333333" />
+
+  <!-- ── Section card ────────────────────────────────────────── -->
+  <Thickness x:Key="SectionBorderThickness">1</Thickness>
+  <Thickness x:Key="SectionCardMargin">0,0,0,4</Thickness>
+
+  <!-- ── Splitter ────────────────────────────────────────────── -->
+  <x:Double x:Key="SplitterWidth">8</x:Double>
+  <x:Double x:Key="SplitterHeight">8</x:Double>
+
+  <!-- ── Inspector tree panel ────────────────────────────────── -->
+  <x:Double x:Key="TreePanelMinWidth">200</x:Double>
+  <x:Double x:Key="TreePanelDefaultWidth">260</x:Double>
+
+  <!-- ── Home ────────────────────────────────────────────────── -->
+  <x:Double x:Key="HomeWelcomeFontSize">14</x:Double>
+  <x:Double x:Key="HomeMaxWidth">800</x:Double>
+  <Thickness x:Key="HomeWelcomeMargin">6</Thickness>
+  <Thickness x:Key="HomeCardsMargin">0,4</Thickness>
+
+</ResourceDictionary>

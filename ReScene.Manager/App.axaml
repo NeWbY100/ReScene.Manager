@@ -2,7 +2,22 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="ReScene.Manager.App"
              RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://ReScene.Manager/Resources/Tokens.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
   <Application.Styles>
-    <FluentTheme />
+    <!-- ReScene accent (#FF0078D4) driven via ColorPaletteResources so Fluent's
+         derived accent shades (hover/pressed/light/dark variants used by
+         controls) are computed from it, not just the bare SystemAccentColor key. -->
+    <FluentTheme>
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Light" Accent="#FF0078D4" />
+        <ColorPaletteResources x:Key="Dark" Accent="#FF0078D4" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
   </Application.Styles>
 </Application>

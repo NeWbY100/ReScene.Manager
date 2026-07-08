@@ -17,6 +17,9 @@
     <PackageReference Include="Avalonia.Diagnostics" Version="11.3.18" Condition="'$(Configuration)'=='Debug'" />
   </ItemGroup>
   <ItemGroup>
+    <AvaloniaResource Include="app.ico" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\ReScene.App.Core\ReScene.App.Core.csproj" />
   </ItemGroup>
 
