@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:ReScene.Manager.Controls"
+             xmlns:conv="clr-namespace:ReScene.Manager.Converters"
+             x:Class="ReScene.Manager.Controls.FieldStatusLine"
+             x:Name="Root"
+             x:CompileBindings="False"
+             VerticalAlignment="Center">
+  <UserControl.Resources>
+    <conv:FieldStateToGlyphConverter x:Key="FieldStateToGlyph" />
+    <conv:FieldStateToBrushConverter x:Key="FieldStateToBrush" />
+  </UserControl.Resources>
+
+  <!-- A Grid, not a horizontal StackPanel: a StackPanel measures children with infinite width,
+       which silently disables the message's TextWrapping. -->
+  <Grid VerticalAlignment="Center"
+        IsVisible="{Binding Status.State, ElementName=Root, Converter={x:Static local:FieldStatusLine.StateVisibleConverter}}">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="Auto" />
+      <ColumnDefinition Width="*" />
+    </Grid.ColumnDefinitions>
+
+    <!-- Glyph -->
+    <TextBlock x:Name="Glyph"
+               Grid.Column="0"
+               Margin="0,0,4,0"
+               FontSize="{DynamicResource FontSizeCaption}"
+               VerticalAlignment="Top"
+               Text="{Binding Status.State, ElementName=Root, Converter={StaticResource FieldStateToGlyph}}"
+               Foreground="{Binding Status.State, ElementName=Root, Converter={StaticResource FieldStateToBrush}}" />
+
+    <!-- Message -->
+    <TextBlock Grid.Column="1"
+               Text="{Binding Status.Message, ElementName=Root}"
+               FontSize="{DynamicResource FontSizeCaption}"
+               TextWrapping="Wrap"
+               VerticalAlignment="Center"
+               Foreground="{Binding Status.State, ElementName=Root, Converter={StaticResource FieldStateToBrush}, ConverterParameter=Message}" />
+  </Grid>
+</UserControl>
