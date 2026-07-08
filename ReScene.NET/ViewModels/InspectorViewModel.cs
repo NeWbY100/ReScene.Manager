@@ -13,6 +13,7 @@ using ReScene.SRR;
 using ReScene.SRS;
 
 using ReScene.App.Core.Helpers;
+using ReScene.App.Core.Services;
 namespace ReScene.NET.ViewModels;
 
 public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditingService srrEditingService, ISRRVerifyService verifyService, IPropertyExportService propertyExportService, IImagePreviewService imagePreviewService, IAppSettingsService? settingsService = null) : ViewModelBase, IDisposable

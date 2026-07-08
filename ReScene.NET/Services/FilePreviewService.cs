@@ -5,6 +5,7 @@ using ReScene.NET.ViewModels;
 using ReScene.NET.Views;
 
 using ReScene.App.Core.Helpers;
+using ReScene.App.Core.Services;
 namespace ReScene.NET.Services;
 
 /// <summary>

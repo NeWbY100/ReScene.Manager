@@ -5,6 +5,7 @@ using ReScene.NET.Services;
 using ReScene.NET.ViewModels;
 using ReScene.NET.Views;
 
+using ReScene.App.Core.Services;
 namespace ReScene.NET;
 
 public partial class App : Application

@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using ReScene.NET.Services;
 
 using ReScene.App.Core.Helpers;
+using ReScene.App.Core.Services;
 namespace ReScene.NET.ViewModels;
 
 /// <summary>

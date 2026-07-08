@@ -2,6 +2,7 @@ using System.Windows;
 using Microsoft.Win32;
 using ReScene.NET.Views;
 
+using ReScene.App.Core.Services;
 namespace ReScene.NET.Services;
 
 public class FileDialogService : IFileDialogService

@@ -4,6 +4,7 @@ using ReScene.NET.ViewModels;
 using ReScene.SRR;
 using ReScene.SRS;
 
+using ReScene.App.Core.Services;
 namespace ReScene.NET.Tests;
 
 /// <summary>

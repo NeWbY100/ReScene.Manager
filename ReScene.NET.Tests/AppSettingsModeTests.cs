@@ -1,6 +1,7 @@
 using ReScene.App.Core.Models;
 using ReScene.NET.Services;
 
+using ReScene.App.Core.Services;
 namespace ReScene.NET.Tests;
 
 public class AppSettingsModeTests

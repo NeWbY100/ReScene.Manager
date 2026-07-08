@@ -1,0 +1,43 @@
+using ReScene.SRS;
+
+namespace ReScene.App.Core.Services;
+
+/// <summary>
+/// Service for creating SRS (Sample ReScene) files from media samples.
+/// </summary>
+public interface ISRSCreationService
+{
+    /// <summary>
+    /// Raised to report progress during SRS creation.
+    /// </summary>
+    public event EventHandler<SRSCreationProgressEventArgs>? Progress;
+
+    /// <summary>
+    /// Raised to report byte-level scan progress during sample profiling.
+    /// </summary>
+    public event EventHandler<SRSScanProgressEventArgs>? ScanProgress;
+
+    /// <summary>
+    /// Creates an SRS file from a sample media file.
+    /// </summary>
+    /// <param name="outputPath">
+    /// Destination path for the SRS file.
+    /// </param>
+    /// <param name="sampleFilePath">
+    /// Path to the source sample file.
+    /// </param>
+    /// <param name="options">
+    /// Creation options.
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token.
+    /// </param>
+    /// <returns>
+    /// The creation result including success status and file size.
+    /// </returns>
+    public Task<SRSCreationResult> CreateAsync(
+        string outputPath,
+        string sampleFilePath,
+        SRSCreationOptions options,
+        CancellationToken ct);
+}

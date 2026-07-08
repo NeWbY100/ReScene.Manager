@@ -3,6 +3,7 @@ using System.Windows.Media.Imaging;
 using ReScene.NET.Helpers;
 using ReScene.NET.Views;
 
+using ReScene.App.Core.Services;
 namespace ReScene.NET.Services;
 
 /// <summary>

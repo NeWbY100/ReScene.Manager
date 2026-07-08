@@ -4,9 +4,9 @@ using System.Windows.Input;
 using System.Windows.Navigation;
 using ReScene.NET.Helpers;
 using ReScene.App.Core.Models;
-using ReScene.NET.Services;
 using ReScene.NET.ViewModels;
 
+using ReScene.App.Core.Services;
 namespace ReScene.NET.Views;
 
 public partial class MainWindow : Window

@@ -1,0 +1,23 @@
+using ReScene.SRR;
+
+namespace ReScene.App.Core.Services;
+
+/// <summary>
+/// Wraps <see cref="SRRVerifier"/> for ViewModel consumption with async semantics.
+/// </summary>
+public interface ISRRVerifyService
+{
+    /// <summary>
+    /// Verifies the structural integrity of the SRR file at the given path.
+    /// </summary>
+    /// <param name="srrFilePath">
+    /// Absolute path to the SRR file to verify.
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token.
+    /// </param>
+    /// <returns>
+    /// A <see cref="SRRVerifyResult"/> describing the outcome.
+    /// </returns>
+    public Task<SRRVerifyResult> VerifyAsync(string srrFilePath, CancellationToken ct = default);
+}

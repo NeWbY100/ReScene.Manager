@@ -5,6 +5,7 @@ using ReScene.NET.Services;
 using ReScene.NET.ViewModels;
 using ReScene.RAR;
 
+using ReScene.App.Core.Services;
 namespace ReScene.NET.Tests;
 
 /// <summary>

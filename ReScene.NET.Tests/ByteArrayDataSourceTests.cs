@@ -1,5 +1,6 @@
 using ReScene.NET.Services;
 
+using ReScene.App.Core.Services;
 namespace ReScene.NET.Tests;
 
 public class ByteArrayDataSourceTests

@@ -3,8 +3,8 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ReScene.App.Core.Models;
-using ReScene.NET.Services;
 
+using ReScene.App.Core.Services;
 namespace ReScene.NET.ViewModels;
 
 public partial class HomeViewModel : ViewModelBase

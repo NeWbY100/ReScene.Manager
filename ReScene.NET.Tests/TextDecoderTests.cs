@@ -3,6 +3,7 @@ using ReScene.Hex;
 using ReScene.NET.Helpers;
 
 using ReScene.App.Core.Helpers;
+using ReScene.App.Core.Services;
 namespace ReScene.NET.Tests;
 
 public class TextDecoderTests

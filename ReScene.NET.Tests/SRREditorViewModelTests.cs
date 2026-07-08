@@ -2,6 +2,7 @@ using ReScene.App.Core.Models;
 using ReScene.NET.Services;
 using ReScene.NET.ViewModels;
 
+using ReScene.App.Core.Services;
 namespace ReScene.NET.Tests;
 
 // NOTE: the grid's code-behind handlers in EditSRRWizardBody.xaml.cs — SelectionChanged
