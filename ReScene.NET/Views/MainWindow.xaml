@@ -12,7 +12,7 @@
         PreviewKeyDown="OnPreviewKeyDown">
 
   <Window.TaskbarItemInfo>
-    <TaskbarItemInfo ProgressState="{Binding TaskbarProgressState}"
+    <TaskbarItemInfo ProgressState="{Binding TaskbarProgressState, Converter={StaticResource TaskbarProgressState}}"
                      ProgressValue="{Binding TaskbarProgressValue}" />
   </Window.TaskbarItemInfo>
 

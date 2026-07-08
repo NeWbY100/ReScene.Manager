@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Reflection;
-using System.Windows.Shell;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ReScene.App.Core.Services;
@@ -128,7 +127,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public partial bool IsBusy { get; set; }
 
     [ObservableProperty]
-    public partial TaskbarItemProgressState TaskbarProgressState { get; set; } = TaskbarItemProgressState.None;
+    public partial TaskbarProgressState TaskbarProgressState { get; set; } = TaskbarProgressState.None;
 
     [ObservableProperty]
     public partial double TaskbarProgressValue { get; set; }
@@ -307,12 +306,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (busy is not null)
         {
-            TaskbarProgressState = TaskbarItemProgressState.Normal;
+            TaskbarProgressState = TaskbarProgressState.Normal;
             TaskbarProgressValue = busy.Progress();
         }
         else
         {
-            TaskbarProgressState = TaskbarItemProgressState.None;
+            TaskbarProgressState = TaskbarProgressState.None;
             TaskbarProgressValue = 0;
         }
     }

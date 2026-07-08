@@ -21,6 +21,7 @@
             <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
             <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
             <local:IndexToVisibilityConverter x:Key="IndexToVisibility" />
+            <local:TaskbarProgressStateConverter x:Key="TaskbarProgressState" />
 
             <!-- ══════════════════════════════════════════════════════════
                  Window
