@@ -1,8 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ReScene.Manager.Views.MainWindow"
-        Title="ReScene Manager" Width="1100" Height="720"
-        Icon="/app.ico">
+        Title="ReScene Manager" Width="1100" Height="720">
+  <!-- Window Icon deferred to Phase 4 (needs an <AvaloniaResource> asset, not the Win32 ApplicationIcon). -->
   <TextBlock Text="ReScene Manager — port in progress"
              HorizontalAlignment="Center" VerticalAlignment="Center" />
 </Window>
