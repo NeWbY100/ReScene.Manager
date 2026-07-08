@@ -1,6 +1,5 @@
 using System.Windows;
 using System.Windows.Media.Imaging;
-using ReScene.NET.Helpers;
 using ReScene.NET.ViewModels;
 using ReScene.NET.Views;
 
@@ -9,18 +8,22 @@ using ReScene.App.Core.Services;
 namespace ReScene.NET.Services;
 
 /// <summary>
-/// Decodes the image (when applicable) and shows the file's bytes in a <see cref="FilePreviewWindow"/>.
+/// Decodes the image (when applicable, via <see cref="IImageLoader"/>) and shows the file's bytes
+/// in a <see cref="FilePreviewWindow"/>.
 /// </summary>
-public class FilePreviewService : IFilePreviewService
+public class FilePreviewService(IImageLoader imageLoader) : IFilePreviewService
 {
+    private readonly IImageLoader _imageLoader = imageLoader;
+
     /// <inheritdoc />
     public void Preview(byte[] data, string fileName)
     {
         BitmapSource? image = ImagePreviewSupport.IsSupported(fileName)
-            ? ImageDecoder.TryDecode(data)
+            ? _imageLoader.Load(new MemoryStream(data)) as BitmapSource
             : null;
 
-        var window = new FilePreviewWindow(new FilePreviewViewModel(data, fileName, image))
+        var window = new FilePreviewWindow(
+            new FilePreviewViewModel(data, fileName, image, image?.PixelWidth, image?.PixelHeight))
         {
             Owner = ActiveWindow()
         };

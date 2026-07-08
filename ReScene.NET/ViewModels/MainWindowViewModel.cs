@@ -168,7 +168,7 @@ public partial class MainWindowViewModel : ViewModelBase
         IUiDispatcher dispatcher = uiDispatcher ?? new WpfDispatcher();
 
         var imagePreviewService = new ImagePreviewService(fileDialog);
-        var filePreviewService = new FilePreviewService();
+        var filePreviewService = new FilePreviewService(new WpfImageLoader());
         Inspector = new InspectorViewModel(fileDialog, srrEditingService, srrVerifyService, propertyExportService, imagePreviewService, appSettingsService);
         // Each creation VM gets its OWN creation-service instance. These services are stateless
         // wrappers that expose a dedicated SRRWriter/SRSWriter's progress events; sharing one
