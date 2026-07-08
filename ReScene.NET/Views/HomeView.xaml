@@ -1,6 +1,5 @@
 <UserControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:ReScene.NET.ViewModels"
              xmlns:m="clr-namespace:ReScene.App.Core.Models;assembly=ReScene.App.Core"
              x:Class="ReScene.NET.Views.HomeView">
 

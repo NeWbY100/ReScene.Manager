@@ -2,10 +2,10 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 using ReScene.NET.Services;
-using ReScene.NET.ViewModels;
 using ReScene.NET.Views;
 
 using ReScene.App.Core.Services;
+using ReScene.App.Core.ViewModels;
 namespace ReScene.NET;
 
 public partial class App : Application
@@ -24,13 +24,14 @@ public partial class App : Application
         var tempDir = new TempDirectoryService();
         var windowState = new WindowStateService();
         var appSettings = new AppSettingsService();
+        var fileDialog = new FileDialogService();
         MainWindow = new MainWindow
         {
             WindowStateService = windowState,
             Opacity = 0,
             DataContext = new MainWindowViewModel(
                 new SRRCreationService(), new SRSCreationService(), new SRSReconstructionService(),
-                new SampleRestorerService(tempDir), new BruteForceService(), new FileCompareService(appSettings), new FileDialogService(), new RecentFilesService(appSettings), tempDir, new SRREditingService(), new SRRVerifyService(), new PropertyExportService(), appSettings, new HexDiffComputer(), new WpfDispatcher())
+                new SampleRestorerService(tempDir), new BruteForceService(), new FileCompareService(appSettings), fileDialog, new RecentFilesService(appSettings), tempDir, new SRREditingService(), new SRRVerifyService(), new PropertyExportService(), appSettings, new HexDiffComputer(), new WpfImageLoader(), new WpfUiTimerFactory(), new FilePreviewService(new WpfImageLoader()), new ImagePreviewService(fileDialog), new WpfDispatcher())
         };
         MainWindow.Show();
     }

@@ -5,11 +5,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ReScene.App.Core.Services;
 using ReScene.App.Core.Models;
-using ReScene.NET.Services;
 
 using ReScene.App.Core.Helpers;
-using ReScene.App.Core.ViewModels;
-namespace ReScene.NET.ViewModels;
+namespace ReScene.App.Core.ViewModels;
 
 /// <summary>
 /// Root ViewModel that owns all child ViewModels and coordinates tab navigation and status aggregation.
@@ -153,25 +151,20 @@ public partial class MainWindowViewModel : ViewModelBase
         return plus >= 0 ? version[..plus] + " (" + version[(plus + 1)..] + ")" : version;
     }
 
-    public MainWindowViewModel()
-        : this(new SRRCreationService(), new SRSCreationService(), new SRSReconstructionService(), new SampleRestorerService(new TempDirectoryService()), new BruteForceService(), new FileCompareService(new AppSettingsService()), new FileDialogService(), new RecentFilesService(new AppSettingsService()), new TempDirectoryService(), new SRREditingService(), new SRRVerifyService(), new PropertyExportService(), new AppSettingsService(), new HexDiffComputer(), new WpfDispatcher())
+    public MainWindowViewModel(ISRRCreationService srrService, ISRSCreationService srsService, ISRSReconstructionService srsReconService, ISampleRestorerService sampleRestorerService, IBruteForceService bruteForceService, IFileCompareService fileCompareService, IFileDialogService fileDialog, IRecentFilesService recentFiles, ITempDirectoryService tempDir, ISRREditingService srrEditingService, ISRRVerifyService srrVerifyService, IPropertyExportService propertyExportService, IAppSettingsService appSettingsService, IHexDiffComputer hexDiffComputer, IImageLoader imageLoader, IUiTimerFactory uiTimerFactory, IFilePreviewService filePreviewService, IImagePreviewService imagePreviewService, IUiDispatcher uiDispatcher)
     {
-    }
+        ArgumentNullException.ThrowIfNull(uiDispatcher);
 
-    public MainWindowViewModel(ISRRCreationService srrService, ISRSCreationService srsService, ISRSReconstructionService srsReconService, ISampleRestorerService sampleRestorerService, IBruteForceService bruteForceService, IFileCompareService fileCompareService, IFileDialogService fileDialog, IRecentFilesService recentFiles, ITempDirectoryService tempDir, ISRREditingService srrEditingService, ISRRVerifyService srrVerifyService, IPropertyExportService propertyExportService, IAppSettingsService appSettingsService, IHexDiffComputer hexDiffComputer, IUiDispatcher? uiDispatcher = null)
-    {
         _fileDialog = fileDialog;
         _recentFiles = recentFiles;
         _appSettingsService = appSettingsService;
 
-        IUiDispatcher dispatcher = uiDispatcher ?? new WpfDispatcher();
+        IUiDispatcher dispatcher = uiDispatcher;
 
         // Platform-aware URL/folder launcher; no WPF-specific implementation is needed (it lives
         // entirely in App.Core, mirroring ReScene.Lib's RarExecutable platform-detection style).
         var launcher = new SystemLauncherService();
 
-        var imagePreviewService = new ImagePreviewService(fileDialog);
-        var filePreviewService = new FilePreviewService(new WpfImageLoader());
         Inspector = new InspectorViewModel(fileDialog, srrEditingService, srrVerifyService, propertyExportService, imagePreviewService, appSettingsService);
         // Each creation VM gets its OWN creation-service instance. These services are stateless
         // wrappers that expose a dedicated SRRWriter/SRSWriter's progress events; sharing one
@@ -180,7 +173,7 @@ public partial class MainWindowViewModel : ViewModelBase
         // advanced Creator tab; the SRS Creator and the wizard below get their own.
         Creator = new CreatorViewModel(srrService, srsService, fileDialog, tempDir, appSettingsService, dispatcher);
         SRSCreator = new SRSCreatorViewModel(new SRSCreationService(), fileDialog, tempDir, appSettingsService, dispatcher);
-        Reconstructor = new ReconstructorViewModel(bruteForceService, fileDialog, dispatcher, new WpfUiTimerFactory(), appSettingsService, tempDir, launcher);
+        Reconstructor = new ReconstructorViewModel(bruteForceService, fileDialog, dispatcher, uiTimerFactory, appSettingsService, tempDir, launcher);
         SRSReconstructor = new SRSReconstructorViewModel(srsReconService, fileDialog, tempDir, dispatcher);
         SampleRestorer = new SampleRestorerViewModel(sampleRestorerService, fileDialog, dispatcher);
         FileCompare = new FileCompareViewModel(fileCompareService, fileDialog, hexDiffComputer, dispatcher);

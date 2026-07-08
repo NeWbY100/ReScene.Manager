@@ -1,6 +1,5 @@
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="clr-namespace:ReScene.NET.ViewModels"
         xmlns:v="clr-namespace:ReScene.NET.Views"
         x:Class="ReScene.NET.Views.MainWindow"
         Title="{Binding WindowTitle}"
