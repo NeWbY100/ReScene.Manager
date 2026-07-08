@@ -151,7 +151,7 @@ public partial class MainWindowViewModel : ViewModelBase
         return plus >= 0 ? version[..plus] + " (" + version[(plus + 1)..] + ")" : version;
     }
 
-    public MainWindowViewModel(ISRRCreationService srrService, ISRSCreationService srsService, ISRSReconstructionService srsReconService, ISampleRestorerService sampleRestorerService, IBruteForceService bruteForceService, IFileCompareService fileCompareService, IFileDialogService fileDialog, IRecentFilesService recentFiles, ITempDirectoryService tempDir, ISRREditingService srrEditingService, ISRRVerifyService srrVerifyService, IPropertyExportService propertyExportService, IAppSettingsService appSettingsService, IHexDiffComputer hexDiffComputer, IImageLoader imageLoader, IUiTimerFactory uiTimerFactory, IFilePreviewService filePreviewService, IImagePreviewService imagePreviewService, IUiDispatcher uiDispatcher)
+    public MainWindowViewModel(ISRRCreationService srrService, ISRSCreationService srsService, ISRSReconstructionService srsReconService, ISampleRestorerService sampleRestorerService, IBruteForceService bruteForceService, IFileCompareService fileCompareService, IFileDialogService fileDialog, IRecentFilesService recentFiles, ITempDirectoryService tempDir, ISRREditingService srrEditingService, ISRRVerifyService srrVerifyService, IPropertyExportService propertyExportService, IAppSettingsService appSettingsService, IHexDiffComputer hexDiffComputer, IUiTimerFactory uiTimerFactory, IFilePreviewService filePreviewService, IImagePreviewService imagePreviewService, IUiDispatcher uiDispatcher)
     {
         ArgumentNullException.ThrowIfNull(uiDispatcher);
 

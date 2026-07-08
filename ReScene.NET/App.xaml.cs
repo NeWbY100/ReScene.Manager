@@ -31,7 +31,7 @@ public partial class App : Application
             Opacity = 0,
             DataContext = new MainWindowViewModel(
                 new SRRCreationService(), new SRSCreationService(), new SRSReconstructionService(),
-                new SampleRestorerService(tempDir), new BruteForceService(), new FileCompareService(appSettings), fileDialog, new RecentFilesService(appSettings), tempDir, new SRREditingService(), new SRRVerifyService(), new PropertyExportService(), appSettings, new HexDiffComputer(), new WpfImageLoader(), new WpfUiTimerFactory(), new FilePreviewService(new WpfImageLoader()), new ImagePreviewService(fileDialog), new WpfDispatcher())
+                new SampleRestorerService(tempDir), new BruteForceService(), new FileCompareService(appSettings), fileDialog, new RecentFilesService(appSettings), tempDir, new SRREditingService(), new SRRVerifyService(), new PropertyExportService(), appSettings, new HexDiffComputer(), new WpfUiTimerFactory(), new FilePreviewService(new WpfImageLoader()), new ImagePreviewService(fileDialog), new WpfDispatcher())
         };
         MainWindow.Show();
     }
