@@ -1,4 +1,4 @@
-namespace ReScene.NET.Helpers;
+namespace ReScene.App.Core.Helpers;
 
 /// <summary>
 /// Decides which stored files are previewable as images. Pure (no WPF), so it can gate the

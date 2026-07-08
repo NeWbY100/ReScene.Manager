@@ -1,4 +1,4 @@
-namespace ReScene.NET.Helpers;
+namespace ReScene.App.Core.Helpers;
 
 /// <summary>
 /// Routes a chosen file to the right Beginner restore flow: an .srr triggers bulk restore of

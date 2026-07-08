@@ -1,9 +1,9 @@
 using System.Windows;
-using ReScene.NET.Helpers;
 using ReScene.App.Core.Models;
 using ReScene.NET.ViewModels;
 using ReScene.NET.ViewModels.Wizards;
 
+using ReScene.App.Core.Helpers;
 namespace ReScene.NET.Views.Wizards;
 
 /// <summary>Assembles the wizard (navigation VM + body view) for a Beginner hub card.</summary>

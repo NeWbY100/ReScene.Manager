@@ -2,7 +2,6 @@ using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ReScene.Hex;
 using ReScene.App.Core.Helpers;
-using ReScene.NET.Helpers;
 using ReScene.NET.Services;
 
 namespace ReScene.NET.ViewModels;

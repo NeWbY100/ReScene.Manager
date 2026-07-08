@@ -4,6 +4,7 @@ using ReScene.RAR;
 using ReScene.SRR;
 using ReScene.SRS;
 
+using ReScene.App.Core.Helpers;
 namespace ReScene.NET.ViewModels.Comparison;
 
 /// <summary>

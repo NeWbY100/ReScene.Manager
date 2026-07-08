@@ -2,6 +2,7 @@ using ReScene.NET.Helpers;
 using ReScene.App.Core.Models;
 using ReScene.NET.ViewModels;
 
+using ReScene.App.Core.Helpers;
 namespace ReScene.NET.Tests;
 
 public class BeginnerRestoreViewModelTests

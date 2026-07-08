@@ -1,7 +1,7 @@
 using ReScene.App.Core.Helpers;
 using ReScene.App.Core.Models;
 
-namespace ReScene.NET.Helpers;
+namespace ReScene.App.Core.Helpers;
 
 /// <summary>
 /// Pure, side-effect-light helpers that turn user input into <see cref="FieldStatus"/>

@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace ReScene.NET.Helpers;
+namespace ReScene.App.Core.Helpers;
 
 /// <summary>
 /// The curated set of encodings offered by the Inspector's Text view. CP437 and Windows-1252 are not

@@ -1,9 +1,9 @@
-namespace ReScene.NET.Helpers;
+namespace ReScene.App.Core.Helpers;
 
 /// <summary>
 /// Centralized file dialog filter definitions used across ViewModels.
 /// </summary>
-internal static class FileDialogFilters
+public static class FileDialogFilters
 {
     /// <summary>
     /// Everything the Inspector can open — scene files, RAR, and MKV/WebM.

@@ -1,6 +1,6 @@
 using ReScene.RAR;
 
-namespace ReScene.NET.Helpers;
+namespace ReScene.App.Core.Helpers;
 
 /// <summary>
 /// Shared formatting for RAR detailed-block tree nodes: the <c>[index] Type[: ItemName]</c> label
@@ -8,7 +8,7 @@ namespace ReScene.NET.Helpers;
 /// these inline with copy-pasted logic (including the literal RAR5 marker bytes); centralizing
 /// them keeps the output byte-for-byte identical while removing the duplication.
 /// </summary>
-internal static class RARBlockLabel
+public static class RARBlockLabel
 {
     /// <summary>The RAR 5.x marker prefix as it appears in a Signature block's first field value.</summary>
     private const string RAR5SignaturePrefix = "52 61 72 21 1A 07 01";

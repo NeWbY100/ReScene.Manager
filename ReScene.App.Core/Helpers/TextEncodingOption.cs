@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace ReScene.NET.Helpers;
+namespace ReScene.App.Core.Helpers;
 
 /// <summary>A selectable text encoding: a human-friendly name plus the backing <see cref="Encoding"/>.</summary>
 public sealed record TextEncodingOption(string DisplayName, Encoding Encoding)

@@ -1,12 +1,12 @@
 using System.Text.RegularExpressions;
 
-namespace ReScene.NET.Helpers;
+namespace ReScene.App.Core.Helpers;
 
 /// <summary>
 /// Scans a scene release directory for files that should be stored in the SRR.
 /// Implements filtering rules based on pyrescene conventions.
 /// </summary>
-internal static partial class ReleaseFileScanner
+public static partial class ReleaseFileScanner
 {
     // ── Stored file extensions ──────────────────────────────
 

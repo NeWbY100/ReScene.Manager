@@ -1,4 +1,4 @@
-namespace ReScene.NET.Helpers;
+namespace ReScene.App.Core.Helpers;
 
 /// <summary>
 /// Single source of truth for the scene-related file-type sets the app reasons about:
@@ -10,7 +10,7 @@ namespace ReScene.NET.Helpers;
 /// These sets are deliberately authored, not derived from the pipe-delimited
 /// <c>FileDialogFilters</c> UI strings.
 /// </remarks>
-internal static class SceneFileTypes
+public static class SceneFileTypes
 {
     /// <summary>
     /// Media container extensions the SRS layer supports (mirrors the library's

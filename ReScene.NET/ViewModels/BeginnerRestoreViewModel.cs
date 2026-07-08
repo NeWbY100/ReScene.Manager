@@ -1,9 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using ReScene.NET.Helpers;
 using ReScene.App.Core.Models;
 using ReScene.NET.Services;
 
+using ReScene.App.Core.Helpers;
 namespace ReScene.NET.ViewModels;
 
 /// <summary>

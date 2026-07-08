@@ -1,7 +1,7 @@
 using System.Text;
 using ReScene.Hex;
 
-namespace ReScene.NET.Helpers;
+namespace ReScene.App.Core.Helpers;
 
 /// <summary>
 /// Decodes a region of an <see cref="IHexDataSource"/> as text. Pure and side-effect free so the

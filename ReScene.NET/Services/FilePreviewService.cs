@@ -4,6 +4,7 @@ using ReScene.NET.Helpers;
 using ReScene.NET.ViewModels;
 using ReScene.NET.Views;
 
+using ReScene.App.Core.Helpers;
 namespace ReScene.NET.Services;
 
 /// <summary>

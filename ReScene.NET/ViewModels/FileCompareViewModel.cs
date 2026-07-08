@@ -4,13 +4,13 @@ using CommunityToolkit.Mvvm.Input;
 using ReScene.App.Core.Services;
 using ReScene.Core.Comparison;
 using ReScene.Hex;
-using ReScene.NET.Helpers;
 using ReScene.NET.Services;
 using ReScene.NET.ViewModels.Comparison;
 using ReScene.RAR;
 using ReScene.SRR;
 using ReScene.SRS;
 
+using ReScene.App.Core.Helpers;
 namespace ReScene.NET.ViewModels;
 
 /// <summary>
