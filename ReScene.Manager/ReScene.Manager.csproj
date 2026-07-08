@@ -23,6 +23,11 @@
     <ProjectReference Include="..\ReScene.App.Core\ReScene.App.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Lets the headless render tests exercise HexViewControl's internal hit-test/geometry helpers. -->
+    <InternalsVisibleTo Include="ReScene.Manager.Tests" />
+  </ItemGroup>
+
   <!-- avalonia-agent-mcp bridge: local Debug only, and only if the external project exists.
        This keeps CI/Release and any machine without the bridge building cleanly. -->
   <PropertyGroup Condition="'$(Configuration)'=='Debug' AND Exists('E:\Projects\avalonia-agent-mcp\AvaDevBridge\AvaDevBridge.csproj')">
