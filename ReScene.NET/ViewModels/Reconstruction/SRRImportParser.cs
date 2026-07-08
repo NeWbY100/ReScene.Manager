@@ -1,4 +1,4 @@
-using ReScene.NET.Helpers;
+using ReScene.App.Core.Helpers;
 using ReScene.SRR;
 
 namespace ReScene.NET.ViewModels.Reconstruction;

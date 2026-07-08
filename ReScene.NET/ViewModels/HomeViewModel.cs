@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using ReScene.NET.Models;
+using ReScene.App.Core.Models;
 using ReScene.NET.Services;
 
 namespace ReScene.NET.ViewModels;

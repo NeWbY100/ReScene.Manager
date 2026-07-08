@@ -1,4 +1,4 @@
-namespace ReScene.NET.Models;
+namespace ReScene.App.Core.Models;
 
 /// <summary>
 /// Persisted window position, size, and UI state.

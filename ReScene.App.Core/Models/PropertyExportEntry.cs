@@ -1,4 +1,4 @@
-namespace ReScene.NET.Models;
+namespace ReScene.App.Core.Models;
 
 /// <summary>
 /// One name/value pair exported from the Inspector property grid.

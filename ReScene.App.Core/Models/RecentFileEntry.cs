@@ -1,4 +1,4 @@
-namespace ReScene.NET.Models;
+namespace ReScene.App.Core.Models;
 
 /// <summary>
 /// Represents a recently opened file displayed on the Home tab.

@@ -1,4 +1,4 @@
-namespace ReScene.NET.Models;
+namespace ReScene.App.Core.Models;
 
 /// <summary>
 /// UI complexity mode. Beginner shows a guided task hub; Advanced shows the full tabbed layout.

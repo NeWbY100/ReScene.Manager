@@ -1,6 +1,6 @@
 using ReScene.SRS;
 
-namespace ReScene.NET.Models;
+namespace ReScene.App.Core.Models;
 
 /// <summary>
 /// Holds a parsed SRS file for the Inspector tab.

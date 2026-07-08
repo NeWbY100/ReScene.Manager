@@ -1,4 +1,4 @@
-namespace ReScene.NET.Models;
+namespace ReScene.App.Core.Models;
 
 /// <summary>
 /// Represents a byte range within a file, used to highlight hex selections in the inspector.

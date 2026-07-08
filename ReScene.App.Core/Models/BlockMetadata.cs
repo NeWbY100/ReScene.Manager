@@ -3,7 +3,7 @@ using ReScene.RAR;
 using ReScene.SRR;
 using ReScene.SRS;
 
-namespace ReScene.NET.Models;
+namespace ReScene.App.Core.Models;
 
 /// <summary>
 /// Single source of truth for mapping an Inspector tree node's <c>Tag</c> object to its

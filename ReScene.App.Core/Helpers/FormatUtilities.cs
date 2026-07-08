@@ -1,11 +1,11 @@
 using System.Reflection;
 
-namespace ReScene.NET.Helpers;
+namespace ReScene.App.Core.Helpers;
 
 /// <summary>
 /// Shared formatting utilities used across ViewModels.
 /// </summary>
-internal static class FormatUtilities
+public static class FormatUtilities
 {
     private static readonly string[] _sizeSuffixes = ["B", "KB", "MB", "GB", "TB"];
 

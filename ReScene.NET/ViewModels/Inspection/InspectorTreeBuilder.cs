@@ -1,5 +1,6 @@
+using ReScene.App.Core.Helpers;
 using ReScene.NET.Helpers;
-using ReScene.NET.Models;
+using ReScene.App.Core.Models;
 using ReScene.RAR;
 using ReScene.SRR;
 using ReScene.SRS;

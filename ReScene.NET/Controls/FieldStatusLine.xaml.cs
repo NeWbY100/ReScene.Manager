@@ -1,6 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
-using ReScene.NET.Models;
+using ReScene.App.Core.Models;
 
 namespace ReScene.NET.Controls;
 

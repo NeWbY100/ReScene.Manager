@@ -1,6 +1,6 @@
 using System.Diagnostics;
-using ReScene.NET.Helpers;
-using ReScene.NET.Models;
+using ReScene.App.Core.Helpers;
+using ReScene.App.Core.Models;
 
 namespace ReScene.NET.Services;
 

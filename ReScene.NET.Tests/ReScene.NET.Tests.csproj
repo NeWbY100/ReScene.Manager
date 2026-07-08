@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ReScene.App.Core\ReScene.App.Core.csproj" />
     <ProjectReference Include="..\ReScene.NET\ReScene.NET.csproj" />
   </ItemGroup>
 

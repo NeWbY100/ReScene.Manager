@@ -8,7 +8,7 @@ using ReScene.Core;
 using ReScene.Core.Cryptography;
 using ReScene.Core.IO;
 using ReScene.NET.Helpers;
-using ReScene.NET.Models;
+using ReScene.App.Core.Models;
 using ReScene.NET.Services;
 using ReScene.NET.ViewModels.Reconstruction;
 using ReScene.RAR;

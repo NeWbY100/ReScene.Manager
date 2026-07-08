@@ -1,4 +1,5 @@
-using ReScene.NET.Models;
+using ReScene.App.Core.Helpers;
+using ReScene.App.Core.Models;
 
 namespace ReScene.NET.Helpers;
 

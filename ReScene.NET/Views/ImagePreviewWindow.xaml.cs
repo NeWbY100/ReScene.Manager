@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Media.Imaging;
+using ReScene.App.Core.Helpers;
 using ReScene.NET.Helpers;
 
 namespace ReScene.NET.Views;

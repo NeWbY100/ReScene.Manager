@@ -1,6 +1,6 @@
-using ReScene.NET.Helpers;
+using ReScene.App.Core.Helpers;
 
-namespace ReScene.NET.Models;
+namespace ReScene.App.Core.Models;
 
 /// <summary>
 /// User-editable app defaults persisted to settings.json.

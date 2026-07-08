@@ -1,4 +1,4 @@
-using ReScene.NET.Models;
+using ReScene.App.Core.Models;
 
 namespace ReScene.NET.ViewModels;
 

@@ -1,6 +1,6 @@
 using System.Text;
 using ReScene.Hex;
-using ReScene.NET.Models;
+using ReScene.App.Core.Models;
 using ReScene.NET.Services;
 using ReScene.NET.ViewModels;
 using ReScene.SRR;

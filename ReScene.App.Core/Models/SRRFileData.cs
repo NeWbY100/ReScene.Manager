@@ -1,7 +1,7 @@
 using ReScene.RAR;
 using ReScene.SRR;
 
-namespace ReScene.NET.Models;
+namespace ReScene.App.Core.Models;
 
 /// <summary>
 /// Holds a parsed SRR file along with detailed RAR block data for each embedded volume.

@@ -1,4 +1,4 @@
-namespace ReScene.NET.Models;
+namespace ReScene.App.Core.Models;
 
 /// <summary>
 /// Serializable snapshot of all user-editable fields and options on the RAR Reconstructor tab.

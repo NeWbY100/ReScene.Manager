@@ -6,7 +6,7 @@ using EBMLElement = ReScene.Core.Comparison.EBMLElement;
 using MKVFileData = ReScene.Core.Comparison.MKVFileData;
 using ReScene.Hex;
 using ReScene.NET.Helpers;
-using ReScene.NET.Models;
+using ReScene.App.Core.Models;
 using ReScene.NET.Services;
 using ReScene.NET.ViewModels.Inspection;
 using ReScene.RAR;

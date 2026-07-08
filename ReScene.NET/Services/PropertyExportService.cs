@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using ReScene.NET.Models;
+using ReScene.App.Core.Models;
 using ReScene.NET.ViewModels;
 
 namespace ReScene.NET.Services;
