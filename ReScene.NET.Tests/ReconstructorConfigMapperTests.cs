@@ -45,7 +45,7 @@ public sealed class ReconstructorConfigMapperTests
 
     private static ReconstructorViewModel CreateVm()
         => new(new InertBruteForceService(), new NoOpFileDialogService(),
-               settingsService: null, uiDispatcher: new InlineUiDispatcher());
+               new InlineUiDispatcher(), new TestUiTimerFactory(), settingsService: null);
 
     /// <summary>
     /// Sets a distinctive value on every option field Capture reads. Strings get unique markers,

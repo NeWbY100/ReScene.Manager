@@ -79,7 +79,7 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
     {
         dialog = new RecordingFileDialogService();
         brute = new FakeBruteForceService();
-        return new ReconstructorViewModel(brute, dialog, settingsService: null, uiDispatcher: new SynchronousUiDispatcher());
+        return new ReconstructorViewModel(brute, dialog, new SynchronousUiDispatcher(), new TestUiTimerFactory(), settingsService: null);
     }
 
     private string NewTempDir()
@@ -188,7 +188,7 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
         var settings = new FakeAppSettingsService(); // default settings: empty paths
         var brute = new FakeBruteForceService();
         var dialog = new RecordingFileDialogService();
-        var vm = new ReconstructorViewModel(brute, dialog, settings, new SynchronousUiDispatcher());
+        var vm = new ReconstructorViewModel(brute, dialog, new SynchronousUiDispatcher(), new TestUiTimerFactory(), settings);
 
         Assert.Equal(string.Empty, vm.WinRARPath); // nothing to fill at construction
 

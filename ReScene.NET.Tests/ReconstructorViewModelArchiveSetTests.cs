@@ -92,8 +92,9 @@ public class ReconstructorViewModelArchiveSetTests
         return new ReconstructorViewModel(
             new InertBruteForceService(),
             new FixtureDialogService(srrPath),
-            settingsService: null,
             uiDispatcher: new InlineUiDispatcher(),
+            timerFactory: new TestUiTimerFactory(),
+            settingsService: null,
             tempDir: tempDir);
     }
 

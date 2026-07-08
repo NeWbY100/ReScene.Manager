@@ -84,7 +84,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
 
     private static ReconstructorViewModel CreateVm()
         => new(new InertBruteForceService(), new NoOpFileDialogService(),
-               settingsService: null, uiDispatcher: new InlineUiDispatcher());
+               new InlineUiDispatcher(), new TestUiTimerFactory(), settingsService: null);
 
     private static readonly IReadOnlyList<InstalledRARVersion> Installed =
     [
@@ -180,7 +180,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
 
         var dispatcher = new QueueingUiDispatcher();
         ReconstructorViewModel vm = new(new InertBruteForceService(), new NoOpFileDialogService(),
-            settingsService: null, uiDispatcher: dispatcher);
+            dispatcher, new TestUiTimerFactory(), settingsService: null);
 
         // Folder A scanned: run the scan Task, then pump its queued ApplyScanResult onto this thread.
         vm.WinRARPath = folderA;

@@ -32,7 +32,7 @@ public class ReconstructorViewModelSolidTests
     }
 
     private static ReconstructorViewModel CreateVm() =>
-        new(new InertBruteForceService(), new NoOpFileDialogService(), settingsService: null, uiDispatcher: new InlineUiDispatcher());
+        new(new InertBruteForceService(), new NoOpFileDialogService(), new InlineUiDispatcher(), new TestUiTimerFactory(), settingsService: null);
 
     [Fact]
     public void SwitchS_True_ClearsSwitchSDash()

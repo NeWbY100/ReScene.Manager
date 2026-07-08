@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ReScene.App.Core.Services;
@@ -8,7 +7,6 @@ using ReScene.Core;
 using ReScene.Core.Cryptography;
 using ReScene.Core.IO;
 using ReScene.App.Core.Models;
-using ReScene.NET.Services;
 using ReScene.App.Core.ViewModels.Reconstruction;
 using ReScene.NET.ViewModels.Reconstruction;
 using ReScene.RAR;
@@ -34,7 +32,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     private string? _sfvTempDir;
 
     // Elapsed timer — ticks every second so the clock doesn't freeze between progress events
-    private readonly DispatcherTimer _elapsedTimer;
+    private readonly IUiTimer _elapsedTimer;
 
     // Per-run progress bookkeeping (timing + version table + copy/verify timing).
     private readonly ReconstructionProgressTracker<VersionEntry> _progress;
@@ -50,12 +48,14 @@ public partial class ReconstructorViewModel : ViewModelBase
     // the original for those files.
     private readonly List<TimestampPreservationFailedEventArgs> _timestampFailures = [];
 
-    public ReconstructorViewModel(IBruteForceService bruteForceService, IFileDialogService fileDialog, IAppSettingsService? settingsService = null, IUiDispatcher? uiDispatcher = null, ITempDirectoryService? tempDir = null)
+    public ReconstructorViewModel(IBruteForceService bruteForceService, IFileDialogService fileDialog, IUiDispatcher uiDispatcher, IUiTimerFactory timerFactory, IAppSettingsService? settingsService = null, ITempDirectoryService? tempDir = null)
     {
+        ArgumentNullException.ThrowIfNull(timerFactory);
+
         _bruteForceService = bruteForceService;
         _fileDialog = fileDialog;
         _settingsService = settingsService;
-        _uiDispatcher = uiDispatcher ?? new WpfDispatcher();
+        _uiDispatcher = uiDispatcher;
         _tempDir = tempDir ?? new TempDirectoryService();
 
         _bruteForceService.Progress += OnProgress;
@@ -74,8 +74,7 @@ public partial class ReconstructorViewModel : ViewModelBase
             getFullCommandLine: row => row.FullCommandLine,
             appendLog: AppendLog);
 
-        _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _elapsedTimer.Tick += (_, _) => OnElapsedTimerTick();
+        _elapsedTimer = timerFactory.Create(TimeSpan.FromSeconds(1), OnElapsedTimerTick);
 
         ApplyPathDefaultsFromSettings();
         RefreshPathStatuses();
