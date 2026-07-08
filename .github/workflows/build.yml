@@ -1,0 +1,45 @@
+name: Build
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      # Avalonia headless tests use the Skia backend, which needs fontconfig on Linux.
+      - name: Install Linux native deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1
+
+      # Windows: build + test the FULL solution (includes the WPF app).
+      - name: Build + test (Windows — full solution)
+        if: runner.os == 'Windows'
+        run: dotnet test ReScene.NET.slnx -c Release
+
+      # Linux/macOS: the WPF app (net10.0-windows) can't build here, so build/test
+      # only the cross-platform projects. ReScene.Manager pulls in App.Core; the two
+      # test projects cover App.Core + the library.
+      - name: Build + test (non-Windows — cross-platform subset)
+        if: runner.os != 'Windows'
+        run: |
+          dotnet build ReScene.Cli/ReScene.Cli.csproj -c Release
+          dotnet build ReScene.Manager/ReScene.Manager.csproj -c Release
+          dotnet test ReScene.Lib/ReScene.Tests/ReScene.Tests.csproj -c Release
+          dotnet test ReScene.NET.Tests/ReScene.NET.Tests.csproj -c Release
