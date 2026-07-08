@@ -4,6 +4,7 @@ using ReScene.Hex;
 using ReScene.App.Core.Helpers;
 
 using ReScene.App.Core.Services;
+using ReScene.App.Core.ViewModels;
 namespace ReScene.NET.ViewModels;
 
 /// <summary>

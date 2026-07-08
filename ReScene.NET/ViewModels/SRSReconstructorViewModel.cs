@@ -7,6 +7,7 @@ using ReScene.App.Core.Models;
 using ReScene.NET.Services;
 using ReScene.SRS;
 
+using ReScene.App.Core.ViewModels;
 namespace ReScene.NET.ViewModels;
 
 public partial class SRSReconstructorViewModel : OperationViewModelBase

@@ -1,7 +1,8 @@
 using System.Windows;
 using ReScene.App.Core.Models;
+using ReScene.App.Core.ViewModels;
 using ReScene.NET.ViewModels;
-using ReScene.NET.ViewModels.Wizards;
+using ReScene.App.Core.ViewModels.Wizards;
 
 using ReScene.App.Core.Helpers;
 namespace ReScene.NET.Views.Wizards;

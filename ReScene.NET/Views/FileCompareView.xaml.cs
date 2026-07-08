@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using ReScene.App.Core.ViewModels;
 using ReScene.NET.ViewModels;
 
 namespace ReScene.NET.Views;

@@ -1,3 +1,4 @@
+using ReScene.App.Core.ViewModels;
 using ReScene.NET.ViewModels;
 
 namespace ReScene.NET.Tests;

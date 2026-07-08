@@ -1,6 +1,7 @@
 using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using ReScene.App.Core.ViewModels;
 using ReScene.NET.ViewModels;
 
 namespace ReScene.NET.Tests;

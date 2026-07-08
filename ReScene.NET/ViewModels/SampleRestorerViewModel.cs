@@ -9,6 +9,7 @@ using ReScene.NET.Services;
 using ReScene.SRS;
 
 using ReScene.App.Core.Helpers;
+using ReScene.App.Core.ViewModels;
 namespace ReScene.NET.ViewModels;
 
 public partial class SampleRestorerViewModel : OperationViewModelBase

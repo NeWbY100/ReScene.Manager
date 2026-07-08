@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Navigation;
 using ReScene.NET.Helpers;
 using ReScene.App.Core.Models;
+using ReScene.App.Core.ViewModels;
 using ReScene.NET.ViewModels;
 
 using ReScene.App.Core.Services;
@@ -205,7 +206,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var settingsVm = new ViewModels.SettingsViewModel(vm.AppSettingsService, vm.FileDialog);
+        var settingsVm = new SettingsViewModel(vm.AppSettingsService, vm.FileDialog);
         var window = new Views.SettingsWindow
         {
             Owner = this,

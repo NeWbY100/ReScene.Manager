@@ -9,6 +9,7 @@ using ReScene.App.Core.Models;
 using ReScene.NET.Services;
 
 using ReScene.App.Core.Helpers;
+using ReScene.App.Core.ViewModels;
 namespace ReScene.NET.ViewModels;
 
 /// <summary>

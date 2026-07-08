@@ -1,4 +1,4 @@
-using ReScene.NET.ViewModels.Wizards;
+using ReScene.App.Core.ViewModels.Wizards;
 
 namespace ReScene.NET.Tests;
 

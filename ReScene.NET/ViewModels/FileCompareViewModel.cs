@@ -5,12 +5,13 @@ using ReScene.App.Core.Services;
 using ReScene.Core.Comparison;
 using ReScene.Hex;
 using ReScene.NET.Services;
-using ReScene.NET.ViewModels.Comparison;
+using ReScene.App.Core.ViewModels.Comparison;
 using ReScene.RAR;
 using ReScene.SRR;
 using ReScene.SRS;
 
 using ReScene.App.Core.Helpers;
+using ReScene.App.Core.ViewModels;
 namespace ReScene.NET.ViewModels;
 
 /// <summary>

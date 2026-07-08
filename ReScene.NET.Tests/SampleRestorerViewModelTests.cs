@@ -1,4 +1,5 @@
 using ReScene.NET.Services;
+using ReScene.App.Core.ViewModels;
 using ReScene.NET.ViewModels;
 using ReScene.SRS;
 

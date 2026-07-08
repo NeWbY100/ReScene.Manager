@@ -2,6 +2,7 @@ using ReScene.Core;
 using ReScene.Core.Cryptography;
 using ReScene.Core.Diagnostics;
 using ReScene.Core.IO;
+using ReScene.App.Core.ViewModels.Reconstruction;
 using ReScene.NET.ViewModels.Reconstruction;
 using ReScene.SRR;
 

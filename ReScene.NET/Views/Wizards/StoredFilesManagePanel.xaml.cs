@@ -4,7 +4,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using ReScene.App.Core.Models;
-using ReScene.NET.ViewModels;
+using ReScene.App.Core.ViewModels;
 
 namespace ReScene.NET.Views.Wizards;
 

@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using ReScene.NET.ViewModels;
+using ReScene.App.Core.ViewModels;
 
 namespace ReScene.NET.Views;
 
