@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <RootNamespace>ReScene.Manager</RootNamespace>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.18" Condition="'$(Configuration)'=='Debug'" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ReScene.App.Core\ReScene.App.Core.csproj" />
+  </ItemGroup>
+
+  <!-- avalonia-agent-mcp bridge: local Debug only, and only if the external project exists.
+       This keeps CI/Release and any machine without the bridge building cleanly. -->
+  <PropertyGroup Condition="'$(Configuration)'=='Debug' AND Exists('E:\Projects\avalonia-agent-mcp\AvaDevBridge\AvaDevBridge.csproj')">
+    <DefineConstants>$(DefineConstants);AGENT_BRIDGE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(Configuration)'=='Debug' AND Exists('E:\Projects\avalonia-agent-mcp\AvaDevBridge\AvaDevBridge.csproj')">
+    <ProjectReference Include="E:\Projects\avalonia-agent-mcp\AvaDevBridge\AvaDevBridge.csproj" />
+  </ItemGroup>
+</Project>
