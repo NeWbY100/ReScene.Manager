@@ -1,4 +1,3 @@
-using ReScene.NET.Helpers;
 
 using ReScene.App.Core.Helpers;
 namespace ReScene.NET.Tests;

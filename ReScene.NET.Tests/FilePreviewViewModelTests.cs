@@ -1,15 +1,16 @@
 using System.Text;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
+using Avalonia;
+using Avalonia.Headless.XUnit;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using ReScene.App.Core.ViewModels;
-using ReScene.NET.ViewModels;
 
 namespace ReScene.NET.Tests;
 
 public class FilePreviewViewModelTests
 {
-    private static BitmapSource DummyImage()
-        => BitmapSource.Create(2, 3, 96, 96, PixelFormats.Bgr24, null, new byte[2 * 3 * 3], 2 * 3);
+    private static WriteableBitmap DummyImage()
+        => new(new PixelSize(2, 3), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
 
     [Fact]
     public void NonImage_HasNoImageTab_AndDecodesText()
@@ -25,7 +26,7 @@ public class FilePreviewViewModelTests
         Assert.False(vm.TextViewTruncated);
     }
 
-    [Fact]
+    [AvaloniaFact]
     public void Image_HasImageTab()
     {
         var vm = new FilePreviewViewModel([0x01, 0x02], "proof.jpg", image: DummyImage());

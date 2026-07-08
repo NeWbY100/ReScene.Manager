@@ -1,6 +1,5 @@
 using System.Text;
 using ReScene.Hex;
-using ReScene.NET.Helpers;
 
 using ReScene.App.Core.Helpers;
 using ReScene.App.Core.Services;

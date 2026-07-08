@@ -1,8 +1,6 @@
 using ReScene.App.Core.Services;
 using ReScene.Core;
-using ReScene.NET.Services;
 using ReScene.App.Core.ViewModels;
-using ReScene.NET.ViewModels;
 using ReScene.App.Core.ViewModels.Reconstruction;
 using ReScene.SRR;
 

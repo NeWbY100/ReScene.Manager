@@ -1,9 +1,7 @@
 using System.Collections.ObjectModel;
 using ReScene.Core.Comparison;
 using ReScene.Hex;
-using ReScene.NET.Services;
 using ReScene.App.Core.ViewModels;
-using ReScene.NET.ViewModels;
 using ReScene.RAR;
 
 using ReScene.App.Core.Services;

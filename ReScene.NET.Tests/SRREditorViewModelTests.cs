@@ -1,7 +1,5 @@
 using ReScene.App.Core.Models;
-using ReScene.NET.Services;
 using ReScene.App.Core.ViewModels;
-using ReScene.NET.ViewModels;
 
 using ReScene.App.Core.Services;
 namespace ReScene.NET.Tests;
