@@ -349,16 +349,18 @@ public partial class ReconstructorViewModel : ViewModelBase
         public string SetText { get; set; } = "";
 
         /// <summary>
-        /// Directory of the WinRAR version this entry tested; the run executes rar.exe inside it.
+        /// Directory of the WinRAR version this entry tested; the run executes the RAR console
+        /// binary (see <see cref="RarExecutable"/>) inside it.
         /// </summary>
         public string VersionDirectory { get; set; } = "";
 
         /// <summary>
-        /// The complete command line as executed: the quoted rar.exe path followed by the arguments.
+        /// The complete command line as executed: the quoted RAR console binary path followed by
+        /// the arguments.
         /// </summary>
         public string FullCommandLine => string.IsNullOrEmpty(VersionDirectory)
             ? Arguments
-            : $"\"{Path.Combine(VersionDirectory, "rar.exe")}\" {Arguments}";
+            : $"\"{RarExecutable.ResolveIn(VersionDirectory)}\" {Arguments}";
 
         // ── Timing ──
         // StartedAt is stamped when the row is created (the tracker constructs a row exactly when
