@@ -1,10 +1,8 @@
-using System.Windows.Threading;
-
-namespace ReScene.NET.Services;
+namespace ReScene.App.Core.Services;
 
 /// <summary>
-/// Abstraction over the WPF UI dispatcher so ViewModels can marshal work to the UI thread
-/// without a hard dependency on <see cref="System.Windows.Application.Current"/>, making them testable.
+/// Abstraction over the platform UI dispatcher so ViewModels can marshal work to the UI thread
+/// without a hard dependency on a specific UI framework, making them testable.
 /// </summary>
 public interface IUiDispatcher
 {
@@ -15,7 +13,7 @@ public interface IUiDispatcher
     public void Post(Action action);
 
     /// <summary>Asynchronously queues <paramref name="action"/> on the UI thread at the given priority.</summary>
-    public void Post(Action action, DispatcherPriority priority);
+    public void Post(Action action, UiDispatcherPriority priority);
 
     /// <summary>Returns true when the caller is already on the UI thread.</summary>
     public bool CheckAccess();

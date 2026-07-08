@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Windows.Shell;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ReScene.App.Core.Services;
 using ReScene.NET.Helpers;
 using ReScene.NET.Models;
 using ReScene.NET.Services;

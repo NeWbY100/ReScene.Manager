@@ -1,3 +1,4 @@
+using ReScene.App.Core.Services;
 using ReScene.Core;
 using ReScene.NET.Models;
 using ReScene.NET.Services;
@@ -22,7 +23,7 @@ public sealed class ReconstructorConfigMapperTests
     {
         public void Invoke(Action action) => action();
         public void Post(Action action) => action();
-        public void Post(Action action, System.Windows.Threading.DispatcherPriority priority) => action();
+        public void Post(Action action, UiDispatcherPriority priority) => action();
         public bool CheckAccess() => true;
     }
 

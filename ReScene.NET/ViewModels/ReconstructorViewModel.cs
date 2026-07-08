@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ReScene.App.Core.Services;
 using ReScene.Core;
 using ReScene.Core.Cryptography;
 using ReScene.Core.IO;

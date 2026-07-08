@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Threading;
+using ReScene.App.Core.Services;
 
 namespace ReScene.NET.Services;
 
@@ -34,7 +35,7 @@ public sealed class WpfDispatcher : IUiDispatcher
         dispatcher.BeginInvoke(action);
     }
 
-    public void Post(Action action, DispatcherPriority priority)
+    public void Post(Action action, UiDispatcherPriority priority)
     {
         Dispatcher? dispatcher = Application.Current?.Dispatcher;
         if (dispatcher is null)
@@ -43,8 +44,15 @@ public sealed class WpfDispatcher : IUiDispatcher
             return;
         }
 
-        dispatcher.BeginInvoke(priority, action);
+        dispatcher.BeginInvoke(ToDispatcherPriority(priority), action);
     }
+
+    private static DispatcherPriority ToDispatcherPriority(UiDispatcherPriority priority) => priority switch
+    {
+        UiDispatcherPriority.Normal => DispatcherPriority.Normal,
+        UiDispatcherPriority.Background => DispatcherPriority.Background,
+        _ => throw new ArgumentOutOfRangeException(nameof(priority), priority, message: null),
+    };
 
     public bool CheckAccess()
     {

@@ -1,3 +1,4 @@
+using ReScene.App.Core.Services;
 using ReScene.Core;
 using ReScene.NET.Services;
 using ReScene.NET.ViewModels;
@@ -11,7 +12,7 @@ public class ReconstructorViewModelSolidTests
     {
         public void Invoke(Action action) => action();
         public void Post(Action action) => action();
-        public void Post(Action action, System.Windows.Threading.DispatcherPriority priority) => action();
+        public void Post(Action action, UiDispatcherPriority priority) => action();
         public bool CheckAccess() => true;
     }
 

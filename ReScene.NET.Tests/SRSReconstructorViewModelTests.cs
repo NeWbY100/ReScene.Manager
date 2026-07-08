@@ -1,4 +1,4 @@
-using System.Windows.Threading;
+using ReScene.App.Core.Services;
 using ReScene.NET.Services;
 using ReScene.NET.ViewModels;
 using ReScene.SRS;
@@ -67,7 +67,7 @@ public sealed class SRSReconstructorViewModelTests : TempDirTestBase
     {
         public void Invoke(Action action) => action();
         public void Post(Action action) => action();
-        public void Post(Action action, DispatcherPriority priority) => action();
+        public void Post(Action action, UiDispatcherPriority priority) => action();
         public bool CheckAccess() => true;
     }
 

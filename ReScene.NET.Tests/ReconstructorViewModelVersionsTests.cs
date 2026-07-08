@@ -1,3 +1,4 @@
+using ReScene.App.Core.Services;
 using ReScene.Core;
 using ReScene.NET.Services;
 using ReScene.NET.ViewModels;
@@ -39,7 +40,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
     {
         public void Invoke(Action action) => action();
         public void Post(Action action) => action();
-        public void Post(Action action, System.Windows.Threading.DispatcherPriority priority) => action();
+        public void Post(Action action, UiDispatcherPriority priority) => action();
         public bool CheckAccess() => true;
     }
 
@@ -54,7 +55,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
         private readonly Queue<Action> _queue = new();
         public void Invoke(Action action) => _queue.Enqueue(action);
         public void Post(Action action) => _queue.Enqueue(action);
-        public void Post(Action action, System.Windows.Threading.DispatcherPriority priority) => _queue.Enqueue(action);
+        public void Post(Action action, UiDispatcherPriority priority) => _queue.Enqueue(action);
         public bool CheckAccess() => true;
 
         /// <summary>Runs every queued action on the calling thread, in order.</summary>

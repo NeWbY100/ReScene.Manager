@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
-using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ReScene.App.Core.Services;
 using ReScene.Core.Comparison;
 using ReScene.Hex;
 using ReScene.NET.Helpers;
@@ -530,7 +530,7 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
         {
             _diffScheduled = false;
             StartDiffNow();
-        }, DispatcherPriority.Background);
+        }, UiDispatcherPriority.Background);
     }
 
     private void StartDiffNow()
