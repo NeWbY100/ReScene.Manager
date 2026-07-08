@@ -8,7 +8,7 @@ using ReScene.App.Core.Models;
 using ReScene.SRS;
 
 using ReScene.App.Core.ViewModels;
-namespace ReScene.NET.ViewModels;
+namespace ReScene.App.Core.ViewModels;
 
 public partial class SRSCreatorViewModel : OperationViewModelBase
 {

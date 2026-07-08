@@ -1,9 +1,9 @@
 namespace ReScene.App.Core.Services;
 
 /// <summary>
-/// Framework-neutral taskbar progress state. The WPF head maps this onto
-/// <c>System.Windows.Shell.TaskbarItemProgressState</c> (a later Avalonia head maps it likewise),
-/// so view-models can drive taskbar progress without referencing a UI framework.
+/// Framework-neutral taskbar progress state. The WPF head maps this onto its native taskbar
+/// progress-state enum (a later Avalonia head maps it likewise), so view-models can drive taskbar
+/// progress without referencing a UI framework.
 /// </summary>
 public enum TaskbarProgressState
 {

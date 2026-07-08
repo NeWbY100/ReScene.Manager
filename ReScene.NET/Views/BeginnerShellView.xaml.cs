@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
 using ReScene.App.Core.ViewModels;
-using ReScene.NET.ViewModels;
 using ReScene.NET.Views.Wizards;
 
 namespace ReScene.NET.Views;

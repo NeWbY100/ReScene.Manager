@@ -4,7 +4,7 @@ using ReScene.App.Core.Helpers;
 using ReScene.App.Core.Services;
 
 using ReScene.App.Core.ViewModels;
-namespace ReScene.NET.ViewModels;
+namespace ReScene.App.Core.ViewModels;
 
 /// <summary>
 /// Drives the tabbed file-preview window: a Hex view over the file's bytes, a Text view with a

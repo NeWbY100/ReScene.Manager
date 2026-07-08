@@ -11,7 +11,7 @@ using ReScene.SRS;
 
 using ReScene.App.Core.Helpers;
 using ReScene.App.Core.ViewModels;
-namespace ReScene.NET.ViewModels;
+namespace ReScene.App.Core.ViewModels;
 
 /// <summary>
 /// ViewModel for the file comparison tab, supporting side-by-side diff of SRR, SRS, and RAR files.

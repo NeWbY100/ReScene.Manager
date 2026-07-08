@@ -8,7 +8,7 @@ using ReScene.SRS;
 
 using ReScene.App.Core.Helpers;
 using ReScene.App.Core.ViewModels;
-namespace ReScene.NET.ViewModels;
+namespace ReScene.App.Core.ViewModels;
 
 /// <summary>
 /// ViewModel for the SRR Creator tab, handling SRR file creation from SFV or RAR inputs.

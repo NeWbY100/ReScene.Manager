@@ -1,7 +1,6 @@
 using ReScene.Core;
 using ReScene.Core.Diagnostics;
 using ReScene.App.Core.ViewModels.Reconstruction;
-using ReScene.NET.ViewModels.Reconstruction;
 
 namespace ReScene.NET.Tests;
 

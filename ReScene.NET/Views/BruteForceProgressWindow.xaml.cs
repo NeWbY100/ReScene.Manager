@@ -4,7 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using ReScene.NET.Helpers;
-using ReScene.NET.ViewModels;
+using ReScene.App.Core.ViewModels;
 
 namespace ReScene.NET.Views;
 

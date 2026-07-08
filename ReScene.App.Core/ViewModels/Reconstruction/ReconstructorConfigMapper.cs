@@ -1,6 +1,6 @@
 using ReScene.App.Core.Models;
 
-namespace ReScene.NET.ViewModels.Reconstruction;
+namespace ReScene.App.Core.ViewModels.Reconstruction;
 
 /// <summary>
 /// Copies the Reconstructor view-model's scalar bound fields (paths and every RAR option toggle)

@@ -1,5 +1,5 @@
 using ReScene.App.Core.ViewModels;
-namespace ReScene.NET.ViewModels;
+namespace ReScene.App.Core.ViewModels;
 
 /// <summary>
 /// Holds references to the shared task ViewModels used by the Beginner hub. The hub opens a

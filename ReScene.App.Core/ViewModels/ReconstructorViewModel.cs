@@ -8,13 +8,12 @@ using ReScene.Core.Cryptography;
 using ReScene.Core.IO;
 using ReScene.App.Core.Models;
 using ReScene.App.Core.ViewModels.Reconstruction;
-using ReScene.NET.ViewModels.Reconstruction;
 using ReScene.RAR;
 using ReScene.SRR;
 
 using ReScene.App.Core.Helpers;
 using ReScene.App.Core.ViewModels;
-namespace ReScene.NET.ViewModels;
+namespace ReScene.App.Core.ViewModels;
 
 public partial class ReconstructorViewModel : ViewModelBase
 {

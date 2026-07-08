@@ -1,6 +1,6 @@
 using System.Windows;
 using System.Windows.Media.Imaging;
-using ReScene.NET.ViewModels;
+using ReScene.App.Core.ViewModels;
 using ReScene.NET.Views;
 
 using ReScene.App.Core.Helpers;
