@@ -5,7 +5,6 @@ using CommunityToolkit.Mvvm.Input;
 using ReScene.App.Core.Services;
 using ReScene.App.Core.Helpers;
 using ReScene.App.Core.Models;
-using ReScene.NET.Services;
 using ReScene.SRS;
 
 using ReScene.App.Core.ViewModels;
@@ -20,13 +19,13 @@ public partial class SRSCreatorViewModel : OperationViewModelBase
     private readonly IUiDispatcher _uiDispatcher;
     private string? _extractedTempFile;
 
-    public SRSCreatorViewModel(ISRSCreationService srsService, IFileDialogService fileDialog, ITempDirectoryService tempDir, IAppSettingsService settingsService, IUiDispatcher? uiDispatcher = null)
+    public SRSCreatorViewModel(ISRSCreationService srsService, IFileDialogService fileDialog, ITempDirectoryService tempDir, IAppSettingsService settingsService, IUiDispatcher uiDispatcher)
     {
         _sRSService = srsService;
         _fileDialog = fileDialog;
         _tempDir = tempDir;
         _settingsService = settingsService;
-        _uiDispatcher = uiDispatcher ?? new WpfDispatcher();
+        _uiDispatcher = uiDispatcher;
 
         _sRSService.Progress += OnProgress;
         _sRSService.ScanProgress += OnScanProgress;

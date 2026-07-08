@@ -4,7 +4,6 @@ using CommunityToolkit.Mvvm.Input;
 using ReScene.App.Core.Services;
 using ReScene.Core.Comparison;
 using ReScene.Hex;
-using ReScene.NET.Services;
 using ReScene.App.Core.ViewModels.Comparison;
 using ReScene.RAR;
 using ReScene.SRR;
@@ -17,12 +16,12 @@ namespace ReScene.NET.ViewModels;
 /// <summary>
 /// ViewModel for the file comparison tab, supporting side-by-side diff of SRR, SRS, and RAR files.
 /// </summary>
-public partial class FileCompareViewModel(IFileCompareService compareService, IFileDialogService fileDialog, IHexDiffComputer diffComputer, IUiDispatcher? uiDispatcher = null) : ViewModelBase, IDisposable
+public partial class FileCompareViewModel(IFileCompareService compareService, IFileDialogService fileDialog, IHexDiffComputer diffComputer, IUiDispatcher uiDispatcher) : ViewModelBase, IDisposable
 {
     private readonly IFileCompareService _compareService = compareService;
     private readonly IFileDialogService _fileDialog = fileDialog;
     private readonly IHexDiffComputer _diffComputer = diffComputer;
-    private readonly IUiDispatcher _uiDispatcher = uiDispatcher ?? new WpfDispatcher();
+    private readonly IUiDispatcher _uiDispatcher = uiDispatcher;
 
     // Internal per-side state. Reassigned by reference on Swap; reset on Close/reload.
     private ComparePane _left = new();

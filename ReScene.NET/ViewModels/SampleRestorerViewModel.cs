@@ -5,7 +5,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ReScene.App.Core.Services;
 using ReScene.App.Core.Models;
-using ReScene.NET.Services;
 using ReScene.SRS;
 
 using ReScene.App.Core.Helpers;
@@ -26,11 +25,11 @@ public partial class SampleRestorerViewModel : OperationViewModelBase
     // Same latest-wins guard for the media-directory scan (see _srsLoadGeneration).
     private int _matchGeneration;
 
-    public SampleRestorerViewModel(ISampleRestorerService service, IFileDialogService fileDialog, IUiDispatcher? uiDispatcher = null)
+    public SampleRestorerViewModel(ISampleRestorerService service, IFileDialogService fileDialog, IUiDispatcher uiDispatcher)
     {
         _service = service;
         _fileDialog = fileDialog;
-        _uiDispatcher = uiDispatcher ?? new WpfDispatcher();
+        _uiDispatcher = uiDispatcher;
 
         _service.Progress += OnProgress;
     }

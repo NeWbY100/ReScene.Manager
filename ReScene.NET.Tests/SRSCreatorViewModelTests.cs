@@ -51,7 +51,7 @@ public sealed class SRSCreatorViewModelTests : IDisposable
     {
         srs = new FakeSRSCreationService();
         dialog = new FakeFileDialogService();
-        return new SRSCreatorViewModel(srs, dialog, new NoOpTempDirectoryService(), new NoOpAppSettingsService());
+        return new SRSCreatorViewModel(srs, dialog, new NoOpTempDirectoryService(), new NoOpAppSettingsService(), new TestUiDispatcher());
     }
 
     private string CreateTempFile(string ext)

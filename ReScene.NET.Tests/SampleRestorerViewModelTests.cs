@@ -37,7 +37,7 @@ public class SampleRestorerViewModelTests
                 new SRSEntryInfo { SRSFileName = "b.srs", SampleFileName = "b.mkv" },
             ],
         };
-        var vm = new SampleRestorerViewModel(service, new NoOpFileDialogService());
+        var vm = new SampleRestorerViewModel(service, new NoOpFileDialogService(), new TestUiDispatcher());
 
         await vm.LoadSRSEntriesAsync();
 
@@ -53,7 +53,7 @@ public class SampleRestorerViewModelTests
         {
             Entries = [new SRSEntryInfo { SRSFileName = "a.srs", SampleFileName = "a.mkv" }],
         };
-        var vm = new SampleRestorerViewModel(service, new NoOpFileDialogService());
+        var vm = new SampleRestorerViewModel(service, new NoOpFileDialogService(), new TestUiDispatcher());
 
         await vm.LoadSRSEntriesAsync();
         await vm.LoadSRSEntriesAsync();
@@ -104,7 +104,7 @@ public class SampleRestorerViewModelTests
             First = [new SRSEntryInfo { SRSFileName = "old.srs", SampleFileName = "old.mkv" }],
             Second = [new SRSEntryInfo { SRSFileName = "new.srs", SampleFileName = "new.mkv" }],
         };
-        var vm = new SampleRestorerViewModel(service, new NoOpFileDialogService());
+        var vm = new SampleRestorerViewModel(service, new NoOpFileDialogService(), new TestUiDispatcher());
 
         // Load #1 starts and blocks inside GetSRSEntries (still "parsing" the first SRR).
         Task first = vm.LoadSRSEntriesAsync();

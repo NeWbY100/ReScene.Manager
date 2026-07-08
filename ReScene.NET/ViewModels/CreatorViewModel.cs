@@ -3,7 +3,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ReScene.App.Core.Services;
 using ReScene.App.Core.Models;
-using ReScene.NET.Services;
 using ReScene.SRR;
 using ReScene.SRS;
 
@@ -23,14 +22,14 @@ public partial class CreatorViewModel : OperationViewModelBase
     private readonly IAppSettingsService _settingsService;
     private readonly IUiDispatcher _uiDispatcher;
 
-    public CreatorViewModel(ISRRCreationService srrService, ISRSCreationService srsService, IFileDialogService fileDialog, ITempDirectoryService tempDir, IAppSettingsService settingsService, IUiDispatcher? uiDispatcher = null)
+    public CreatorViewModel(ISRRCreationService srrService, ISRSCreationService srsService, IFileDialogService fileDialog, ITempDirectoryService tempDir, IAppSettingsService settingsService, IUiDispatcher uiDispatcher)
     {
         _sRRService = srrService;
         _sRSService = srsService;
         _fileDialog = fileDialog;
         _tempDir = tempDir;
         _settingsService = settingsService;
-        _uiDispatcher = uiDispatcher ?? new WpfDispatcher();
+        _uiDispatcher = uiDispatcher;
 
         _sRRService.Progress += OnProgress;
 

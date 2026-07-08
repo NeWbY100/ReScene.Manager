@@ -105,7 +105,7 @@ public sealed class CreatorViewModelTests : IDisposable
         srr = new FakeSRRCreationService();
         _dialog = new FakeFileDialogService();
         var vm = new CreatorViewModel(srr, new FakeSRSCreationService(), _dialog,
-            new FakeTempDirectoryService(_tempPaths), new NoOpAppSettingsService())
+            new FakeTempDirectoryService(_tempPaths), new NoOpAppSettingsService(), new TestUiDispatcher())
         {
             // Keep the build trivial and deterministic: no sample/vobsub/fix phases.
             AutoCreateSRS = false,

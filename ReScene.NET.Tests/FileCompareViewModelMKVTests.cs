@@ -84,7 +84,7 @@ public class FileCompareViewModelMKVTests : TempDirTestBase
     }
 
     private static FileCompareViewModel CreateViewModel() =>
-        new(new FileCompareService(), new NoOpFileDialogService(), new StubHexDiffComputer());
+        new(new FileCompareService(), new NoOpFileDialogService(), new StubHexDiffComputer(), new TestUiDispatcher());
 
     [Fact]
     public async Task Compare_MetadataDiffers_MarksTreeNodesDifferent()
@@ -145,7 +145,7 @@ public class FileCompareViewModelMKVTests : TempDirTestBase
     {
         string path = WriteMKV("one.mkv", BuildMKV("libebml", 0xAA));
         var gated = new GatedCompareService();
-        using var vm = new FileCompareViewModel(gated, new NoOpFileDialogService(), new StubHexDiffComputer());
+        using var vm = new FileCompareViewModel(gated, new NoOpFileDialogService(), new StubHexDiffComputer(), new TestUiDispatcher());
 
         Task load = vm.LoadLeftFileAsync(path); // runs synchronously up to the Task.Run await
 
@@ -165,7 +165,7 @@ public class FileCompareViewModelMKVTests : TempDirTestBase
     {
         string path = WriteMKV("one.mkv", BuildMKV("libebml", 0xAA));
         var gated = new GatedCompareService();
-        using var vm = new FileCompareViewModel(gated, new NoOpFileDialogService(), new StubHexDiffComputer());
+        using var vm = new FileCompareViewModel(gated, new NoOpFileDialogService(), new StubHexDiffComputer(), new TestUiDispatcher());
 
         Task first = vm.LoadLeftFileAsync(path);
         Assert.True(gated.Entered.Wait(TimeSpan.FromSeconds(5)));
