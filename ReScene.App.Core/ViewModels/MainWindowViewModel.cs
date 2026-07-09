@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ReScene.App.Core;
 using ReScene.App.Core.Services;
 using ReScene.App.Core.Models;
 
@@ -116,7 +117,7 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [ObservableProperty]
-    public partial string WindowTitle { get; set; } = "ReScene.NET";
+    public partial string WindowTitle { get; set; } = AppInfo.DisplayName;
 
     [ObservableProperty]
     public partial string StatusMessage { get; set; } = "Ready";
@@ -276,7 +277,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         Mode = UserMode.Advanced;
         SelectedTabIndex = 1; // Switch to Inspector tab immediately so the load is visible
-        WindowTitle = $"ReScene.NET - {Path.GetFileName(filePath)}";
+        WindowTitle = $"{AppInfo.DisplayName} - {Path.GetFileName(filePath)}";
 
         await Inspector.LoadFileAsync(filePath);
         StatusMessage = Inspector.StatusMessage;

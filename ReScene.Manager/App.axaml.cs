@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using ReScene.App.Core;
 using ReScene.App.Core.Services;
 using ReScene.App.Core.ViewModels;
 using ReScene.Manager.Services;
@@ -29,6 +30,9 @@ public partial class App : Application
 
             // Fresh-start settings folder — set BEFORE any settings service reads/writes.
             AppDataConfig.FolderName = "ReScene.Manager";
+            // Rebrand: this head shows "ReScene Manager"; the WPF app never sets this, so it
+            // keeps the "ReScene.NET" default.
+            AppInfo.DisplayName = "ReScene Manager";
 
             var window = new MainWindow();
             Window Owner() => desktop.MainWindow as Window ?? window; // resolved lazily when a dialog is requested

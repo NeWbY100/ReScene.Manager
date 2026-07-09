@@ -1,0 +1,181 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       ReScene Manager shared control style classes
+       (functional-parity port of the ~10 SEMANTIC named styles from
+       ReScene.NET/App.xaml — NOT a re-template of Fluent's own
+       ControlThemes. Layered on top of <FluentTheme> in App.axaml.)
+
+       Fluent's Button/ToggleButton/ListBoxItem ControlThemes already
+       theme the templated *ContentPresenter* for :pointerover/:pressed/
+       :selected via nested "^:state /template/ ContentPresenter" style
+       rules baked into the control theme. A plain Setter on Button.X's
+       own Background is NOT enough to change the hover/pressed color —
+       Fluent's own state rule keeps re-applying its default brush on
+       top of it. The documented Avalonia fix (see "How to style a
+       control" in the Avalonia docs) is to add a MORE SPECIFIC selector
+       — one that also requires our class — targeting the same
+       "/template/ ContentPresenter" combinator; the extra class token
+       gives it higher specificity than Fluent's own bare ":pointerover"
+       rule, so ours wins without touching the template at all.
+       ═══════════════════════════════════════════════════════════ -->
+
+  <!-- ── Button.primary — accent-filled primary action button ──── -->
+  <Style Selector="Button.primary">
+    <Setter Property="Background" Value="{DynamicResource AccentPrimary}" />
+    <Setter Property="Foreground" Value="White" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentPrimary}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="8,4" />
+    <Setter Property="CornerRadius" Value="{DynamicResource MediumRadius}" />
+  </Style>
+  <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentHover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentHover}" />
+  </Style>
+  <Style Selector="Button.primary:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentPressed}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentPressed}" />
+  </Style>
+  <Style Selector="Button.primary:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundDisabled}" />
+  </Style>
+  <Style Selector="Button.primary:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource InputBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+  </Style>
+
+  <!-- ── Button.cancel — subtle, destructive-leaning secondary button ── -->
+  <Style Selector="Button.cancel">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentError}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentError}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="8,4" />
+    <Setter Property="CornerRadius" Value="{DynamicResource MediumRadius}" />
+  </Style>
+  <!-- No AccentError-tint token exists yet; these opacity variants mirror the WPF
+       CancelButton's literal hover/pressed brushes (#33/#55 over AccentError's RGB). -->
+  <Style Selector="Button.cancel:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="#33F44747" />
+  </Style>
+  <Style Selector="Button.cancel:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="#55F44747" />
+  </Style>
+  <Style Selector="Button.cancel:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundDisabled}" />
+  </Style>
+  <Style Selector="Button.cancel:disabled /template/ ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+  </Style>
+
+  <!-- ── Button.ghost — transparent, low-emphasis button ────────── -->
+  <Style Selector="Button.ghost">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundPrimary}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="8,4" />
+    <Setter Property="CornerRadius" Value="{DynamicResource MediumRadius}" />
+  </Style>
+  <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource HoverBackground}" />
+  </Style>
+  <Style Selector="Button.ghost:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundDisabled}" />
+  </Style>
+  <Style Selector="Button.ghost:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <!-- ── ToggleButton.toolbar — compact ghost-style toolbar toggle ── -->
+  <Style Selector="ToggleButton.toolbar">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundPrimary}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderMedium}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="8,2" />
+    <Setter Property="CornerRadius" Value="{DynamicResource MediumRadius}" />
+  </Style>
+  <Style Selector="ToggleButton.toolbar:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource HoverBackground}" />
+  </Style>
+  <Style Selector="ToggleButton.toolbar:checked">
+    <Setter Property="Foreground" Value="White" />
+  </Style>
+  <Style Selector="ToggleButton.toolbar:checked /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentPrimary}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentPrimary}" />
+  </Style>
+  <Style Selector="ToggleButton.toolbar:checked:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentHover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentHover}" />
+  </Style>
+
+  <!-- ── Button.recentItem — flat, left-aligned list-row button (Home) ── -->
+  <Style Selector="Button.recentItem">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+  </Style>
+  <Style Selector="Button.recentItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource HoverBackground}" />
+  </Style>
+  <Style Selector="Button.recentItem:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ActiveBackground}" />
+  </Style>
+
+  <!-- ── TextBlock.mono — monospaced text ───────────────────────── -->
+  <Style Selector="TextBlock.mono">
+    <Setter Property="FontFamily" Value="{DynamicResource MonoFontFamily}" />
+    <Setter Property="FontSize" Value="{DynamicResource MonoFontSize}" />
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundPrimary}" />
+  </Style>
+
+  <!-- ── TextBlock.panelHeader — panel/section header caption ──── -->
+  <Style Selector="TextBlock.panelHeader">
+    <Setter Property="FontSize" Value="{DynamicResource SectionHeaderFontSize}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource HeaderForeground}" />
+  </Style>
+
+  <!-- ── Border.panelHeaderBar — header strip above a panel body ── -->
+  <Style Selector="Border.panelHeaderBar">
+    <Setter Property="Padding" Value="{DynamicResource PanelHeaderPadding}" />
+    <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource PanelHeaderSeparatorBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+  </Style>
+
+  <!-- ── Border.section — bordered card used heavily by forms ──── -->
+  <Style Selector="Border.section">
+    <Setter Property="Background" Value="{DynamicResource PanelBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource LargeRadius}" />
+    <Setter Property="Margin" Value="{DynamicResource SectionCardMargin}" />
+  </Style>
+
+  <!-- ── ListBox.logList — compact, monospaced log/terminal list ── -->
+  <Style Selector="ListBox.logList">
+    <Setter Property="Background" Value="{DynamicResource PanelBackground}" />
+    <Setter Property="Foreground" Value="{DynamicResource LogTerminalForeground}" />
+    <Setter Property="FontFamily" Value="{DynamicResource MonoFontFamily}" />
+  </Style>
+  <Style Selector="ListBox.logList ListBoxItem">
+    <Setter Property="MinHeight" Value="18" />
+    <Setter Property="Padding" Value="4,1" />
+    <Setter Property="Foreground" Value="{DynamicResource LogTerminalForeground}" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="ListBox.logList ListBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource HoverBackground}" />
+  </Style>
+  <Style Selector="ListBox.logList ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SelectedItemBackground}" />
+  </Style>
+
+</Styles>

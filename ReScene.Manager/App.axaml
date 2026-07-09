@@ -23,5 +23,8 @@
         <ColorPaletteResources x:Key="Dark" Accent="#FF0078D4" />
       </FluentTheme.Palettes>
     </FluentTheme>
+    <!-- Semantic control style classes (Button.primary, Border.section, ...), layered on top of
+         FluentTheme so they can override its default per-state ContentPresenter styling. -->
+    <StyleInclude Source="avares://ReScene.Manager/Resources/Styles.axaml" />
   </Application.Styles>
 </Application>
