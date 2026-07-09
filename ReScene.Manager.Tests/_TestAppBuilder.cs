@@ -1,8 +1,16 @@
 using Avalonia;
 using Avalonia.Headless;
 using ReScene.Manager;
+using Xunit;
 
 [assembly: AvaloniaTestApplication(typeof(ReScene.Manager.Tests.TestAppBuilder))]
+
+// Avalonia headless tests share one global UI Dispatcher/Application AND a single process-global
+// Avalonia.Logging.Logger.Sink (BindingErrorSink installs itself there). Running test classes in
+// parallel lets one test's binding-error log propagate through the chained sink into a concurrently
+// running test's BindingErrorSink, causing intermittent false failures. Serialize the whole assembly
+// (headless Avalonia is single-UI-thread anyway, so parallelism buys nothing here).
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
 
 namespace ReScene.Manager.Tests;
 
