@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ReScene.Manager.Controls"
+             x:Class="ReScene.Manager.Views.Wizards.CreateSRSWizardBody"
+             x:CompileBindings="False">
+  <!-- DataContext is the wizard's dedicated SRSCreatorViewModel. Choices are collected first; the
+       SRS is created in one go on the final step. Step visibility is driven by the hosting Window's
+       WizardViewModel.CurrentStepIndex (reached with $parent[Window]). -->
+  <Grid MinHeight="150">
+
+    <!-- Step 0: sample + optional full movie -->
+    <StackPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                    Converter={StaticResource IndexEqualsConverter}, ConverterParameter=0}">
+      <TextBlock Text="Pick a sample video (or an ISO) — the SRS captures what's needed to rebuild it later."
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="0,0,0,8" />
+      <TextBlock Text="Sample file" FontWeight="SemiBold" Margin="0,0,0,2" />
+      <DockPanel Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseInputCommand}"
+                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+        <TextBox Text="{Binding InputPath}" />
+      </DockPanel>
+      <controls:FieldStatusLine Status="{Binding SampleStatus}" />
+      <DockPanel Margin="0,8,0,0" IsVisible="{Binding ShowISOSelection}">
+        <TextBlock Text="File inside ISO:" VerticalAlignment="Center" Margin="0,0,8,0" />
+        <ComboBox ItemsSource="{Binding ISOMediaFiles}" SelectedItem="{Binding SelectedISOMediaFile}"
+                  FontFamily="{DynamicResource MonoFontFamily}" FontSize="{DynamicResource FontSizeCaption}" />
+      </DockPanel>
+
+      <!-- Optional full movie — populates each track's match offset -->
+      <TextBlock Text="Full movie (optional)" FontWeight="SemiBold" Margin="0,14,0,2" />
+      <TextBlock Text="Point at the full movie this sample came from to record where each track's data sits inside it, so the sample restores faster and exactly. Leave empty for a signature-only SRS."
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="0,0,0,4" />
+      <DockPanel Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseMainFileCommand}"
+                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+        <Button DockPanel.Dock="Right" Content="Clear" Command="{Binding ClearMainFileCommand}"
+                Classes="ghost" Margin="4,0,0,0" MinWidth="60" />
+        <TextBox Text="{Binding MainFilePath}" />
+      </DockPanel>
+      <controls:FieldStatusLine Status="{Binding MainFileStatus}" />
+    </StackPanel>
+
+    <!-- Step 1: output -->
+    <StackPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                    Converter={StaticResource IndexEqualsConverter}, ConverterParameter=1}">
+      <TextBlock Text="Where should the .srs be saved?"
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="0,0,0,8" />
+      <TextBlock Text="Save SRS to" FontWeight="SemiBold" Margin="0,0,0,2" />
+      <DockPanel Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseOutputCommand}"
+                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+        <TextBox Text="{Binding OutputPath}" />
+      </DockPanel>
+      <controls:FieldStatusLine Status="{Binding OutputStatus}" />
+    </StackPanel>
+
+    <!-- Step 2: run + result (creation is started by the "Create" button on the save step) -->
+    <DockPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                   Converter={StaticResource IndexEqualsConverter}, ConverterParameter=2}">
+      <StackPanel DockPanel.Dock="Top">
+        <ProgressBar Value="{Binding ProgressPercent}" Maximum="100" Height="6"
+                     IsVisible="{Binding ShowProgress}" />
+        <TextBlock Text="{Binding ProgressMessage}"
+                   Foreground="{DynamicResource ForegroundSecondary}"
+                   FontSize="{DynamicResource FontSizeCaption}"
+                   Margin="0,4,0,0"
+                   IsVisible="{Binding ShowProgress}" />
+        <!-- Cancellation is offered by the ISO/profiling progress modal during the work. -->
+        <TextBlock Text="Details" FontWeight="SemiBold" Margin="0,12,0,2" />
+      </StackPanel>
+      <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1"
+              Background="{DynamicResource SystemControlBackgroundAltHighBrush}" MinHeight="120">
+        <ListBox ItemsSource="{Binding LogEntries}" Classes="logList"
+                 FontFamily="{DynamicResource MonoFontFamily}" FontSize="{DynamicResource MonoFontSize}" />
+      </Border>
+    </DockPanel>
+
+  </Grid>
+</UserControl>

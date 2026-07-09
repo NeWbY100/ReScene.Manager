@@ -1,0 +1,179 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ReScene.Manager.Controls"
+             x:Class="ReScene.Manager.Views.Wizards.ReconstructWizardBody"
+             x:CompileBindings="False">
+  <!-- DataContext is the wizard's dedicated ReconstructorViewModel. Step visibility is driven by the
+       hosting Window's WizardViewModel.CurrentStepIndex (reached with $parent[Window]). -->
+  <Grid MinHeight="150">
+
+    <!-- Step 0: import SRR -->
+    <StackPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                    Converter={StaticResource IndexEqualsConverter}, ConverterParameter=0}">
+      <TextBlock Text="Import the release's SRR — compression settings and file list are configured automatically."
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="0,0,0,12" />
+      <Button Content="Import from SRR..." Command="{Binding ImportSRRCommand}"
+              Classes="primary" Padding="14,6" HorizontalAlignment="Left"
+              ToolTip.Tip="Pick the release's .srr file. Compression, version, dictionary and timestamps are configured automatically." />
+
+      <!-- Details of the imported SRR -->
+      <Border IsVisible="{Binding HasImportedSRR}"
+              BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1"
+              Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+              CornerRadius="3" Margin="0,12,0,0" Padding="12,10">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+
+          <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                     Text="{Binding ImportedSRRName}" FontWeight="SemiBold"
+                     TextWrapping="Wrap" Margin="0,0,0,8" />
+
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Created with"
+                     Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,16,4" />
+          <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ImportedSRRAppName}"
+                     TextWrapping="Wrap" Margin="0,0,0,4" />
+
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="RAR volumes"
+                     Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,16,4" />
+          <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ImportedRARVolumeText}" Margin="0,0,0,4" />
+
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="Archived files"
+                     Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,16,4" />
+          <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding ImportedArchivedFilesText}" Margin="0,0,0,4" />
+
+          <TextBlock Grid.Row="4" Grid.Column="0" Text="Compression"
+                     Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,16,4" />
+          <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding ImportedCompressionText}" Margin="0,0,0,4" />
+
+          <TextBlock Grid.Row="5" Grid.Column="0" Text="Stored files"
+                     Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,16,0" VerticalAlignment="Top" />
+          <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding ImportedStoredFilesText}" TextWrapping="Wrap" />
+        </Grid>
+      </Border>
+
+      <Border IsVisible="{Binding HasCustomPackerWarning}"
+              Background="#3DE0A030" BorderBrush="#E0A030" BorderThickness="1"
+              CornerRadius="3" Margin="0,8,0,0" Padding="8,5">
+        <TextBlock Text="{Binding CustomPackerWarning}" Foreground="#FFD080"
+                   FontSize="{DynamicResource FontSizeBody}" TextWrapping="Wrap" />
+      </Border>
+    </StackPanel>
+
+    <!-- Step 1: files & folders (WinRAR versions, release files, output, verification).
+         Scrollable: this step is dense and must not clip on small windows. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                      Converter={StaticResource IndexEqualsConverter}, ConverterParameter=1}">
+      <StackPanel>
+      <TextBlock Text="ReScene rebuilds the original RAR archives from these — here's what to pick for each:"
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="0,0,0,12" />
+
+      <TextBlock Text="WinRAR versions folder" FontWeight="SemiBold" Margin="0,0,0,2" />
+      <TextBlock Text="The folder holding your different WinRAR versions, each in its own subfolder. ReScene uses the version that matches the release so the rebuilt archives are byte-identical."
+                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="0,0,0,2" />
+      <DockPanel Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseWinRARCommand}"
+                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+        <TextBox Text="{Binding WinRARPath}" />
+      </DockPanel>
+      <controls:FieldStatusLine Status="{Binding WinRARStatus}" />
+
+      <TextBlock Text="Extracted release files" FontWeight="SemiBold" Margin="0,12,0,2" />
+      <TextBlock Text="The folder with the release's already-extracted files — the originals that were inside the .rar archives (the movie, sample, subtitles, …)."
+                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="0,0,0,2" />
+      <DockPanel Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseReleaseCommand}"
+                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+        <TextBox Text="{Binding ReleasePath}" />
+      </DockPanel>
+      <controls:FieldStatusLine Status="{Binding ReleaseStatus}" />
+
+      <TextBlock Text="Output folder" FontWeight="SemiBold" Margin="0,12,0,2" />
+      <TextBlock Text="Where the rebuilt .rar / .r00… volumes are written. Pick an empty folder so nothing is overwritten."
+                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="0,0,0,2" />
+      <DockPanel Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseOutputCommand}"
+                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+        <TextBox Text="{Binding OutputPath}" />
+      </DockPanel>
+      <controls:FieldStatusLine Status="{Binding OutputStatus}" />
+
+      <TextBlock Text="Verification file (.sfv or .sha1)" FontWeight="SemiBold" Margin="0,12,0,2" />
+      <TextBlock Text="Auto-filled from the SRR when it includes one — otherwise pick the release's .sfv. The rebuilt archives are checked against it to confirm they came out identical."
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="0,0,0,2" />
+      <DockPanel Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseVerificationCommand}"
+                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+        <TextBox Text="{Binding VerificationPath}" />
+      </DockPanel>
+      <controls:FieldStatusLine Status="{Binding VerifyStatus}" />
+
+      <controls:FieldStatusLine Status="{Binding ArchiveSetStatus}" />
+
+      <CheckBox Content="Recreate the whole release"
+                IsChecked="{Binding CompleteAllVolumes}" Margin="0,14,0,2" />
+      <TextBlock Text="When a match is found, let WinRAR finish writing every .rar volume of the release instead of stopping after the first one. Takes longer but gives you the complete archive set."
+                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="20,0,0,0" />
+
+      <CheckBox Content="Rename to the release's file names"
+                IsChecked="{Binding RenameToReleaseNames}"
+                IsEnabled="{Binding IsRenameEnabled}" Margin="0,10,0,2" />
+      <TextBlock Text="Name the rebuilt archives exactly like the original release (taken from the SRR, or the verification .sfv) instead of technical names like '420-m3-md4096k.rar'."
+                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="20,0,0,0" />
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- Step 2: run + progress (started by the "Start" button on the previous step) -->
+    <DockPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                   Converter={StaticResource IndexEqualsConverter}, ConverterParameter=2}">
+      <StackPanel DockPanel.Dock="Top">
+        <ProgressBar Value="{Binding ProgressPercent}" Maximum="100" Height="6"
+                     IsVisible="{Binding ShowProgress}" />
+        <TextBlock Text="{Binding ProgressMessage}"
+                   Foreground="{DynamicResource ForegroundSecondary}"
+                   FontSize="{DynamicResource FontSizeCaption}"
+                   Margin="0,4,0,0"
+                   IsVisible="{Binding ShowProgress}" />
+        <Button Content="Stop" Command="{Binding StopCommand}"
+                Classes="cancel" Padding="14,4" Margin="0,8,0,0"
+                HorizontalAlignment="Left"
+                IsVisible="{Binding IsRunning}" />
+        <Button Content="Open output folder" Command="{Binding OpenOutputFolderCommand}"
+                Classes="primary" Padding="14,4" Margin="0,8,0,0"
+                HorizontalAlignment="Left"
+                IsVisible="{Binding LastRunSucceeded}" />
+        <TextBlock Text="Details" FontWeight="SemiBold" Margin="0,12,0,2" />
+      </StackPanel>
+      <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1"
+              Background="{DynamicResource SystemControlBackgroundAltHighBrush}" MinHeight="120">
+        <TextBox Text="{Binding SystemLog}" IsReadOnly="True" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 TextWrapping="Wrap" FontFamily="{DynamicResource MonoFontFamily}"
+                 FontSize="{DynamicResource MonoFontSize}" Background="Transparent"
+                 BorderThickness="0" Padding="4" />
+      </Border>
+    </DockPanel>
+
+  </Grid>
+</UserControl>
