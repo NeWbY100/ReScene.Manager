@@ -1,0 +1,115 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ReScene.Manager.Controls"
+             xmlns:behaviors="clr-namespace:ReScene.Manager.Behaviors"
+             xmlns:conv="clr-namespace:ReScene.Manager.Converters"
+             x:Class="ReScene.Manager.Views.SRSReconstructorView"
+             x:CompileBindings="False">
+
+  <UserControl.Resources>
+    <conv:ResultSuccessToBrushConverter x:Key="ResultSuccessToBrush" />
+  </UserControl.Resources>
+
+  <DockPanel Margin="{DynamicResource PageMargin}">
+
+    <!-- ── Tab description ─────────────────────────────────── -->
+    <TextBlock DockPanel.Dock="Top"
+               Text="Reconstruct a sample file from an SRS file and the original full media file. The reconstructed sample will be CRC-verified against the expected checksum."
+               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+               TextWrapping="Wrap" Margin="0,0,0,6" />
+
+    <!-- ── SRS File ────────────────────────────────────────── -->
+    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,2">
+      <Run Text="SRS File " FontWeight="SemiBold" />
+      <Run Text="— The .srs file describing the sample to rebuild."
+           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+    </TextBlock>
+    <DockPanel DockPanel.Dock="Top">
+      <Button DockPanel.Dock="Right" Content="Browse"
+              Command="{Binding BrowseSRSCommand}"
+              Classes="ghost"
+              Margin="4,0,0,0" MinWidth="75" />
+      <TextBox x:Name="SRSFileTextBox" Text="{Binding SRSFilePath}"
+               behaviors:TextBoxDropBehavior.DropMode="File" />
+    </DockPanel>
+    <controls:FieldStatusLine DockPanel.Dock="Top" Status="{Binding SRSStatus}" />
+
+    <!-- separator -->
+    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+    <!-- ── Media File ──────────────────────────────────────── -->
+    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,2">
+      <Run Text="Media File " FontWeight="SemiBold" />
+      <Run Text="— The full original media file the sample was cut from."
+           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+    </TextBlock>
+    <DockPanel DockPanel.Dock="Top">
+      <Button DockPanel.Dock="Right" Content="Browse"
+              Command="{Binding BrowseMediaCommand}"
+              Classes="ghost"
+              Margin="4,0,0,0" MinWidth="75" />
+      <TextBox x:Name="MediaFileTextBox" Text="{Binding MediaFilePath}" IsReadOnly="{Binding IsISOSource}"
+               behaviors:TextBoxDropBehavior.DropMode="File" />
+    </DockPanel>
+    <controls:FieldStatusLine DockPanel.Dock="Top" Status="{Binding MediaStatus}" />
+
+    <!-- separator -->
+    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+    <!-- ── Output ──────────────────────────────────────────── -->
+    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,2">
+      <Run Text="Output " FontWeight="SemiBold" />
+      <Run Text="— Where the rebuilt sample will be written."
+           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+    </TextBlock>
+    <DockPanel DockPanel.Dock="Top">
+      <Button DockPanel.Dock="Right" Content="Browse"
+              Command="{Binding BrowseOutputCommand}"
+              Classes="ghost"
+              Margin="4,0,0,0" MinWidth="75" />
+      <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}"
+               behaviors:TextBoxDropBehavior.DropMode="File" />
+    </DockPanel>
+    <controls:FieldStatusLine DockPanel.Dock="Top" Status="{Binding OutputStatus}" />
+
+    <!-- separator -->
+    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+    <!-- ── Action row ──────────────────────────────────────── -->
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+      <Button DockPanel.Dock="Right"
+              Content="Rebuild Sample"
+              Command="{Binding RebuildCommand}"
+              Classes="primary"
+              Padding="16,4" />
+    </DockPanel>
+
+    <!-- ── Result ──────────────────────────────────────────── -->
+    <Border DockPanel.Dock="Top"
+            IsVisible="{Binding ShowResult}"
+            Background="{Binding ResultSuccess, Converter={StaticResource ResultSuccessToBrush}}"
+            Padding="8,6" Margin="0,0,0,4" CornerRadius="4">
+      <TextBlock Text="{Binding ResultSummary}" FontWeight="SemiBold" />
+    </Border>
+
+    <!-- separator -->
+    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+    <!-- ── Log (fills remaining space) ─────────────────────── -->
+    <DockPanel>
+      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Save log..."
+                Command="{Binding SaveLogCommand}"
+                Classes="ghost"
+                Padding="8,2" />
+        <TextBlock Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
+      </DockPanel>
+      <ListBox ItemsSource="{Binding LogEntries}"
+               Classes="logList"
+               FontFamily="{DynamicResource MonoFontFamily}"
+               FontSize="{DynamicResource MonoFontSize}" />
+    </DockPanel>
+
+  </DockPanel>
+
+</UserControl>

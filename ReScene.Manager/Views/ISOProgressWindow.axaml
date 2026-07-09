@@ -1,0 +1,128 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ReScene.Manager.Views.ISOProgressWindow"
+        x:CompileBindings="False"
+        Title="ISO Processing"
+        Width="550" Height="400"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource ForegroundPrimary}"
+        FontFamily="{DynamicResource UIFontFamily}">
+
+  <Grid Margin="16">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <!-- Heading -->
+    <TextBlock Grid.Row="0"
+               Text="{Binding ISOProgressHeading}"
+               FontWeight="Bold" FontSize="{DynamicResource FontSizeH2}"
+               Margin="0,0,0,8" />
+
+    <!-- ── Overall progress ──────────────────────────────── -->
+    <DockPanel Grid.Row="1" Margin="0,0,0,4">
+      <TextBlock DockPanel.Dock="Right" Text="{Binding ISOOverallPercent, StringFormat='{}{0}%'}"
+                 Margin="8,0,0,0" VerticalAlignment="Center" MinWidth="35" TextAlignment="Right" />
+      <TextBlock Text="{Binding ISOFileCountText}"
+                 FontWeight="SemiBold"
+                 VerticalAlignment="Center" />
+    </DockPanel>
+
+    <ProgressBar Grid.Row="2" Value="{Binding ISOOverallPercent}"
+                 Maximum="100" Height="20" Margin="0,0,0,4" />
+
+    <!-- Overall stats -->
+    <Grid Grid.Row="3" Margin="0,0,0,10">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+
+      <TextBlock Grid.Column="0" Text="Processed:"
+                 Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,8,0"
+                 FontSize="{DynamicResource FontSizeCaption}" />
+      <TextBlock Grid.Column="1" Text="{Binding ISOProcessedText}"
+                 FontSize="{DynamicResource FontSizeCaption}" />
+
+      <TextBlock Grid.Column="2" Text="Remaining:"
+                 Foreground="{DynamicResource ForegroundSecondary}" Margin="16,0,8,0"
+                 FontSize="{DynamicResource FontSizeCaption}" />
+      <TextBlock Grid.Column="3" Text="{Binding ISORemainingText}"
+                 FontSize="{DynamicResource FontSizeCaption}" />
+    </Grid>
+
+    <!-- ── Current file progress ─────────────────────────── -->
+    <DockPanel Grid.Row="4" Margin="0,0,0,4">
+      <TextBlock DockPanel.Dock="Right" Text="{Binding ISOCurrentPercent, StringFormat='{}{0}%'}"
+                 Margin="8,0,0,0" VerticalAlignment="Center" MinWidth="35" TextAlignment="Right" />
+      <TextBlock Text="{Binding ISOCurrentFileText}"
+                 TextTrimming="CharacterEllipsis"
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 VerticalAlignment="Center" />
+    </DockPanel>
+
+    <ProgressBar Grid.Row="5" Value="{Binding ISOCurrentPercent}"
+                 Maximum="100" Height="20" Margin="0,0,0,4" />
+
+    <!-- Current file stats -->
+    <Grid Grid.Row="6" Margin="0,0,0,10">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+
+      <TextBlock Grid.Column="0" Text="File size:"
+                 Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,8,0"
+                 FontSize="{DynamicResource FontSizeCaption}" />
+      <TextBlock Grid.Column="1" Text="{Binding ISOCurrentSizeText}"
+                 FontSize="{DynamicResource FontSizeCaption}" />
+
+      <TextBlock Grid.Column="2" Text="Speed:"
+                 Foreground="{DynamicResource ForegroundSecondary}" Margin="16,0,8,0"
+                 FontSize="{DynamicResource FontSizeCaption}" />
+      <TextBlock Grid.Column="3" Text="{Binding ISOSpeedText}"
+                 FontSize="{DynamicResource FontSizeCaption}" />
+    </Grid>
+
+    <!-- ETA -->
+    <Grid Grid.Row="7" Margin="0,0,0,8">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+
+      <TextBlock Grid.Column="0" Text="ETA:"
+                 Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,8,0"
+                 FontSize="{DynamicResource FontSizeCaption}" />
+      <TextBlock Grid.Column="1" Text="{Binding ISOEtaText}"
+                 FontSize="{DynamicResource FontSizeCaption}" />
+    </Grid>
+
+    <!-- Cancel button -->
+    <DockPanel Grid.Row="9" LastChildFill="False">
+      <Button DockPanel.Dock="Right"
+              Content="Cancel"
+              Classes="cancel"
+              Padding="20,6"
+              MinWidth="90"
+              Click="OnCancelClick" />
+    </DockPanel>
+
+  </Grid>
+</Window>

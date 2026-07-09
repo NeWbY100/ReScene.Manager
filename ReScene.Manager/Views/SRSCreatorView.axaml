@@ -1,0 +1,149 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ReScene.Manager.Controls"
+             xmlns:behaviors="clr-namespace:ReScene.Manager.Behaviors"
+             x:Class="ReScene.Manager.Views.SRSCreatorView"
+             x:CompileBindings="False">
+
+  <DockPanel Margin="{DynamicResource PageMargin}">
+
+    <!-- ── Tab description ─────────────────────────────────── -->
+    <TextBlock DockPanel.Dock="Top"
+               Text="Create an SRS (Sample Rescue Storage) file from a sample video file. The SRS stores enough data to reconstruct the exact sample from any copy of the same video."
+               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+               TextWrapping="Wrap" Margin="0,0,0,6" />
+
+    <!-- ── Sample File ─────────────────────────────────────────── -->
+    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,2">
+      <Run Text="Sample File " FontWeight="SemiBold" />
+      <Run Text="— The small sample clip (.mkv, .avi, .mp4, …) to store. Usually in a Sample/ subfolder of the release."
+           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+    </TextBlock>
+    <DockPanel DockPanel.Dock="Top">
+      <Button DockPanel.Dock="Right" Content="Browse"
+              Command="{Binding BrowseInputCommand}"
+              Classes="ghost"
+              Margin="4,0,0,0" MinWidth="75" />
+      <TextBox x:Name="InputTextBox" Text="{Binding InputPath}"
+               behaviors:TextBoxDropBehavior.DropMode="File" />
+    </DockPanel>
+    <controls:FieldStatusLine DockPanel.Dock="Top" Status="{Binding SampleStatus}" />
+
+    <!-- ── ISO file selection (visible only when ISO loaded, single mode) ── -->
+    <DockPanel DockPanel.Dock="Top"
+               IsVisible="{Binding ShowISOSelection}"
+               Margin="0,4,0,0">
+      <TextBlock Text="File inside ISO:" VerticalAlignment="Center"
+                 Margin="0,0,8,0" />
+      <ComboBox ItemsSource="{Binding ISOMediaFiles}"
+                SelectedItem="{Binding SelectedISOMediaFile}"
+                FontFamily="{DynamicResource MonoFontFamily}"
+                FontSize="{DynamicResource FontSizeCaption}" />
+    </DockPanel>
+
+    <!-- separator -->
+    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+    <!-- ── Main file (optional, for MatchOffset verification) ──────── -->
+    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,2">
+      <Run Text="Main file " FontWeight="SemiBold" />
+      <Run Text="(optional — populates MatchOffset, matches pyrescene's -c flag)"
+           Foreground="{DynamicResource ForegroundSecondary}"
+           FontSize="{DynamicResource FontSizeCaption}" />
+    </TextBlock>
+    <DockPanel DockPanel.Dock="Top">
+      <Button DockPanel.Dock="Right" Content="Browse"
+              Command="{Binding BrowseMainFileCommand}"
+              Classes="ghost"
+              Margin="4,0,0,0" MinWidth="75" />
+      <Button DockPanel.Dock="Right" Content="Clear"
+              Command="{Binding ClearMainFileCommand}"
+              Classes="ghost"
+              Margin="4,0,0,0" MinWidth="60" />
+      <TextBox Text="{Binding MainFilePath}" />
+    </DockPanel>
+    <controls:FieldStatusLine DockPanel.Dock="Top" Status="{Binding MainFileStatus}" Margin="0,2,0,0" />
+
+    <!-- separator -->
+    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+    <!-- ── Output ────────────────────────────────────────────── -->
+    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,2">
+      <Run Text="Output " FontWeight="SemiBold" />
+      <Run Text="— Where the .srs file will be written."
+           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+    </TextBlock>
+    <DockPanel DockPanel.Dock="Top">
+      <Button DockPanel.Dock="Right" Content="Browse"
+              Command="{Binding BrowseOutputCommand}"
+              Classes="ghost"
+              Margin="4,0,0,0" MinWidth="75" />
+      <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}"
+               behaviors:TextBoxDropBehavior.DropMode="File" />
+    </DockPanel>
+    <controls:FieldStatusLine DockPanel.Dock="Top" Status="{Binding OutputStatus}" />
+
+    <!-- separator -->
+    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+    <!-- ── Options ───────────────────────────────────────────── -->
+    <TextBlock DockPanel.Dock="Top" Text="Options" FontWeight="SemiBold" Margin="0,0,0,2" />
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
+      <TextBlock Text="App name:" VerticalAlignment="Center"
+                 Margin="0,0,8,0" />
+      <TextBox Text="{Binding AppName}" Width="400"
+               HorizontalAlignment="Left" />
+      <TextBlock Text="Embedded in the SRS file to identify the creating application."
+                 VerticalAlignment="Center" Margin="8,0,0,0"
+                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+    </DockPanel>
+
+    <!-- separator -->
+    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+    <!-- ── Action row ────────────────────────────────────────── -->
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+        <Button Content="Create SRS"
+                Command="{Binding CreateSRSCommand}"
+                Classes="primary"
+                Padding="16,4" Margin="0,0,4,0" />
+        <Button Content="Cancel"
+                Command="{Binding CancelCreationCommand}"
+                Classes="cancel"
+                IsVisible="{Binding IsCreating}"
+                Padding="16,4" />
+      </StackPanel>
+      <TextBlock Text="{Binding ProgressMessage}"
+                 IsVisible="{Binding ShowProgress}"
+                 VerticalAlignment="Center" />
+    </DockPanel>
+
+    <!-- Progress bar -->
+    <ProgressBar DockPanel.Dock="Top"
+                 Value="{Binding ProgressPercent}"
+                 Maximum="100" Height="18"
+                 Margin="0,0,0,4"
+                 IsVisible="{Binding ShowProgress}" />
+
+    <!-- separator -->
+    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+    <!-- ── Log (fills remaining space) ───────────────────────── -->
+    <DockPanel>
+      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Save log..."
+                Command="{Binding SaveLogCommand}"
+                Classes="ghost"
+                Padding="8,2" />
+        <TextBlock Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
+      </DockPanel>
+      <ListBox ItemsSource="{Binding LogEntries}"
+               Classes="logList"
+               FontFamily="{DynamicResource MonoFontFamily}"
+               FontSize="{DynamicResource MonoFontSize}" />
+    </DockPanel>
+
+  </DockPanel>
+
+</UserControl>
