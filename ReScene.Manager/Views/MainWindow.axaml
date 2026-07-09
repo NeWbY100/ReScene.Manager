@@ -1,8 +1,101 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:v="using:ReScene.Manager.Views"
         x:Class="ReScene.Manager.Views.MainWindow"
+        x:CompileBindings="False"
+        Title="{Binding WindowTitle}"
+        MinWidth="700" MinHeight="450"
+        Width="1100" Height="720"
         Icon="/app.ico"
-        Title="ReScene Manager" Width="1100" Height="720">
-  <TextBlock Text="ReScene Manager — port in progress"
-             HorizontalAlignment="Center" VerticalAlignment="Center" />
+        Background="{DynamicResource WindowBackground}"
+        FontFamily="{DynamicResource UIFontFamily}"
+        FontSize="{DynamicResource FontSizeBody}">
+
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Ctrl+O" Command="{Binding OpenFileCommand}" />
+    <KeyBinding Gesture="Ctrl+E" Command="{Binding ExportStoredFileCommand}" />
+  </Window.KeyBindings>
+
+  <DockPanel>
+
+    <!-- ══ Menu Bar ══════════════════════════════════════════════════ -->
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="_File">
+        <MenuItem Header="_Open..."
+                  Command="{Binding OpenFileCommand}"
+                  InputGesture="Ctrl+O" />
+        <MenuItem Header="_Export Stored File..."
+                  Command="{Binding ExportStoredFileCommand}"
+                  InputGesture="Ctrl+E" />
+        <Separator />
+        <MenuItem Header="_Settings..."
+                  Click="OnSettingsClick" />
+        <Separator />
+        <MenuItem Header="E_xit"
+                  Click="OnExitClick" />
+      </MenuItem>
+      <MenuItem Header="_Mode">
+        <!-- Radio ToggleType gives mutually-exclusive check marks; IsChecked is a one-way mirror of
+             the VM's resolved mode, while the Command drives the actual mode change. -->
+        <MenuItem Header="_Beginner"
+                  ToggleType="Radio"
+                  IsChecked="{Binding IsBeginnerMode, Mode=OneWay}"
+                  Command="{Binding SetBeginnerModeCommand}" />
+        <MenuItem Header="_Advanced"
+                  ToggleType="Radio"
+                  IsChecked="{Binding IsAdvancedMode, Mode=OneWay}"
+                  Command="{Binding SetAdvancedModeCommand}" />
+      </MenuItem>
+      <MenuItem Header="_Help">
+        <MenuItem Header="_About"
+                  Click="OnAboutClick" />
+      </MenuItem>
+    </Menu>
+
+    <!-- ══ Status Bar ════════════════════════════════════════════════ -->
+    <Border DockPanel.Dock="Bottom"
+            BorderBrush="{DynamicResource StatusSeparatorBrush}"
+            BorderThickness="0,1,0,0"
+            Background="{DynamicResource SurfaceBackground}">
+      <DockPanel>
+        <ProgressBar DockPanel.Dock="Top"
+                     IsIndeterminate="True"
+                     IsVisible="{Binding IsBusy}"
+                     Height="2"
+                     Minimum="0" Maximum="100" />
+
+        <Grid Margin="4,2">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <TextBlock Text="{Binding StatusMessage}"
+                     FontSize="{DynamicResource StatusBarFontSize}"
+                     VerticalAlignment="Center"
+                     Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+          <!-- Version link content is set in code-behind ("{DisplayName} v{AppVersion}"); the click
+               opens the project's GitHub page via the cross-platform launcher. -->
+          <Button Grid.Column="1"
+                  x:Name="VersionLink"
+                  Classes="link"
+                  Click="OnVersionLinkClick"
+                  FontSize="{DynamicResource FontSizeCaption}"
+                  VerticalAlignment="Center"
+                  Foreground="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" />
+        </Grid>
+      </DockPanel>
+    </Border>
+
+    <!-- ══ Shell Host ════════════════════════════════════════════════ -->
+    <Grid>
+      <v:AdvancedShellView IsVisible="{Binding IsAdvancedMode}" />
+      <Border x:Name="BeginnerHost" IsVisible="{Binding IsBeginnerMode}">
+        <TextBlock Text="Beginner wizard — coming soon"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Foreground="{DynamicResource ForegroundSecondary}" />
+      </Border>
+    </Grid>
+
+  </DockPanel>
+
 </Window>

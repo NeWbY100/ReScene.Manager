@@ -1,0 +1,60 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:ReScene.Manager.Views"
+             x:Class="ReScene.Manager.Views.AdvancedShellView"
+             x:CompileBindings="False">
+
+  <!-- ══ Tab Control ═══════════════════════════════════════════════
+       Home is the only live view this task. The remaining seven tabs are
+       placeholders, but each still binds its child ViewModel via DataContext
+       so a later task only swaps the placeholder for the real view. -->
+  <TabControl SelectedIndex="{Binding SelectedTabIndex}"
+              Padding="0">
+    <TabItem Header="Home">
+      <v:HomeView DataContext="{Binding Home}" />
+    </TabItem>
+    <TabItem Header="Inspector">
+      <TextBlock DataContext="{Binding Inspector}"
+                 Text="Inspector — porting in progress"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Foreground="{DynamicResource ForegroundSecondary}" />
+    </TabItem>
+    <TabItem Header="SRR Creator">
+      <TextBlock DataContext="{Binding Creator}"
+                 Text="SRR Creator — porting in progress"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Foreground="{DynamicResource ForegroundSecondary}" />
+    </TabItem>
+    <TabItem Header="SRS Creator">
+      <TextBlock DataContext="{Binding SRSCreator}"
+                 Text="SRS Creator — porting in progress"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Foreground="{DynamicResource ForegroundSecondary}" />
+    </TabItem>
+    <TabItem Header="RAR Reconstructor">
+      <TextBlock DataContext="{Binding Reconstructor}"
+                 Text="RAR Reconstructor — porting in progress"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Foreground="{DynamicResource ForegroundSecondary}" />
+    </TabItem>
+    <TabItem Header="SRS Reconstructor">
+      <TextBlock DataContext="{Binding SRSReconstructor}"
+                 Text="SRS Reconstructor — porting in progress"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Foreground="{DynamicResource ForegroundSecondary}" />
+    </TabItem>
+    <TabItem Header="SRS Restorer">
+      <TextBlock DataContext="{Binding SampleRestorer}"
+                 Text="SRS Restorer — porting in progress"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Foreground="{DynamicResource ForegroundSecondary}" />
+    </TabItem>
+    <TabItem Header="Compare">
+      <TextBlock DataContext="{Binding FileCompare}"
+                 Text="Compare — porting in progress"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Foreground="{DynamicResource ForegroundSecondary}" />
+    </TabItem>
+  </TabControl>
+
+</UserControl>

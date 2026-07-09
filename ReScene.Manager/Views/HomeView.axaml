@@ -1,0 +1,143 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ReScene.Manager.Views.HomeView"
+             x:CompileBindings="False">
+
+  <DockPanel Margin="{DynamicResource PageMargin}">
+
+    <!-- ── Tab description ─────────────────────────────────── -->
+    <TextBlock DockPanel.Dock="Top"
+               Text="Open SRR or SRS files to inspect, create new rescue files, or pick up where you left off from recent files."
+               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+               TextWrapping="Wrap" Margin="0,0,0,6" />
+
+    <!-- ── Top toolbar row ──────────────────────────────────── -->
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+      <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+        <Button Content="Open File..."
+                Command="{Binding OpenInspectCommand}"
+                Classes="primary"
+                Padding="10,3" Margin="0,0,4,0" />
+        <Button Content="Create SRR..."
+                Command="{Binding SwitchToCreatorCommand}"
+                Classes="primary"
+                Padding="10,3" />
+      </StackPanel>
+      <TextBlock Text="Open an SRR/SRS file to inspect, or drag and drop files onto this window."
+                 VerticalAlignment="Center"
+                 Margin="8,0,0,0"
+                 Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+    </DockPanel>
+
+    <!-- ── Resources ────────────────────────────────────────── -->
+    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+      <TextBlock Text="Resources" FontWeight="SemiBold" Margin="0,0,0,2" />
+      <Border BorderBrush="{DynamicResource PanelBorderBrush}"
+              BorderThickness="1"
+              Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+              Padding="8,6">
+        <StackPanel>
+          <!-- WPF inline Hyperlinks have no Avalonia equivalent; each "link — description" line
+               becomes a Button Classes="link" (bound to OpenUrlCommand) plus a description run. -->
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+            <Button Classes="link"
+                    Content="pyReScene / ReSample wiki"
+                    Command="{Binding OpenUrlCommand}"
+                    CommandParameter="http://rescene.wikidot.com/"
+                    VerticalAlignment="Center" />
+            <TextBlock Text=" — documentation for the original rescene and resample tools"
+                       Foreground="{DynamicResource ForegroundSecondary}"
+                       VerticalAlignment="Center" />
+          </StackPanel>
+          <TextBlock Margin="0,0,0,4" TextWrapping="Wrap">
+            <Run Text="WinRAR versions" FontWeight="SemiBold" />
+            <Run Text=" — needed to reconstruct original RAR archives" Foreground="{DynamicResource ForegroundSecondary}" />
+          </TextBlock>
+          <Button Classes="link"
+                  Content="Extracted files (ready to use)"
+                  Command="{Binding OpenUrlCommand}"
+                  CommandParameter="https://drive.google.com/file/d/1of053kS2Wxk-foHN_ALRu-u6Tcck58yn/view?usp=drive_link"
+                  Margin="0,0,0,2" />
+          <Button Classes="link"
+                  Content="Original files from RAR FTP"
+                  Command="{Binding OpenUrlCommand}"
+                  CommandParameter="https://drive.google.com/file/d/1hvgzSY6YH_ZS3cpy7bHcw2zpjiwuP_Xi/view?usp=drive_link" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+
+    <!-- ── Recent files (fills remaining space) ─────────────── -->
+    <DockPanel x:Name="RecentFilesPanel"
+               IsVisible="{Binding HasRecentFiles}">
+
+      <!-- Header row -->
+      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right"
+                Content="Clear"
+                Command="{Binding ClearRecentFilesCommand}"
+                Classes="ghost"
+                Padding="8,2"
+                FontSize="{DynamicResource FontSizeCaption}" />
+        <TextBlock Text="Recent Files"
+                   FontWeight="SemiBold"
+                   VerticalAlignment="Center" />
+      </DockPanel>
+
+      <!-- Bordered file list -->
+      <Border BorderBrush="{DynamicResource PanelBorderBrush}"
+              BorderThickness="1"
+              Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+          <ItemsControl ItemsSource="{Binding RecentFiles}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Button Command="{Binding DataContext.OpenRecentFileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                        CommandParameter="{Binding}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="4,3"
+                        Cursor="Hand"
+                        Classes="recentItem">
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                      <TextBlock Text="{Binding FileName}"
+                                 FontWeight="SemiBold"
+                                 FontSize="{DynamicResource FontSizeBody}" />
+                      <TextBlock Text="{Binding FilePath}"
+                                 FontSize="{DynamicResource FontSizeCaption}"
+                                 Foreground="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                                 TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding LastOpened, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}"
+                                 FontSize="{DynamicResource FontSizeCaption}"
+                                 VerticalAlignment="Center"
+                                 Foreground="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                                 Margin="8,0,0,0" />
+                      <Button Content="Remove"
+                              Command="{Binding DataContext.RemoveRecentFileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                              CommandParameter="{Binding}"
+                              Classes="ghost"
+                              FontSize="{DynamicResource FontSizeCaption}"
+                              Padding="6,1"
+                              Margin="8,0,0,0"
+                              VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Grid>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Border>
+
+    </DockPanel>
+
+  </DockPanel>
+
+</UserControl>

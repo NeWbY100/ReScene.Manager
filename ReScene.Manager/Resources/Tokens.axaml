@@ -116,4 +116,18 @@
   <Thickness x:Key="HomeWelcomeMargin">6</Thickness>
   <Thickness x:Key="HomeCardsMargin">0,4</Thickness>
 
+  <!-- ══ WinUI SystemControl* shim brushes ═══════════════════════
+       Compatibility keys the ported WPF views reference as DynamicResource
+       (HomeView, and several later views). Phase 1 dropped these; re-adding
+       them with their original colors keeps those views porting unchanged. -->
+  <SolidColorBrush x:Key="SystemControlForegroundBaseMediumHighBrush" Color="#FFE0E0E0" />
+  <SolidColorBrush x:Key="SystemControlForegroundBaseMediumBrush" Color="#FFD4D4D4" />
+  <SolidColorBrush x:Key="SystemControlForegroundBaseMediumLowBrush" Color="#FF9E9E9E" />
+  <SolidColorBrush x:Key="SystemControlForegroundBaseLowBrush" Color="#FF5A5A5A" />
+  <SolidColorBrush x:Key="SystemControlForegroundBaseHighBrush" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="SystemControlBackgroundListLowBrush" Color="#FF2D2D30" />
+  <SolidColorBrush x:Key="SystemControlBackgroundAltHighBrush" Color="#FF252526" />
+  <SolidColorBrush x:Key="SystemControlHighlightListLowBrush" Color="#FF3E3E42" />
+  <SolidColorBrush x:Key="SystemAccentBrush" Color="#FF0078D4" />
+
 </ResourceDictionary>

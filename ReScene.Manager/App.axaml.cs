@@ -34,7 +34,11 @@ public partial class App : Application
             // keeps the "ReScene.NET" default.
             AppInfo.DisplayName = "ReScene Manager";
 
-            var window = new MainWindow();
+            var window = new MainWindow
+            {
+                // Mirrors the WPF app: the window persists its position/size/tab across runs.
+                WindowStateService = new WindowStateService(),
+            };
             Window Owner() => desktop.MainWindow as Window ?? window; // resolved lazily when a dialog is requested
 
             var tempDir = new TempDirectoryService();
