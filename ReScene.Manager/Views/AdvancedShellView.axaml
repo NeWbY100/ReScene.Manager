@@ -26,10 +26,7 @@
       <v:SRSCreatorView DataContext="{Binding SRSCreator}" />
     </TabItem>
     <TabItem Header="RAR Reconstructor">
-      <TextBlock DataContext="{Binding Reconstructor}"
-                 Text="RAR Reconstructor — porting in progress"
-                 HorizontalAlignment="Center" VerticalAlignment="Center"
-                 Foreground="{DynamicResource ForegroundSecondary}" />
+      <v:ReconstructorView DataContext="{Binding Reconstructor}" />
     </TabItem>
     <TabItem Header="SRS Reconstructor">
       <v:SRSReconstructorView DataContext="{Binding SRSReconstructor}" />
