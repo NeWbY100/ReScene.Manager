@@ -141,6 +141,31 @@ public class InspectorViewTests
     }
 
     [AvaloniaFact]
+    public void TreeContextMenu_Open_EvaluatesCommandAndVisibilityBindings_NoBindingErrors()
+    {
+        InspectorViewModel vm = CreateViewModel();
+
+        using var sink = new BindingErrorSink();
+        (Window window, _) = Show(vm);
+
+        TreeView tree = window.GetVisualDescendants().OfType<TreeView>().Single();
+        var menu = Assert.IsType<ContextMenu>(tree.ContextMenu);
+
+        // The header-only assertion elsewhere never opens the menu, so its per-item Command/IsVisible
+        // bindings are not evaluated under the sink. Opening propagates the TreeView's DataContext (the
+        // VM) into the popup, forcing every command binding to resolve against the VM.
+        menu.Open(tree);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.All(menu.Items.OfType<MenuItem>(), item => Assert.NotNull(item.Command));
+
+        menu.Close();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Empty(sink.Messages);
+    }
+
+    [AvaloniaFact]
     public void SeededPropertiesAndTreeNode_RealizeRowsAndNode_NoBindingErrors()
     {
         InspectorViewModel vm = CreateViewModel();
