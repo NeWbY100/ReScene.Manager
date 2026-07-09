@@ -1,0 +1,142 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ReScene.Manager.Views.BruteForceProgressWindow"
+        x:CompileBindings="False"
+        Title="Brute Force Progress"
+        Width="920" Height="600"
+        MinWidth="600" MinHeight="450"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True"
+        ShowInTaskbar="False"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource ForegroundPrimary}"
+        FontFamily="{DynamicResource UIFontFamily}">
+
+  <Grid Margin="16">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <!-- Phase label -->
+    <TextBlock Grid.Row="0"
+               Text="{Binding PhaseDescription}"
+               Foreground="{DynamicResource HeaderForeground}"
+               FontWeight="Bold" FontSize="{DynamicResource FontSizeH2}"
+               Margin="0,0,0,10" TextTrimming="CharacterEllipsis" />
+
+    <!-- Test count + percent row -->
+    <DockPanel Grid.Row="1" Margin="0,0,0,2">
+      <TextBlock Text="{Binding TestCountText}" />
+      <TextBlock Text="{Binding ProgressPercentText}"
+                 HorizontalAlignment="Right" DockPanel.Dock="Right" />
+    </DockPanel>
+
+    <!-- Progress bar -->
+    <ProgressBar Grid.Row="2"
+                 Value="{Binding ProgressPercent}"
+                 Maximum="100" Height="20"
+                 Margin="0,0,0,8" />
+
+    <!-- Current version detail -->
+    <TextBlock Grid.Row="3"
+               Text="{Binding CurrentDetailText}"
+               Foreground="{DynamicResource ForegroundSecondary}"
+               Margin="0,0,0,10" TextTrimming="CharacterEllipsis" />
+
+    <!-- Timing stats -->
+    <Grid Grid.Row="4" Margin="0,0,0,12">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="120" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+      </Grid.RowDefinitions>
+
+      <TextBlock Grid.Row="0" Grid.Column="0" Text="Elapsed:"
+                 Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,8,2" />
+      <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ElapsedText}" Margin="0,0,0,2" />
+
+      <TextBlock Grid.Row="0" Grid.Column="2" Text="Remaining:"
+                 Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,8,2" />
+      <TextBlock Grid.Row="0" Grid.Column="3" Text="{Binding RemainingText}" Margin="0,0,0,2" />
+
+      <TextBlock Grid.Row="1" Grid.Column="0" Text="Speed:"
+                 Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,8,0" />
+      <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SpeedText}" />
+
+      <TextBlock Grid.Row="1" Grid.Column="2" Text="ETA:"
+                 Foreground="{DynamicResource ForegroundSecondary}" Margin="0,0,8,0" />
+      <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding EtaText}" />
+    </Grid>
+
+    <!-- Version list -->
+    <DataGrid Grid.Row="5"
+              x:Name="VersionGrid"
+              ItemsSource="{Binding VersionEntries}"
+              AutoGenerateColumns="False"
+              IsReadOnly="True"
+              CanUserReorderColumns="False"
+              HeadersVisibility="Column"
+              SelectionMode="Single"
+              GridLinesVisibility="None"
+              BorderThickness="1"
+              BorderBrush="{DynamicResource BorderSubtle}"
+              Background="{DynamicResource PanelBackground}"
+              Foreground="{DynamicResource ForegroundPrimary}"
+              RowBackground="{DynamicResource PanelBackground}"
+              Margin="0,0,0,12">
+      <DataGrid.ContextMenu>
+        <ContextMenu>
+          <MenuItem Header="Copy Arguments"
+                    Click="OnCopyArgumentsClick" />
+          <MenuItem Header="Copy Full Command Line"
+                    Click="OnCopyFullCommandLineClick" />
+        </ContextMenu>
+      </DataGrid.ContextMenu>
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Set" Binding="{Binding SetText}" Width="80" />
+        <DataGridTextColumn Header="Version" Binding="{Binding VersionName}" Width="140" />
+        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
+        <DataGridTextColumn Header="Result" Binding="{Binding Result}" Width="80" />
+        <DataGridTextColumn Header="Start" Binding="{Binding StartText}" Width="70" />
+        <DataGridTextColumn Header="End" Binding="{Binding EndText}" Width="70" />
+        <DataGridTextColumn Header="Duration" Binding="{Binding DurationText}" Width="70" />
+        <DataGridTextColumn Header="Arguments" Binding="{Binding Arguments}" Width="*" />
+      </DataGrid.Columns>
+    </DataGrid>
+
+    <!-- Auto-scroll toggle + Stop / Close button -->
+    <DockPanel Grid.Row="6" LastChildFill="False">
+      <CheckBox DockPanel.Dock="Left"
+                Content="Auto-scroll"
+                IsChecked="{Binding AutoScrollProgress}"
+                VerticalAlignment="Center" />
+      <Button x:Name="btnStopClose"
+              DockPanel.Dock="Right"
+              Content="Stop"
+              Classes="cancel"
+              Padding="20,6"
+              MinWidth="90"
+              Click="OnStopCloseClick" />
+      <Button DockPanel.Dock="Right"
+              Content="Open Folder"
+              Classes="ghost"
+              Padding="20,6"
+              MinWidth="90"
+              Margin="0,0,8,0"
+              Command="{Binding OpenOutputFolderCommand}"
+              IsVisible="{Binding LastRunSucceeded}" />
+    </DockPanel>
+
+  </Grid>
+</Window>
