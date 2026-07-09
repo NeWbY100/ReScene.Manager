@@ -1,0 +1,32 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ReScene.Manager.Views.ImagePreviewWindow"
+        x:CompileBindings="False"
+        Title="{Binding TitleText}"
+        Width="800" Height="600" MinWidth="240" MinHeight="180"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True"
+        ShowInTaskbar="False"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource ForegroundPrimary}"
+        FontFamily="{DynamicResource UIFontFamily}">
+  <DockPanel>
+    <Border DockPanel.Dock="Bottom"
+            Background="{DynamicResource SurfaceBackground}"
+            BorderBrush="{DynamicResource BorderSeparator}"
+            BorderThickness="0,1,0,0"
+            Padding="8,4">
+      <TextBlock Text="{Binding StatusText}"
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 FontSize="{DynamicResource FontSizeCaption}"
+                 TextTrimming="CharacterEllipsis" />
+    </Border>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto">
+      <Image Source="{Binding Image}"
+             Stretch="Uniform"
+             StretchDirection="DownOnly" />
+    </ScrollViewer>
+  </DockPanel>
+</Window>

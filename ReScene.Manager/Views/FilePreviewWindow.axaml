@@ -1,0 +1,118 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:ReScene.Manager.Controls"
+        xmlns:conv="clr-namespace:ReScene.Manager.Converters"
+        x:Class="ReScene.Manager.Views.FilePreviewWindow"
+        x:CompileBindings="False"
+        Title="{Binding TitleText}"
+        Width="880" Height="620" MinWidth="360" MinHeight="240"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True"
+        ShowInTaskbar="False"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource ForegroundPrimary}"
+        FontFamily="{DynamicResource UIFontFamily}">
+  <Window.Resources>
+    <conv:BoolToTextWrappingConverter x:Key="BoolToTextWrapping" />
+  </Window.Resources>
+
+  <DockPanel>
+    <Border DockPanel.Dock="Bottom"
+            Background="{DynamicResource SurfaceBackground}"
+            BorderBrush="{DynamicResource BorderSeparator}"
+            BorderThickness="0,1,0,0"
+            Padding="8,4">
+      <TextBlock Text="{Binding StatusText}"
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 FontSize="{DynamicResource FontSizeCaption}"
+                 TextTrimming="CharacterEllipsis" />
+    </Border>
+
+    <TabControl>
+      <!-- Hex tab (first → default) -->
+      <TabItem Header="Hex">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal"
+                      HorizontalAlignment="Right" Margin="4,4,4,2" Spacing="4">
+            <TextBlock Text="Bytes/Row:" VerticalAlignment="Center"
+                       Foreground="{DynamicResource ForegroundSecondary}"
+                       FontSize="{DynamicResource FontSizeCaption}" />
+            <!-- Avalonia has no editable ComboBox: a NumericUpDown gives free integer entry
+                 (the WPF presets 8/16/24/32/48/64 were only a convenience). -->
+            <NumericUpDown Value="{Binding HexBytesPerLine, Mode=TwoWay}"
+                           Minimum="1" Maximum="256" Increment="8"
+                           FormatString="0"
+                           Width="120"
+                           FontSize="{DynamicResource FontSizeCaption}"
+                           VerticalAlignment="Center" />
+          </StackPanel>
+          <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Auto">
+            <controls:HexViewControl DataSource="{Binding HexDataSource}"
+                                     BlockOffset="0"
+                                     BlockLength="{Binding HexBlockLength}"
+                                     BytesPerLine="{Binding HexBytesPerLine}" />
+          </ScrollViewer>
+        </DockPanel>
+      </TabItem>
+
+      <!-- Text tab -->
+      <TabItem Header="Text">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal"
+                      HorizontalAlignment="Right" Margin="4,4,4,2" Spacing="4">
+            <TextBlock Text="Encoding:" VerticalAlignment="Center"
+                       Foreground="{DynamicResource ForegroundSecondary}"
+                       FontSize="{DynamicResource FontSizeCaption}" />
+            <!-- Avalonia has no DisplayMemberPath: an ItemTemplate renders DisplayName. -->
+            <ComboBox ItemsSource="{Binding TextEncodings}"
+                      SelectedItem="{Binding SelectedEncoding}"
+                      Width="160" FontSize="{DynamicResource FontSizeCaption}"
+                      VerticalAlignment="Center">
+              <ComboBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding DisplayName}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <CheckBox Content="Word wrap"
+                      IsChecked="{Binding TextWordWrap}"
+                      VerticalAlignment="Center"
+                      Margin="10,0,0,0" />
+          </StackPanel>
+          <Border DockPanel.Dock="Bottom"
+                  IsVisible="{Binding TextViewTruncated}"
+                  Background="{DynamicResource SurfaceBackground}"
+                  BorderBrush="{DynamicResource BorderSeparator}"
+                  BorderThickness="0,1,0,0"
+                  Padding="6,3">
+            <TextBlock Text="Large file — showing the first 1 MB as text."
+                       Foreground="{DynamicResource ForegroundSecondary}"
+                       FontSize="{DynamicResource FontSizeCaption}" />
+          </Border>
+          <TextBox Text="{Binding TextViewContent, Mode=OneWay}"
+                   IsReadOnly="True"
+                   AcceptsReturn="True"
+                   TextWrapping="{Binding TextWordWrap, Converter={StaticResource BoolToTextWrapping}}"
+                   FontFamily="{DynamicResource MonoFontFamily}"
+                   FontSize="{DynamicResource FontSizeCaption}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto"
+                   Padding="6"
+                   BorderThickness="0" />
+        </DockPanel>
+      </TabItem>
+
+      <!-- Image tab (collapsed unless an image decoded) -->
+      <TabItem Header="Image"
+               IsVisible="{Binding HasImageTab}">
+        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto">
+          <Image Source="{Binding Image}"
+                 Stretch="Uniform"
+                 StretchDirection="DownOnly" />
+        </ScrollViewer>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</Window>
