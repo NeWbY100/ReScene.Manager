@@ -1,0 +1,66 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ReScene.Manager.Controls"
+             xmlns:wiz="clr-namespace:ReScene.Manager.Views.Wizards"
+             x:Class="ReScene.Manager.Views.Wizards.EditSRRWizardBody"
+             x:CompileBindings="False">
+  <!-- DataContext is the wizard's dedicated SRREditorViewModel. Step visibility is driven by the
+       hosting Window's WizardViewModel.CurrentStepIndex (reached with $parent[Window]). -->
+  <Grid MinHeight="150">
+
+    <!-- Step 0: Choose the SRR -->
+    <StackPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                    Converter={StaticResource IndexEqualsConverter}, ConverterParameter=0}">
+      <TextBlock Text="Choose the SRR file you want to edit."
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="0,0,0,8" />
+      <TextBlock Text="SRR file" FontWeight="SemiBold" Margin="0,0,0,2" />
+      <DockPanel Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseSourceCommand}"
+                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+        <TextBox Text="{Binding SourcePath}" />
+      </DockPanel>
+      <controls:FieldStatusLine Status="{Binding SourceStatus}" />
+    </StackPanel>
+
+    <!-- Step 1: Manage stored files -->
+    <DockPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                   Converter={StaticResource IndexEqualsConverter}, ConverterParameter=1}">
+      <wiz:StoredFilesManagePanel />
+    </DockPanel>
+
+    <!-- Step 2: Save as -->
+    <StackPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                    Converter={StaticResource IndexEqualsConverter}, ConverterParameter=2}">
+      <TextBlock Text="Choose where the edited SRR should be saved."
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="0,0,0,8" />
+      <TextBlock Text="Save edited SRR to" FontWeight="SemiBold" Margin="0,0,0,2" />
+      <DockPanel Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseOutputCommand}"
+                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+        <TextBox Text="{Binding OutputPath}" />
+      </DockPanel>
+      <controls:FieldStatusLine Status="{Binding OutputStatus}" />
+    </StackPanel>
+
+    <!-- Step 3: Done -->
+    <DockPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                   Converter={StaticResource IndexEqualsConverter}, ConverterParameter=3}">
+      <StackPanel DockPanel.Dock="Top">
+        <TextBlock Text="{Binding ResultMessage}"
+                   IsVisible="{Binding ShowResult}"
+                   FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8" />
+        <TextBlock Text="Details" FontWeight="SemiBold" Margin="0,4,0,2" />
+      </StackPanel>
+      <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1"
+              Background="{DynamicResource SystemControlBackgroundAltHighBrush}" MinHeight="120">
+        <ListBox ItemsSource="{Binding LogEntries}" Classes="logList"
+                 FontFamily="{DynamicResource MonoFontFamily}" FontSize="{DynamicResource MonoFontSize}" />
+      </Border>
+    </DockPanel>
+
+  </Grid>
+</UserControl>

@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ReScene.Manager.Controls"
+             x:Class="ReScene.Manager.Views.Wizards.StoredFilesManagePanel"
+             x:CompileBindings="False">
+  <!-- DataContext is a SRREditorViewModel (inherited from the host wizard body). -->
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+      <Button Content="Add files…" Command="{Binding AddStoredFilesCommand}"
+              Classes="ghost" Padding="10,4" Margin="0,0,4,0" />
+      <Button Content="Remove" Command="{Binding RemoveStoredFileCommand}"
+              Classes="ghost" Padding="10,4" Margin="0,0,4,0" />
+      <Button Content="Rename" Command="{Binding RenameStoredFileCommand}"
+              Classes="ghost" Padding="10,4" Margin="0,0,4,0" />
+      <Button Content="Extract…" Command="{Binding ExtractStoredFileCommand}"
+              Classes="ghost" Padding="10,4" Margin="0,0,4,0" />
+      <Button Content="Preview…" Command="{Binding PreviewStoredFileCommand}"
+              Classes="ghost" Padding="10,4" Margin="0,0,4,0" />
+      <Button Content="Move up" Command="{Binding MoveStoredFileUpCommand}"
+              Classes="ghost" Padding="10,4" Margin="0,0,4,0" />
+      <Button Content="Move down" Command="{Binding MoveStoredFileDownCommand}"
+              Classes="ghost" Padding="10,4" />
+    </StackPanel>
+    <controls:FieldStatusLine DockPanel.Dock="Bottom" Status="{Binding ManageStatus}" Margin="0,4,0,0" />
+    <DataGrid x:Name="StoredFilesGrid"
+              ItemsSource="{Binding StoredFiles}" SelectedItem="{Binding SelectedStoredFile}"
+              SelectionChanged="StoredFilesGrid_SelectionChanged"
+              DoubleTapped="StoredFilesGrid_DoubleTapped"
+              AutoGenerateColumns="False" CanUserReorderColumns="False" CanUserSortColumns="False"
+              GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+              SelectionMode="Extended" BorderThickness="0" IsReadOnly="True" MinHeight="120">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
+        <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" Width="110" />
+      </DataGrid.Columns>
+    </DataGrid>
+  </DockPanel>
+</UserControl>

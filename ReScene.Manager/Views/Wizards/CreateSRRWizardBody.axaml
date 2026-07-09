@@ -1,0 +1,164 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ReScene.Manager.Controls"
+             x:Class="ReScene.Manager.Views.Wizards.CreateSRRWizardBody"
+             x:CompileBindings="False">
+  <!-- DataContext is the wizard's dedicated CreatorViewModel. All choices are collected first;
+       the SRR is created in one go on the final step. Step visibility is driven by the hosting
+       Window's WizardViewModel.CurrentStepIndex (reached with $parent[Window]). -->
+  <Grid MinHeight="150">
+
+    <!-- Step 0: release input -->
+    <StackPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                    Converter={StaticResource IndexEqualsConverter}, ConverterParameter=0}">
+      <TextBlock Text="Point at the release's .sfv or first .rar."
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="0,0,0,8" />
+      <TextBlock Text="Release .sfv or first .rar" FontWeight="SemiBold" Margin="0,0,0,2" />
+      <DockPanel Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseInputCommand}"
+                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+        <TextBox Text="{Binding InputPath}" />
+      </DockPanel>
+      <controls:FieldStatusLine Status="{Binding InputStatus}" />
+    </StackPanel>
+
+    <!-- Step 1: samples & subtitles — generate SRS / nested SRRs for files the scan can't find -->
+    <DockPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                   Converter={StaticResource IndexEqualsConverter}, ConverterParameter=1}">
+      <TextBlock DockPanel.Dock="Top"
+                 Text="Samples in the release become .srs files and subtitle archives become nested .srr files automatically. If the release isn't extracted (so they aren't found), add them here: point at the sample media, and at each subtitle archive's .sfv (its .rar volumes must sit beside it). They're listed on the next step (where you can reorder them) and created when you press Create."
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="0,0,0,8" />
+      <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="*" />
+          <RowDefinition Height="12" />
+          <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Samples -->
+        <DockPanel Grid.Row="0">
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="Sample media files" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <Button Content="Add sample…" Command="{Binding AddSampleCommand}"
+                    Classes="ghost" Padding="10,4" Margin="0,0,4,0" />
+            <Button Content="Remove" Command="{Binding RemoveSampleCommand}"
+                    Classes="ghost" Padding="10,4" />
+          </StackPanel>
+          <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1"
+                  Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
+            <ListBox ItemsSource="{Binding ExtraSampleFiles}" SelectedItem="{Binding SelectedExtraSample}"
+                     BorderThickness="0" Background="Transparent"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+          </Border>
+        </DockPanel>
+
+        <!-- Subtitles -->
+        <DockPanel Grid.Row="2">
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="Subtitle archives (.sfv)" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <Button Content="Add subtitle…" Command="{Binding AddSubtitleCommand}"
+                    Classes="ghost" Padding="10,4" Margin="0,0,4,0" />
+            <Button Content="Remove" Command="{Binding RemoveSubtitleCommand}"
+                    Classes="ghost" Padding="10,4" />
+          </StackPanel>
+          <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1"
+                  Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
+            <ListBox ItemsSource="{Binding ExtraSubtitleSfvFiles}" SelectedItem="{Binding SelectedExtraSubtitle}"
+                     BorderThickness="0" Background="Transparent"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+          </Border>
+        </DockPanel>
+      </Grid>
+    </DockPanel>
+
+    <!-- Step 2: manage stored files (no SRR exists yet — this curates the list to store) -->
+    <DockPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                   Converter={StaticResource IndexEqualsConverter}, ConverterParameter=2}">
+      <StackPanel DockPanel.Dock="Top">
+        <TextBlock Text="These files will be stored inside the SRR, in this order. Common release files (.nfo, .sfv, proof images, …) were detected automatically — add, remove, rename or reorder anything you like."
+                   Foreground="{DynamicResource ForegroundSecondary}"
+                   FontSize="{DynamicResource FontSizeCaption}"
+                   TextWrapping="Wrap" Margin="0,0,0,8" />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+          <Button Content="Add files…" Command="{Binding AddStoredFileCommand}"
+                  Classes="ghost" Padding="10,4" Margin="0,0,4,0" />
+          <Button Content="Remove" Command="{Binding RemoveStoredFileCommand}"
+                  Classes="ghost" Padding="10,4" Margin="0,0,4,0" />
+          <Button Content="Remove all" Command="{Binding RemoveAllStoredFilesCommand}"
+                  Classes="ghost" Padding="10,4" Margin="0,0,4,0" />
+          <Button Content="Rename" Command="{Binding RenameStoredFileCommand}"
+                  Classes="ghost" Padding="10,4" Margin="0,0,4,0" />
+          <Button Content="Move up" Command="{Binding MoveStoredFileUpCommand}"
+                  Classes="ghost" Padding="10,4" Margin="0,0,4,0" />
+          <Button Content="Move down" Command="{Binding MoveStoredFileDownCommand}"
+                  Classes="ghost" Padding="10,4" />
+        </StackPanel>
+      </StackPanel>
+      <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+        <CheckBox Content="Compute OSO hashes for the release's files (helps match them on OpenSubtitles)"
+                  IsChecked="{Binding ComputeOSOHashes}" />
+      </StackPanel>
+      <DataGrid ItemsSource="{Binding StoredFiles}" SelectedItem="{Binding SelectedStoredFile}"
+                AutoGenerateColumns="False" CanUserReorderColumns="False" CanUserSortColumns="False"
+                GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                SelectionMode="Single" BorderThickness="0" IsReadOnly="True"
+                MinHeight="120">
+        <!-- Auto-sized columns: long paths extend past the viewport so the grid's built-in
+             horizontal scrollbar kicks in (star-sized columns would clip instead). -->
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="Stored name" Binding="{Binding StoredName}" Width="Auto" MinWidth="160" />
+          <DataGridTextColumn Header="Source file" Binding="{Binding SourceDisplay}" Width="Auto" MinWidth="160" />
+        </DataGrid.Columns>
+      </DataGrid>
+    </DockPanel>
+
+    <!-- Step 3: save as -->
+    <StackPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                    Converter={StaticResource IndexEqualsConverter}, ConverterParameter=3}">
+      <TextBlock Text="Choose where the SRR should be saved. Creating starts when you press Create."
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 FontSize="{DynamicResource FontSizeCaption}"
+                 TextWrapping="Wrap" Margin="0,0,0,8" />
+      <TextBlock Text="Save SRR to" FontWeight="SemiBold" Margin="0,0,0,2" />
+      <DockPanel Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseOutputCommand}"
+                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+        <TextBox Text="{Binding OutputPath}" />
+      </DockPanel>
+      <controls:FieldStatusLine Status="{Binding OutputStatus}" />
+    </StackPanel>
+
+    <!-- Step 4: create (progress + details) -->
+    <DockPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
+                                   Converter={StaticResource IndexEqualsConverter}, ConverterParameter=4}">
+      <StackPanel DockPanel.Dock="Top">
+        <TextBlock Text="Creating the SRR — sample SRS files and subtitle SRRs are built first when the release has them."
+                   Foreground="{DynamicResource ForegroundSecondary}"
+                   FontSize="{DynamicResource FontSizeCaption}"
+                   TextWrapping="Wrap" Margin="0,0,0,8" />
+        <ProgressBar Value="{Binding ProgressPercent}" Maximum="100" Height="6"
+                     IsVisible="{Binding ShowProgress}" />
+        <TextBlock Text="{Binding ProgressMessage}"
+                   Foreground="{DynamicResource ForegroundSecondary}"
+                   FontSize="{DynamicResource FontSizeCaption}"
+                   Margin="0,4,0,0"
+                   IsVisible="{Binding ShowProgress}" />
+        <Button Content="Cancel" Command="{Binding CancelCreationCommand}"
+                Classes="cancel" Padding="14,4" Margin="0,8,0,0"
+                HorizontalAlignment="Left"
+                IsVisible="{Binding IsCreating}" />
+        <TextBlock Text="Details" FontWeight="SemiBold" Margin="0,12,0,2" />
+      </StackPanel>
+      <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1"
+              Background="{DynamicResource SystemControlBackgroundAltHighBrush}" MinHeight="120">
+        <ListBox ItemsSource="{Binding LogEntries}" Classes="logList"
+                 FontFamily="{DynamicResource MonoFontFamily}" FontSize="{DynamicResource MonoFontSize}" />
+      </Border>
+    </DockPanel>
+
+  </Grid>
+</UserControl>
