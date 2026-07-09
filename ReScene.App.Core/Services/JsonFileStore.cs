@@ -12,11 +12,14 @@ namespace ReScene.App.Core.Services;
 internal static class JsonFileStore
 {
     /// <summary>
-    /// The <c>%LOCALAPPDATA%\ReScene.NET</c> directory used for all persisted JSON files.
+    /// The <c>%LOCALAPPDATA%\{<see cref="AppDataConfig.FolderName"/>}</c> directory used for all
+    /// persisted JSON files. Recomputed on every access so a change to
+    /// <see cref="AppDataConfig.FolderName"/> takes effect immediately (each app head sets it once
+    /// at startup, before any settings access).
     /// </summary>
-    public static string AppDataDirectory { get; } = Path.Combine(
+    public static string AppDataDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "ReScene.NET");
+        AppDataConfig.FolderName);
 
     // PropertyNameCaseInsensitive so files written by older builds still load after a property's
     // acronym casing changes (e.g. the "MkvMaxElements" key now binds to MKVMaxElements).

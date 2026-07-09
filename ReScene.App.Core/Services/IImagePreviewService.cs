@@ -7,7 +7,7 @@ namespace ReScene.App.Core.Services;
 public interface IImagePreviewService
 {
     /// <summary>
-    /// Decodes <paramref name="data"/> and shows it in a modal preview window titled with
+    /// Decodes <paramref name="data"/> and shows it in a preview window titled with
     /// <paramref name="fileName"/>. On decode failure, shows an error dialog and opens nothing.
     /// </summary>
     public void Preview(byte[] data, string fileName);

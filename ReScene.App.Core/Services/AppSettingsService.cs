@@ -6,7 +6,11 @@ namespace ReScene.App.Core.Services;
 
 public class AppSettingsService : IAppSettingsService
 {
-    private static readonly string _filePath = JsonFileStore.GetPath("settings.json");
+    // Instance (not static) field: computed at construction time so it picks up whatever
+    // AppDataConfig.FolderName is current when this instance is created (mirrors
+    // RecentFilesService). A static field would freeze to the folder active on the type's first
+    // touch in the process, which breaks the per-head folder switch (and cross-test isolation).
+    private readonly string _filePath = JsonFileStore.GetPath("settings.json");
 
     public event EventHandler? Changed;
 
