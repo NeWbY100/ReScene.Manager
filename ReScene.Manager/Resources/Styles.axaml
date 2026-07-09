@@ -90,6 +90,33 @@
     <Setter Property="BorderBrush" Value="Transparent" />
   </Style>
 
+  <!-- ── Button.link — hyperlink-styled button (About window links) ──── -->
+  <!-- Transparent chrome + HyperlinkForeground token; the hover state brightens the text
+       (HyperlinkHoverForeground) instead of underlining, since Avalonia's TextDecorations is not
+       an inherited property and cannot be pushed from Button down into its ContentPresenter's
+       implicit TextBlock via a style setter the way Foreground/FontWeight can. -->
+  <Style Selector="Button.link">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Foreground" Value="{DynamicResource HyperlinkForeground}" />
+  </Style>
+  <Style Selector="Button.link:pointerover">
+    <Setter Property="Foreground" Value="{DynamicResource HyperlinkHoverForeground}" />
+  </Style>
+  <Style Selector="Button.link:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.link:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.link:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundDisabled}" />
+  </Style>
+
   <!-- ── ToggleButton.toolbar — compact ghost-style toolbar toggle ── -->
   <Style Selector="ToggleButton.toolbar">
     <Setter Property="Background" Value="Transparent" />

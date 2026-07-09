@@ -1,0 +1,42 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ReScene.Manager.Views.AboutWindow"
+        x:CompileBindings="False"
+        Title="About ReScene.NET"
+        Width="400"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource ForegroundPrimary}"
+        FontFamily="{DynamicResource UIFontFamily}">
+
+  <StackPanel Margin="20">
+    <TextBlock Text="{Binding AppName}" FontSize="18" FontWeight="Bold" />
+    <TextBlock Text="{Binding AppVersion, StringFormat='Version {0}'}"
+               Foreground="{DynamicResource ForegroundSecondary}"
+               Margin="0,4,0,0" />
+    <TextBlock Text="Inspect, create, and reconstruct ReScene (SRR/SRS) files"
+               Margin="0,8,0,0" />
+
+    <!-- Links -->
+    <StackPanel Margin="0,12,0,0">
+      <Button Classes="link"
+              Content="ReScene.NET on GitHub"
+              Tag="https://github.com/NeWbY100/ReScene.NET"
+              Click="OnLinkClick"
+              Margin="0,2,0,0" />
+      <Button Classes="link"
+              Content="ReScene.Lib on GitHub"
+              Tag="https://github.com/NeWbY100/ReScene.Lib"
+              Click="OnLinkClick"
+              Margin="0,2,0,0" />
+      <Button Classes="link"
+              Content="ReScene Wiki"
+              Tag="https://rescene.wikidot.com"
+              Click="OnLinkClick"
+              Margin="0,2,0,0" />
+    </StackPanel>
+  </StackPanel>
+</Window>
