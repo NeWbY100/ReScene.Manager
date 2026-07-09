@@ -25,7 +25,9 @@ namespace ReScene.Manager.Controls;
 /// </remarks>
 public class HexViewControl : Control
 {
-    private const double LineHeight = 18;
+    // Row height in DIPs. Exposed to the composite HexView (same assembly) so it can compute the
+    // scroll-to-selection target and viewport math against the exact same value.
+    internal const double LineHeight = 18;
     private const double DefaultFontSize = 12;
     private const double ContentRightMargin = 20;
     private const int MaxCopyBytes = 10 * 1024 * 1024; // 10 MB
@@ -38,8 +40,13 @@ public class HexViewControl : Control
     private double _fontSize = DefaultFontSize;
     private double _charWidth;
     private double _addressWidth;
-    private double _gap1;
-    private double _gap2;
+
+    // Column gaps (address→hex, hex→ASCII), draggable via the composite's HexColumnHeader.
+    // NaN means "auto" — resolved to _charWidth on read (EffectiveGap1/2). Kept as NaN sentinels
+    // (rather than being seeded in EnsureMetrics) so a user/header-set gap survives a metrics
+    // recompute (e.g. on re-attach) while an unset gap keeps tracking the current char width.
+    private double _gap1 = double.NaN;
+    private double _gap2 = double.NaN;
     private bool _metricsValid;
 
     private byte[] _lineBuffer = new byte[16];
@@ -73,13 +80,23 @@ public class HexViewControl : Control
     public static readonly StyledProperty<IReadOnlyList<HexMatchRange>?> DiffRangesProperty =
         AvaloniaProperty.Register<HexViewControl, IReadOnlyList<HexMatchRange>?>(nameof(DiffRanges));
 
+    // Viewport window pushed in by the host ScrollViewer (the composite HexView) so Render can cull
+    // to the visible rows. Left at 0 for headless/standalone use, where every row is drawn (which
+    // keeps the drawing-surface tests, that never set a viewport, rendering all content).
+    internal static readonly StyledProperty<double> ViewportTopProperty =
+        AvaloniaProperty.Register<HexViewControl, double>(nameof(ViewportTop));
+
+    internal static readonly StyledProperty<double> ViewportHeightProperty =
+        AvaloniaProperty.Register<HexViewControl, double>(nameof(ViewportHeight));
+
     static HexViewControl()
     {
         // A visual change on any of these forces a repaint...
         AffectsRender<HexViewControl>(
             DataSourceProperty, BlockOffsetProperty, BlockLengthProperty,
             SelectionOffsetProperty, SelectionLengthProperty, BytesPerLineProperty,
-            HighlightRangesProperty, DiffRangesProperty);
+            HighlightRangesProperty, DiffRangesProperty,
+            ViewportTopProperty, ViewportHeightProperty);
 
         // ...while these two also change the control's desired size (row count / column widths).
         AffectsMeasure<HexViewControl>(BlockLengthProperty, BytesPerLineProperty);
@@ -90,6 +107,40 @@ public class HexViewControl : Control
         Focusable = true;
         Cursor = new Cursor(StandardCursorType.Ibeam);
         _typeface = new Typeface(_fallbackMonoFont);
+        ContextMenu = BuildContextMenu();
+    }
+
+    /// <summary>
+    /// Builds the right-click menu (Copy as Hex / Copy as Text / Select All), mirroring the WPF
+    /// original. The two copy items are enabled only while there is a non-empty active selection,
+    /// re-evaluated each time the menu opens.
+    /// </summary>
+    private ContextMenu BuildContextMenu()
+    {
+        var copyHex = new MenuItem { Header = "Copy as Hex" };
+        copyHex.Click += (_, _) => CopyToClipboard(asText: false);
+
+        var copyText = new MenuItem { Header = "Copy as Text" };
+        copyText.Click += (_, _) => CopyToClipboard(asText: true);
+
+        var selectAll = new MenuItem { Header = "Select All" };
+        selectAll.Click += (_, _) => SelectAll();
+
+        var menu = new ContextMenu();
+        menu.Items.Add(copyHex);
+        menu.Items.Add(copyText);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(selectAll);
+
+        menu.Opened += (_, _) =>
+        {
+            GetActiveSelection(out long selStart, out long selLength);
+            bool hasSelection = selStart >= 0 && selLength > 0;
+            copyHex.IsEnabled = hasSelection;
+            copyText.IsEnabled = hasSelection;
+        };
+
+        return menu;
     }
 
     public IHexDataSource? DataSource
@@ -140,6 +191,26 @@ public class HexViewControl : Control
         set => SetValue(DiffRangesProperty, value);
     }
 
+    /// <summary>
+    /// Top of the visible viewport (the host <c>ScrollViewer</c>'s vertical offset), in DIPs. Only
+    /// consulted for row culling when <see cref="ViewportHeight"/> is positive.
+    /// </summary>
+    internal double ViewportTop
+    {
+        get => GetValue(ViewportTopProperty);
+        set => SetValue(ViewportTopProperty, value);
+    }
+
+    /// <summary>
+    /// Height of the visible viewport, in DIPs. Zero (the default) disables culling so every row is
+    /// drawn; a positive value restricts <see cref="Render"/> to the visible rows (± one row).
+    /// </summary>
+    internal double ViewportHeight
+    {
+        get => GetValue(ViewportHeightProperty);
+        set => SetValue(ViewportHeightProperty, value);
+    }
+
     private long MouseSelStart => _mouseSelAnchor < 0 ? -1 : Math.Min(_mouseSelAnchor, _mouseSelCurrent);
     private long MouseSelEnd => _mouseSelAnchor < 0 ? -1 : Math.Max(_mouseSelAnchor, _mouseSelCurrent);
     private long MouseSelLength => _mouseSelAnchor < 0 ? 0 : MouseSelEnd - MouseSelStart + 1;
@@ -157,12 +228,45 @@ public class HexViewControl : Control
     private double HexWidth => (BytesPerLine * 3 - 1) * _charWidth;
     private double AsciiWidth => BytesPerLine * _charWidth;
 
+    // NaN gap → "auto" → current char width.
+    private double EffectiveGap1 => double.IsNaN(_gap1) ? _charWidth : _gap1;
+    private double EffectiveGap2 => double.IsNaN(_gap2) ? _charWidth : _gap2;
+
+    /// <summary>
+    /// Gap between the address column and the hex column, in DIPs. Assigning a value clamps it to a
+    /// floor of <c>0.5 * CharWidth</c> (the single authoritative clamp — the header relies on it) and
+    /// re-measures/re-paints. Reads resolve the "auto" default to the current char width.
+    /// </summary>
+    internal double Gap1
+    {
+        get
+        {
+            EnsureMetrics();
+            return EffectiveGap1;
+        }
+        set => SetGap(ref _gap1, value);
+    }
+
+    /// <summary>
+    /// Gap between the hex column and the ASCII gutter, in DIPs. See <see cref="Gap1"/> for clamp and
+    /// invalidation semantics.
+    /// </summary>
+    internal double Gap2
+    {
+        get
+        {
+            EnsureMetrics();
+            return EffectiveGap2;
+        }
+        set => SetGap(ref _gap2, value);
+    }
+
     internal double HexStartX
     {
         get
         {
             EnsureMetrics();
-            return _addressWidth + _gap1;
+            return _addressWidth + EffectiveGap1;
         }
     }
 
@@ -171,8 +275,22 @@ public class HexViewControl : Control
         get
         {
             EnsureMetrics();
-            return _addressWidth + _gap1 + HexWidth + _gap2;
+            return _addressWidth + EffectiveGap1 + HexWidth + EffectiveGap2;
         }
+    }
+
+    private void SetGap(ref double field, double value)
+    {
+        EnsureMetrics();
+        double clamped = Math.Max(0.5 * _charWidth, value);
+        if (field.Equals(clamped))
+        {
+            return;
+        }
+
+        field = clamped;
+        InvalidateMeasure();
+        InvalidateVisual();
     }
 
     private double TotalContentWidth => AsciiStartX + AsciiWidth + ContentRightMargin;
@@ -264,10 +382,24 @@ public class HexViewControl : Control
         double hexStartX = HexStartX;
         double asciiStartX = AsciiStartX;
 
+        // Viewport culling. When the host ScrollViewer has pushed a viewport in (ViewportHeight > 0),
+        // draw only the rows overlapping [ViewportTop, ViewportTop + ViewportHeight] plus one row of
+        // overscan on each side — the exact bounds the WPF HexCanvas used. When no viewport is set
+        // (headless / standalone drawing-surface use), draw every row.
+        long firstVisible = 0;
+        long lastVisible = totalLines - 1;
+        double viewportHeight = ViewportHeight;
+        if (viewportHeight > 0)
+        {
+            double viewportTop = ViewportTop;
+            firstVisible = Math.Max(0, (long)(viewportTop / LineHeight) - 1);
+            lastVisible = Math.Min(totalLines - 1, (long)((viewportTop + viewportHeight) / LineHeight) + 1);
+        }
+
         IReadOnlyList<HexMatchRange>? highlightRanges = HighlightRanges;
         IReadOnlyList<HexMatchRange>? diffRanges = DiffRanges;
 
-        for (long line = 0; line < totalLines; line++)
+        for (long line = firstVisible; line <= lastVisible; line++)
         {
             double y = line * LineHeight;
             long lineFileOffset = blockStart + line * bytesPerLine;
@@ -640,8 +772,6 @@ public class HexViewControl : Control
             FlowDirection.LeftToRight, _typeface, _fontSize, Brushes.Black);
         _charWidth = probe.Width / 10;
         _addressWidth = 10 * _charWidth;
-        _gap1 = _charWidth;
-        _gap2 = _charWidth;
         _metricsValid = true;
     }
 

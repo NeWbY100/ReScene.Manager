@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ReScene.Manager.Controls"
+             x:Class="ReScene.Manager.Controls.HexView">
+  <!-- Composite hex viewer chrome (ported from the WPF ReScene.NET.Controls.HexViewControl):
+       a pinned, horizontally-scrolling column header over a scrolling host that carries the inner
+       HexViewControl drawing surface. Header/scroll sync and auto-scroll-to-selection live in the
+       code-behind; the DP surface is forwarded down to Inner there too. -->
+  <DockPanel>
+    <!-- ClipToBounds so the header's horizontal RenderTransform never bleeds past its strip. -->
+    <Border DockPanel.Dock="Top" ClipToBounds="True">
+      <controls:HexColumnHeader x:Name="Header" />
+    </Border>
+    <Border x:Name="HeaderSeparator"
+            DockPanel.Dock="Top"
+            Height="1"
+            Background="{DynamicResource BorderSeparator}" />
+    <ScrollViewer x:Name="Scroll"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto">
+      <controls:HexViewControl x:Name="Inner"
+                               HorizontalAlignment="Left"
+                               VerticalAlignment="Top" />
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>
