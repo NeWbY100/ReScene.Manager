@@ -11,7 +11,7 @@
   </ItemGroup>
   <ItemGroup>
     <!-- The test project exercises App.Core internal helpers directly. -->
-    <InternalsVisibleTo Include="ReScene.NET.Tests" />
+    <InternalsVisibleTo Include="ReScene.App.Core.Tests" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />

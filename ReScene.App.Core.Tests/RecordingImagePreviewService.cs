@@ -1,0 +1,12 @@
+using ReScene.App.Core.Models;
+
+using ReScene.App.Core.Services;
+namespace ReScene.App.Core.Tests;
+
+/// <summary>Records every <see cref="IImagePreviewService.Preview"/> call for assertions.</summary>
+public sealed class RecordingImagePreviewService : ReScene.App.Core.Services.IImagePreviewService
+{
+    public List<(byte[] Data, string FileName)> Calls { get; } = [];
+
+    public void Preview(byte[] data, string fileName) => Calls.Add((data, fileName));
+}

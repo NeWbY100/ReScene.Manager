@@ -1,0 +1,73 @@
+using ReScene.App.Core.ViewModels.Reconstruction;
+
+namespace ReScene.App.Core.Tests;
+
+public sealed class WinRARVersionScannerTests : IDisposable
+{
+    private readonly string _root =
+        Path.Combine(Path.GetTempPath(), "wrvs-" + Guid.NewGuid().ToString("N"));
+
+    public WinRARVersionScannerTests() => Directory.CreateDirectory(_root);
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); } catch { /* best effort */ }
+    }
+
+    private void MakeVersion(string folderName, bool withRARExe)
+    {
+        string dir = Path.Combine(_root, folderName);
+        Directory.CreateDirectory(dir);
+        if (withRARExe)
+        {
+            File.WriteAllText(Path.Combine(dir, "rar.exe"), "stub");
+        }
+    }
+
+    [Fact]
+    public void Scan_NullOrMissingFolder_ReturnsEmpty()
+    {
+        Assert.Empty(WinRARVersionScanner.Scan(null));
+        Assert.Empty(WinRARVersionScanner.Scan(""));
+        Assert.Empty(WinRARVersionScanner.Scan(Path.Combine(_root, "does-not-exist")));
+    }
+
+    [Fact]
+    public void Scan_IncludesOnlyFoldersWithRARExeAndParseableName_SortedAscending()
+    {
+        MakeVersion("winrar-624", withRARExe: true);
+        MakeVersion("winrar-560", withRARExe: true);
+        MakeVersion("winrar-590", withRARExe: false);  // no rar.exe -> excluded
+        MakeVersion("winrar-beta", withRARExe: true);  // unparseable -> excluded (no throw)
+
+        IReadOnlyList<InstalledRARVersion> result = WinRARVersionScanner.Scan(_root);
+
+        Assert.Equal(new[] { 560, 624 }, result.Select(r => r.Version).ToArray());
+        Assert.Equal("winrar-560", result[0].FolderName);
+    }
+
+    [Fact]
+    public void Scan_TwoDigitName_NormalisedToThreeDigits()
+    {
+        MakeVersion("winrar-56", withRARExe: true);
+
+        IReadOnlyList<InstalledRARVersion> result = WinRARVersionScanner.Scan(_root);
+
+        Assert.Single(result);
+        Assert.Equal(560, result[0].Version);
+    }
+
+    [Fact]
+    public void Scan_SameVersionVariants_CarryDistinguishingTags()
+    {
+        MakeVersion("winrar-250", withRARExe: true);
+        MakeVersion("winrar-250-beta1", withRARExe: true);
+
+        IReadOnlyList<InstalledRARVersion> result = WinRARVersionScanner.Scan(_root);
+
+        Assert.Equal(2, result.Count);
+        Assert.All(result, r => Assert.Equal(250, r.Version));
+        Assert.Contains(result, r => r.FolderName == "winrar-250" && r.Tag.Length == 0);
+        Assert.Contains(result, r => r.FolderName == "winrar-250-beta1" && r.Tag == "beta1");
+    }
+}

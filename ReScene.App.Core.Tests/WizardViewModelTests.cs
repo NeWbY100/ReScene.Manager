@@ -1,0 +1,154 @@
+using ReScene.App.Core.ViewModels.Wizards;
+
+namespace ReScene.App.Core.Tests;
+
+public class WizardViewModelTests
+{
+    private static WizardViewModel Make(params bool[] canAdvance)
+    {
+        var steps = new List<WizardStep>();
+        for (int i = 0; i < canAdvance.Length; i++)
+        {
+            bool v = canAdvance[i];
+            steps.Add(new WizardStep { Title = $"Step {i}", CanAdvance = () => v });
+        }
+        return new WizardViewModel("Test", new object(), steps);
+    }
+
+    [Fact]
+    public void NewWizard_StartsAtFirstStep()
+    {
+        var w = Make(true, true, true);
+        Assert.Equal(0, w.CurrentStepIndex);
+        Assert.True(w.IsFirstStep);
+        Assert.False(w.IsLastStep);
+        Assert.Equal(3, w.StepCount);
+        Assert.Equal(1, w.CurrentStepNumber);
+        Assert.False(w.BackCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void Next_AdvancesWhenStepValid_AndStopsAtLast()
+    {
+        var w = Make(true, true);
+        Assert.True(w.NextCommand.CanExecute(null));
+        w.NextCommand.Execute(null);
+        Assert.Equal(1, w.CurrentStepIndex);
+        Assert.True(w.IsLastStep);
+        Assert.False(w.NextCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void Next_BlockedWhenStepInvalid()
+    {
+        var w = Make(false, true);
+        Assert.False(w.NextCommand.CanExecute(null));
+        w.NextCommand.Execute(null);
+        Assert.Equal(0, w.CurrentStepIndex);
+    }
+
+    [Fact]
+    public void Back_ReturnsToPreviousStep()
+    {
+        var w = Make(true, true);
+        w.NextCommand.Execute(null);
+        Assert.True(w.BackCommand.CanExecute(null));
+        w.BackCommand.Execute(null);
+        Assert.Equal(0, w.CurrentStepIndex);
+        Assert.True(w.IsFirstStep);
+    }
+
+    [Fact]
+    public void Next_RunsLeavingStepOnLeave_AndUsesItsNextLabel()
+    {
+        bool left = false;
+        var steps = new List<WizardStep>
+        {
+            new() { Title = "A", NextLabel = "Create", OnLeave = () => left = true },
+            new() { Title = "B" },
+        };
+        var w = new WizardViewModel("T", new object(), steps);
+
+        Assert.Equal("Create", w.NextButtonText);
+
+        w.NextCommand.Execute(null);
+
+        Assert.True(left);
+        Assert.Equal(1, w.CurrentStepIndex);
+        Assert.Equal("Next ›", w.NextButtonText);
+    }
+
+    [Fact]
+    public void NextButtonText_UsesNextLabelFunc_OverNextLabel_AndReflectsState()
+    {
+        string mode = "single";
+        var steps = new List<WizardStep>
+        {
+            new() { Title = "A", NextLabel = "Static", NextLabelFunc = () => mode == "bulk" ? "Restore All" : "Rebuild" },
+            new() { Title = "B" },
+        };
+        var w = new WizardViewModel("T", new object(), steps);
+
+        Assert.Equal("Rebuild", w.NextButtonText);   // the dynamic func wins over NextLabel
+
+        mode = "bulk";
+        Assert.Equal("Restore All", w.NextButtonText);   // re-evaluated each read, reflects current state
+    }
+
+    [Fact]
+    public void Next_DoesNotAdvanceOrRunOnLeave_WhenConfirmLeaveReturnsFalse()
+    {
+        bool left = false;
+        var steps = new List<WizardStep>
+        {
+            new() { Title = "A", ConfirmLeave = () => false, OnLeave = () => left = true },
+            new() { Title = "B" },
+        };
+        var w = new WizardViewModel("T", new object(), steps);
+
+        w.NextCommand.Execute(null);
+
+        Assert.Equal(0, w.CurrentStepIndex);
+        Assert.False(left);
+    }
+
+    [Fact]
+    public void Back_HiddenAndBlocked_WhenStepCanGoBackReturnsFalse()
+    {
+        bool finished = false;
+        var steps = new List<WizardStep>
+        {
+            new() { Title = "A" },
+            new() { Title = "Run", CanGoBack = () => !finished },
+        };
+        var w = new WizardViewModel("T", new object(), steps);
+
+        w.NextCommand.Execute(null);
+
+        // Run in progress (or not yet succeeded): Back is available.
+        Assert.True(w.IsBackVisible);
+        Assert.True(w.BackCommand.CanExecute(null));
+
+        // Operation finished: Back disappears and cannot execute.
+        finished = true;
+        Assert.False(w.IsBackVisible);
+        Assert.False(w.BackCommand.CanExecute(null));
+        w.BackCommand.Execute(null);
+        Assert.Equal(1, w.CurrentStepIndex);
+    }
+
+    [Fact]
+    public void Back_Hidden_OnFirstStep()
+    {
+        var w = Make(true, true);
+
+        // Nothing to go back to on the first step, so the button is hidden outright.
+        Assert.False(w.IsBackVisible);
+        Assert.False(w.BackCommand.CanExecute(null));
+
+        // It appears once there is a previous step to return to.
+        w.NextCommand.Execute(null);
+        Assert.True(w.IsBackVisible);
+        Assert.True(w.BackCommand.CanExecute(null));
+    }
+}
