@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using ReScene.App.Core.ViewModels;
+using ReScene.Manager.Helpers;
 
 namespace ReScene.Manager.Views;
 
@@ -13,14 +14,12 @@ namespace ReScene.Manager.Views;
 /// tests WinRAR versions against a release, ported from the WPF
 /// <c>ReScene.NET.Views.BruteForceProgressWindow</c>. Its <see cref="Window.DataContext"/> is the same
 /// <see cref="ReconstructorViewModel"/> the owning tab uses, so every binding here reads that VM's
-/// progress/version-grid state directly.
+/// progress/version-grid state directly. Also opens/closes the nested
+/// <see cref="FileCopyProgressWindow"/> and <see cref="CRCValidationProgressWindow"/> modals in step
+/// with the VM's <c>IsCopying</c>/<c>IsVerifying</c> flags, one
+/// <see cref="ModalProgressWindowController{TWindow}"/> per flag, mirroring
+/// <see cref="IsoProgressWindowController"/>.
 /// </summary>
-/// <remarks>
-/// The WPF version also opens nested Copy/CRC-validation progress windows when the VM's
-/// <c>IsCopying</c>/<c>IsVerifying</c> flip; those windows don't exist yet on the Avalonia side (a
-/// later port task) so that wiring is intentionally left out here — only the progress/stats/grid,
-/// clipboard context menu, auto-scroll, and Stop/Close state machine are ported in this task.
-/// </remarks>
 public partial class BruteForceProgressWindow : Window
 {
     // x:CompileBindings="False" (needed since DataContext is set dynamically at runtime, not
@@ -32,6 +31,8 @@ public partial class BruteForceProgressWindow : Window
 
     private bool _isCompleted;
     private ReconstructorViewModel? _subscribedVm;
+    private ModalProgressWindowController<FileCopyProgressWindow>? _copyController;
+    private ModalProgressWindowController<CRCValidationProgressWindow>? _verifyController;
 
     public BruteForceProgressWindow()
     {
@@ -57,11 +58,22 @@ public partial class BruteForceProgressWindow : Window
 
         if (_subscribedVm is not { } vm)
         {
+            _copyController = null;
+            _verifyController = null;
             return;
         }
 
         vm.PropertyChanged += OnVmPropertyChanged;
         vm.VersionEntries.CollectionChanged += OnVersionEntriesChanged;
+
+        _copyController = new ModalProgressWindowController<FileCopyProgressWindow>(
+            this, () => vm.IsCopying, () => vm.StopCommand.Execute(null));
+        _verifyController = new ModalProgressWindowController<CRCValidationProgressWindow>(
+            this, () => vm.IsVerifying, () => vm.StopCommand.Execute(null));
+
+        // Catch up with state that changed before the DataContext was wired.
+        _copyController.OnBusyChanged(vm.IsCopying);
+        _verifyController.OnBusyChanged(vm.IsVerifying);
     }
 
     private void OnVersionEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -88,6 +100,26 @@ public partial class BruteForceProgressWindow : Window
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(ReconstructorViewModel.IsCopying))
+        {
+            if (sender is ReconstructorViewModel vmCopying)
+            {
+                _copyController?.OnBusyChanged(vmCopying.IsCopying);
+            }
+
+            return;
+        }
+
+        if (e.PropertyName == nameof(ReconstructorViewModel.IsVerifying))
+        {
+            if (sender is ReconstructorViewModel vmVerifying)
+            {
+                _verifyController?.OnBusyChanged(vmVerifying.IsVerifying);
+            }
+
+            return;
+        }
+
         if (e.PropertyName != nameof(ReconstructorViewModel.IsRunning))
         {
             return;
