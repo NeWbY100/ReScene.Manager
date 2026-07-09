@@ -5,9 +5,9 @@
              x:CompileBindings="False">
 
   <!-- ══ Tab Control ═══════════════════════════════════════════════
-       Home, SRR Creator, SRS Creator, RAR Reconstructor, SRS Reconstructor and
-       SRS Restorer are live views. Inspector and Compare remain placeholders,
-       but each still binds its child ViewModel via DataContext so a later
+       Home, SRR Creator, SRS Creator, RAR Reconstructor, SRS Reconstructor,
+       SRS Restorer and Compare are live views. Inspector remains a placeholder,
+       but still binds its child ViewModel via DataContext so a later
        task only swaps the placeholder for the real view. -->
   <TabControl SelectedIndex="{Binding SelectedTabIndex}"
               Padding="0">
@@ -36,10 +36,7 @@
       <v:SampleRestorerView DataContext="{Binding SampleRestorer}" />
     </TabItem>
     <TabItem Header="Compare">
-      <TextBlock DataContext="{Binding FileCompare}"
-                 Text="Compare — porting in progress"
-                 HorizontalAlignment="Center" VerticalAlignment="Center"
-                 Foreground="{DynamicResource ForegroundSecondary}" />
+      <v:FileCompareView DataContext="{Binding FileCompare}" />
     </TabItem>
   </TabControl>
 

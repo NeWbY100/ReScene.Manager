@@ -11,6 +11,9 @@
       <!-- App-wide converters, reused across Phase-4 views (bool/index -> IsVisible). -->
       <conv:InverseBoolConverter x:Key="InverseBoolConverter" />
       <conv:IndexEqualsConverter x:Key="IndexEqualsConverter" />
+      <!-- Compare tab: diff/indent flags -> brush/margin (replace WPF DataTriggers). -->
+      <conv:BoolToBrushConverter x:Key="BoolToBrushConverter" />
+      <conv:IndentToMarginConverter x:Key="IndentToMarginConverter" />
     </ResourceDictionary>
   </Application.Resources>
   <Application.Styles>
