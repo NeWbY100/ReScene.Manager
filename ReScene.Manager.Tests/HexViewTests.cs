@@ -72,6 +72,7 @@ public class HexViewTests
     [AvaloniaFact]
     public void Inner_ContextMenu_HasCopyAndSelectAllCommands()
     {
+        using var sink = new BindingErrorSink();
         var hexView = new HexView { DataSource = RampSource(64), BlockLength = 64 };
         var window = new Window { Width = 900, Height = 500, Content = hexView };
         window.Show();
@@ -84,6 +85,8 @@ public class HexViewTests
         Assert.Contains("Copy as Hex", headers);
         Assert.Contains("Copy as Text", headers);
         Assert.Contains("Select All", headers);
+
+        Assert.Empty(sink.Messages);
     }
 
     [AvaloniaFact]

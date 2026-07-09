@@ -142,7 +142,7 @@ public partial class HexView : UserControl
     {
         newY = currentY;
 
-        if (selectionOffset < 0 || blockLength <= 0)
+        if (selectionOffset < 0 || blockLength <= 0 || bytesPerLine <= 0)
         {
             return false;
         }
