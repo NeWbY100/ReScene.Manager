@@ -1,6 +1,8 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using ReScene.App.Core.ViewModels;
+using ReScene.Manager.Helpers;
 
 namespace ReScene.Manager.Views;
 
@@ -10,17 +12,27 @@ namespace ReScene.Manager.Views;
 /// <c>ReScene.NET.Views.CRCValidationProgressWindow</c>. Its <see cref="Window.DataContext"/> is the
 /// same <c>ReconstructorViewModel</c> the owning window uses, so every binding here reads that VM's
 /// <c>Verify*</c> progress properties directly. Opened/closed by a
-/// <see cref="Helpers.ModalProgressWindowController{TWindow}"/> keyed off <c>IsVerifying</c>; the WPF
-/// <c>DarkTitleBar.Enable</c> call and the button-feedback half of <c>ProgressWindowLifecycle</c> are
-/// dropped, same as the earlier <see cref="ISOProgressWindow"/> port — Cancel simply closes the dialog
-/// and the controller's <c>Closed</c> handler turns that into a Stop-command invocation.
+/// <see cref="Helpers.ModalProgressWindowController{TWindow}"/> keyed off <c>IsVerifying</c>; on
+/// <see cref="Control.Loaded"/> the Cancel button is wired through
+/// <see cref="ProgressWindowLifecycle"/> so Cancel (or a native close while verifying) drives
+/// <c>StopCommand</c> and shows a "Cancelling..." grace period instead of tearing the dialog down —
+/// the controller still closes it programmatically once <c>IsVerifying</c> clears.
 /// </summary>
 public partial class CRCValidationProgressWindow : Window
 {
     public CRCValidationProgressWindow()
     {
         AvaloniaXamlLoader.Load(this);
+        Loaded += OnLoaded;
     }
 
-    private void OnCancelClick(object? sender, RoutedEventArgs e) => Close();
+    private void OnLoaded(object? sender, RoutedEventArgs e)
+    {
+        // The controller sets DataContext before ShowDialog, so it is available here. Wire once.
+        Loaded -= OnLoaded;
+        if (DataContext is ReconstructorViewModel vm)
+        {
+            ProgressWindowLifecycle.Attach(this, vm, () => vm.IsVerifying, this.FindControl<Button>("CancelButton")!);
+        }
+    }
 }

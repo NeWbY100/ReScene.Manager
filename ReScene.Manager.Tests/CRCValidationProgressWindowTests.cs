@@ -17,8 +17,10 @@ namespace ReScene.Manager.Tests;
 /// <see cref="ReconstructorViewModel"/> DataContext, plus the heading/progress/stats text and the
 /// Cancel button render and reflect the VM's <c>Verify*</c> properties. Live open-on-IsVerifying is
 /// <see cref="ModalProgressWindowController{TWindow}"/>'s job and needs a live owning Window, so it's
-/// the Reconstructor tab's (T4.4b) launch-smoke, not exercised here — this only checks that the window
-/// itself renders correctly and that clicking Cancel closes it.
+/// the Reconstructor tab's (T4.4b) launch-smoke, not exercised here. The Cancel grace period wired by
+/// <see cref="Helpers.ProgressWindowLifecycle"/> on <c>Loaded</c> is exercised: while verifying, Cancel
+/// (and a native close) relabels/disables the button and does NOT close; when not verifying, a close is
+/// allowed.
 /// </summary>
 public class CRCValidationProgressWindowTests
 {
@@ -110,9 +112,11 @@ public class CRCValidationProgressWindowTests
     }
 
     [AvaloniaFact]
-    public void CancelClick_ClosesTheWindow()
+    public void CancelClick_WhileVerifying_RelabelsAndDisables_AndDoesNotClose()
     {
         ReconstructorViewModel vm = CreateVm();
+        vm.IsVerifying = true;
+
         var window = new CRCValidationProgressWindow { DataContext = vm };
         window.Show();
         Dispatcher.UIThread.RunJobs();
@@ -120,8 +124,55 @@ public class CRCValidationProgressWindowTests
         bool closed = false;
         window.Closed += (_, _) => closed = true;
 
-        Button cancel = window.GetVisualDescendants().OfType<Button>().Single(b => b.Content is "Cancel");
+        Button cancel = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "CancelButton");
         cancel.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+
+        // Grace period: relabel + disable, no close. The controller (not the button) closes the dialog
+        // once IsVerifying clears.
+        Assert.Equal("Cancelling...", cancel.Content);
+        Assert.False(cancel.IsEnabled);
+        Assert.False(closed);
+        // StopCommand ran (it logs "Cancellation requested..." to the system log).
+        Assert.Contains("Cancellation requested", vm.SystemLog, StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
+    public void NativeClose_WhileVerifying_IsBlocked_AndTurnedIntoCancel()
+    {
+        ReconstructorViewModel vm = CreateVm();
+        vm.IsVerifying = true;
+
+        var window = new CRCValidationProgressWindow { DataContext = vm };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        bool closed = false;
+        window.Closed += (_, _) => closed = true;
+
+        window.Close();
+        Dispatcher.UIThread.RunJobs();
+
+        // The Closing guard cancelled the native close and ran the same Cancel action instead.
+        Assert.False(closed);
+        Button cancel = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "CancelButton");
+        Assert.Equal("Cancelling...", cancel.Content);
+        Assert.False(cancel.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void NativeClose_WhenNotVerifying_IsAllowed()
+    {
+        ReconstructorViewModel vm = CreateVm(); // IsVerifying defaults false
+
+        var window = new CRCValidationProgressWindow { DataContext = vm };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        bool closed = false;
+        window.Closed += (_, _) => closed = true;
+
+        window.Close();
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(closed);

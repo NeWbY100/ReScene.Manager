@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ReScene.App.Core.Services;
 using ReScene.App.Core.ViewModels;
+using ReScene.App.Core.ViewModels.Reconstruction;
 using ReScene.Core;
 using ReScene.Manager.Services;
 using ReScene.Manager.Views;
@@ -132,6 +133,49 @@ public class ReconstructorViewTests
         vm.SystemLog += "line 4\nline 5\n";
         Dispatcher.UIThread.RunJobs();
         Assert.NotEqual(vm.SystemLog.Length, systemLog.CaretIndex);
+
+        Assert.Empty(sink.Messages);
+    }
+
+    [AvaloniaFact]
+    public void VersionsTab_RealizesSeededVersionGroupRows_NoBindingErrors()
+    {
+        // T4.4b restructured the WPF Run-based version rows into horizontal TextBlocks; this seeds the
+        // VM's VersionGroups (a couple of major groups, each with sub-version leaves) and asserts the
+        // restructured group-header and leaf TextBlocks realize their bound values with no binding
+        // errors. A ticked leaf makes its group start expanded, so the leaf rows render.
+        ReconstructorViewModel vm = CreateVm();
+        vm.VersionGroups.Add(new RARVersionGroup(5,
+            [new RARVersionLeaf(500, "winrar-500") { IsChecked = true }, new RARVersionLeaf(501, "winrar-501")]));
+        vm.VersionGroups.Add(new RARVersionGroup(6,
+            [new RARVersionLeaf(600, "winrar-600") { IsChecked = true }]));
+
+        using var sink = new BindingErrorSink();
+        var window = new Window { Width = 1000, Height = 760, Content = new ReconstructorView { DataContext = vm } };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        // The Versions sub-tab is the second tab of the six-tab settings TabControl; select it so its
+        // content realizes.
+        TabControl settingsTabs = window.GetVisualDescendants().OfType<TabControl>().Single(t => t.ItemCount == 6);
+        settingsTabs.SelectedIndex = 1; // Versions
+        Dispatcher.UIThread.RunJobs();
+
+        TextBlock[] textBlocks = [.. window.GetVisualDescendants().OfType<TextBlock>()];
+
+        // Group-header row (restructured horizontal TextBlocks: "RAR" + Header + CountText).
+        Assert.Contains(textBlocks, t => t.Text == "5.x");
+        Assert.Contains(textBlocks, t => t.Text == "6.x");
+        Assert.Contains(textBlocks, t => t.Text == "(1 of 2)");
+        Assert.Contains(textBlocks, t => t.Text == "(1 of 1)");
+
+        // Leaf rows (LabelWithTag + parenthesised FolderDisplay), realized because each group with a
+        // ticked leaf starts expanded.
+        Assert.Contains(textBlocks, t => t.Text == "5.00");
+        Assert.Contains(textBlocks, t => t.Text == "5.01");
+        Assert.Contains(textBlocks, t => t.Text == "6.00");
+        Assert.Contains(textBlocks, t => t.Text == "(winrar-500)");
+        Assert.Contains(textBlocks, t => t.Text == "(winrar-600)");
 
         Assert.Empty(sink.Messages);
     }

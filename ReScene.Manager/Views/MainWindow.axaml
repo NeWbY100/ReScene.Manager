@@ -75,13 +75,14 @@
                      Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
           <!-- Version link content is set in code-behind ("{DisplayName} v{AppVersion}"); the click
                opens the project's GitHub page via the cross-platform launcher. -->
+          <!-- statusVersion carries the muted rest color as a STYLE setter (not a local value) so
+               Button.link/statusVersion :pointerover can brighten it on hover — see Styles.axaml. -->
           <Button Grid.Column="1"
                   x:Name="VersionLink"
-                  Classes="link"
+                  Classes="link statusVersion"
                   Click="OnVersionLinkClick"
                   FontSize="{DynamicResource FontSizeCaption}"
-                  VerticalAlignment="Center"
-                  Foreground="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" />
+                  VerticalAlignment="Center" />
         </Grid>
       </DockPanel>
     </Border>

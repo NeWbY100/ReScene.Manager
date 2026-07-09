@@ -29,6 +29,7 @@ public class StylesTests
     private static Color HeaderForeground => Color.Parse("#FFE0E0E0");
     private static Color PanelHeaderSeparator => Color.Parse("#FF333333");
     private static Color LogTerminalForeground => Color.Parse("#FF4EC9B0");
+    private static Color StatusVersionForeground => Color.Parse("#FF9E9E9E");
 
     private static Color Solid(IBrush? brush) => Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color;
 
@@ -40,6 +41,7 @@ public class StylesTests
         var ghost = new Button { Content = "Ghost", Classes = { "ghost" } };
         var recentItem = new Button { Content = "Recent", Classes = { "recentItem" } };
         var toolbarToggle = new ToggleButton { Content = "Hex", Classes = { "toolbar" } };
+        var statusLink = new Button { Content = "v1.0", Classes = { "link", "statusVersion" } };
         var mono = new TextBlock { Text = "DEADBEEF", Classes = { "mono" } };
         var panelHeader = new TextBlock { Text = "Section", Classes = { "panelHeader" } };
         var panelHeaderBar = new Border { Classes = { "panelHeaderBar" }, Child = new TextBlock { Text = "Header" } };
@@ -50,7 +52,7 @@ public class StylesTests
         {
             Children =
             {
-                primary, cancel, ghost, recentItem, toolbarToggle,
+                primary, cancel, ghost, recentItem, toolbarToggle, statusLink,
                 mono, panelHeader, panelHeaderBar, section, logList,
             },
         };
@@ -79,9 +81,14 @@ public class StylesTests
         Assert.Equal(new Thickness(0), recentItem.BorderThickness);
         Assert.Equal(HorizontalAlignment.Left, recentItem.HorizontalContentAlignment);
 
-        // ToggleButton.toolbar: compact ghost-style toggle (base/unchecked state).
+        // ToggleButton.toolbar: compact ghost-style toggle (base/unchecked state) + WPF-matching FontSize.
         Assert.Equal(Colors.Transparent, Solid(toolbarToggle.Background));
         Assert.Equal(BorderMedium, Solid(toolbarToggle.BorderBrush));
+        Assert.Equal(11, toolbarToggle.FontSize);
+
+        // Button.statusVersion: muted rest foreground set via a STYLE setter (so it wins over
+        // Button.link's HyperlinkForeground and lets :pointerover brighten it — hover is launch-smoke).
+        Assert.Equal(StatusVersionForeground, Solid(statusLink.Foreground));
 
         // TextBlock.mono: monospaced family + size.
         Assert.Contains("Cascadia Mono", mono.FontFamily.Name, StringComparison.Ordinal);

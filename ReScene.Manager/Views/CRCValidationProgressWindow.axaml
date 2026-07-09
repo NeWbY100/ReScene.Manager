@@ -83,11 +83,11 @@
     <!-- Cancel button -->
     <DockPanel Grid.Row="6" LastChildFill="False">
       <Button DockPanel.Dock="Right"
+              x:Name="CancelButton"
               Content="Cancel"
               Classes="cancel"
               Padding="20,6"
-              MinWidth="90"
-              Click="OnCancelClick" />
+              MinWidth="90" />
     </DockPanel>
 
   </Grid>

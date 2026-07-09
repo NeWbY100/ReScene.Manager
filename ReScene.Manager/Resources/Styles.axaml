@@ -82,6 +82,13 @@
   <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource HoverBackground}" />
   </Style>
+  <!-- Pressed feedback, consistent with Button.primary:pressed. Mirrors the WPF GhostButton IsPressed
+       brush (#FF333333) — a step darker than the hover HoverBackground (#FF3E3E42). No neutral
+       "pressed" token exists (like the cancel button's literal hover/pressed hexes above), so the WPF
+       literal is used directly. -->
+  <Style Selector="Button.ghost:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="#FF333333" />
+  </Style>
   <Style Selector="Button.ghost:disabled">
     <Setter Property="Foreground" Value="{DynamicResource ForegroundDisabled}" />
   </Style>
@@ -117,6 +124,19 @@
     <Setter Property="Foreground" Value="{DynamicResource ForegroundDisabled}" />
   </Style>
 
+  <!-- ── Button.statusVersion — muted status-bar version link ─────
+       The MainWindow status-bar version link wants a MUTED rest color (grey, not Button.link's bright
+       HyperlinkForeground) that still brightens on hover. It previously carried a LOCAL Foreground,
+       which shadowed Button.link:pointerover (a local value outranks a style setter in Avalonia), so
+       it never showed any hover affordance. Moving the rest color into a style setter (this class,
+       declared AFTER .link so it wins at equal specificity) lets :pointerover override it. -->
+  <Style Selector="Button.statusVersion">
+    <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" />
+  </Style>
+  <Style Selector="Button.statusVersion:pointerover">
+    <Setter Property="Foreground" Value="{DynamicResource HyperlinkHoverForeground}" />
+  </Style>
+
   <!-- ── ToggleButton.toolbar — compact ghost-style toolbar toggle ── -->
   <Style Selector="ToggleButton.toolbar">
     <Setter Property="Background" Value="Transparent" />
@@ -124,6 +144,8 @@
     <Setter Property="BorderBrush" Value="{DynamicResource BorderMedium}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="Padding" Value="8,2" />
+    <!-- Compact toolbar toggle: matches the WPF ToolbarToggleButton's explicit FontSize="11". -->
+    <Setter Property="FontSize" Value="11" />
     <Setter Property="CornerRadius" Value="{DynamicResource MediumRadius}" />
   </Style>
   <Style Selector="ToggleButton.toolbar:pointerover /template/ ContentPresenter">
@@ -203,6 +225,22 @@
   </Style>
   <Style Selector="ListBox.logList ListBoxItem:selected /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource SelectedItemBackground}" />
+  </Style>
+
+  <!-- ── DataGridRow — alternating even-row tint ─────────────────
+       Avalonia's DataGrid (11.3.13) has no AlternatingRowBackground (WPF did); this restores a subtle
+       even-row stripe globally. SystemControlBackgroundListLowBrush (#FF2D2D30) sits one step above the
+       grids' PanelBackground for a low-contrast band; odd rows keep the base background.
+
+       Safety: the selector is limited to REST-state even rows via :not(:selected):not(:pointerover).
+       An app-level style (this one) outranks the DataGrid control theme's own setters, so without the
+       exclusions this even-row Background would win over the Fluent theme's :selected / :pointerover
+       row backgrounds. Excluding those pseudo-classes de-activates this setter the moment a row is
+       selected or hovered, letting the theme's selection/hover backgrounds show through. Diff tint in
+       the Compare property grids is applied at the DataGridCell level (see FileCompareView) and renders
+       on top of the row, so it always wins regardless of this row tint. -->
+  <Style Selector="DataGridRow:nth-child(even):not(:selected):not(:pointerover)">
+    <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListLowBrush}" />
   </Style>
 
 </Styles>
