@@ -5,20 +5,15 @@
              x:CompileBindings="False">
 
   <!-- ══ Tab Control ═══════════════════════════════════════════════
-       Home, SRR Creator, SRS Creator, RAR Reconstructor, SRS Reconstructor,
-       SRS Restorer and Compare are live views. Inspector remains a placeholder,
-       but still binds its child ViewModel via DataContext so a later
-       task only swaps the placeholder for the real view. -->
+       All eight tabs are live ported views, each bound to its child
+       ViewModel via DataContext. -->
   <TabControl SelectedIndex="{Binding SelectedTabIndex}"
               Padding="0">
     <TabItem Header="Home">
       <v:HomeView DataContext="{Binding Home}" />
     </TabItem>
     <TabItem Header="Inspector">
-      <TextBlock DataContext="{Binding Inspector}"
-                 Text="Inspector — porting in progress"
-                 HorizontalAlignment="Center" VerticalAlignment="Center"
-                 Foreground="{DynamicResource ForegroundSecondary}" />
+      <v:InspectorView DataContext="{Binding Inspector}" />
     </TabItem>
     <TabItem Header="SRR Creator">
       <v:CreatorView DataContext="{Binding Creator}" />

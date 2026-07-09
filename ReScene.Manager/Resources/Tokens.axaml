@@ -89,6 +89,8 @@
   <!-- ══ Inspector colors ════════════════════════════════════ -->
   <SolidColorBrush x:Key="PropertyHighlightBrush" Color="#FF094771" />
   <SolidColorBrush x:Key="HexHeaderBrush" Color="#FF2D2D30" />
+  <!-- Amber warning foreground (WPF literal #FFD080) for warned property values. -->
+  <SolidColorBrush x:Key="WarningForeground" Color="#FFD080" />
 
   <!-- ══ Borders (legacy keys) ═══════════════════════════════ -->
   <SolidColorBrush x:Key="PanelBorderBrush" Color="#FF3C3C3C" />

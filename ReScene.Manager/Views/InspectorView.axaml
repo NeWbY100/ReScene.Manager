@@ -1,0 +1,379 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ReScene.Manager.Controls"
+             x:Class="ReScene.Manager.Views.InspectorView"
+             x:CompileBindings="False"
+             x:Name="InspectorRoot">
+
+  <UserControl.KeyBindings>
+    <KeyBinding Gesture="Ctrl+F" Command="{Binding ShowHexSearchCommand}" />
+    <KeyBinding Gesture="Escape" Command="{Binding HideHexSearchCommand}" />
+    <KeyBinding Gesture="F3" Command="{Binding FindNextCommand}" />
+    <KeyBinding Gesture="Shift+F3" Command="{Binding FindPreviousCommand}" />
+  </UserControl.KeyBindings>
+
+  <!-- ── Inspector panels ──────────────────────────────────── -->
+  <DockPanel Margin="{DynamicResource PageMargin}">
+    <TextBlock DockPanel.Dock="Top"
+               Text="Inspect the internal structure of SRR, SRS, and RAR files. Browse blocks in the tree, view properties for each block, and examine raw hex data."
+               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+               TextWrapping="Wrap" Margin="0,0,0,6" />
+
+    <!-- File selection bar -->
+    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+      <TextBlock Text="File" FontWeight="SemiBold" Margin="0,0,0,2" />
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="Close"
+                Command="{Binding CloseFileCommand}"
+                Classes="ghost"
+                Margin="4,0,0,0" MinWidth="55" />
+        <Button DockPanel.Dock="Right" Content="Browse"
+                Command="{Binding BrowseFileCommand}"
+                Classes="ghost"
+                Margin="4,0,0,0" MinWidth="75" />
+        <TextBox x:Name="LoadedFilePathTextBox"
+                 Text="{Binding LoadedFilePath}"
+                 IsReadOnly="True"
+                 FontSize="{DynamicResource FontSizeBody}" />
+      </DockPanel>
+    </StackPanel>
+
+    <!-- Warning bar for custom packer detection -->
+    <Border DockPanel.Dock="Top"
+            IsVisible="{Binding HasWarning}"
+            Background="#3DE0A030" BorderBrush="#E0A030" BorderThickness="1"
+            CornerRadius="3" Margin="0,0,0,4" Padding="8,5">
+      <TextBlock Text="{Binding WarningMessage}"
+                 Foreground="#FFD080"
+                 FontSize="{DynamicResource FontSizeBody}"
+                 TextWrapping="Wrap" />
+    </Border>
+
+    <Grid ColumnDefinitions="400,Auto,*">
+
+      <!-- Left panel: Structure -->
+      <Border Grid.Column="0"
+              Classes="section"
+              Margin="2,2,0,2">
+        <DockPanel>
+          <!-- Panel header -->
+          <Border DockPanel.Dock="Top" Classes="panelHeaderBar">
+            <TextBlock Classes="panelHeader" Text="Structure" />
+          </Border>
+
+          <!-- Filter box -->
+          <TextBox DockPanel.Dock="Top"
+                   Text="{Binding TreeFilterText}"
+                   Margin="{DynamicResource TreeFilterMargin}" />
+
+          <TreeView x:Name="StructureTree"
+                    ItemsSource="{Binding TreeRoots}"
+                    SelectedItem="{Binding SelectedTreeNode, Mode=TwoWay}"
+                    DoubleTapped="OnTreeDoubleTapped"
+                    Margin="{DynamicResource TreeViewMargin}"
+                    FontSize="{DynamicResource FontSizeBody}">
+            <TreeView.Styles>
+              <Style Selector="TreeViewItem">
+                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                <Setter Property="IsVisible" Value="{Binding IsVisible}" />
+              </Style>
+            </TreeView.Styles>
+            <TreeView.ItemTemplate>
+              <TreeDataTemplate ItemsSource="{Binding Children}">
+                <TextBlock Text="{Binding Text}"
+                           TextTrimming="CharacterEllipsis" />
+              </TreeDataTemplate>
+            </TreeView.ItemTemplate>
+            <TreeView.ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="Export..."
+                          Command="{Binding ExportBlockCommand}" />
+                <Separator IsVisible="{Binding IsSRRLoaded}" />
+                <MenuItem Header="Add Stored File..."
+                          Command="{Binding AddStoredFileToSRRCommand}"
+                          IsVisible="{Binding IsSRRLoaded}" />
+                <MenuItem Header="Remove Stored File"
+                          Command="{Binding RemoveStoredFileFromSRRCommand}"
+                          IsVisible="{Binding IsStoredFileSelected}" />
+                <Separator IsVisible="{Binding IsStoredFileSelected}" />
+                <MenuItem Header="Rename..."
+                          Command="{Binding RenameStoredFileCommand}"
+                          IsVisible="{Binding IsStoredFileSelected}" />
+                <MenuItem Header="Move Up"
+                          Command="{Binding MoveStoredFileUpCommand}"
+                          IsVisible="{Binding IsStoredFileSelected}" />
+                <MenuItem Header="Move Down"
+                          Command="{Binding MoveStoredFileDownCommand}"
+                          IsVisible="{Binding IsStoredFileSelected}" />
+                <Separator IsVisible="{Binding IsSRRLoaded}" />
+                <MenuItem Header="Verify integrity"
+                          Command="{Binding VerifyIntegrityCommand}"
+                          IsVisible="{Binding IsSRRLoaded}" />
+                <Separator />
+                <MenuItem Header="Export properties as JSON..."
+                          Command="{Binding ExportSelectedPropertiesCommand}" />
+                <MenuItem Header="Export entire tree as JSON..."
+                          Command="{Binding ExportTreeCommand}" />
+              </ContextMenu>
+            </TreeView.ContextMenu>
+          </TreeView>
+        </DockPanel>
+      </Border>
+
+      <!-- Splitter -->
+      <GridSplitter Grid.Column="1"
+                    Width="{DynamicResource SplitterWidth}"
+                    ResizeDirection="Columns"
+                    ResizeBehavior="PreviousAndNext" />
+
+      <!-- Right panel: Verify Result + Properties + Hex -->
+      <Grid Grid.Column="2"
+            Margin="0,2,2,2"
+            RowDefinitions="Auto,*,Auto,*">
+
+        <!-- Verify result panel -->
+        <Border Grid.Row="0"
+                IsVisible="{Binding IsVerifyResultVisible}"
+                Classes="section"
+                Margin="0,0,0,4">
+          <DockPanel>
+            <Border DockPanel.Dock="Top" Classes="panelHeaderBar">
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Close"
+                        Command="{Binding DismissVerifyResultCommand}"
+                        Classes="ghost"
+                        MinWidth="55" Margin="4,0,0,0" />
+                <TextBlock Classes="panelHeader" Text="Integrity Verify Result" />
+              </DockPanel>
+            </Border>
+            <TextBox Text="{Binding VerifyResultText, Mode=OneWay}"
+                     IsReadOnly="True"
+                     AcceptsReturn="True"
+                     FontFamily="{DynamicResource MonoFontFamily}"
+                     FontSize="{DynamicResource FontSizeCaption}"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                     MaxHeight="180"
+                     Padding="6"
+                     BorderThickness="0" />
+          </DockPanel>
+        </Border>
+
+        <!-- Properties panel -->
+        <Border Grid.Row="1" Classes="section">
+          <DockPanel>
+            <!-- Panel header -->
+            <Border DockPanel.Dock="Top" Classes="panelHeaderBar">
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Content="View Image"
+                        Command="{Binding PreviewStoredImageCommand}"
+                        Classes="ghost"
+                        MinWidth="80" Margin="4,0,0,0"
+                        IsVisible="{Binding IsImagePreviewAvailable}" />
+                <TextBlock Classes="panelHeader" Text="Properties" />
+              </DockPanel>
+            </Border>
+
+            <Grid>
+              <!-- DataGrid -->
+              <DataGrid x:Name="PropertiesGrid"
+                        ItemsSource="{Binding Properties}"
+                        SelectedItem="{Binding SelectedProperty}"
+                        IsReadOnly="True"
+                        CanUserResizeColumns="True"
+                        CanUserReorderColumns="False"
+                        CanUserSortColumns="False"
+                        GridLinesVisibility="Horizontal"
+                        HeadersVisibility="Column"
+                        SelectionMode="Single"
+                        BorderThickness="0"
+                        AutoGenerateColumns="False">
+                <DataGrid.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="Copy Name"
+                              Click="OnCopyPropertyNameClick" />
+                    <MenuItem Header="Copy Value"
+                              Click="OnCopyPropertyValueClick" />
+                    <Separator />
+                    <MenuItem Header="Copy Name: Value"
+                              Click="OnCopyPropertyClick" />
+                  </ContextMenu>
+                </DataGrid.ContextMenu>
+                <DataGrid.Columns>
+                  <DataGridTemplateColumn Header="Property" Width="200">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding Name}"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center"
+                                   Margin="{Binding IsIndented, Converter={StaticResource IndentToMarginConverter}}"
+                                   Foreground="{Binding IsIndented, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=SystemControlForegroundBaseMediumBrush}" />
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <DataGridTemplateColumn Header="Value" Width="*">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding Value}"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center"
+                                   Foreground="{Binding IsWarning, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=WarningForeground}" />
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                </DataGrid.Columns>
+              </DataGrid>
+
+              <!-- Empty state overlay -->
+              <TextBlock Text="Select a tree node to view properties"
+                         IsVisible="{Binding HasProperties, Converter={StaticResource InverseBoolConverter}}"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         FontSize="{DynamicResource EmptyStateFontSize}"
+                         Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                         IsHitTestVisible="False" />
+            </Grid>
+          </DockPanel>
+        </Border>
+
+        <!-- Splitter between properties and hex -->
+        <GridSplitter Grid.Row="2"
+                      Height="{DynamicResource SplitterHeight}"
+                      HorizontalAlignment="Stretch"
+                      ResizeDirection="Rows"
+                      ResizeBehavior="PreviousAndNext" />
+
+        <!-- Hex / Text view panel -->
+        <Border Grid.Row="3"
+                Classes="section">
+          <TabControl>
+            <!-- Hex tab -->
+            <TabItem Header="Hex" IsSelected="{Binding IsHexViewActive, Mode=OneWay}">
+              <DockPanel>
+                <!-- Hex toolbar: Bytes/Row -->
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal"
+                            HorizontalAlignment="Right" Margin="4,4,4,2">
+                  <TextBlock Text="Bytes/Row:" VerticalAlignment="Center"
+                             Foreground="{DynamicResource ForegroundSecondary}"
+                             FontSize="{DynamicResource FontSizeCaption}"
+                             Margin="0,0,4,0" />
+                  <NumericUpDown Value="{Binding HexBytesPerLine}"
+                                 Minimum="1" Maximum="128" Increment="8"
+                                 FormatString="0"
+                                 Width="64"
+                                 FontSize="{DynamicResource FontSizeCaption}"
+                                 VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Search bar -->
+                <Border DockPanel.Dock="Top"
+                        IsVisible="{Binding IsHexSearchVisible}"
+                        Background="{DynamicResource SurfaceBackground}"
+                        BorderBrush="{DynamicResource BorderSeparator}"
+                        BorderThickness="0,0,0,1"
+                        Padding="4">
+                  <DockPanel>
+                    <Button DockPanel.Dock="Right" Content="Close"
+                            Command="{Binding HideHexSearchCommand}"
+                            Classes="ghost"
+                            MinWidth="55" Margin="4,0,0,0" />
+                    <Button DockPanel.Dock="Right" Content="Prev"
+                            Command="{Binding FindPreviousCommand}"
+                            Classes="ghost"
+                            MinWidth="55" Margin="4,0,0,0" />
+                    <Button DockPanel.Dock="Right" Content="Next"
+                            Command="{Binding FindNextCommand}"
+                            Classes="primary"
+                            MinWidth="55" Margin="4,0,0,0" />
+                    <TextBlock DockPanel.Dock="Right"
+                               Text="{Binding HexSearchStatus}"
+                               Foreground="{DynamicResource ForegroundSecondary}"
+                               VerticalAlignment="Center"
+                               Margin="8,0" />
+                    <CheckBox DockPanel.Dock="Right" Content="Hex"
+                              IsChecked="{Binding HexSearchAsHex}"
+                              VerticalAlignment="Center"
+                              Margin="4,0,0,0" />
+                    <CheckBox DockPanel.Dock="Right" Content="Highlight all"
+                              IsChecked="{Binding HighlightAllMatches}"
+                              VerticalAlignment="Center"
+                              Margin="4,0,0,0" />
+                    <TextBox x:Name="HexSearchBox"
+                             Text="{Binding HexSearchText}"
+                             FontFamily="{DynamicResource MonoFontFamily}"
+                             VerticalAlignment="Center">
+                      <TextBox.KeyBindings>
+                        <KeyBinding Gesture="Enter" Command="{Binding FindNextCommand}" />
+                        <KeyBinding Gesture="Shift+Enter" Command="{Binding FindPreviousCommand}" />
+                      </TextBox.KeyBindings>
+                    </TextBox>
+                  </DockPanel>
+                </Border>
+
+                <controls:HexView DataSource="{Binding HexDataSource}"
+                                  BlockOffset="{Binding HexBlockOffset}"
+                                  BlockLength="{Binding HexBlockLength}"
+                                  SelectionOffset="{Binding HexSelectionOffset}"
+                                  SelectionLength="{Binding HexSelectionLength}"
+                                  BytesPerLine="{Binding HexBytesPerLine}"
+                                  HighlightRanges="{Binding HexMatchRanges}" />
+              </DockPanel>
+            </TabItem>
+
+            <!-- Text tab -->
+            <TabItem Header="Text" IsSelected="{Binding IsTextViewActive, Mode=TwoWay}">
+              <DockPanel>
+                <!-- Text toolbar: Encoding + word wrap -->
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal"
+                            HorizontalAlignment="Right" Margin="4,4,4,2">
+                  <TextBlock Text="Encoding:" VerticalAlignment="Center"
+                             Foreground="{DynamicResource ForegroundSecondary}"
+                             FontSize="{DynamicResource FontSizeCaption}"
+                             Margin="0,0,4,0" />
+                  <ComboBox ItemsSource="{Binding TextEncodings}"
+                            SelectedItem="{Binding SelectedEncoding}"
+                            Width="160" FontSize="{DynamicResource FontSizeCaption}"
+                            VerticalAlignment="Center" Padding="4,1">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding DisplayName}" />
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                  <CheckBox Content="Word wrap"
+                            IsChecked="{Binding TextWordWrap}"
+                            VerticalAlignment="Center"
+                            Margin="10,0,0,0" />
+                </StackPanel>
+
+                <!-- Truncation note -->
+                <Border DockPanel.Dock="Bottom"
+                        IsVisible="{Binding TextViewTruncated}"
+                        Background="{DynamicResource SurfaceBackground}"
+                        BorderBrush="{DynamicResource BorderSeparator}"
+                        BorderThickness="0,1,0,0"
+                        Padding="6,3">
+                  <TextBlock Text="Large block — showing the first 1 MB as text."
+                             Foreground="{DynamicResource ForegroundSecondary}"
+                             FontSize="{DynamicResource FontSizeCaption}" />
+                </Border>
+                <TextBox Text="{Binding TextViewContent, Mode=OneWay}"
+                         IsReadOnly="True"
+                         AcceptsReturn="True"
+                         TextWrapping="{Binding TextWordWrap, Converter={StaticResource BoolToTextWrappingConverter}}"
+                         FontFamily="{DynamicResource MonoFontFamily}"
+                         FontSize="{DynamicResource FontSizeCaption}"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         Padding="6"
+                         BorderThickness="0" />
+              </DockPanel>
+            </TabItem>
+          </TabControl>
+        </Border>
+
+      </Grid>
+    </Grid>
+  </DockPanel>
+
+</UserControl>

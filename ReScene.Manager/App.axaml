@@ -14,6 +14,8 @@
       <!-- Compare tab: diff/indent flags -> brush/margin (replace WPF DataTriggers). -->
       <conv:BoolToBrushConverter x:Key="BoolToBrushConverter" />
       <conv:IndentToMarginConverter x:Key="IndentToMarginConverter" />
+      <!-- Inspector Text view: word-wrap flag -> TextWrapping (replace WPF DataTrigger). -->
+      <conv:BoolToTextWrappingConverter x:Key="BoolToTextWrappingConverter" />
     </ResourceDictionary>
   </Application.Resources>
   <Application.Styles>
