@@ -1,5 +1,8 @@
+using System.Globalization;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ReScene.App.Core.Services;
@@ -7,6 +10,7 @@ using ReScene.App.Core.ViewModels;
 using ReScene.Core.Comparison;
 using ReScene.Hex;
 using ReScene.Manager.Controls;
+using ReScene.Manager.Converters;
 using ReScene.Manager.Services;
 using ReScene.Manager.Views;
 using ReScene.RAR;
@@ -152,6 +156,41 @@ public class FileCompareViewTests
         Assert.Contains(window.GetVisualDescendants().OfType<TreeViewItem>(),
             i => i.DataContext is TreeNodeViewModel { Text: "Archive" });
 
+        Assert.Empty(sink.Messages);
+    }
+
+    [AvaloniaFact]
+    public void BoolToBrushConverter_MapsTrueToTokenBrush_AndFalseOrNonBoolToUnset()
+    {
+        var converter = new BoolToBrushConverter();
+
+        // true + a real Tokens key → the exact token brush (locks the diff-tint contract).
+        object? on = converter.Convert(true, typeof(IBrush), "AccentError", CultureInfo.InvariantCulture);
+        ISolidColorBrush brush = Assert.IsAssignableFrom<ISolidColorBrush>(on);
+        Assert.Equal(Color.Parse("#FFF44747"), brush.Color);
+
+        // false, null, non-bool, and unknown keys all fall back so the target inherits its theme default.
+        Assert.Equal(AvaloniaProperty.UnsetValue, converter.Convert(false, typeof(IBrush), "AccentError", CultureInfo.InvariantCulture));
+        Assert.Equal(AvaloniaProperty.UnsetValue, converter.Convert(null, typeof(IBrush), "AccentError", CultureInfo.InvariantCulture));
+        Assert.Equal(AvaloniaProperty.UnsetValue, converter.Convert("nope", typeof(IBrush), "AccentError", CultureInfo.InvariantCulture));
+        Assert.Equal(AvaloniaProperty.UnsetValue, converter.Convert(true, typeof(IBrush), "NoSuchKey", CultureInfo.InvariantCulture));
+    }
+
+    [AvaloniaFact]
+    public void ClearingBytesPerRowSelector_ToNull_DoesNotErrorAndVmStaysInRange()
+    {
+        FileCompareViewModel vm = CreateViewModel();
+
+        using var sink = new BindingErrorSink();
+        (Window window, _) = Show(vm);
+
+        // Simulate the user clearing the field: NumericUpDown.Value is decimal? and goes null on empty,
+        // which the two-way binding must push into the non-nullable int HexBytesPerLine without erroring.
+        NumericUpDown selector = window.GetVisualDescendants().OfType<NumericUpDown>().First();
+        selector.Value = null;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.InRange(vm.HexBytesPerLine, 1, 128);
         Assert.Empty(sink.Messages);
     }
 

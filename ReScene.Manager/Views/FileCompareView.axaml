@@ -212,7 +212,7 @@
                     <NumericUpDown Value="{Binding HexBytesPerLine}"
                                    Minimum="1" Maximum="128" Increment="8"
                                    FormatString="0"
-                                   Width="96"
+                                   Width="64"
                                    FontSize="{DynamicResource FontSizeCaption}"
                                    VerticalAlignment="Center" />
                   </StackPanel>
@@ -347,7 +347,7 @@
                     <NumericUpDown Value="{Binding HexBytesPerLine}"
                                    Minimum="1" Maximum="128" Increment="8"
                                    FormatString="0"
-                                   Width="96"
+                                   Width="64"
                                    FontSize="{DynamicResource FontSizeCaption}"
                                    VerticalAlignment="Center" />
                   </StackPanel>
