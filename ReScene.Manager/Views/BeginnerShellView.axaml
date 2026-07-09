@@ -1,0 +1,113 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ReScene.App.Core.ViewModels"
+             x:Class="ReScene.Manager.Views.BeginnerShellView"
+             x:CompileBindings="False">
+  <UserControl.Styles>
+    <!-- ── Button.hubCard — bordered task card with accent-on-hover ──
+         Mirrors the WPF HubCardButton style. Fluent's Button ControlTheme re-applies its own
+         Background/BorderBrush on :pointerover via a "/template/ ContentPresenter" rule, so the
+         hover flip is expressed with the same more-specific combinator (as elsewhere in
+         Styles.axaml) rather than a plain Setter that Fluent would override. -->
+    <Style Selector="Button.hubCard">
+      <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource LargeRadius}" />
+      <Setter Property="Padding" Value="16" />
+      <Setter Property="Margin" Value="6" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="VerticalContentAlignment" Value="Top" />
+    </Style>
+    <Style Selector="Button.hubCard:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource HoverBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentPrimary}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid Margin="{DynamicResource PageMargin}">
+
+    <!-- ══ HUB ═══════════════════════════════════════════════════════ -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+      <StackPanel MaxWidth="760" HorizontalAlignment="Center" Margin="0,12,0,0">
+        <TextBlock Text="What would you like to do?"
+                   FontSize="{DynamicResource FontSizeH1}" FontWeight="SemiBold"
+                   HorizontalAlignment="Center" Margin="0,0,0,12" />
+        <!-- ── Group: SRR recovery files ── -->
+        <TextBlock Text="Release recovery files (SRR)"
+                   FontSize="{DynamicResource FontSizeH2}" FontWeight="SemiBold" Margin="6,4,6,2" />
+        <TextBlock Text="An .srr records how to rebuild a release's RAR archives. Create one, or edit an existing one."
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                   TextWrapping="Wrap" Margin="6,0,6,6" />
+        <UniformGrid Columns="2">
+          <Button Classes="hubCard"
+                  Click="OnCardClick" Tag="{x:Static vm:BeginnerCard.CreateSRR}">
+            <StackPanel>
+              <TextBlock Text="&#x1F4E6;" FontSize="28" Margin="0,0,0,6" />
+              <TextBlock Text="Create an SRR" FontSize="{DynamicResource FontSizeH2}" FontWeight="SemiBold" />
+              <TextBlock Text="Make a recovery file for a release." TextWrapping="Wrap"
+                         Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" Margin="0,2,0,0" />
+            </StackPanel>
+          </Button>
+          <Button Classes="hubCard"
+                  Click="OnCardClick" Tag="{x:Static vm:BeginnerCard.EditSRR}">
+            <StackPanel>
+              <TextBlock Text="&#x270E;" FontSize="28" Margin="0,0,0,6" />
+              <TextBlock Text="Edit an SRR" FontSize="{DynamicResource FontSizeH2}" FontWeight="SemiBold" />
+              <TextBlock Text="Add, remove, rename or reorder an SRR's stored files." TextWrapping="Wrap"
+                         Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" Margin="0,2,0,0" />
+            </StackPanel>
+          </Button>
+        </UniformGrid>
+
+        <!-- ── Group: Sample videos ── -->
+        <TextBlock Text="Sample videos (SRS)"
+                   FontSize="{DynamicResource FontSizeH2}" FontWeight="SemiBold" Margin="6,18,6,2" />
+        <TextBlock Text="An .srs stores a short proof sample. Capture one from a clip, or rebuild one from the full movie."
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                   TextWrapping="Wrap" Margin="6,0,6,6" />
+        <UniformGrid Columns="2">
+          <Button Classes="hubCard"
+                  Click="OnCardClick" Tag="{x:Static vm:BeginnerCard.CreateSRS}">
+            <StackPanel>
+              <TextBlock Text="&#x1F3AC;" FontSize="28" Margin="0,0,0,6" />
+              <TextBlock Text="Create a sample SRS" FontSize="{DynamicResource FontSizeH2}" FontWeight="SemiBold" />
+              <TextBlock Text="Capture a movie sample." TextWrapping="Wrap"
+                         Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" Margin="0,2,0,0" />
+            </StackPanel>
+          </Button>
+          <Button Classes="hubCard"
+                  Click="OnCardClick" Tag="{x:Static vm:BeginnerCard.Restore}">
+            <StackPanel>
+              <TextBlock Text="&#x21BA;" FontSize="28" Margin="0,0,0,6" />
+              <TextBlock Text="Restore a sample" FontSize="{DynamicResource FontSizeH2}" FontWeight="SemiBold" />
+              <TextBlock Text="Get a sample back from an SRR or SRS." TextWrapping="Wrap"
+                         Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" Margin="0,2,0,0" />
+            </StackPanel>
+          </Button>
+        </UniformGrid>
+
+        <!-- ── Group: RAR archives ── -->
+        <TextBlock Text="RAR archives"
+                   FontSize="{DynamicResource FontSizeH2}" FontWeight="SemiBold" Margin="6,18,6,2" />
+        <TextBlock Text="Rebuild a release's original .rar files from its SRR."
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                   TextWrapping="Wrap" Margin="6,0,6,6" />
+        <UniformGrid Columns="2">
+          <Button Classes="hubCard"
+                  Click="OnCardClick" Tag="{x:Static vm:BeginnerCard.Reconstruct}">
+            <StackPanel>
+              <TextBlock Text="&#x1F527;" FontSize="28" Margin="0,0,0,6" />
+              <TextBlock Text="Reconstruct RAR archives" FontSize="{DynamicResource FontSizeH2}" FontWeight="SemiBold" />
+              <TextBlock Text="Rebuild the original RARs from an SRR." TextWrapping="Wrap"
+                         Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" Margin="0,2,0,0" />
+            </StackPanel>
+          </Button>
+        </UniformGrid>
+      </StackPanel>
+    </ScrollViewer>
+
+  </Grid>
+</UserControl>

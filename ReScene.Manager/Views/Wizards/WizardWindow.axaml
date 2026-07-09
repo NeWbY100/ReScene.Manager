@@ -1,0 +1,43 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ReScene.Manager.Views.Wizards.WizardWindow"
+        x:CompileBindings="False"
+        Title="{Binding Title}"
+        Width="860" Height="800" MinWidth="620" MinHeight="480"
+        WindowStartupLocation="CenterOwner" CanResize="True"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource ForegroundPrimary}"
+        FontFamily="{DynamicResource UIFontFamily}"
+        FontSize="{DynamicResource FontSizeBody}">
+  <DockPanel Margin="{DynamicResource PageMargin}">
+
+    <!-- Header -->
+    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+      <TextBlock Text="{Binding Title}" FontSize="{DynamicResource FontSizeH1}" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding StepHeader}"
+                 Foreground="{DynamicResource ForegroundSecondary}"
+                 FontSize="{DynamicResource FontSizeCaption}" Margin="0,2,0,0" />
+    </StackPanel>
+
+    <!-- Footer -->
+    <DockPanel DockPanel.Dock="Bottom" Margin="0,14,0,0">
+      <Button DockPanel.Dock="Left" Content="Close" Click="OnCloseClick"
+              Classes="ghost" MinWidth="80"
+              IsVisible="{Binding IsLastStep, Converter={StaticResource InverseBoolConverter}}" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+        <Button Content="&#x2039; Back" Command="{Binding BackCommand}"
+                Classes="ghost" MinWidth="90" Margin="0,0,8,0"
+                IsVisible="{Binding IsBackVisible}" />
+        <Button Content="{Binding NextButtonText}" Command="{Binding NextCommand}"
+                Classes="primary" MinWidth="90"
+                IsVisible="{Binding IsLastStep, Converter={StaticResource InverseBoolConverter}}" />
+        <Button Content="Close" Click="OnCloseClick"
+                Classes="primary" MinWidth="90"
+                IsVisible="{Binding IsLastStep}" />
+      </StackPanel>
+    </DockPanel>
+
+    <!-- Body: per-task step panels (DataContext = task VM, injected in code-behind) -->
+    <ContentControl x:Name="BodyHost" />
+  </DockPanel>
+</Window>

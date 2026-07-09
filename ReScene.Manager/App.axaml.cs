@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -39,7 +40,14 @@ public partial class App : Application
                 // Mirrors the WPF app: the window persists its position/size/tab across runs.
                 WindowStateService = new WindowStateService(),
             };
-            Window Owner() => desktop.MainWindow as Window ?? window; // resolved lazily when a dialog is requested
+            // Resolve the currently-active window first so a sync dialog (e.g. a wizard's confirm)
+            // is owned by the active pop-up (the WizardWindow when open), not always MainWindow —
+            // otherwise it renders behind the modal wizard. Falls back to MainWindow, then the
+            // freshly-built window. Resolved lazily when a dialog is requested.
+            Window Owner() =>
+                desktop.Windows.FirstOrDefault(w => w.IsActive)
+                ?? desktop.MainWindow as Window
+                ?? window;
 
             var tempDir = new TempDirectoryService();
             var appSettings = new AppSettingsService();

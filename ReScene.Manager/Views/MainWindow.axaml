@@ -90,9 +90,7 @@
     <Grid>
       <v:AdvancedShellView IsVisible="{Binding IsAdvancedMode}" />
       <Border x:Name="BeginnerHost" IsVisible="{Binding IsBeginnerMode}">
-        <TextBlock Text="Beginner wizard — coming soon"
-                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                   Foreground="{DynamicResource ForegroundSecondary}" />
+        <v:BeginnerShellView DataContext="{Binding Beginner}" />
       </Border>
     </Grid>
 

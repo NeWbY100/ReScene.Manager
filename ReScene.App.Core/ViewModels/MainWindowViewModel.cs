@@ -194,6 +194,7 @@ public partial class MainWindowViewModel : ViewModelBase
             Reconstructor = Reconstructor,
             Restore = beginnerRestore,
             SRREditor = new SRREditorViewModel(srrEditingService, fileDialog, tempDir, filePreviewService),
+            FileDialog = fileDialog,
         };
 
         Home = new HomeViewModel(
