@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ReScene.Manager.Views.PromptDialog"
+        Title="Input"
+        Width="760" Height="176"
+        MinWidth="420" MinHeight="150"
+        CanResize="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource ForegroundPrimary}"
+        FontFamily="{DynamicResource UIFontFamily}"
+        FontSize="{DynamicResource FontSizeBody}">
+  <DockPanel Margin="{DynamicResource PageMargin}">
+
+    <TextBlock x:Name="MessageBlock"
+               DockPanel.Dock="Top"
+               Margin="0,0,0,6"
+               TextWrapping="Wrap"
+               Foreground="{DynamicResource ForegroundPrimary}" />
+
+    <StackPanel DockPanel.Dock="Bottom"
+                Orientation="Horizontal"
+                HorizontalAlignment="Right"
+                Spacing="8"
+                Margin="0,8,0,0">
+      <Button x:Name="CancelButton"
+              Content="Cancel"
+              MinWidth="80"
+              IsCancel="True"
+              Click="OnCancelClick" />
+      <Button x:Name="OkButton"
+              Content="OK"
+              MinWidth="80"
+              IsDefault="True"
+              Classes="accent"
+              Click="OnOkClick" />
+    </StackPanel>
+
+    <TextBox x:Name="InputBox"
+             VerticalAlignment="Center"
+             FontFamily="{DynamicResource UIFontFamily}"
+             FontSize="{DynamicResource FontSizeBody}" />
+  </DockPanel>
+</Window>

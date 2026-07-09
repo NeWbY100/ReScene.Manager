@@ -1,0 +1,48 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ReScene.Manager.Views.MessageDialog"
+        Title="ReScene Manager"
+        Width="440" MinWidth="320" MaxWidth="640"
+        SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource ForegroundPrimary}"
+        FontFamily="{DynamicResource UIFontFamily}"
+        FontSize="{DynamicResource FontSizeBody}">
+  <DockPanel Margin="{DynamicResource PageMargin}">
+
+    <StackPanel DockPanel.Dock="Bottom"
+                Orientation="Horizontal"
+                HorizontalAlignment="Right"
+                Spacing="8"
+                Margin="0,16,0,0">
+      <Button x:Name="CancelButton"
+              Content="Cancel"
+              MinWidth="80"
+              IsCancel="True"
+              IsVisible="False"
+              Click="OnCancelClick" />
+      <Button x:Name="OkButton"
+              Content="OK"
+              MinWidth="80"
+              IsDefault="True"
+              Classes="accent"
+              Click="OnOkClick" />
+    </StackPanel>
+
+    <Grid ColumnDefinitions="Auto,*">
+      <TextBlock x:Name="Glyph"
+                 Grid.Column="0"
+                 FontSize="26"
+                 Margin="0,0,12,0"
+                 VerticalAlignment="Top" />
+      <TextBlock x:Name="MessageBlock"
+                 Grid.Column="1"
+                 TextWrapping="Wrap"
+                 VerticalAlignment="Center"
+                 Foreground="{DynamicResource ForegroundPrimary}" />
+    </Grid>
+  </DockPanel>
+</Window>
