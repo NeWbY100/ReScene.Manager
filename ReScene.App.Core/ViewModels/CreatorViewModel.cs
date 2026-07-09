@@ -382,6 +382,18 @@ public partial class CreatorViewModel : OperationViewModelBase
             && f.StoredName.Replace('\\', '/').Equals(normalized, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Shows the platform's synchronous "duplicate stored name" warning through the injected
+    /// <see cref="IFileDialogService"/>. Kept on the ViewModel (rather than in view code-behind) so
+    /// the message is framework-agnostic and rendered by whatever dialog the platform provides — the
+    /// editable Stored Files grid calls this when an inline rename would collide with an existing
+    /// stored name.
+    /// </summary>
+    public void WarnDuplicateStoredName(string attemptedName) =>
+        _fileDialog.ShowWarning(
+            "Duplicate stored name",
+            $"A stored file is already named \"{attemptedName}\". The name was not changed.");
+
     // ── Sample / subtitle inputs (wizard "Samples & subtitles" step) ──
 
     [RelayCommand]

@@ -20,10 +20,7 @@
                  Foreground="{DynamicResource ForegroundSecondary}" />
     </TabItem>
     <TabItem Header="SRR Creator">
-      <TextBlock DataContext="{Binding Creator}"
-                 Text="SRR Creator — porting in progress"
-                 HorizontalAlignment="Center" VerticalAlignment="Center"
-                 Foreground="{DynamicResource ForegroundSecondary}" />
+      <v:CreatorView DataContext="{Binding Creator}" />
     </TabItem>
     <TabItem Header="SRS Creator">
       <TextBlock DataContext="{Binding SRSCreator}"

@@ -11,6 +11,9 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.18" />
+    <!-- The DataGrid package's 11.3 line tops out at 11.3.13 (no 11.3.18 published);
+         11.3.13 depends on Avalonia >= 11.3.13 and composes cleanly with the 11.3.18 core. -->
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.13" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.18" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.18" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.18" />

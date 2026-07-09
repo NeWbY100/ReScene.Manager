@@ -23,6 +23,10 @@
         <ColorPaletteResources x:Key="Dark" Accent="#FF0078D4" />
       </FluentTheme.Palettes>
     </FluentTheme>
+    <!-- Avalonia DataGrid is a separate package with its own Fluent theme; it must be included
+         after <FluentTheme> so the grid's control template and cell styling resolve. First used by
+         the SRR Creator tab (Stored Files); shared by the other grid-bearing tabs. -->
+    <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
     <!-- Semantic control style classes (Button.primary, Border.section, ...), layered on top of
          FluentTheme so they can override its default per-state ContentPresenter styling. -->
     <StyleInclude Source="avares://ReScene.Manager/Resources/Styles.axaml" />
