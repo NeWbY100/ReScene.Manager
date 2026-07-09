@@ -5,9 +5,10 @@
              x:CompileBindings="False">
 
   <!-- ══ Tab Control ═══════════════════════════════════════════════
-       Home is the only live view this task. The remaining seven tabs are
-       placeholders, but each still binds its child ViewModel via DataContext
-       so a later task only swaps the placeholder for the real view. -->
+       Home, SRR Creator, SRS Creator, RAR Reconstructor, SRS Reconstructor and
+       SRS Restorer are live views. Inspector and Compare remain placeholders,
+       but each still binds its child ViewModel via DataContext so a later
+       task only swaps the placeholder for the real view. -->
   <TabControl SelectedIndex="{Binding SelectedTabIndex}"
               Padding="0">
     <TabItem Header="Home">
@@ -32,10 +33,7 @@
       <v:SRSReconstructorView DataContext="{Binding SRSReconstructor}" />
     </TabItem>
     <TabItem Header="SRS Restorer">
-      <TextBlock DataContext="{Binding SampleRestorer}"
-                 Text="SRS Restorer — porting in progress"
-                 HorizontalAlignment="Center" VerticalAlignment="Center"
-                 Foreground="{DynamicResource ForegroundSecondary}" />
+      <v:SampleRestorerView DataContext="{Binding SampleRestorer}" />
     </TabItem>
     <TabItem Header="Compare">
       <TextBlock DataContext="{Binding FileCompare}"

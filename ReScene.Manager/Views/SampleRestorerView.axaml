@@ -1,0 +1,146 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ReScene.Manager.Controls"
+             xmlns:behaviors="clr-namespace:ReScene.Manager.Behaviors"
+             x:Class="ReScene.Manager.Views.SampleRestorerView"
+             x:CompileBindings="False">
+
+  <DockPanel Margin="{DynamicResource PageMargin}">
+
+    <!-- ── Tab description ─────────────────────────────────── -->
+    <TextBlock DockPanel.Dock="Top"
+               Text="Restore media files using SRS data embedded in an SRR file. Select a directory containing the media files to restore — metadata and structure will be reconstructed and CRC-verified."
+               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+               TextWrapping="Wrap" Margin="0,0,0,6" />
+
+    <!-- ── SRR File ──────────────────────────────────────────── -->
+    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,2">
+      <Run Text="SRR File " FontWeight="SemiBold" />
+      <Run Text="— The .srr file containing embedded .srs sample data."
+           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+    </TextBlock>
+    <DockPanel DockPanel.Dock="Top">
+      <Button DockPanel.Dock="Right" Content="Browse"
+              Command="{Binding BrowseSRRCommand}"
+              Classes="ghost"
+              Margin="4,0,0,0" MinWidth="75" />
+      <TextBox x:Name="SRRFileTextBox" Text="{Binding SRRFilePath}"
+               behaviors:TextBoxDropBehavior.DropMode="File" />
+    </DockPanel>
+    <controls:FieldStatusLine DockPanel.Dock="Top" Status="{Binding SRRStatus}" />
+
+    <!-- separator -->
+    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+    <!-- ── Media Directory ───────────────────────────────────── -->
+    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,2">
+      <Run Text="Media Directory " FontWeight="SemiBold" />
+      <Run Text="— Folder holding the full media files the samples were cut from. Files are matched to samples automatically."
+           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+    </TextBlock>
+    <DockPanel DockPanel.Dock="Top">
+      <Button DockPanel.Dock="Right" Content="Browse"
+              Command="{Binding BrowseMediaDirectoryCommand}"
+              Classes="ghost"
+              Margin="4,0,0,0" MinWidth="75" />
+      <TextBox x:Name="MediaDirTextBox" Text="{Binding MediaDirectoryPath}"
+               behaviors:TextBoxDropBehavior.DropMode="Folder" />
+    </DockPanel>
+    <controls:FieldStatusLine DockPanel.Dock="Top" Status="{Binding MatchStatus}" />
+
+    <!-- separator -->
+    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+    <!-- ── Output Directory ──────────────────────────────────── -->
+    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,2">
+      <Run Text="Output Directory " FontWeight="SemiBold" />
+      <Run Text="— Folder where restored samples will be written. Defaults to the media folder."
+           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+    </TextBlock>
+    <DockPanel DockPanel.Dock="Top">
+      <Button DockPanel.Dock="Right" Content="Browse"
+              Command="{Binding BrowseOutputDirectoryCommand}"
+              Classes="ghost"
+              Margin="4,0,0,0" MinWidth="75" />
+      <TextBox x:Name="OutputDirTextBox" Text="{Binding OutputDirectoryPath}"
+               behaviors:TextBoxDropBehavior.DropMode="Folder" />
+    </DockPanel>
+
+    <!-- separator -->
+    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+    <!-- ── SRS Entries DataGrid ──────────────────────────────── -->
+    <TextBlock DockPanel.Dock="Top" Text="Embedded SRS Files" FontWeight="SemiBold" Margin="0,0,0,2" />
+    <DataGrid x:Name="SRSEntriesGrid"
+              DockPanel.Dock="Top"
+              ItemsSource="{Binding SRSEntries}"
+              IsReadOnly="False"
+              AutoGenerateColumns="False"
+              CanUserReorderColumns="False"
+              CanUserSortColumns="False"
+              GridLinesVisibility="Horizontal"
+              HeadersVisibility="Column"
+              SelectionMode="Single"
+              BorderThickness="0"
+              MinHeight="100"
+              MaxHeight="250">
+      <DataGrid.Columns>
+        <DataGridCheckBoxColumn Header="" Binding="{Binding IsSelected}" Width="30" />
+        <DataGridTextColumn Header="SRS File" Binding="{Binding SRSFileName}" Width="200" IsReadOnly="True" />
+        <DataGridTextColumn Header="Sample Name" Binding="{Binding SampleFileName}" Width="200" IsReadOnly="True" />
+        <DataGridTextColumn Header="Media File" Binding="{Binding MediaFilePath}" Width="*" />
+        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="200" IsReadOnly="True" />
+      </DataGrid.Columns>
+    </DataGrid>
+
+    <!-- separator -->
+    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+    <!-- ── Action row ────────────────────────────────────────── -->
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+        <Button Content="Restore All"
+                Command="{Binding RestoreCommand}"
+                Classes="primary"
+                Padding="16,4" Margin="0,0,4,0" />
+        <Button Content="Cancel"
+                Command="{Binding CancelRestoreCommand}"
+                Classes="cancel"
+                IsVisible="{Binding IsRestoring}"
+                Padding="16,4" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <TextBlock Text="{Binding OverallProgressText}" Margin="0,0,8,0" />
+        <TextBlock Text="{Binding ProgressMessage}"
+                   IsVisible="{Binding ShowProgress}" />
+      </StackPanel>
+    </DockPanel>
+
+    <!-- Progress bar -->
+    <ProgressBar DockPanel.Dock="Top"
+                 Value="{Binding ProgressPercent}"
+                 Maximum="100" Height="18"
+                 Margin="0,0,0,4"
+                 IsVisible="{Binding ShowProgress}" />
+
+    <!-- separator -->
+    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+    <!-- ── Log (fills remaining space) ───────────────────────── -->
+    <DockPanel>
+      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Save log..."
+                Command="{Binding SaveLogCommand}"
+                Classes="ghost"
+                Padding="8,2" />
+        <TextBlock Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
+      </DockPanel>
+      <ListBox ItemsSource="{Binding LogEntries}"
+               Classes="logList"
+               FontFamily="{DynamicResource MonoFontFamily}"
+               FontSize="{DynamicResource MonoFontSize}" />
+    </DockPanel>
+
+  </DockPanel>
+
+</UserControl>
