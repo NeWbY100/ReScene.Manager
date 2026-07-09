@@ -8,6 +8,5 @@
   <Project Path="ReScene.Lib/ReScene/ReScene.csproj" />
   <Project Path="ReScene.Manager/ReScene.Manager.csproj" />
   <Project Path="ReScene.Manager.Tests/ReScene.Manager.Tests.csproj" />
-  <Project Path="ReScene.NET/ReScene.NET.csproj" />
   <Project Path="ReScene.NET.Tests/ReScene.NET.Tests.csproj" />
 </Solution>

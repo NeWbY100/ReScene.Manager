@@ -10,10 +10,7 @@
     <Using Include="System.IO" />
   </ItemGroup>
   <ItemGroup>
-    <!-- The WPF head (and any future UI head) still hosts a few ViewModels that
-         consume App.Core internal helpers; the test project exercises internals
-         directly. This preserves the pre-migration internal/public design. -->
-    <InternalsVisibleTo Include="ReScene.NET" />
+    <!-- The test project exercises App.Core internal helpers directly. -->
     <InternalsVisibleTo Include="ReScene.NET.Tests" />
   </ItemGroup>
   <ItemGroup>

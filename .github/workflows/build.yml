@@ -28,10 +28,10 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libfontconfig1
 
-      # Windows: build the FULL solution (all 7 projects incl. the WPF app), then test.
-      # An explicit build is required — `dotnet test <solution>` only builds the test
-      # projects and their references, so it would NOT catch a broken ReScene.NET / Cli /
-      # Manager build on its own.
+      # Windows: build the FULL solution (all 7 cross-platform projects — the WPF app
+      # was retired), then test. An explicit build is required — `dotnet test <solution>`
+      # only builds the test projects and their references, so it would NOT catch a
+      # broken Cli / Manager build on its own.
       - name: Build (Windows — full solution)
         if: runner.os == 'Windows'
         run: dotnet build ReScene.NET.slnx -c Release
@@ -40,9 +40,9 @@ jobs:
         if: runner.os == 'Windows'
         run: dotnet test ReScene.NET.slnx -c Release --no-build
 
-      # Linux/macOS: the WPF app (net10.0-windows) can't build here, so build/test
-      # only the cross-platform projects. ReScene.Manager pulls in App.Core; the two
-      # test projects cover App.Core + the library.
+      # Linux/macOS: the solution is now entirely cross-platform (the WPF app is gone),
+      # but we still build/test only a subset here. ReScene.Manager pulls in App.Core;
+      # the two test projects cover App.Core + the library.
       - name: Build + test (non-Windows — cross-platform subset)
         if: runner.os != 'Windows'
         run: |
