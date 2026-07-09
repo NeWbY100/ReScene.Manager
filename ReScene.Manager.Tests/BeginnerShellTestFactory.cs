@@ -23,9 +23,14 @@ internal static class BeginnerShellTestFactory
     // false, matching how the wizard-body tests wire their VMs.
     private static AvaloniaFileDialogService HeadlessDialog() => new(static () => null);
 
-    public static BeginnerShellViewModel Create()
+    /// <summary>
+    /// Builds the shell. Pass <paramref name="fileDialogOverride"/> to control the sync
+    /// <see cref="IFileDialogService.Confirm"/> the factory's wizard steps call (e.g. a stub that
+    /// returns a known value); null uses the headless dialog (confirms return false).
+    /// </summary>
+    public static BeginnerShellViewModel Create(IFileDialogService? fileDialogOverride = null)
     {
-        AvaloniaFileDialogService fileDialog = HeadlessDialog();
+        IFileDialogService fileDialog = fileDialogOverride ?? HeadlessDialog();
         var dispatcher = new InlineUiDispatcher();
         var tempDir = new InertTempDirectoryService();
         var appSettings = new DefaultAppSettingsService();
