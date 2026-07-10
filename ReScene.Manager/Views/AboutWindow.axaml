@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ReScene.Manager.Views.AboutWindow"
         x:CompileBindings="False"
-        Title="About ReScene.NET"
+        Title="About ReScene Manager"
         Width="400"
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
@@ -23,8 +23,8 @@
     <!-- Links -->
     <StackPanel Margin="0,12,0,0">
       <Button Classes="link"
-              Content="ReScene.NET on GitHub"
-              Tag="https://github.com/NeWbY100/ReScene.NET"
+              Content="ReScene Manager on GitHub"
+              Tag="https://github.com/NeWbY100/ReScene.Manager"
               Click="OnLinkClick"
               Margin="0,2,0,0" />
       <Button Classes="link"

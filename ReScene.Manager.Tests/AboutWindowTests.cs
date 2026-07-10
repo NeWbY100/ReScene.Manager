@@ -55,7 +55,7 @@ public class AboutWindowTests
         Button[] links = [.. window.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("link"))];
 
         Assert.Equal(3, links.Length);
-        Assert.Contains(links, b => (string?)b.Tag == "https://github.com/NeWbY100/ReScene.NET");
+        Assert.Contains(links, b => (string?)b.Tag == "https://github.com/NeWbY100/ReScene.Manager");
         Assert.Contains(links, b => (string?)b.Tag == "https://github.com/NeWbY100/ReScene.Lib");
         Assert.Contains(links, b => (string?)b.Tag == "https://rescene.wikidot.com");
     }

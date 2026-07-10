@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using ReScene.App.Core;
 using ReScene.App.Core.Models;
 using ReScene.App.Core.Services;
@@ -30,6 +31,7 @@ public partial class MainWindow : Window
     private double _normalWidth = 1280;
     private double _normalHeight = 900;
     private bool _stateRestored;
+    private bool _capturePending;
 
     /// <summary>Injected by the composition root before the window is shown.</summary>
     public IWindowStateService? WindowStateService { get; set; }
@@ -232,8 +234,29 @@ public partial class MainWindow : Window
         WindowStateService.Save(state);
     }
 
-    private void CaptureNormalBounds()
+    // Internal so the deferred-capture race test can trigger a capture directly.
+    internal void CaptureNormalBounds()
     {
+        // Coalesce a burst of move/resize events (each fires this) into a single deferred commit.
+        if (_capturePending)
+        {
+            return;
+        }
+
+        _capturePending = true;
+
+        // Defer the actual capture to Background priority and re-check the window state when it runs.
+        // The platform can deliver a size/position change slightly BEFORE WindowState flips to
+        // Maximized; a synchronous capture would then record maximized geometry as the "normal"
+        // bounds. By the time a Background-priority job runs, the state flip from the same input burst
+        // has been processed, so a maximize-in-flight capture self-cancels in CommitNormalBounds.
+        Dispatcher.UIThread.Post(CommitNormalBounds, DispatcherPriority.Background);
+    }
+
+    private void CommitNormalBounds()
+    {
+        _capturePending = false;
+
         if (_stateRestored && WindowState == WindowState.Normal && !double.IsNaN(Width) && Width > 0)
         {
             _normalLeft = Position.X;
@@ -298,5 +321,5 @@ public partial class MainWindow : Window
     private void OnExitClick(object? sender, RoutedEventArgs e) => Close();
 
     private void OnVersionLinkClick(object? sender, RoutedEventArgs e)
-        => new SystemLauncherService().OpenUrl("https://github.com/NeWbY100/ReScene.NET");
+        => new SystemLauncherService().OpenUrl("https://github.com/NeWbY100/ReScene.Manager");
 }

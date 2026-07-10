@@ -13,9 +13,12 @@ namespace ReScene.Manager.Services;
 /// opens a <see cref="FilePreviewWindow"/>.
 /// </summary>
 /// <remarks>
-/// The <see cref="IFilePreviewService.Preview"/> contract is synchronous (<c>void</c>) but Avalonia's
-/// <c>ShowDialog</c> is async-only, so the preview is shown modeless via <c>Show(owner)</c> — the
-/// correct equivalent of the WPF modal <c>ShowDialog</c> here.
+/// The WPF original opened the preview modally (<c>ShowDialog</c>). Avalonia's <c>ShowDialog</c>
+/// returns a <see cref="Task"/> while <see cref="IFilePreviewService.Preview"/> is synchronous
+/// (<c>void</c>), so — when there is an owner — the modal dialog is started fire-and-forget
+/// (<c>_ = window.ShowDialog(owner)</c>): the owner's input is blocked (the modality invariant that
+/// matters) without blocking the calling thread. With no owner (headless) it falls back to
+/// <c>Show()</c>, which needs no visible parent.
 /// </remarks>
 public sealed class AvaloniaFilePreviewService : IFilePreviewService
 {
@@ -47,7 +50,8 @@ public sealed class AvaloniaFilePreviewService : IFilePreviewService
         Window? owner = _owner();
         if (owner is not null)
         {
-            window.Show(owner);
+            // Modal (like WPF's ShowDialog), started fire-and-forget so the void contract holds.
+            _ = window.ShowDialog(owner);
         }
         else
         {

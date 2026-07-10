@@ -40,13 +40,15 @@ jobs:
         if: runner.os == 'Windows'
         run: dotnet test ReScene.Manager.slnx -c Release --no-build
 
-      # Linux/macOS: the solution is now entirely cross-platform (the WPF app is gone),
-      # but we still build/test only a subset here. ReScene.Manager pulls in App.Core;
-      # the two test projects cover App.Core + the library.
-      - name: Build + test (non-Windows — cross-platform subset)
+      # Linux/macOS: the solution is now entirely cross-platform (the WPF app is gone).
+      # release.yml ships linux/osx builds of the Avalonia app, so its headless test suite
+      # must run here too — alongside the library and App.Core tests. ReScene.Manager pulls
+      # in App.Core; the three test projects cover App.Core + the library + the Avalonia app.
+      - name: Build + test (non-Windows — cross-platform)
         if: runner.os != 'Windows'
         run: |
           dotnet build ReScene.Cli/ReScene.Cli.csproj -c Release
           dotnet build ReScene.Manager/ReScene.Manager.csproj -c Release
           dotnet test ReScene.Lib/ReScene.Tests/ReScene.Tests.csproj -c Release
           dotnet test ReScene.App.Core.Tests/ReScene.App.Core.Tests.csproj -c Release
+          dotnet test ReScene.Manager.Tests/ReScene.Manager.Tests.csproj -c Release

@@ -203,4 +203,20 @@ public class FileCopyProgressWindowTests
         // No assertion beyond "did not throw" — there is no owning Window to show a modal over, and
         // the guard in OnBusyChanged must have skipped it rather than crashing.
     }
+
+    [AvaloniaFact]
+    public void OnBusyChanged_True_AgainstUnshownWindowOwner_SkipsAndOpensNothing()
+    {
+        // The owner is a real Window (as in production, where it is the BruteForceProgressWindow) but
+        // is never shown. A Window is its own TopLevel, so the old bare "is not Window" guard would
+        // NOT skip, and the fire-and-forget ShowDialog over an unshown window would throw on the
+        // dispatcher (surfacing here when RunJobs pumps the posted job). The visible-owner guard skips.
+        var owner = new Window();
+        var controller = new ModalProgressWindowController<FileCopyProgressWindow>(owner, () => true, () => { });
+
+        controller.OnBusyChanged(true);
+        Dispatcher.UIThread.RunJobs(); // must not throw
+
+        Assert.Empty(owner.OwnedWindows);
+    }
 }

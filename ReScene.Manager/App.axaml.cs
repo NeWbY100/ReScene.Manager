@@ -4,9 +4,11 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using ReScene.App.Core;
 using ReScene.App.Core.Services;
 using ReScene.App.Core.ViewModels;
+using ReScene.Manager.Helpers;
 using ReScene.Manager.Services;
 using ReScene.Manager.Views;
 
@@ -20,7 +22,10 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // Surface otherwise-silent background failures (mirrors the WPF App handlers).
+            // Re-establish the WPF app's three last-chance exception handlers. AppDomain and
+            // TaskScheduler surface otherwise-silent background failures here; the UI-thread
+            // (Dispatcher) equivalent of WPF's DispatcherUnhandledException is wired below, once the
+            // error dialog it shows exists.
             AppDomain.CurrentDomain.UnhandledException += (_, e) =>
                 Trace.TraceError($"Fatal unhandled exception (terminating={e.IsTerminating}): {e.ExceptionObject}");
             TaskScheduler.UnobservedTaskException += (_, e) =>
@@ -53,6 +58,12 @@ public partial class App : Application
             var appSettings = new AppSettingsService();
             var fileDialog = new AvaloniaFileDialogService(Owner);
             var imageLoader = new AvaloniaImageLoader();
+
+            // Third WPF handler equivalent (DispatcherUnhandledException): log a UI-thread exception,
+            // show a non-fatal error dialog via the existing sync-modal path, and mark it handled so
+            // the app keeps running. Wired here because it needs the fileDialog built above.
+            var uiExceptionHandler = new UiThreadExceptionHandler(fileDialog.ShowError);
+            Dispatcher.UIThread.UnhandledException += (_, e) => e.Handled = uiExceptionHandler.Handle(e.Exception);
 
             window.DataContext = new MainWindowViewModel(
                 new SRRCreationService(), new SRSCreationService(), new SRSReconstructionService(),

@@ -30,11 +30,11 @@ internal sealed class IsoProgressWindowController(Control owner, Func<bool> isPr
             Dispatcher.UIThread.Post(() =>
             {
                 // WPF resolved the owner via Window.GetWindow(_owner); Avalonia's equivalent is the
-                // owning control's attached TopLevel, cast down to a Window. If the control isn't
-                // attached to a window yet (e.g. running headless, or DataContext wired before the
-                // view is placed in the visual tree), there is nothing to show a modal dialog over —
-                // skip rather than crash.
-                if (TopLevel.GetTopLevel(_owner) is not Window ownerWindow)
+                // owning control's attached TopLevel, cast down to a Window. Require a VISIBLE owner:
+                // if the control isn't attached to a shown window yet (running headless, or the
+                // DataContext wired before the view is placed in a shown visual tree), ShowDialog over
+                // it throws, so skip rather than crash.
+                if (TopLevel.GetTopLevel(_owner) is not Window { IsVisible: true } ownerWindow)
                 {
                     return;
                 }

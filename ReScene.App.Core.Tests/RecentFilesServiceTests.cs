@@ -43,4 +43,44 @@ public class RecentFilesServiceTests
             Directory.Delete(Path.GetDirectoryName(tempFile)!, recursive: true);
         }
     }
+
+    [Fact]
+    public void PathComparison_MatchesCurrentOsFilesystemRules()
+    {
+        StringComparison expected = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        Assert.Equal(expected, RecentFilesService.PathComparison);
+    }
+
+    [Fact]
+    public void AddEntry_DedupesByOsCasingRules()
+    {
+        // Two paths differing only in case: on Windows they are the SAME file and must collapse to a
+        // single entry (regression guard for the existing behavior); on Linux/macOS they are distinct
+        // files and must both survive.
+        string tempFile = NewTempFile();
+        try
+        {
+            var svc = new RecentFilesService(new FixedLimitSettingsService(50), tempFile);
+
+            svc.AddEntry(@"C:\Sets\Movie.srr");
+            svc.AddEntry(@"c:\sets\movie.srr");
+
+            List<RecentFileEntry> entries = svc.LoadEntries();
+            if (OperatingSystem.IsWindows())
+            {
+                RecentFileEntry only = Assert.Single(entries);
+                Assert.Equal(@"c:\sets\movie.srr", only.FilePath); // newest of the two wins
+            }
+            else
+            {
+                Assert.Equal(2, entries.Count);
+            }
+        }
+        finally
+        {
+            Directory.Delete(Path.GetDirectoryName(tempFile)!, recursive: true);
+        }
+    }
 }

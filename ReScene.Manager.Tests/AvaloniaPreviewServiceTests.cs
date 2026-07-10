@@ -1,8 +1,10 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using ReScene.App.Core.Services;
 using ReScene.Manager.Services;
+using ReScene.Manager.Views;
 
 namespace ReScene.Manager.Tests;
 
@@ -99,5 +101,45 @@ public class AvaloniaPreviewServiceTests
 
         Assert.Equal(1, loader.StreamLoadCount);
         Assert.Null(dialog.LastError); // success path never reports an error
+    }
+
+    // ── Modal path (F4): with a visible owner the preview opens as an owned modal dialog ──
+    // ShowDialog(owner) requires a visible owner (it throws otherwise), so these tests also prove the
+    // service takes the modal branch rather than the null-owner Show() fallback above.
+
+    [AvaloniaFact]
+    public void FilePreview_WithVisibleOwner_OpensOwnedModalPreview()
+    {
+        var owner = new Window();
+        owner.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        Bitmap image = ImageTestData.CreateBitmap(6, 4);
+        var loader = new RecordingImageLoader { StreamResult = image };
+        var service = new AvaloniaFilePreviewService(loader, () => owner);
+
+        service.Preview(ImageTestData.CreatePngBytes(6, 4), "poster.png");
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Single(owner.OwnedWindows.OfType<FilePreviewWindow>());
+    }
+
+    [AvaloniaFact]
+    public void ImagePreview_WithVisibleOwner_OpensOwnedModalPreview()
+    {
+        var owner = new Window();
+        owner.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        Bitmap image = ImageTestData.CreateBitmap(8, 8);
+        var loader = new RecordingImageLoader { StreamResult = image };
+        var dialog = new RecordingFileDialog();
+        var service = new AvaloniaImagePreviewService(loader, dialog, () => owner);
+
+        service.Preview(ImageTestData.CreatePngBytes(8, 8), "cover.png");
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Null(dialog.LastError);
+        Assert.Single(owner.OwnedWindows.OfType<ImagePreviewWindow>());
     }
 }

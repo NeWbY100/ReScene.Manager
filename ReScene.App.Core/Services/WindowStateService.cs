@@ -7,7 +7,11 @@ namespace ReScene.App.Core.Services;
 /// </summary>
 public class WindowStateService : IWindowStateService
 {
-    private static readonly string _filePath = JsonFileStore.GetPath("window-state.json");
+    // Instance (not static) field: computed at construction time so it picks up whatever
+    // AppDataConfig.FolderName is current when this instance is created (mirrors AppSettingsService
+    // and RecentFilesService). A static field would freeze to the folder active on the type's first
+    // touch in the process, which breaks the per-head folder switch (and cross-test isolation).
+    private readonly string _filePath = JsonFileStore.GetPath("window-state.json");
 
     public WindowStateModel? Load()
     {

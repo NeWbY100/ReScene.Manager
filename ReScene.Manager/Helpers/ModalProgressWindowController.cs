@@ -33,10 +33,11 @@ internal sealed class ModalProgressWindowController<TWindow>(Control owner, Func
         {
             Dispatcher.UIThread.Post(() =>
             {
-                // The owner here is the BruteForceProgressWindow itself; if it isn't attached to a
-                // TopLevel yet (headless, or DataContext wired before the window is shown), there is
-                // nothing to show a modal dialog over — skip rather than crash.
-                if (TopLevel.GetTopLevel(_owner) is not Window ownerWindow)
+                // The owner here is the BruteForceProgressWindow itself, so it is always its own
+                // TopLevel — a bare "is Window" check never skips. Require a VISIBLE owner: if this
+                // catch-up call runs before the owner is shown (headless, or DataContext wired before
+                // the window is displayed), ShowDialog over a not-yet-shown window throws, so skip.
+                if (TopLevel.GetTopLevel(_owner) is not Window { IsVisible: true } ownerWindow)
                 {
                     return;
                 }

@@ -1,5 +1,6 @@
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviors="using:ReScene.Manager.Behaviors">
 
   <!-- ═══════════════════════════════════════════════════════════
        ReScene Manager shared control style classes
@@ -213,6 +214,9 @@
     <Setter Property="Background" Value="{DynamicResource PanelBackground}" />
     <Setter Property="Foreground" Value="{DynamicResource LogTerminalForeground}" />
     <Setter Property="FontFamily" Value="{DynamicResource MonoFontFamily}" />
+    <!-- Auto-scroll to the newest log line as entries append (while the user is at the bottom).
+         Mirrors the WPF shared log style; see Behaviors/ListBoxAutoScroll.cs. -->
+    <Setter Property="behaviors:ListBoxAutoScroll.AutoScrollToEnd" Value="True" />
   </Style>
   <Style Selector="ListBox.logList ListBoxItem">
     <Setter Property="MinHeight" Value="18" />

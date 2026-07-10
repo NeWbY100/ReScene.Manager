@@ -4,6 +4,12 @@ namespace ReScene.App.Core.Services;
 
 public class RecentFilesService(IAppSettingsService appSettingsService, string? filePath = null) : IRecentFilesService
 {
+    // Path dedup must match the filesystem's own casing rules: Windows paths are case-insensitive, so
+    // "A.srr" and "a.srr" are the same file and must collapse to one entry; on Linux/macOS they are
+    // two distinct files and must NOT collapse. Internal so the OS-specific test can reference it.
+    internal static readonly StringComparison PathComparison =
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
     // filePath is a seam for tests; production uses the default per-user store path.
     private readonly string _filePath = filePath ?? JsonFileStore.GetPath("recent.json");
 
@@ -28,7 +34,7 @@ public class RecentFilesService(IAppSettingsService appSettingsService, string? 
     {
         List<RecentFileEntry> entries = LoadEntries();
 
-        entries.RemoveAll(e => string.Equals(e.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+        entries.RemoveAll(e => string.Equals(e.FilePath, filePath, PathComparison));
 
         entries.Insert(0, new RecentFileEntry
         {
@@ -52,7 +58,7 @@ public class RecentFilesService(IAppSettingsService appSettingsService, string? 
     public void RemoveEntry(string filePath)
     {
         List<RecentFileEntry> entries = LoadEntries();
-        entries.RemoveAll(e => string.Equals(e.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+        entries.RemoveAll(e => string.Equals(e.FilePath, filePath, PathComparison));
         Save(entries);
     }
 
