@@ -1,6 +1,8 @@
-# ReScene.NET
+# ReScene Manager
 
-A Windows desktop application for inspecting, creating, and reconstructing [ReScene](https://rescene.wikidot.com/) (SRR/SRS) files, built with WPF and .NET 10.
+A cross-platform desktop application for inspecting, creating, and reconstructing [ReScene](https://rescene.wikidot.com/) (SRR/SRS) files, built with [Avalonia UI](https://avaloniaui.net/) and .NET 10. Runs on Windows and Linux (first-class) and macOS (best-effort builds).
+
+*Formerly **ReScene.NET** (WPF, Windows-only) — renamed to avoid colliding with the original 2008 ReScene .NET tool that pyReScene was ported from.*
 
 It runs in two modes, switchable any time from the **Mode** menu (or in Settings); the choice is remembered:
 
@@ -26,31 +28,42 @@ The full tabbed workbench, with every tool on its own tab.
 - **Compare** two RAR/SRR/SRS/MKV/WebM files side by side, with differences highlighted (down to byte-level cluster payloads for MKV/WebM).
 - Drag & drop (or command-line) opens SRR/SRS/RAR/MKV files straight in the Inspector.
 
-## Requirements
+## Download
 
-- [.NET 10.0](https://dotnet.microsoft.com/download/dotnet/10.0)
-- Windows (WPF)
+Self-contained single-file builds are published per release — no .NET runtime required:
 
-## Getting Started
+| Platform | Asset |
+|---|---|
+| Windows x64 | `ReSceneManager-<version>-win-x64.zip` |
+| Linux x64 | `ReSceneManager-<version>-linux-x64.tar.gz` |
+| macOS x64 / Apple Silicon | `ReSceneManager-<version>-osx-x64.tar.gz` / `-osx-arm64.tar.gz` |
+
+## Building from Source
+
+Requires the [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
 
 ```bash
 # Clone with submodules
-git clone --recurse-submodules https://github.com/NeWbY100/ReScene.NET.git
+git clone --recurse-submodules https://github.com/NeWbY100/ReScene.Manager.git
 # (or, if already cloned) git submodule update --init --recursive
 
 dotnet build
-dotnet run --project ReScene.NET
+dotnet run --project ReScene.Manager
 ```
 
 ## Project Structure
 
 ```
-ReScene.NET/
-├── ReScene.NET/            # WPF desktop application (.NET 10): Views, ViewModels, Services, …
-└── ReScene.Lib/            # Git submodule — shared library (net8.0 + net10.0)
-    ├── ReScene/            # RAR / SRR / SRS parsing & writing, Core reconstruction & compare
-    └── ReScene.Tests/      # xUnit tests
+ReScene.Manager/
+├── ReScene.Manager/         # Avalonia desktop application (.NET 10): Views, platform services
+├── ReScene.App.Core/        # Shared UI-framework-free core: ViewModels, services, models
+├── ReScene.Cli/             # Command-line interface
+└── ReScene.Lib/             # Git submodule — shared library (net8.0 + net10.0)
+    ├── ReScene/             # RAR / SRR / SRS parsing & writing, Core reconstruction & compare
+    └── ReScene.Tests/       # xUnit tests
 ```
+
+(App tests live in `ReScene.App.Core.Tests/` and `ReScene.Manager.Tests/` — the latter runs headless Avalonia UI tests.)
 
 `ReScene.Lib` is versioned and released independently (see its [repository](https://github.com/NeWbY100/ReScene.Lib)).
 
@@ -58,7 +71,9 @@ ReScene.NET/
 
 | Package | Version | Project |
 |---|---|---|
-| [CommunityToolkit.Mvvm](https://www.nuget.org/packages/CommunityToolkit.Mvvm) | 8.4.2 | ReScene.NET |
+| [Avalonia](https://www.nuget.org/packages/Avalonia) (+ Desktop, Fluent, Inter) | 11.3.18 | ReScene.Manager |
+| [Avalonia.Controls.DataGrid](https://www.nuget.org/packages/Avalonia.Controls.DataGrid) | 11.3.13 | ReScene.Manager |
+| [CommunityToolkit.Mvvm](https://www.nuget.org/packages/CommunityToolkit.Mvvm) | 8.4.2 | ReScene.App.Core |
 | [Crc32.NET](https://www.nuget.org/packages/Crc32.NET) | 1.2.0 | ReScene |
 | [System.IO.Hashing](https://www.nuget.org/packages/System.IO.Hashing) | 9.0.4 | ReScene |
 | [CliWrap](https://www.nuget.org/packages/CliWrap) | 3.10.0 | ReScene |
