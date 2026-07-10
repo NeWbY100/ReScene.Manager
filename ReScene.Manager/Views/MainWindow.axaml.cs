@@ -6,10 +6,12 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using System.ComponentModel;
 using ReScene.App.Core;
 using ReScene.App.Core.Models;
 using ReScene.App.Core.Services;
 using ReScene.App.Core.ViewModels;
+using ReScene.Manager.Services;
 
 namespace ReScene.Manager.Views;
 
@@ -32,6 +34,11 @@ public partial class MainWindow : Window
     private double _normalHeight = 900;
     private bool _stateRestored;
     private bool _capturePending;
+
+    // Windows-only taskbar progress consumer (ITaskbarList3); null off Windows / headless / on COM
+    // failure. Subscribed to the VM's PropertyChanged while the window is open.
+    private WindowsTaskbarProgress? _taskbarProgress;
+    private MainWindowViewModel? _taskbarVm;
 
     /// <summary>Injected by the composition root before the window is shown.</summary>
     public IWindowStateService? WindowStateService { get; set; }
@@ -72,17 +79,74 @@ public partial class MainWindow : Window
             versionLink.Content = $"{AppInfo.DisplayName} v{vm.AppVersion}";
         }
 
+        AttachTaskbarProgress();
+
         HandleCommandLineOpen();
     }
 
     protected override void OnClosing(WindowClosingEventArgs e)
     {
         SaveWindowState();
+        DetachTaskbarProgress();
         base.OnClosing(e);
 
         if (DataContext is MainWindowViewModel vm)
         {
             vm.Cleanup();
+        }
+    }
+
+    // ── Windows taskbar progress (ITaskbarList3) ─────────────────────
+
+    private void AttachTaskbarProgress()
+    {
+        // Guard the whole feature off non-Windows platforms so the windows-only COM wrapper is never
+        // referenced there (satisfies CA1416 platform-compatibility flow analysis).
+        if (!OperatingSystem.IsWindows() || DataContext is not MainWindowViewModel vm)
+        {
+            return;
+        }
+
+        // TryCreate returns null on a headless window or if COM activation fails, so this wiring is
+        // inert everywhere except a real Win32 desktop window.
+        _taskbarProgress = WindowsTaskbarProgress.TryCreate(this);
+        if (_taskbarProgress is null)
+        {
+            return;
+        }
+
+        _taskbarVm = vm;
+        _taskbarProgress.Update(vm.TaskbarProgressState, vm.TaskbarProgressValue);
+        vm.PropertyChanged += OnTaskbarPropertyChanged;
+    }
+
+    private void DetachTaskbarProgress()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        if (_taskbarVm is not null)
+        {
+            _taskbarVm.PropertyChanged -= OnTaskbarPropertyChanged;
+            _taskbarVm = null;
+        }
+
+        _taskbarProgress?.Clear();
+        _taskbarProgress = null;
+    }
+
+    private void OnTaskbarPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // VM property changes already arrive on the UI thread (the VM marshals via its dispatcher), so
+        // no extra thread-hop is needed before the COM call. This handler is only ever subscribed on
+        // Windows (AttachTaskbarProgress bails otherwise); the OS guard makes that explicit for CA1416.
+        if (OperatingSystem.IsWindows() && _taskbarProgress is not null && sender is MainWindowViewModel vm
+            && (e.PropertyName == nameof(MainWindowViewModel.TaskbarProgressState)
+                || e.PropertyName == nameof(MainWindowViewModel.TaskbarProgressValue)))
+        {
+            _taskbarProgress.Update(vm.TaskbarProgressState, vm.TaskbarProgressValue);
         }
     }
 
