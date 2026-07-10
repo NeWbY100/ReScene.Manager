@@ -1,0 +1,60 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!--
+    Density parity with the WPF original (ReScene.NET App.xaml templates).
+
+    Avalonia's Fluent theme uses UWP touch metrics: 24px SemiLight "pivot" tab headers
+    (TabItemHeaderFontSize), 32px control min-heights, and generous paddings — which made the
+    ported app render visibly larger than the WPF original. FluentTheme DensityStyle="Compact"
+    (set in App.axaml) closes most of the gap; this dictionary overrides the remainder to the
+    WPF template values. Every Fluent sizing key here is consumed via DynamicResource, and
+    Application.Resources wins over both the theme's Normal AND Compact dictionaries, so these
+    values are authoritative regardless of density mode.
+
+    WPF reference values come from the deleted ReScene.NET/App.xaml (git 910a00d~1).
+  -->
+
+  <!-- Font: the WPF app rendered in Segoe UI; Inter (embedded via WithInterFont) has a larger
+       x-height at equal size, reading "bigger". Prefer Segoe UI where it exists (Windows), fall
+       back to the embedded Inter elsewhere (Linux/macOS). Same chain overrides the Fluent theme
+       default (ContentControlThemeFontFamily) so popups/tooltips match the windows. -->
+  <FontFamily x:Key="ContentControlThemeFontFamily">Segoe UI, fonts:Inter#Inter, $Default</FontFamily>
+
+  <!-- TabItem — WPF: FontSize 12, FontWeight Normal, Padding 12,6, MinHeight 0 (App.xaml:359-394).
+       Fluent default: 24px SemiLight, MinHeight 48. TabItemHeaderMargin is consumed as the
+       TabItem PADDING by the Fluent template (despite its name). The Fluent 2px bottom selection
+       pipe visually matches WPF's 2px accent bottom border, so it stays. -->
+  <x:Double x:Key="TabItemHeaderFontSize">12</x:Double>
+  <FontWeight x:Key="TabItemHeaderThemeFontWeight">Normal</FontWeight>
+  <x:Double x:Key="TabItemMinHeight">0</x:Double>
+  <Thickness x:Key="TabItemHeaderMargin">12,6</Thickness>
+
+  <!-- Menu bar + items — WPF: bar ~27px, top-level item Padding 6,4, submenu item Padding 8,4,
+       popup Padding 0,2 (App.xaml:877-1022). Fluent: 32px bar, 12,0 / 11,4,11,7 paddings. -->
+  <x:Double x:Key="MenuBarHeight">26</x:Double>
+  <Thickness x:Key="MenuBarItemPadding">6,4</Thickness>
+  <Thickness x:Key="MenuFlyoutItemThemePaddingNarrow">8,4</Thickness>
+  <Thickness x:Key="MenuFlyoutScrollerMargin">0,2</Thickness>
+  <x:Double x:Key="MenuFlyoutThemeMinHeight">24</x:Double>
+
+  <!-- Button — WPF: Padding 8,4, no MinHeight (App.xaml:61). Fluent Normal 8,5,8,6 / Compact 6,4.
+       The semantic classes (primary/cancel/ghost) already set 8,4; this covers plain buttons
+       (Browse, dialogs). -->
+  <Thickness x:Key="ButtonPadding">8,4</Thickness>
+
+  <!-- TextBox (also drives NumericUpDown/AutoCompleteBox text areas) — WPF: Padding 4,3, ~27px
+       (App.xaml:268-310). Compact already lowers MinHeight 32→24 / MinWidth 64→32. -->
+  <Thickness x:Key="TextControlThemePadding">4,3</Thickness>
+
+  <!-- ComboBox — WPF: content margin 6,3, item Padding 6,4 (App.xaml:633-734). Compact lowers
+       MinHeight to 24 but leaves item padding at the touch value (its Compact entry is a no-op). -->
+  <Thickness x:Key="ComboBoxPadding">6,3,0,3</Thickness>
+  <Thickness x:Key="ComboBoxItemThemePadding">6,4</Thickness>
+
+  <!-- CheckBox/RadioButton/TreeView rows — WPF rows are ~20px (14x14 glyph + 4px gap;
+       TreeViewItem at WPF default metrics). Compact stops at 24; the Fluent 20x20 check glyph
+       is hardcoded in the template, so 20 is the natural floor. -->
+  <x:Double x:Key="CheckBoxMinHeight">20</x:Double>
+  <x:Double x:Key="RadioButtonMinHeight">20</x:Double>
+  <x:Double x:Key="TreeViewItemMinHeight">20</x:Double>
+</ResourceDictionary>

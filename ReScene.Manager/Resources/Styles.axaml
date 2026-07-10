@@ -2,6 +2,12 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:behaviors="using:ReScene.Manager.Behaviors">
 
+  <!-- Density parity (see Resources/Density.axaml): the Fluent CheckBox hardcodes Padding 8,0,0,0
+       in a literal setter (not a resource), so the WPF 4px glyph→label gap needs a style. -->
+  <Style Selector="CheckBox">
+    <Setter Property="Padding" Value="4,0,0,0" />
+  </Style>
+
   <!-- ═══════════════════════════════════════════════════════════
        ReScene Manager shared control style classes
        (functional-parity port of the ~10 SEMANTIC named styles from

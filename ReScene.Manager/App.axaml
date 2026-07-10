@@ -7,6 +7,9 @@
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
         <ResourceInclude Source="avares://ReScene.Manager/Resources/Tokens.axaml" />
+        <!-- WPF-density overrides of Fluent's touch metrics (tab headers, menus, control
+             paddings); pairs with DensityStyle="Compact" on FluentTheme below. -->
+        <ResourceInclude Source="avares://ReScene.Manager/Resources/Density.axaml" />
       </ResourceDictionary.MergedDictionaries>
       <!-- App-wide converters, reused across Phase-4 views (bool/index -> IsVisible). -->
       <conv:InverseBoolConverter x:Key="InverseBoolConverter" />
@@ -22,7 +25,7 @@
     <!-- ReScene accent (#FF0078D4) driven via ColorPaletteResources so Fluent's
          derived accent shades (hover/pressed/light/dark variants used by
          controls) are computed from it, not just the bare SystemAccentColor key. -->
-    <FluentTheme>
+    <FluentTheme DensityStyle="Compact">
       <FluentTheme.Palettes>
         <ColorPaletteResources x:Key="Light" Accent="#FF0078D4" />
         <ColorPaletteResources x:Key="Dark" Accent="#FF0078D4" />

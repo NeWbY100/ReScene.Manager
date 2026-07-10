@@ -7,7 +7,10 @@
        ═══════════════════════════════════════════════════════════ -->
 
   <!-- ── Typography ──────────────────────────────────────────── -->
-  <FontFamily x:Key="UIFontFamily">Inter, $Default</FontFamily>
+  <!-- Segoe UI first for parity with the WPF original on Windows (Inter's larger x-height reads
+       "bigger" at equal size); the embedded Inter (fonts:Inter#Inter, via WithInterFont) is the
+       cross-platform fallback on Linux/macOS. Matches ContentControlThemeFontFamily in Density.axaml. -->
+  <FontFamily x:Key="UIFontFamily">Segoe UI, fonts:Inter#Inter, $Default</FontFamily>
   <FontFamily x:Key="MonoFontFamily">Cascadia Mono, Cascadia Code, Consolas, DejaVu Sans Mono, Menlo, monospace</FontFamily>
   <x:Double x:Key="FontSizeH1">20</x:Double>
   <x:Double x:Key="FontSizeH2">16</x:Double>

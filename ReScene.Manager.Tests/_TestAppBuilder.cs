@@ -25,5 +25,9 @@ public sealed class TestAppBuilder
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<App>()
             .UseSkia()
+            // Match production (Program.BuildAvaloniaApp): UIFontFamily's fallback chain references
+            // the embedded Inter collection (fonts:Inter#Inter); without registering it, font
+            // resolution on machines lacking Segoe UI (Linux CI) would skip to $Default or fail.
+            .WithInterFont()
             .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
 }
