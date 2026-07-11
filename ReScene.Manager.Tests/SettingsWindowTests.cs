@@ -56,6 +56,45 @@ public class SettingsWindowTests
     }
 
     [AvaloniaFact]
+    public void Window_IsResizable_WithCenteredFooterButtons()
+    {
+        string originalFolder = AppDataConfig.FolderName;
+        string tempFolder = UseTempAppDataFolder();
+        try
+        {
+            using var sink = new BindingErrorSink();
+            var window = new SettingsWindow(CreateViewModel());
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            try
+            {
+                // Resizable with a sane floor; content scrolls when shrunk below natural height.
+                Assert.True(window.CanResize);
+                Assert.Equal(480, window.MinWidth);
+                Assert.NotNull(window.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault());
+
+                // Cancel/Save carry MinWidth=75, so the global WPF-parity centering style (Fluent
+                // sets no content alignment → labels would hug the left edge) must apply to them.
+                Button[] footer = [.. window.GetVisualDescendants().OfType<Button>()
+                    .Where(b => Equals(b.Content, "Cancel") || Equals(b.Content, "Save"))];
+                Assert.Equal(2, footer.Length);
+                Assert.All(footer, b =>
+                    Assert.Equal(Avalonia.Layout.HorizontalAlignment.Center, b.HorizontalContentAlignment));
+                Assert.Empty(sink.Messages);
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+        finally
+        {
+            AppDataConfig.FolderName = originalFolder;
+            CleanUpTempAppDataFolder(tempFolder);
+        }
+    }
+
+    [AvaloniaFact]
     public void Renders_ReflectsViewModelValues_NoBindingErrors()
     {
         string originalFolder = AppDataConfig.FolderName;

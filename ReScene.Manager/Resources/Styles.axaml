@@ -8,6 +8,15 @@
     <Setter Property="Padding" Value="4,0,0,0" />
   </Style>
 
+  <!-- WPF parity: WPF buttons center their content; Avalonia's Fluent Button theme sets no
+       content alignment, so any button wider than its text (MinWidth Save/Cancel/Browse
+       buttons) renders the label left-hugging. Button.link / Button.recentItem re-assert Left
+       further down (later styles win), which is intentional for those. -->
+  <Style Selector="Button">
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+
   <!-- Tab-strip band (pairs with the TabItemHeader* state brushes in Density.axaml): paint the
        tab row's items panel with the surface color so the full-width strip reads as a tab bar,
        WPF App.xaml:332-335 style. The Fluent TabControl's items host is a WrapPanel (the theme's

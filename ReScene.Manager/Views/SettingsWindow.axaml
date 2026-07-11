@@ -4,10 +4,12 @@
         x:CompileBindings="False"
         Title="Settings"
         Width="560"
+        MinWidth="480"
+        MinHeight="320"
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        CanResize="False"
+        CanResize="True"
         Background="{DynamicResource WindowBackground}"
         Foreground="{DynamicResource ForegroundPrimary}"
         FontFamily="{DynamicResource UIFontFamily}">
@@ -34,6 +36,8 @@
       </StackPanel>
     </Border>
 
+    <!-- Scrollable so the window stays usable when resized below its natural height. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="{DynamicResource PageMargin}">
 
       <!-- ── Interface ─────────────────────────────────────────── -->
@@ -148,6 +152,7 @@
       </Border>
 
     </StackPanel>
+    </ScrollViewer>
 
   </DockPanel>
 </Window>
