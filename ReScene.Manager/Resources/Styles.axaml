@@ -279,4 +279,21 @@
     <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListLowBrush}" />
   </Style>
 
+  <!-- ── DataGrid header/cell density (WPF App.xaml:1173-1199) ────
+       Fluent's DataGrid renders 14px column headers with generous padding, which overflows the fixed
+       column widths ported verbatim from WPF (e.g. "Duration" clips to "Dura", "No Match" to "No Matc"
+       on the brute-force grid). Restore WPF's compact chrome: 11px SemiBold secondary-color headers with
+       6,4 padding and 6,3 cell padding, so those exact widths fit as they did in WPF. Applies to every
+       grid; the Compare diff tint (a DataGridCell Background set in FileCompareView) and the alt-row tint
+       above set different properties, so they compose. -->
+  <Style Selector="DataGridColumnHeader">
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundSecondary}" />
+    <Setter Property="Padding" Value="6,4" />
+  </Style>
+  <Style Selector="DataGridCell">
+    <Setter Property="Padding" Value="6,3" />
+  </Style>
+
 </Styles>

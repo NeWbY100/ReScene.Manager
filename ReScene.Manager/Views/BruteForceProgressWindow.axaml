@@ -104,14 +104,17 @@
         </ContextMenu>
       </DataGrid.ContextMenu>
       <DataGrid.Columns>
-        <DataGridTextColumn Header="Set" Binding="{Binding SetText}" Width="80" />
+        <!-- Widths account for Avalonia's DataGrid header chrome (a sort-indicator reserve WPF's custom
+             template lacked): the WPF-copied widths clipped "Duration"→"Dura", "No Match"→"No Matc" and
+             the HH:mm:ss timestamps. Sized to fit header + content at the 11px/6,4 header density above. -->
+        <DataGridTextColumn Header="Set" Binding="{Binding SetText}" Width="70" />
         <DataGridTextColumn Header="Version" Binding="{Binding VersionName}" Width="140" />
         <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
-        <DataGridTextColumn Header="Result" Binding="{Binding Result}" Width="80" />
-        <DataGridTextColumn Header="Start" Binding="{Binding StartText}" Width="70" />
-        <DataGridTextColumn Header="End" Binding="{Binding EndText}" Width="70" />
-        <DataGridTextColumn Header="Duration" Binding="{Binding DurationText}" Width="70" />
-        <DataGridTextColumn Header="Arguments" Binding="{Binding Arguments}" Width="*" />
+        <DataGridTextColumn Header="Result" Binding="{Binding Result}" Width="100" />
+        <DataGridTextColumn Header="Start" Binding="{Binding StartText}" Width="82" />
+        <DataGridTextColumn Header="End" Binding="{Binding EndText}" Width="82" />
+        <DataGridTextColumn Header="Duration" Binding="{Binding DurationText}" Width="92" />
+        <DataGridTextColumn Header="Arguments" Binding="{Binding Arguments}" Width="*" MinWidth="180" />
       </DataGrid.Columns>
     </DataGrid>
 
