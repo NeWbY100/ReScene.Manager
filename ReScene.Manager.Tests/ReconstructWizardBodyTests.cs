@@ -7,6 +7,7 @@ using ReScene.App.Core.ViewModels;
 using ReScene.App.Core.ViewModels.Wizards;
 using ReScene.Core;
 using ReScene.Manager.Services;
+using ReScene.Manager.Views;
 using ReScene.Manager.Views.Wizards;
 
 namespace ReScene.Manager.Tests;
@@ -84,6 +85,28 @@ public class ReconstructWizardBodyTests
         window.Show();
         Dispatcher.UIThread.RunJobs();
         return (window, body, wizard);
+    }
+
+    [AvaloniaFact]
+    public void RunStart_OpensBruteForceProgressModal_OwnedByWizard()
+    {
+        // Regression: the beginner "Reconstruct RAR archives" wizard must open the brute-force progress
+        // dialog when a run starts, exactly as the RAR Reconstructor tab does on IsRunning=true. The
+        // wizard runs without that tab realized, so ReconstructWizardBody opens the window itself, owned
+        // by the hosting WizardWindow.
+        ReconstructorViewModel vm = CreateViewModel();
+
+        using var sink = new BindingErrorSink();
+        (Window window, _, _) = Show(vm);
+
+        vm.IsRunning = true;
+        Dispatcher.UIThread.RunJobs();
+        BruteForceProgressWindow modal = Assert.Single(window.OwnedWindows.OfType<BruteForceProgressWindow>());
+        Assert.Same(vm, modal.DataContext);
+
+        Assert.Empty(sink.Messages);
+        modal.Close();
+        window.Close();
     }
 
     [AvaloniaFact]
