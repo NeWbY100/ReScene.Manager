@@ -1,7 +1,7 @@
 # RAR Reconstruction Subsystem — Correctness Fixes (Design)
 
 **Date:** 2026-07-11
-**Status:** Draft — pending user approval
+**Status:** Draft (rev. 3) — refined after two codex reviews of the implementation plan; see Revision note below.
 **Branch:** `avalonia-feature` (app + nested `ReScene.Lib` submodule)
 **Scope:** `ReScene.App.Core` reconstruction view-models/helpers and `ReScene.Lib`
 (`Manager` engine, `SRRFile`/`SRRFileParser`, `SRRArchiveSet`) — the RAR Reconstructor only.
@@ -40,6 +40,36 @@ Reading that spec sharpens three findings:
   "fix C"); the fields were added to `SRRArchiveSet` but the app-side wiring in `BuildOptionsForSet`
   was never finished. Our fix completes it.
 
+### Revision note (rev. 3, post-codex-review) — clauses that supersede the original WS text
+
+Two codex reviews of the implementation plan (grounded in a read of the engine and version-selection
+code) refined several decisions. Where the WS sections below differ from these, **these govern**:
+
+1. **Two reserved guarded roots, fail-closed** supersedes "no delete outside the output tree." Every
+   destructive delete/move must target a strict descendant of a *validated* reserved root — the
+   **output tree** (`OutputPath\output`) or the **scratch tree** (`OutputPath\.rescene-work`) — each
+   verified (resolving every path component / real links, not lexical `Path.GetFullPath`, and not
+   `Directory.Exists`-gated) to resolve under the real `OutputPath`. Fail closed when safety is
+   indeterminate for an existing path.
+2. **Relocation moves exactly the engine-reported committed files.** The engine result gains
+   `BruteForceRunResult.CommittedFiles` (a lib change); the VM relocates those, never files found by
+   scanning the work-root (which mixes the winner with `DeleteRARFiles==false` leftovers and `input\`
+   sources, indistinguishable by name when `RenameToReleaseNames==false`). Multi-set custom-packer
+   (`Combo==null`) is reported **unsupported/failed**, never a false success.
+3. **Verification snapshot is the *sole* post-cleanup source.** A named `(name→hash)` snapshot is
+   parsed once *before* cleanup; all downstream volume-name and CRC lookups read it; the post-cleanup
+   re-reads (`ResolveSfvVolumeNames`/`TryLoadUserSfv`) are removed. Only CRC32 snapshots feed
+   `ExpectedVolumeCrcs`; SHA1 feeds `options.Hashes` only. Expected CRCs store **one canonical key per
+   volume** (qualified-first, basename fallback in `Manager`) — never both aliases (double-counts).
+4. **`-mt` preserves `-mt0`** (byte-significant) and clamps the high end to a **version-aware** max
+   (not a universal 1..64), plus a **checked cardinality cap** and cooperative cancellation; the
+   matrix builds off the UI thread.
+5. **#6 uses an explicit format↔executable-version compatibility map** (`SRRArchiveSet.RARVersion` is
+   an unpack version → RAR4/5/7 → capable exe versions + `-ma` toggle, intersected with the user's
+   selection, with empty-intersection reported honestly) — not a raw range from the unpack version.
+6. **Config restore uses a *public* lib construction seam** and a versioned/complete DTO (empty dirs
+   and null metadata are legitimate — completeness is a schema marker, not "non-empty").
+
 ## Goal
 
 Every confirmed finding fixed, root-caused where the findings cluster (the work-root/relocation
@@ -58,10 +88,11 @@ restored to writing verified output to the user's chosen `OutputPath\output\`.
   pre-fix behavior intended by the original design. The uniform relocation path satisfies this via a
   same-volume rename; it is verified by a snapshot/assertion test on the produced options + final
   paths (byte identity of `.rar` is covered by the manual check).
-- **No destructive delete outside the output tree:** every `Directory.Delete`/`File.Delete` on a
-  reconstruction path must first canonicalize its target and assert it is at or under
-  `Path.GetFullPath(Path.Combine(OutputPath, "output"))`. Untrusted `set.Directory` (from SRR volume
-  names) must never widen a delete.
+- **Two reserved guarded roots (see Revision note #1):** every destructive delete/move targets a
+  strict descendant of a *validated* reserved root — the output tree (`OutputPath\output`) or the
+  scratch tree (`OutputPath\.rescene-work`) — resolved via real links (every component), fail-closed
+  when indeterminate. Untrusted `set.Directory`/`set.Key` (from SRR volume names) can never widen or
+  redirect a delete. Relocation moves only the engine-reported committed files (Revision note #2).
 - **Honest reporting:** a run reports success for a set only when that set's own output is verified
   and placed at its final location. Never report success while output is stranded, missing, or
   another set's output was destroyed.
@@ -198,12 +229,13 @@ Fixes **#6, #7, #8, #9, #10**. #7 and #9 touch `ReScene.Lib`.
 Fixes **#13, #21, #14, #18**.
 
 - **#13 — `-mt` matrix built on the UI thread, unclamped, overflow-unsafe**
-  (`RARCommandLineBuilder.cs:262`). **Fix:** clamp `SwitchMTStart`/`SwitchMTEnd` to `1..64` (RAR's real
-  max) in the setters/builder; make the `for (z = mtLo; z <= mtHi; z++)` loop overflow-safe (widen to
-  `long` or use an exclusive bound); cap total matrix cardinality; build the matrix off the UI thread
-  (`Task.Run`) with the run's `CancellationToken`. The existing `0..0` (MT off) single-iteration
-  behavior is preserved. **Test:** `SwitchMTEnd = int.MaxValue` → clamped, no OOM/overflow; matrix
-  build honors cancellation.
+  (`RARCommandLineBuilder.cs:262`). **Fix (per Revision note #4):** preserve `-mt0` (byte-significant);
+  clamp the high end to a **version-aware** valid max (RAR4 ≤16, RAR5+ per its manual) — not a
+  universal 1..64; compute matrix cardinality with `checked` arithmetic and reject (typed exception,
+  before allocation) when it exceeds a defined cap; check the run `CancellationToken` inside the
+  expansion loop; build off the UI thread via `Task.Run`. The existing `0..0` (MT off) single-iteration
+  behavior is preserved. **Test:** `SwitchMTEnd = int.MaxValue` → bounded, no OOM/overflow; `-mt0`
+  retained; a cap-exceeding matrix → typed exception; cancellation honored.
 - **#21 — blank volume size reinterpreted in the selected unit** (`RARCommandLineBuilder.cs:372`).
   Blank size + GB unit yields `-v15000000000` (~15 TB). **Fix:** on invalid/nonpositive input return the
   fixed KB fallback directly (`-v15000k`), not the numeric default reinterpreted through the unit; use

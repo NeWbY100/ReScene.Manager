@@ -1,264 +1,258 @@
-# RAR Reconstruction Correctness Fixes — Implementation Plan (rev. 2, post-codex-review)
+# RAR Reconstruction Correctness Fixes — Implementation Plan (rev. 3, post-2×-codex-review)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Fix all 25 verified codex findings in the RAR reconstruction subsystem, restoring the common single-set workflow and closing the multi-set correctness/safety gaps — with the shared infrastructure the fixes depend on built first, and no task leaving the build broken.
+**Goal:** Fix all 25 verified codex findings in the RAR reconstruction subsystem — restoring the common single-set workflow and closing the multi-set correctness/safety gaps — with the shared infrastructure and engine contracts the fixes depend on built first, and no task leaving the build broken.
 
-**Architecture:** Lib-first (per-set directories + backward-compatible dir-qualified CRC). Then app-side shared infrastructure (metadata normalization, a named verification snapshot, containment guards, a `TimeProvider` seam, an immutable switch snapshot). Then the atomic work-root/relocation redesign. Then the remaining per-set, robustness, path-guard and progress fixes. Every task is TDD.
+**Architecture:** Lib-first: per-set directories, a backward-compatible dir-qualified CRC, and an engine result that returns the committed output file paths. Then app-side infrastructure (metadata normalization, a named verification snapshot that becomes the sole verification source, two reserved-root path guards, a format/version compatibility map, a `TimeProvider` seam, an immutable switch snapshot). Then the atomic work-root/relocation redesign that relocates exactly the engine-reported committed files. Then per-set matrices, robustness, path-guard, and progress fixes. TDD throughout.
 
-**Tech Stack:** .NET 10 · CommunityToolkit.Mvvm 8.4 · xUnit · `ReScene.App.Core` (UI-agnostic) + `ReScene.Lib` submodule. Spec: `docs/superpowers/specs/2026-07-11-reconstruction-fixes-design.md`. This revision incorporates a full codex review of rev. 1 (all 15 concerns adopted).
+**Tech Stack:** .NET 10 · CommunityToolkit.Mvvm 8.4 · xUnit · `Microsoft.Extensions.TimeProvider.Testing` (FakeTimeProvider) · `ReScene.App.Core` + `ReScene.Lib` submodule. Spec: `docs/superpowers/specs/2026-07-11-reconstruction-fixes-design.md` (updated to rev. 3). This revision adopts all concerns from two codex reviews of rev. 1/2, grounded in a read of the engine (`Manager`/`SRRReconstructor`) and version-selection code.
+
+## Ground-truth notes (verified against source; do not re-assume)
+
+- Engine output lives at `<OutputDirectoryPath>\output`; input at `…\input`; trial candidates are written **into `output`** under generated names `…{versionDir}-{joinedArgs}[-patched].rar`; `comment.txt` at the root; logs at `…\logs` (`Manager.cs:583-630`, `InputDirectoryPreparer.cs:99-107`).
+- After success, `output` holds the committed winner **plus** retained non-match leftovers when `RAROptions.DeleteRARFiles==false` (`Manager.cs:742-753`); with `RenameToOriginalNames==false` the winner keeps a generated name **indistinguishable by pattern** from leftovers. `CompleteAllVolumes==false` produces only the **first** volume (`Manager.cs:433-451,690`).
+- `BruteForceRunResult(bool Success, WinningCombo? Combo)`; `WinningCombo(int Version, IReadOnlyList<RARCommandLineArgument> Args)` — **no produced file paths** are returned today (`BruteForceRunResult.cs`, `WinningCombo.cs`, `Manager.cs:388,821`). Custom-packer returns `Combo==null` (`Manager.cs:231`).
+- Custom-packer (`SRRReconstructor`) writes **directly to `OutputDirectoryPath` root**, possibly nested (`DVD1\x.rar`), no brute-force/rename (`Manager.cs:211-226`, `SRRReconstructor.cs:40,140-141`).
+- Rename maps produced→original **positionally** via `RAROptions.OriginalRARFileNames`, using `Path.GetFileName(originalNames[i])` (`Manager.cs:963-965,984-986`) — the Unix-backslash bug (#10) is here too.
+- `VersionRange(int Start incl, int End excl)` over **executable** version×100 (200-800). Format per (exe, args): `<500`→RAR4, `500-699`→RAR5 default / RAR4 with `-ma4` / RAR5 with `-ma5`, `>=700`→RAR7; `-ma4/-ma5` carry `Min=500,Max=699` and are filtered out elsewhere (`RARVersionSelector.ParseRARArchiveVersion`/`FilterArgumentsForVersion`, `RARVersionThresholds` 500/700). `SRRArchiveSet.RARVersion` is an **unpack** version, never read per-set today (`ArchiveSetPlanner.cs:99-169`).
+- `SharedReconstructionSettings.VerificationHashes` is values-only; the run still re-reads the SFV after cleanup via `ResolveSfvVolumeNames()`/`TryLoadUserSfv(VerificationPath)` (`ReconstructorViewModel.cs:1553-1560`). `SFVFileEntry.FileName`/`SHA1FileEntry.FileName` exist. `RARSwitchSettings` is a copyable `sealed record`. `RARVolumeIdentifier.IsRARVolume` recognizes `.rar/.rNN/.sNN/.NNN`. `ReScene.Lib` exposes internals only to `ReScene.Tests`, so App.Core-facing seams must be **public**.
 
 ## Global Constraints
 
-- **Single-set output contract:** a single-set run produces byte-identical `.rar` output at `OutputPath\output\<name>` — same bytes AND same location (no `<dir>` subfolder even when the set has a non-empty `Key`/`Directory`). Assert final path + option equivalence in tests.
-- **Delete safety — two guarded roots:** every destructive delete/move canonicalizes its target with real link resolution and asserts it is a strict descendant of exactly one reserved root — the **output tree** (`OutputPath\output`) or the **scratch tree** (`OutputPath\.rescene-work`). Untrusted `set.Directory`/`set.Key` (from SRR volume names) can never widen or redirect a delete. When safety cannot be established for an existing path, **fail closed** (abort with a validation error), never delete.
-- **Honest reporting:** a set reports success only when its own **complete** verified volume set is placed at its final location. Never report success while output is stranded, incomplete, missing, or a sibling's output was destroyed.
-- **Full-volume verification must never be silently disabled:** any change to expected-CRC keying must keep the expected map populated for the common case; an empty map (which makes `Manager` fall back to first-volume-only) is a failure to fix, not an acceptable outcome.
-- **TDD, small commits:** one failing test per fix first; commit per task; each task leaves the build green.
-- **Build gate (every task):** `dotnet build ReScene.Manager.slnx -c Debug -p:BaseOutputPath=bin2/` → 0 warnings / 0 errors; relevant `dotnet test` green; delete `bin2/` after.
-- **Lib-first & backward-compatible:** `ReScene.Lib` changes (Tasks 1–2) land + pointer bumped before app tasks build against them; the dir-qualified CRC key keeps a legacy basename fallback so the app keeps working across the T2→T9 gap. No flat `SRRFile` field removed; update `PublicApi.ReScene.approved.txt` for new public members.
-- **Deferred:** recovery-record (`-rr`) — no `-rr` switch exists; Task 8 leaves a documented `// TODO(-rr)`.
-- **Commit trailer:** end every commit message with `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
-
-## File Structure
-
-**Lib (`ReScene.Lib/ReScene/`):** `SRR/SRRArchiveSet.cs` (per-set dir membership + 3 time maps), `SRR/SRRFileParser.cs` (route dir records to current set), `Core/Manager.cs` (`BuildExpectedInOrder` qualified-first + basename fallback + `LastSegment`), `ReScene.Tests/PublicApi.ReScene.approved.txt`.
-**App new files (`ReScene.App.Core/ViewModels/Reconstruction/`):** `RarMetadataNormalizer.cs`, `VerificationSnapshot.cs`, `ReconstructionPathGuard.cs`.
-**App modified:** `SRRSwitchMapper.cs`, `SRRImportParser.cs`, `ArchiveSetPlanner.cs`, `SharedReconstructionSettings.cs`, `RARCommandLineBuilder.cs`, `ReconstructionProgressTracker.cs`, `ImportedSRRStateMapper.cs`, `Models/ImportedSRRState.cs`, `ReconstructorFieldGuidance.cs`, `ViewModels/ReconstructorViewModel.cs`; `ReScene.Manager/Views/Wizards/BeginnerWizardFactory.cs` (confirm surface).
-**Tests:** `ReScene.App.Core.Tests/`, `ReScene.Manager.Tests/`, `ReScene.Lib/ReScene.Tests/`.
-
-Line numbers are review anchors — re-confirm with a quick read before editing.
+- **Single-set output contract:** a single-set run produces byte-identical `.rar` output at `OutputPath\output\<name>` — same bytes AND same location (no `<dir>` subfolder even for a non-empty `Key`/`Directory`).
+- **Committed-file identity:** relocation moves **exactly the files the engine reports as committed** (new `BruteForceRunResult.CommittedFiles`), never files it discovers by scanning the work-root. Never relocate `input\` sources or `DeleteRARFiles==false` leftovers.
+- **Two reserved guarded roots:** every destructive delete/move targets a strict descendant of exactly one **validated** reserved root — the output tree (`OutputPath\output`) or the scratch tree (`OutputPath\.rescene-work`) — each verified to itself resolve (real links, every component) under the real `OutputPath`. Destructive cleanup of a reserved root enumerates and guards its children; it never deletes via an unresolved path. When safety cannot be established for an existing path, **fail closed** (validation error), never delete. Untrusted `set.Directory`/`set.Key` can never widen or redirect a delete.
+- **Full-volume verification never silently disabled:** expected-CRC keying stores exactly **one canonical key per volume** (never both qualified+basename aliases — that double-counts coverage); `Manager` looks up canonical-then-legacy-basename. An empty `ExpectedVolumeCrcs` in a case the old basename logic would have covered is a defect.
+- **Honest reporting:** a set reports success only when its own complete committed volume set is placed at its final location. Multi-set custom-packer (`Combo==null`, root/nested layout) is reported **unsupported/failed**, never a false success (the original design's noted non-goal).
+- **TDD, small commits, green each task; build gate:** `dotnet build ReScene.Manager.slnx -c Debug -p:BaseOutputPath=bin2/` → 0 warnings/0 errors; relevant `dotnet test` green; delete `bin2/` after.
+- **Lib-first & backward-compatible:** lib tasks land + pointer bumped before app builds against them; dir-qualified CRC keeps a legacy basename fallback so the app works across the gap; update `PublicApi.ReScene.approved.txt`.
+- **Deferred:** recovery-record (`-rr`) — no switch exists; a `// TODO(-rr)` marks where it would attach.
+- **Commit trailer:** `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
 
 ---
 
 ## Phase A — Lib (submodule first)
 
-### Task 1: Lib — per-set directory membership + all three time maps (#7)
+### Task 1: Lib — per-set directory membership + all three time maps + public construction seam (#7)
 
-**Files:** Modify `ReScene.Lib/ReScene/SRR/SRRArchiveSet.cs`, `ReScene.Lib/ReScene/SRR/SRRFileParser.cs` (directory branch ~708-715), `ReScene.Lib/ReScene.Tests/PublicApi.ReScene.approved.txt`; Test `ReScene.Lib/ReScene.Tests/SRRArchiveSetTests.cs`.
+**Files:** `ReScene.Lib/ReScene/SRR/SRRArchiveSet.cs`, `SRRFileParser.cs` (dir branch ~708-715), `ReScene.Lib/ReScene.Tests/RAR4HeaderBuilder.cs` (emits only mtime, ~92 — extend for ctime/atime), `PublicApi.ReScene.approved.txt`; Test `SRRArchiveSetTests.cs`.
 
-**Interfaces — Produces:** `SRRArchiveSet.ArchivedDirectories` (`IReadOnlyList<string>`), `.ArchivedDirectoryTimestamps` / `.ArchivedDirectoryCreationTimes` / `.ArchivedDirectoryAccessTimes` (`IReadOnlyDictionary<string, DateTime>`) — the set's own in-archive directory records + all three time maps. A public/init construction seam so the config restore (Task 11) can rebuild a set (add an `internal` add-method or `init` collections; do NOT leave the backing collections write-inaccessible to `ReScene.App.Core`).
+**Interfaces — Produces:** `SRRArchiveSet.ArchivedDirectories` + `.ArchivedDirectoryTimestamps`/`.ArchivedDirectoryCreationTimes`/`.ArchivedDirectoryAccessTimes`; a **public** factory/`init` seam (`public static SRRArchiveSet FromRestored(...)` or public `init` collections) usable from `ReScene.App.Core` for config restore (Task 11) — NOT internal.
 
-- [ ] **Step 1 — failing test:** synthetic two-set SRR (via `SRRTestDataBuilder`, RAR4) where set A archives dir `SubsA` (with a distinct modified time) and set B archives `SubsB`. Assert `sets[0].ArchivedDirectories == ["SubsA"]`, `sets[1].ArchivedDirectories == ["SubsB"]`, and each set's three time maps contain only its own dir with the right values.
-- [ ] **Step 2 — run, expect FAIL** (members absent / flattened).
-- [ ] **Step 3 — implement:** add the membership list + three time dictionaries to `SRRArchiveSet` (mirror the existing `ArchivedFiles`/`ArchivedFileTimestamps`/`…CreationTimes`/`…AccessTimes` members). In `SRRFileParser`'s `isDirectory` branch, after the existing flat `srr.ArchivedDirectories.Add`, also route the record + all three times to `srr.CurrentArchiveSet?`.
-- [ ] **Step 4 — run, expect PASS;** regenerate/approve `PublicApi.ReScene.approved.txt` for the new members.
-- [ ] **Step 5 — commit** (`fix(lib): per-set in-archive directory membership + times (#7)`).
+- [ ] **Step 1 — extend the test builder:** add creation/access extended-time emission to `RAR4HeaderBuilder` (today only mtime at ~92) so a test can set distinct m/c/a times on a directory record.
+- [ ] **Step 2 — failing test:** a synthetic two-set SRR where **both** sets contain a directory of the **same name** `Subs` but with **different** m/c/a times → assert `sets[0].ArchivedDirectories==["Subs"]` with set 0's three times, `sets[1]` with set 1's — proving no flat last-wins contamination (same name is the discriminating case; `SubsA`/`SubsB` would not expose it).
+- [ ] **Step 3 — run, expect FAIL.**
+- [ ] **Step 4 — implement:** add the membership list + three time maps to `SRRArchiveSet` with a public construction seam; route dir records + all three times to `srr.CurrentArchiveSet?` in `SRRFileParser`'s `isDirectory` branch; approve `PublicApi`.
+- [ ] **Step 5 — run PASS; commit** (`fix(lib): per-set directory membership + m/c/a times + public restore seam (#7)`).
 
-### Task 2: Lib — dir-qualified CRC with basename fallback (#9, #10-lib) + bump pointer
+### Task 2: Lib — canonical dir-qualified CRC + Unix-safe rename (#9, #10-lib)
 
-**Files:** Modify `ReScene.Lib/ReScene/Core/Manager.cs` (`BuildExpectedInOrder` 157-169); Test `ReScene.Lib/ReScene.Tests/` (Manager/VolumeMatch).
+**Files:** `ReScene.Lib/ReScene/Core/Manager.cs` (`BuildExpectedInOrder` 157-169, `RenameMatchedOutput` 963-986); Test lib Manager tests.
 
-**Interfaces — Produces:** `Manager.BuildExpectedInOrder` looks up each ordered volume by **directory-qualified relative path first** (normalized `\`→`/` via a `LastSegment`/normalize helper), then **falls back to bare basename** when no qualified key exists. It must **never** return empty when the previous basename logic would have matched (no silent loss of full-volume verification).
+**Interfaces — Produces:** `BuildExpectedInOrder` looks up each ordered volume by its **canonical dir-qualified key first, then legacy basename fallback**, never returning empty where basename would have matched. A private `LastSegment(string)` (splits on `/` and `\`) replaces `Path.GetFileName` on SRR-internal names in both `BuildExpectedInOrder` and `RenameMatchedOutput`.
 
-- [ ] **Step 1 — failing tests:** (a) collision — expected map has `CD1/release.rar`→CRC_A and `CD2/release.rar`→CRC_B; a set whose `OriginalRARFileNames` are `CD2\release.rar` → picks CRC_B. (b) common case — expected map keyed by bare `release.r00` (flat SFV) with volumes `DVD1\release.r00` → still matches via basename fallback (map NOT empty). (c) mixed separators resolve identically.
-- [ ] **Step 2 — run, expect FAIL** on (a); (b)/(c) guard against regressing them.
-- [ ] **Step 3 — implement:** add a private `static string LastSegment(string p) => p.Replace('\\','/').TrimEnd('/').Split('/')[^1];` and normalize helper; build the lookup to try the qualified relative key, then `LastSegment`. Store both keys when building `ExpectedVolumeCrcs` consumers agree (coordinated with Task 9). Keep the positional iteration over `OriginalRARFileNames`.
-- [ ] **Step 4 — run, expect PASS;** full lib suite green.
-- [ ] **Step 5 — commit** (`fix(lib): directory-qualified CRC matching with basename fallback (#9,#10)`), then bump the superproject pointer: `git add ReScene.Lib && git commit -m "chore: bump ReScene.Lib (per-set dirs #7, dir-qualified CRC #9)"` (+ trailer). Delete `bin2/`.
+- [ ] **Step 1 — failing tests:** (a) collision `CD1/x.rar`→A, `CD2/x.rar`→B; set with `CD2\x.rar` → B. (b) common flat-SFV case (`x.r00` keys, `DVD1\x.r00` volumes) → still matched via basename fallback (map not empty). (c) `RenameMatchedOutput` with `originalNames=["DVD1\\x.rar"]` on a simulated non-Windows separator → output name `x.rar`, not a literal-backslash name.
+- [ ] **Step 2 — run FAIL.**
+- [ ] **Step 3 — implement:** add `LastSegment`; qualified-first + basename fallback lookup keyed on ONE canonical key; replace `Path.GetFileName(originalNames[i/0])` with `LastSegment`.
+- [ ] **Step 4 — run PASS; full lib suite green; commit** (`fix(lib): canonical dir-qualified CRC + Unix-safe volume rename (#9,#10)`).
+
+### Task 3: Lib — engine returns committed output file paths (D1 foundation for #3/#4/#5)
+
+**Files:** `ReScene.Lib/ReScene/Core/BruteForceRunResult.cs`, `Manager.cs` (`RenameMatchedOutput` 937-994 returns the committed paths; `BruteForceRARVersionAsync` 388/821 threads them into the result), `SRRReconstructor.cs` (returns written paths), `PublicApi.ReScene.approved.txt`; Test lib Manager tests.
+
+**Interfaces — Produces:** `BruteForceRunResult(bool Success, WinningCombo? Combo, IReadOnlyList<string> CommittedFiles)` — absolute paths of the volumes actually committed for the winning combo (full set when `CompleteAllVolumes`, else the single first volume; release names or generated names per `RenameToOriginalNames`); empty on failure. The custom-packer path returns the paths it wrote (root/nested).
+
+- [ ] **Step 1 — failing tests (pure/seam where possible):** `RenameMatchedOutput` collects and returns the exact destination paths it moved (CAV multi-volume and non-CAV single-volume); a failed run → empty `CommittedFiles`; the custom-packer branch returns its written volume paths.
+- [ ] **Step 2 — run FAIL** (result has no `CommittedFiles`).
+- [ ] **Step 3 — implement:** add the property; collect committed destination paths in `RenameMatchedOutput`; populate in both success returns and the custom-packer return; approve `PublicApi`.
+- [ ] **Step 4 — run PASS; commit** (`fix(lib): return committed output file paths from a reconstruction run (D1)`), then **bump the superproject pointer** for Tasks 1–3 (`chore: bump ReScene.Lib (per-set dirs, dir-qualified CRC, committed files)` + trailer). Delete `bin2/`.
 
 ---
 
 ## Phase B — App shared infrastructure
 
-### Task 3: App — shared RAR-metadata normalization (#11, #12)
+### Task 4: App — shared RAR-metadata normalization (#11, #12)
 
-**Files:** Create `ReScene.App.Core/ViewModels/Reconstruction/RarMetadataNormalizer.cs`; Modify `SRRSwitchMapper.cs` (`MapCompression` 58-72, `DictionarySwitch` enum 25-35, `MapDictionary` 74-98) and `SRRImportParser.cs` (`DescribeCompression` ~97-107); Test `ReScene.App.Core.Tests/Reconstruction/RarMetadataNormalizerTests.cs`, `SRRSwitchMapperTests.cs`.
+**Files:** Create `ReScene.App.Core/ViewModels/Reconstruction/RarMetadataNormalizer.cs`; Modify `SRRSwitchMapper.cs` (58-98), `SRRImportParser.cs` (`DescribeCompression` ~97-107), `ReconstructorViewModel.cs` (`ApplySwitchDiff` ~2098+ eight new dict set-cases); Test `RarMetadataNormalizerTests`, `SRRSwitchMapperTests`.
 
-**Interfaces — Produces:** `static int RarMetadataNormalizer.NormalizeCompressionMethod(int raw)` (maps RAR5 ASCII `0x30..0x35`→`0..5`, leaves `0..5` unchanged, returns `-1` for anything else); `static DictionarySwitch RarMetadataNormalizer.DictionarySwitchFor(int sizeKb)` covering `64…1048576` KB → `MD64K…MD1G` (used by both the mapper and, later, Task 8's planner).
+**Interfaces — Produces:** `static int RarMetadataNormalizer.NormalizeCompressionMethod(int raw)` (`0x30..0x35`→`0..5`, passes `0..5`, else `-1`); `static SRRSwitchMapper.DictionarySwitch RarMetadataNormalizer.DictionarySwitchFor(int sizeKb)` covering `64…1048576`→`MD64K…MD1G`. (VM toggles `SwitchMD8M…SwitchMD1G` already exist, `RARSwitchSettings.cs:44-51`.)
 
-- [ ] **Step 1 — failing tests:** `NormalizeCompressionMethod(0x35) == 5`, `(3) == 3`, `(0x99) == -1`; `DictionarySwitchFor(1048576) == MD1G`, `(4096) == MD4096K`; end-to-end `Map(srr)` for `CompressionMethod==0x35` → `CompressionMap(5,"Best")` and `DictionarySize==1048576` → `DictionaryMap(MD1G,1048576)`; `DescribeCompression(0x35)` returns the RAR5 "Best" text.
-- [ ] **Step 2 — run, expect FAIL.**
-- [ ] **Step 3 — implement:** add `RarMetadataNormalizer`. Extend `DictionarySwitch` enum with `MD8M,MD16M,MD32M,MD64M,MD128M,MD256M,MD512M,MD1G` (VM toggles already exist, lines 670-677). Rewrite `MapCompression` to `int m = RarMetadataNormalizer.NormalizeCompressionMethod(srr.CompressionMethod.Value); if (m < 0) return null; return new(m, _compressionNames[m]);` and `MapDictionary` to use `DictionarySwitchFor`. Route `DescribeCompression` through the normalizer too. In `ReconstructorViewModel.ApplySwitchDiff` (~2098+) add the eight new `DictionarySwitch` set-cases (the clear-all already covers the toggles).
-- [ ] **Step 4 — run, expect PASS.**
-- [ ] **Step 5 — commit** (`fix: normalize RAR5 compression + large dictionaries via shared helper (#11,#12)`).
+- [ ] **Step 1 — failing tests:** `NormalizeCompressionMethod(0x35)==5,(3)==3,(0x99)==-1`; `DictionarySwitchFor(1048576)==MD1G`; `Map(srr)` for `0x35`→`(5,"Best")`, `1048576`→`(MD1G,…)`; `DescribeCompression(0x35)`→"Best (-m5)".
+- [ ] **Step 2 — run FAIL.**
+- [ ] **Step 3 — implement** the normalizer; extend `DictionarySwitch` enum with the 8 large sizes; route `MapCompression`/`MapDictionary`/`DescribeCompression` through it; add the 8 `ApplySwitchDiff` set-cases.
+- [ ] **Step 4 — run PASS; commit** (`fix: shared RAR5 compression + large-dictionary normalization (#11,#12)`).
 
-### Task 4: App — named verification snapshot parsed before cleanup (#14, enables #8)
+### Task 5: App — verification snapshot as the SOLE verification source (#14, enables #8)
 
-**Files:** Create `ReScene.App.Core/ViewModels/Reconstruction/VerificationSnapshot.cs`; Modify `SharedReconstructionSettings.cs` (add the snapshot), `ReconstructorViewModel.cs` (`LoadVerificationHashes` 1722-1740, the run-start ordering ~1449, the overlap guard); Test `ReScene.App.Core.Tests/`.
+**Files:** Create `VerificationSnapshot.cs`; Modify `SharedReconstructionSettings.cs`, `ArchiveSetPlanner.cs` (`BuildExpectedVolumeCrcs` 67-95 consumes the snapshot), `ReconstructorViewModel.cs` (parse once before cleanup ~1449; remove post-cleanup reads at 1553-1560 `ResolveSfvVolumeNames`/`TryLoadUserSfv` and `LoadVerificationHashes` file read); Test `ReScene.App.Core.Tests/`.
 
-**Interfaces — Produces:** `sealed record VerificationSnapshot(HashType HashType, IReadOnlyList<(string Name, string Hash)> Entries)` with `IReadOnlyCollection<string> AllHashes` and `IReadOnlyList<string> HashesForVolumes(IEnumerable<string> volumeNames)` (qualified-first, basename fallback). Carried on `SharedReconstructionSettings.Verification` (replacing the values-only `VerificationHashes` for filtering; keep `AllHashes` for the SHA1/no-CRC gate).
+**Interfaces — Produces:** `sealed record VerificationSnapshot(HashType HashType, IReadOnlyList<(string Name, string Hash)> Entries)` with `AllHashes`, `IReadOnlyList<string> VolumeNames`, `IReadOnlyDictionary<string,string> Crc32ByName` (empty for SHA1), and `HashesForVolumes(IEnumerable<string>)` (canonical qualified-first, basename fallback). Carried on `SharedReconstructionSettings.Verification`. **Only CRC32 snapshots populate `ExpectedVolumeCrcs`; SHA1 entries feed `options.Hashes` only.**
 
-- [ ] **Step 1 — failing test:** `VerificationPath` is a `.sfv` **inside** `OutputPath`, output non-empty (cleanup runs) → the run still gates on the parsed named entries (snapshot captured before cleanup, so the delete cannot empty it); and `HashesForVolumes(["DVD1\\x.r00"])` matches a flat `x.r00` SFV entry.
-- [ ] **Step 2 — run, expect FAIL** (file deleted → empty hashes; and no named data exists).
-- [ ] **Step 3 — implement:** parse the verification file **once into a `VerificationSnapshot`** at Start, **before** the output-cleanup block (~1417-1447); carry it on `SharedReconstructionSettings`; `LoadVerificationHashes` returns `snapshot.AllHashes`. Add the Start-time guard rejecting `VerificationPath` equal-to/under `OutputPath` (via Task 6's guard once it lands; here, a lexical check is acceptable and hardened in Task 15).
-- [ ] **Step 4 — run, expect PASS.**
-- [ ] **Step 5 — commit** (`fix: snapshot verification file into a named map before cleanup (#14)`).
+- [ ] **Step 1 — failing tests (as seams, not self-contradictory):** (i) `BuildExpectedVolumeCrcs` derives per-set CRCs from a `VerificationSnapshot` (no file I/O), qualified-first + basename fallback, map non-empty for the flat-SFV case; (ii) volume-name fallback (formerly `ResolveSfvVolumeNames`) comes from `snapshot.VolumeNames`; (iii) a SHA1 snapshot yields empty `Crc32ByName` but populated `AllHashes`. Rejection of `VerificationPath` under `OutputPath` is tested **separately** in Task 7 (not by deleting-and-using the same path).
+- [ ] **Step 2 — run FAIL.**
+- [ ] **Step 3 — implement:** parse the file once into a `VerificationSnapshot` at Start **before** cleanup; carry it on `SharedReconstructionSettings`; rewrite `BuildExpectedVolumeCrcs`, the volume-name fallback, and `LoadVerificationHashes` to read the snapshot; **delete** the post-cleanup `ResolveSfvVolumeNames()`/`TryLoadUserSfv(VerificationPath)` reads (1553-1560).
+- [ ] **Step 4 — run PASS; commit** (`fix: verification snapshot is the sole post-cleanup verification source (#14)`).
 
-### Task 5: App — reconstruction path guards (output tree + scratch tree) (#1, #2, #26 foundation)
+### Task 6: App — reserved-root path guards with full-component link resolution (#1, foundation for #2/#26)
 
-**Files:** Create `ReScene.App.Core/ViewModels/Reconstruction/ReconstructionPathGuard.cs`; Test `ReScene.App.Core.Tests/Reconstruction/ReconstructionPathGuardTests.cs`.
+**Files:** Create `ReconstructionPathGuard.cs`; Test `ReconstructionPathGuardTests`.
 
 **Interfaces — Produces:**
-- `static string ResolveReal(string path)` — canonical real path: resolve the **deepest existing ancestor** via `Directory.ResolveLinkTarget(..., returnFinalTarget:true)` / final-path, then re-append the non-existent suffix; lexical `Path.GetFullPath` only when nothing on the chain exists.
-- `static bool IsStrictDescendant(string root, string candidate)` — real-resolves both; compares with a **filesystem-appropriate** comparer (case-insensitive on Windows/macOS default volumes; case-sensitive where the FS is; when it cannot be determined for an existing path, **throw** so callers fail closed).
-- `static string ResolveOutputChild(string outputPath, string relative)` and `static string ResolveScratchChild(string outputPath, string setKey)` — return the canonical child and **throw `InvalidOperationException`** if not a strict descendant of `OutputPath\output` / `OutputPath\.rescene-work` respectively. `ResolveScratchChild` sanitizes `setKey` (strip `..`/rooted/`/\`) and appends a short stable hash of the raw key for collision resistance.
+- `static string ResolveReal(string path)` — resolves **every** component (walk root→leaf via `Directory.ResolveLinkTarget`/OS final-path), re-appending non-existent suffixes; not `Directory.Exists`-gated (access-denied ≠ absent). Throws `IOException`-family when an existing path can't be resolved.
+- `static bool IsStrictDescendant(string root, string candidate)` — real-resolves both; filesystem-appropriate comparer (case-insensitive on Windows/macOS-default, case-sensitive where the FS is; throw when indeterminate for an existing path → callers fail closed).
+- `static string ResolveOutputRoot(string outputPath)` / `ResolveScratchRoot(string outputPath)` — the reserved roots themselves, each **verified to resolve under real `OutputPath`** (throws otherwise, catching reserved-root junction escape).
+- `static string ResolveOutputChild(string outputPath, string relative)` / `ResolveScratchChild(string outputPath, string setKey)` — strict descendants of the respective root (throw on traversal); `ResolveScratchChild` sanitizes the key and appends a short stable hash for collision resistance.
 
-- [ ] **Step 1 — failing tests:** `ResolveOutputChild(out,"DVD1")` under `out\output`; `ResolveOutputChild(out,"../../x")` throws; `ResolveScratchChild(out,"release")` under `out\.rescene-work` and `!= out\.rescene-work` itself; two different raw keys sanitizing to the same base still yield distinct scratch dirs (hash suffix); a linked-ancestor case where the real target escapes → `IsStrictDescendant` false; case-sensitivity honored per platform.
-- [ ] **Step 2 — run, expect FAIL** (class absent).
-- [ ] **Step 3 — implement** `ReconstructionPathGuard` per the interfaces above.
-- [ ] **Step 4 — run, expect PASS.**
-- [ ] **Step 5 — commit** (`feat: reconstruction path guards for output + scratch trees (#1 foundation)`).
+- [ ] **Step 1 — failing tests:** child under the correct root; `..`/rooted `relative` throws; two raw keys sanitizing alike → distinct scratch dirs; a **junction ancestor above a normal child** whose real target escapes → `IsStrictDescendant` false / root-validate throws; access-denied ancestor → throws (fail closed), not lexical fallback; case-sensitivity per platform; `ResolveScratchChild(out,"x") != ResolveScratchRoot(out)`.
+- [ ] **Step 2 — run FAIL.**
+- [ ] **Step 3 — implement** per interfaces (component-walking resolver).
+- [ ] **Step 4 — run PASS; commit** (`feat: reserved-root path guards with full-component link resolution (#1)`).
+
+### Task 7: App — format/version compatibility map (D2 foundation for #6)
+
+**Files:** Create `RarFormatCompatibility.cs`; Consumes `RARVersionThresholds` (lib, 500/700). Test `RarFormatCompatibilityTests`.
+
+**Interfaces — Produces:**
+- `enum RarFormat { Rar4, Rar5, Rar7 }`; `static RarFormat FormatForUnpackVersion(int unpackVersion)` (`<50`→Rar4, `<70`→Rar5, else Rar7 — matching `MapFormat`).
+- `static bool ExecutableSupports(int exeVersion, RarFormat fmt, out bool needsMa4, out bool needsMa5)` — Rar4: `exe<500` (no `-ma`) or `500-699` (`needsMa4`); Rar5: `500-699` (`needsMa5`/default); Rar7: `>=700`.
+- `static (IReadOnlyList<VersionRange> Ranges, IReadOnlyList<string> Folders, bool Empty) SelectFor(RarFormat fmt, IReadOnlyList<VersionRange> userRanges, IReadOnlyList<string> userFolders, IReadOnlyList<InstalledRARVersion> installed)` — intersects the format-capable exe versions with the user's selected ranges/folders; `Empty==true` when nothing is capable.
+
+- [ ] **Step 1 — failing tests — one per case:** RAR4+old exe(390)→no `-ma`; RAR4+560→`needsMa4`; RAR5+560→`needsMa5`/default; RAR7+700; same-version folder variants preserved via `Folders`; empty intersection (RAR5 set, only 390 selected)→`Empty`; a metadata switch the user didn't select is not force-added.
+- [ ] **Step 2 — run FAIL.**
+- [ ] **Step 3 — implement** the mapping.
+- [ ] **Step 4 — run PASS; commit** (`feat: RAR format↔executable-version compatibility map (#6 foundation)`).
 
 ---
 
-## Phase C — Work-root / relocation core (atomic)
+## Phase C — Robustness primitive needed by later matrix builds
 
-### Task 6: App — uniform work-root + robust relocation + clear-once + cancel cleanup (#3, #1, #4, #5, #17)
+### Task 8: App — bounded, cancellable option-matrix builder preserving -mt0 (#13)
 
-Single atomic task (per codex: switching the work root and fixing relocation must land together, or single-set output strands between commits).
+Placed before the per-set matrices (Task 10) so they reuse it.
 
-**Files:** Modify `ArchiveSetPlanner.cs` (`WorkRootFor` 182-185, `Sanitize` ~265), `ReconstructorViewModel.cs` (`RelocateVerifiedOutput` 1855-1898, `CleanupWorkRoot` 1904-1928, run loop 1601-1637, pre-run cleanup 1417-1447), `ReScene.Manager/Views/Wizards/BeginnerWizardFactory.cs` (confirm surface ~204-219); Consumes `ReconstructionPathGuard` (Task 5), `RARVolumeIdentifier.IsRARVolume` (lib). Test `ReScene.App.Core.Tests/`, `ReScene.Manager.Tests/` (wizard confirm text).
+**Files:** `RARCommandLineBuilder.cs` (267-268, 284, build entry → async/token overload + cardinality cap), `ReconstructorViewModel.cs` (`SwitchMTStart/End` setters 714-715; call site off-thread); Test `RARCommandLineBuilderTests`.
 
-**Interfaces — Produces:** `WorkRootFor` always returns `ReconstructionPathGuard.ResolveScratchChild(OutputPath, set.Key or "release")`. Relocation target = **output root** for `setCount == 1`, `output\<set.Directory>` for multi-set.
+**Interfaces — Produces:** `static IReadOnlyList<RARCommandLineArgument[]> BuildCommandLineArguments(RARSwitchSettings s, CancellationToken ct)` that (a) allows `-mt0`, (b) clamps the high end to a version-aware valid max (RAR4 ≤16; RAR5+ per manual), (c) computes cardinality with `checked` arithmetic and **throws a typed "matrix too large" exception before allocating** when it exceeds a defined cap, (d) checks `ct` periodically. Callers invoke it via `Task.Run(…, ct)` — the planner/VM stay off the UI thread; the builder itself is synchronous+cancellable (no `Task.Run` inside it).
 
-- [ ] **Step 1 — failing tests (headless seam, no rar.exe):**
-  (a) **single set, non-empty key + `Directory="DVD1"`** → final files at `OutputPath\output\<name>` (NOT `output\DVD1\`); `.rescene-work` removed. (single-set location contract)
-  (b) two sets sharing `Directory="DVD1"` → both survive (no sibling recursive delete).
-  (c) `set.Directory="../../x"` → relocation aborts that set (records failure), **no** delete outside `output`.
-  (d) custom-packer layout (volumes at `<workRoot>` root, and nested `<workRoot>\DVD1\`) → complete volume set detected via `RARVolumeIdentifier.IsRARVolume` (incl `.sNN`/`.001`) and relocated; success.
-  (e) incomplete/missing output (fewer volumes than expected) → set reported **failed**.
-  (f) a pre-existing file at a destination → move-without-overwrite + preflight; a mid-move failure rolls back only this set's moved files, leaving siblings intact.
-  (g) cancel thrown mid-set → `<workRoot>` removed (scratch guard) before propagation; a committed set is not cleaned.
-  (h) confirm text (VM + `BeginnerWizardFactory`) names the **output subtree**, and unrelated root files under `OutputPath` survive cleanup.
-- [ ] **Step 2 — run, expect FAIL.**
+- [ ] **Step 1 — failing tests:** `SwitchMTEnd=int.MaxValue`→no overflow, bounded; `-mt0` preserved; a cap-exceeding matrix→typed exception before allocation; a cancelled token→`OperationCanceledException` promptly.
+- [ ] **Step 2 — run FAIL.**
+- [ ] **Step 3 — implement:** include 0 in the `-mt` range, clamp the high end version-aware; checked cardinality + cap; periodic `ct.ThrowIfCancellationRequested()`; clamp the VM setters to the same bounds.
+- [ ] **Step 4 — run PASS; commit** (`fix: bounded, cancellable option-matrix builder, -mt0 preserved (#13)`).
+
+---
+
+## Phase D — Work-root / relocation core (atomic)
+
+### Task 9: App — link-resolved, filesystem-correct overlap guard (#2, #26)
+
+Placed before the destructive Task 10 so the real-path Release/Output/Verify overlap check exists first.
+
+**Files:** `ReconstructorFieldGuidance.cs` (`PathsOverlap` 138-159, `PathsNeedAttention` 100-108 to include verification vs output); Consumes `ReconstructionPathGuard` (Task 6). Test `ReconstructorFieldGuidanceTests`.
+
+- [ ] **Step 1 — failing tests:** (#2) junction ancestor → overlap detected; resolution failure on an existing path → fail closed (attention-needed); (#26) case-correct per filesystem; verification path under output flagged.
+- [ ] **Step 2 — run FAIL.**
+- [ ] **Step 3 — implement:** replace lexical compare with `ReconstructionPathGuard.ResolveReal` + filesystem-correct comparer; add verification-vs-output to the overlap set; fail closed on indeterminate.
+- [ ] **Step 4 — run PASS; commit** (`fix: link-resolved, filesystem-correct overlap guard incl. verification path (#2,#26)`).
+
+### Task 10: App — uniform work-root + relocate exactly the committed files + clear-once + cancel cleanup (#3, #1, #4, #5, #17)
+
+Atomic. Consumes: `ReconstructionPathGuard` (T6), `BruteForceRunResult.CommittedFiles` (T3), the overlap guard (T9). Injects a file-operation seam for deterministic rollback tests.
+
+**Files:** `ArchiveSetPlanner.cs` (`WorkRootFor` 182-185), `ReconstructorViewModel.cs` (relocation 1855-1898, cleanup 1904-1928, run loop 1601-1637, pre-run cleanup 1417-1447), `ReScene.Manager/Views/Wizards/BeginnerWizardFactory.cs` (confirm surface 204-219); Test `ReScene.App.Core.Tests/`, `ReScene.Manager.Tests/`.
+
+**Interfaces — Consumes:** an `IFileMover` seam (`Move(src,dst)`, default `File.Move(...,overwrite:false)`) injected for the rollback test.
+
+- [ ] **Step 1 — failing tests:** (a) single set, non-empty key + `Directory="DVD1"` → committed files (from `RunResult.CommittedFiles`) land at `OutputPath\output\<name>` (NOT `output\DVD1\`); scratch removed. (b) two sets sharing `Directory="DVD1"` → both survive. (c) `Directory="../../x"` → set fails, no delete outside output. (d) `RunResult.CommittedFiles` are the ONLY files relocated — `DeleteRARFiles=false` leftovers and `input\` sources are ignored. (e) `CompleteAllVolumes=false` (one committed file) and `RenameToReleaseNames=false` (generated names) both relocate correctly because identity comes from the result, not scanning. (f) preflight destination-exists → fail; injected mover failing on move N → rollback of this set's moved files only. (g) cancel mid-set → `<workRoot>` removed via scratch guard; committed set untouched. (h) multi-set custom-packer (`Combo==null`) → reported **failed/unsupported**, not success. (i) confirm text (VM + wizard) names the output+scratch subtrees; unrelated `OutputPath` root files survive; a still-needed input under a reserved root → Start rejected.
+- [ ] **Step 2 — run FAIL.**
 - [ ] **Step 3 — implement:**
-  - `WorkRootFor` → `ReconstructionPathGuard.ResolveScratchChild(shared.OutputPath, string.IsNullOrEmpty(set.Key) ? "release" : set.Key)`; harden `Sanitize` (dead once the guard sanitizes, but keep for its other callers).
-  - Rewrite `RelocateVerifiedOutput(workRoot, set, setCount)`: enumerate produced volumes across both layouts (`<workRoot>\output` and `<workRoot>` root, including nested subdirs) filtering with `RARVolumeIdentifier.IsRARVolume`; require the **complete expected volume set** (else return `false`). Compute `targetDir = setCount == 1 ? ReconstructionPathGuard.ResolveOutputChild(OutputPath, "") : ReconstructionPathGuard.ResolveOutputChild(OutputPath, set.Directory)` (throws on traversal → catch → `false`). `Directory.CreateDirectory(targetDir)`; preflight that no destination file exists (else fail); `File.Move(src, dst, overwrite:false)` tracking moved dests; on any exception, move them back (rollback) and return `false`. Never recursively delete a shared `targetDir`.
-  - Remove the `setCount <= 1` early-returns in relocation/cleanup.
-  - `CleanupWorkRoot`: delete only `workRoot`, guarded by `ReconstructionPathGuard.ResolveScratchChild` (strict scratch descendant); never a shared `output\<dir>`.
-  - Pre-run cleanup (1417-1447): clear only the **output subtree** + the reserved **scratch tree** (each via its guard), preserve unrelated `OutputPath` root files; update the confirm message text (VM + wizard) to say the *output and working folders'* contents will be cleared; reject Start when a still-needed input (imported SRR / verification file / WinRAR dir) resolves under either reserved root.
-  - Run loop: wrap the per-set body so cancellation/failure calls `CleanupWorkRoot` in a `finally` for any uncommitted set; a committed (relocated) set is left intact.
-- [ ] **Step 4 — run, expect PASS.**
-- [ ] **Step 5 — commit** (`fix: uniform scratch work-root + guarded transactional relocation (#3,#1,#4,#5,#17)`).
+  - `WorkRootFor` → `ReconstructionPathGuard.ResolveScratchChild(OutputPath, set.Key or "release")`.
+  - Relocation takes `RunResult.CommittedFiles`; target = `ResolveOutputRoot(OutputPath)` when `setCount==1` else `ResolveOutputChild(OutputPath, set.Directory)`; require the committed set to be **complete** for the mode (count/name check against the set's expected volumes when `RenameToReleaseNames`); `Directory.CreateDirectory`; preflight no-overwrite; `IFileMover.Move` tracking dests; rollback moved dests on any failure; never recursively delete a shared target. Multi-set + `Combo==null` (custom packer) → return failure with an "unsupported" log.
+  - Cleanup deletes only the guarded `<workRoot>` (scratch descendant); pre-run cleanup clears the guarded output + scratch subtrees by enumerating children, preserves unrelated `OutputPath` root files, updates both confirm messages, and rejects Start when an imported-SRR/verification/WinRAR path resolves under a reserved root.
+  - Run loop: per-set `finally` cleans the work-root for any uncommitted set; committed sets untouched.
+- [ ] **Step 4 — run PASS; commit** (`fix: relocate engine-reported committed files with reserved-root guards (#3,#1,#4,#5,#17)`).
 
 ---
 
-## Phase D — Per-set correctness
+## Phase E — Per-set correctness
 
-### Task 7: App — per-set command/version matrices (#6)
+### Task 11: App — per-set command/version matrices via compatibility map (#6)
 
-**Files:** Modify `SharedReconstructionSettings.cs` (add an immutable switch snapshot), `ArchiveSetPlanner.cs` (`BuildOptionsForSet` 99-168), `ReconstructorViewModel.cs` (`BuildSharedSettings`); Consumes `RarMetadataNormalizer` (Task 3). Test `ArchiveSetPlannerTests`.
+**Files:** `SharedReconstructionSettings.cs` (add `RARSwitchSettings SwitchSnapshot` + `IReadOnlyList<InstalledRARVersion> InstalledVersions`), `ArchiveSetPlanner.cs` (`BuildOptionsForSet` 99-168), `ReconstructorViewModel.cs` (`BuildSharedSettings` capture, per-set build off-thread); Consumes `RarMetadataNormalizer` (T4), `RarFormatCompatibility` (T7), the cancellable builder (T8). Test `ArchiveSetPlannerTests`.
 
-**Interfaces — Consumes:** `SharedReconstructionSettings.SwitchSnapshot` (new — an immutable copy of the user's `RARSwitchSettings`) so a per-set matrix can be built by constraining a copy. **Produces:** per-set `CommandLineArguments`/`RARVersions` derived from each set's normalized metadata.
+- [ ] **Step 1 — failing tests:** A `{unpack 29, m0, s-}`, B `{unpack 50, m5, s}` within user selection → A's args `-m0/-s-`, B's `-m5/-s/-ma5`; B's version ranges/folders = `RarFormatCompatibility.SelectFor(Rar5, …)` intersected with user selection; an empty-intersection set (RAR5, only 3.90 selected) → the set is reported **failed** ("no selected WinRAR version can produce RAR5") not a silent no-match; the flat metadata-less set → global matrix unchanged.
+- [ ] **Step 2 — run FAIL.**
+- [ ] **Step 3 — implement:** carry the switch snapshot + installed versions on `SharedReconstructionSettings`. Per set with metadata: derive `RarFormat` from `set.RARVersion`; clone the snapshot, set compression (normalized), dictionary, solid, and `-ma4/-ma5` from `ExecutableSupports`; version ranges/folders from `SelectFor` (fail the set honestly when `Empty`); build the matrix via Task 8's cancellable builder off-thread. Flat set → `shared.CommandLineArguments`/`RARVersions`. `// TODO(-rr)`.
+- [ ] **Step 4 — run PASS; commit** (`fix: per-set matrices via format/version compatibility map (#6)`).
 
-- [ ] **Step 1 — failing test:** two sets, A `{CompressionMethod:0, IsSolid:false, RARVersion:29}`, B `{CompressionMethod:0x35→5, IsSolid:true, RARVersion:50}` within the user's selected switches → set A's args carry `-m0`/`-s-`, set B's `-m5`/`-s`; each set's `RARVersions` intersect the user's selected version folders with the set's format (RAR4 vs RAR5), **not** a raw range built from the unpack-version int.
-- [ ] **Step 2 — run, expect FAIL** (both sets identical global matrix).
-- [ ] **Step 3 — implement:** carry `RARSwitchSettings SwitchSnapshot` on `SharedReconstructionSettings`. In `BuildOptionsForSet`, when `set` carries metadata, clone the snapshot, constrain compression (via `RarMetadataNormalizer.NormalizeCompressionMethod`), dictionary (`DictionarySwitchFor`), solid, and archive **format** (RAR4/RAR5 from `set.RARVersion` treated as an unpack-version → `-ma4`/`-ma5`), then build the per-set matrix off-thread (reuse Task 11's cancellable/bounded builder). Derive the version selection by **intersecting the user-selected version folders/ranges with the set's format**, never by constructing a range from the raw unpack-version. Fall back to `shared.CommandLineArguments`/`RARVersions` for the metadata-less flat set. Add `// TODO(-rr): thread set.HasRecoveryRecord once a -rr switch exists (deferred).`
-- [ ] **Step 4 — run, expect PASS.**
-- [ ] **Step 5 — commit** (`fix: per-set command/version matrices from normalized set metadata (#6)`).
+### Task 12: App — per-set hash gate, basename, canonical CRC, per-set dirs (#8, #10-app, #9-app, #7-app)
 
-### Task 8: App — per-set hash gate, basename, dir-qualified CRC, per-set dirs (#8, #10-app, #9-app, #7-app)
+**Files:** `ArchiveSetPlanner.cs` (`BuildOptionsForSet` 119-156, `BuildExpectedVolumeCrcs`); Consumes `VerificationSnapshot` (T5), `SRRArchiveSet` dirs (T1), the canonical key (T2). Test `ArchiveSetPlannerTests`.
 
-**Files:** Modify `ArchiveSetPlanner.cs` (`BuildOptionsForSet` hash loop 153-156 + dirs 122-125; `BuildExpectedVolumeCrcs` 67-95); Consumes `VerificationSnapshot` (Task 4), `SRRArchiveSet.ArchivedDirectories` + 3 time maps (Task 1), the qualified/basename key convention (Task 2). Test `ArchiveSetPlannerTests`.
-
-- [ ] **Step 1 — failing tests:** (#8) set B's `options.Hashes` excludes set A's first-volume CRC when a combined verification snapshot covers both (uses `VerificationSnapshot.HashesForVolumes(set.VolumeNames)`, qualified-first + basename fallback). (#10) `DVD1\release.rar` matches a flat `release.rar` SFV entry on any separator. (#9) two sets, identical basenames in `CD1\`/`CD2\`, get distinct CRCs; **and** the common flat-SFV case still populates the map (not empty). (#7) `options.RAROptions.ArchiveDirectoryPaths` + all three directory-time maps equal the set's own (from Task 1), not the release union — except the synthetic flat set, which keeps the union.
-- [ ] **Step 2 — run, expect FAIL.**
-- [ ] **Step 3 — implement:** replace the `VerificationHashes` pooling with `shared.Verification.HashesForVolumes(set.VolumeNames)`; replace `Path.GetFileName` at 70/77 with a separator-neutral `LastSegment`; key `BuildExpectedVolumeCrcs` qualified-first with basename fallback to agree with Task 2 (never empty in the common case); source `ArchiveDirectoryPaths` + the three time maps from `set` (fallback to `shared` only for the flat no-SRR set, detected by `set.Key == ""`).
-- [ ] **Step 4 — run, expect PASS.**
-- [ ] **Step 5 — commit** (`fix: per-set hash gate, cross-platform basename, dir-qualified CRC, per-set dirs (#8,#10,#9,#7)`).
+- [ ] **Step 1 — failing tests:** (#8) set B `Hashes` excludes A's first-volume CRC (`snapshot.HashesForVolumes(set.VolumeNames)`); (#10) `DVD1\x.rar` matches flat `x.rar` any separator; (#9) identical basenames in `CD1\`/`CD2\` distinct **and** flat-SFV case not empty **and** `ExpectedVolumeCrcs.Count == VolumeNames.Count` (single canonical key, no double-count); (#7) `ArchiveDirectoryPaths` + all three time maps from the set (flat set keeps union).
+- [ ] **Step 2 — run FAIL.**
+- [ ] **Step 3 — implement:** `HashesForVolumes`; `LastSegment` basename; ONE canonical dir-qualified key in `BuildExpectedVolumeCrcs` (Manager already falls back, T2); per-set dirs + three time maps from `set` (fallback to `shared` only when `set.Key==""`).
+- [ ] **Step 4 — run PASS; commit** (`fix: per-set hash gate, basename, canonical CRC, per-set dirs (#8,#10,#9,#7)`).
 
 ---
 
-## Phase E — Import / config
+## Phase F — Import / config / robustness
 
-### Task 9: App — retire stale auto-SFV on every import (#15)
+### Task 13: App — retire stale auto-SFV on every import (#15)
+**Files:** `ReconstructorViewModel.cs` (`TryExtractStoredSFV` ~2576-2612); Test `ReScene.App.Core.Tests/`.
+- [ ] **Step 1 — failing test:** import A (embedded SFV) then B (`StoredFiles.Count==0`) → `VerificationPath` cleared, `_sfvTempDir` null.
+- [ ] **Step 2 — FAIL.** **Step 3 — implement:** move the retire block before the `Count==0` early return. **Step 4 — PASS; commit** (`fix: retire previous auto-extracted SFV on no-stored-files import (#15)`).
 
-**Files:** Modify `ReconstructorViewModel.cs` (`TryExtractStoredSFV` ~2576-2612); Test `ReScene.App.Core.Tests/`.
+### Task 14: App — complete, versioned per-set config round-trip (#22)
+**Files:** `Models/ImportedSRRState.cs` (add `SchemaVersion` + a complete `ArchiveSetDto` list), `ImportedSRRStateMapper.cs` (`Capture` incl. `hasState`, `Apply` rebuild via Task 1's public seam); Test `ReScene.App.Core.Tests/`.
+- [ ] **Step 1 — failing test:** capture→apply a two-set state → 2 sets with full data (volumes ordered, CRCs, all timestamps incl. dir m/c/a, compression/dict/version/solid, host/attrs, large flags, `HasRecoveryRecord`), CI comparers preserved; `hasState` true when only `ArchiveSets` populated; a DTO with `SchemaVersion` set but empty dirs/null metadata is treated as **complete** (presence marker, not "non-empty"); a legacy DTO (no set list, older `SchemaVersion`) with `SRRFilePath` → re-parse via `ResolveSets`.
+- [ ] **Step 2 — FAIL.** **Step 3 — implement** the versioned complete DTO + mapping via the public seam; `hasState` includes `ArchiveSets.Count>0`; prefer a restored set list only when `SchemaVersion` marks it complete. **Step 4 — PASS; commit** (`fix: complete versioned per-set config round-trip (#22)`).
 
-- [ ] **Step 1 — failing test:** import A (embedded SFV → `VerificationPath` under `_sfvTempDir`), then import B with `StoredFiles.Count == 0` → `VerificationPath` cleared, `_sfvTempDir` null.
-- [ ] **Step 2 — run, expect FAIL.**
-- [ ] **Step 3 — implement:** move the retire block (clear `VerificationPath` under `_sfvTempDir`, `Cleanup(_sfvTempDir)`, null it) to run **before** the `StoredFiles.Count == 0` early return (or unconditionally at method entry).
-- [ ] **Step 4 — run, expect PASS; commit** (`fix: retire previous auto-extracted SFV on no-stored-files import (#15)`).
+### Task 15: App — checked volume-size conversion (#21)
+**Files:** `RARCommandLineBuilder.cs` (`BuildVolumeArgument` 370-388); Test `RARCommandLineBuilderTests`.
+- [ ] **Step 1 — failing tests:** blank+GB→`-v15000k`; `long.MaxValue`+GB→fallback, no overflow.
+- [ ] **Step 2 — FAIL.** **Step 3 — implement:** `if (!long.TryParse|| v<=0) return $"-v{DefaultVolumeSizeKb}k";` then `checked(...)` per unit catching `OverflowException`→same fallback. **Step 4 — PASS; commit** (`fix: checked volume-size conversion (#21)`).
 
-### Task 10: App — complete per-set config round-trip (#22)
-
-**Files:** Modify `Models/ImportedSRRState.cs` (add a complete per-set DTO list), `ImportedSRRStateMapper.cs` (`Capture` 18-60 incl. `hasState`, `Apply` 66-105); Consumes Task 1's construction seam. Test `ReScene.App.Core.Tests/`.
-
-- [ ] **Step 1 — failing test:** capture→apply a two-set imported state → `ArchiveSets.Count == 2` with each set's full data (volumes, CRCs, all timestamps, compression/dict/version/solid, host/attrs, large flags, dirs); and `Capture`'s `hasState` returns true when only `ArchiveSets` is populated. Add a legacy DTO (no set list) but present `SRRFilePath` → falls back to `ResolveSets` re-parse (unchanged).
-- [ ] **Step 2 — run, expect FAIL** (sets dropped; merged single set synthesized).
-- [ ] **Step 3 — implement:** add a `List<ArchiveSetDto>` (complete fields) to `ImportedSRRState`; map it in `Capture` (and add `state.ArchiveSets.Count > 0` to `hasState`) and `Apply` (rebuild `SRRArchiveSet`s via Task 1's seam). Guard: only prefer a restored non-empty set list when it is complete; otherwise leave re-parse to `ResolveSets`.
-- [ ] **Step 4 — run, expect PASS; commit** (`fix: persist and restore complete per-set archive sets in config (#22)`).
-
----
-
-## Phase F — Robustness
-
-### Task 11: App — bounded, cancellable -mt matrix preserving -mt0 (#13)
-
-**Files:** Modify `RARCommandLineBuilder.cs` (267-268, 284, and the build entry), `ReconstructorViewModel.cs` (`SwitchMTStart/End` setters 714-715, matrix build in `BuildSharedSettings`); Consumed also by Task 7's per-set builds. Test `RARCommandLineBuilderTests`.
-
-- [ ] **Step 1 — failing tests:** `SwitchMTEnd = int.MaxValue` → returns without OOM/overflow, values bounded to the version-valid max; a matrix whose cardinality would exceed a defined cap → the builder throws/returns a signalled "too large" result rejected before allocation; `-mt0` is **preserved** as a valid value (0 not clamped away); cancellation passed into the expansion loop stops it promptly.
-- [ ] **Step 2 — run, expect FAIL** (inclusive loop wraps; no cap; 0 excluded by `Math.Max(1,…)`).
-- [ ] **Step 3 — implement:** allow the low end to include 0 (`-mt0` is byte-significant per the RAR4 manual), clamp the high end to a version-aware valid max (RAR4 ≤ 16, RAR5+ per its manual) — not a single universal 64; compute the total matrix cardinality with `checked` arithmetic and reject (validation error) before allocating when it exceeds a defined cap; pass the run `CancellationToken` into the expansion loop (check periodically) and build off the UI thread via `Task.Run`.
-- [ ] **Step 4 — run, expect PASS; commit** (`fix: bound and cancel the -mt/option matrix, preserve -mt0 (#13)`).
-
-### Task 12: App — checked volume-size conversion (#21)
-
-**Files:** Modify `RARCommandLineBuilder.cs` (`BuildVolumeArgument` 370-388); Test `RARCommandLineBuilderTests`.
-
-- [ ] **Step 1 — failing tests:** blank + GB unit → `-v15000k` (not `-v15000000000`); `VolumeSize = long.MaxValue` + GB → a defined validation fallback, **no overflow** (today `sizeValue * 1000 * 1000` overflows).
-- [ ] **Step 2 — run, expect FAIL.**
-- [ ] **Step 3 — implement:** `if (!long.TryParse(s.VolumeSize, out long v) || v <= 0) return $"-v{DefaultVolumeSizeKb}k";` before the switch; convert each unit with `checked(...)`, catching `OverflowException` → the same fixed KB fallback.
-- [ ] **Step 4 — run, expect PASS; commit** (`fix: checked volume-size conversion with safe fallback (#21)`).
-
-### Task 13: App — guard preflight directory enumeration (#18)
-
-**Files:** Modify `ReconstructorViewModel.cs` (~1302, ~1417); Test `ReScene.App.Core.Tests/`.
-
-- [ ] **Step 1 — failing test:** preflight enumeration throwing `UnauthorizedAccessException` → Start surfaces a validation error, `IsRunning` false, no escape.
-- [ ] **Step 2 — run, expect FAIL.**
-- [ ] **Step 3 — implement:** wrap the two `Directory.Enumerate*` preflight calls in `try { … } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _fileDialog.ShowError("Validation Error", …); return; }` (mirror 1405/1427).
-- [ ] **Step 4 — run, expect PASS; commit** (`fix: guard preflight directory enumeration (#18)`).
+### Task 16: App — guard preflight directory enumeration (#18)
+**Files:** `ReconstructorViewModel.cs` (~1302, ~1417); Test `ReScene.App.Core.Tests/`.
+- [ ] **Step 1 — failing test:** enumeration throwing `UnauthorizedAccessException` → validation error, `IsRunning` false, no escape.
+- [ ] **Step 2 — FAIL.** **Step 3 — implement:** wrap both `Directory.Enumerate*` in `try/catch (IOException or UnauthorizedAccessException)` → `ShowError`; return. **Step 4 — PASS; commit** (`fix: guard preflight directory enumeration (#18)`).
 
 ---
 
-## Phase G — Path guard
+## Phase G — Progress / logging
 
-### Task 14: App — link-resolved, filesystem-correct overlap guard (#2, #26)
+### Task 17: App — per-set outcome rows + TimeProvider ETA (#23, #25)
 
-**Files:** Modify `ReconstructorFieldGuidance.cs` (`PathsOverlap` 138-159); Consumes `ReconstructionPathGuard` (Task 5). Test `ReconstructorFieldGuidanceTests`.
+**Files:** add `Microsoft.Extensions.TimeProvider.Testing` to `ReScene.App.Core.Tests.csproj`; `ReconstructionProgressTracker.cs` (ctor 19-27 add `TimeProvider`, phase/set-clear 148-156, `Tick` 187-199), `ReconstructorViewModel.cs` (finalize each set's row when the set completes in the run loop ~1636; remove the global `anySuccess` overwrite at `ReportSetSummary` 1970-1972; stop `OnStatusChanged` assigning whole-run `LastRunSucceeded`/`ProgressMessage` per engine attempt); Test `ReconstructionProgressTrackerTests`.
 
-- [ ] **Step 1 — failing tests:** (#2) two distinct lexical paths whose deepest existing ancestor resolves to the same real dir (linked ancestor with a nonexistent child) → overlap detected; resolution failure on an existing path → fail closed (treated as attention-needed), not silently non-overlapping. (#26) case-sensitivity honored from the actual filesystem (equal on case-insensitive volumes, distinct on case-sensitive).
-- [ ] **Step 2 — run, expect FAIL.**
-- [ ] **Step 3 — implement:** replace the lexical `Path.GetFullPath` + `OrdinalIgnoreCase` with `ReconstructionPathGuard.ResolveReal` + `IsStrictDescendant`/equality using the filesystem-appropriate comparer; when `ReconstructionPathGuard` throws (safety indeterminate for an existing path) treat the pair as overlapping/attention-needed (fail closed).
-- [ ] **Step 4 — run, expect PASS; commit** (`fix: link-resolved, filesystem-correct path-overlap guard (#2,#26)`).
+- [ ] **Step 1 — failing tests (FakeTimeProvider):** (#23) set 1 succeeds, set 2 seeds then fails → set 2's row not "Match"; each set's row finalized from its own outcome at set completion (not recovered in `ReportSetSummary`); prior-set rows survive set boundaries. (#25) 100 s remaining then +5 s with no event → ~95 s remaining.
+- [ ] **Step 2 — FAIL.**
+- [ ] **Step 3 — implement:** inject `TimeProvider` (default `System`, tests `FakeTimeProvider`); `Tick` uses `_timeProvider.GetLocalNow()` + cached fixed completion instant minus elapsed; stamp rows with active set, preserve prior-set rows across phase changes; finalize per-set rows at set completion; delete the global `anySuccess` overwrite; gate per-attempt whole-run status assignments.
+- [ ] **Step 4 — PASS; commit** (`fix: per-set outcome rows + TimeProvider ETA (#23,#25)`).
 
----
+### Task 18: App — timestamp summary in finally, generation-safe batched log, set/attempt progress (#19, #20, #24)
 
-## Phase H — Progress / logging
+**Files:** `ReconstructorViewModel.cs` (timestamp display ~2293, log append 2338-2354, progress mapping ~2244, run `finally`); Test `ReScene.App.Core.Tests/`.
 
-### Task 15: App — per-set outcome rows + TimeProvider ETA (#23, #25)
-
-**Files:** Modify `ReconstructionProgressTracker.cs` (constructor 19-27 add `TimeProvider`, phase-clear 148-156, `Tick` 187-199), `ReconstructorViewModel.cs` (`ReportSetSummary` 1935-1972, tracker construction); Test `ReconstructionProgressTrackerTests`.
-
-- [ ] **Step 1 — failing tests:** (#23) set 1 succeeds with combo C, set 2 seeds C then fails → set 2's active row is **not** "Match" (each row finalized from its own `SetOutcome`, not the global `anySuccess` at 1970-1972); prior-set rows survive the set boundary. (#25) with an injected `FakeTimeProvider`, a progress event reporting 100 s remaining then advancing the clock 5 s with no new event → remaining ≈ 95 s (today it stays 100 s and pushes ETA forward via `DateTime.Now`).
-- [ ] **Step 2 — run, expect FAIL.**
-- [ ] **Step 3 — implement:** inject `TimeProvider` into the tracker (default `TimeProvider.System`; tests pass `FakeTimeProvider`); replace `DateTime.Now` in `Tick` with `_timeProvider.GetLocalNow()`, and cache the fixed estimated-completion instant, subtracting elapsed each tick. Stamp rows with the active set and preserve prior-set rows across phase changes (distinguish set boundary from phase boundary). In `ReportSetSummary`, finalize **each** set's row from its own outcome; remove the global `anySuccess` overwrite.
-- [ ] **Step 4 — run, expect PASS; commit** (`fix: per-set outcome rows + TimeProvider-based ETA (#23,#25)`).
-
-### Task 16: App — timestamp summary in finally, thread-safe batched log, set/attempt progress (#19, #20, #24)
-
-**Files:** Modify `ReconstructorViewModel.cs` (timestamp display ~2293, log append 2338-2354, progress mapping ~2244, run `finally`); Test `ReScene.App.Core.Tests/`.
-
-- [ ] **Step 1 — failing tests:** (#19) two sets each with a timestamp failure → warning shown exactly once, from the **run's `finally`** (also fires on cancel/exception paths). (#20) N log events → at most K UI dispatches via a thread-safe queue (counting `IUiDispatcher`), content preserved and the **final batch is flushed** (synchronous drain at end); ordering per target preserved. (#24) progress labeled by **set and attempt/stage** (seed vs full search) so it does not appear to rewind within a set.
-- [ ] **Step 2 — run, expect FAIL.**
-- [ ] **Step 3 — implement:** accumulate `_timestampFailures` and show/clear one summary from the outer run `finally`; replace the per-event whole-string rebuild with a thread-safe bounded queue + an atomic "flush scheduled" flag + a single coalesced dispatcher post + a synchronous final drain, preserving per-target order; label progress `Set X/N · <stage>` (or aggregate attempts) rather than raw per-invocation percent.
-- [ ] **Step 4 — run, expect PASS; commit** (`fix: single timestamp summary, thread-safe batched log, set/attempt progress (#19,#20,#24)`).
+- [ ] **Step 1 — failing tests:** (#19) two sets each with a failure → one summary from the run's `finally` (also on cancel/exception); `_timestampFailures` accessed thread-safely. (#20) N events → ≤K dispatches via a thread-safe queue with an atomic flush flag, a **run-generation token** so a queued flush from a prior run cannot repopulate after Start clears, a synchronous final drain, per-target order preserved. (#24) progress labeled `Set X/N · <stage>` (seed vs full) so it does not rewind within a set.
+- [ ] **Step 2 — FAIL.**
+- [ ] **Step 3 — implement** per the tests.
+- [ ] **Step 4 — PASS; commit** (`fix: timestamp summary in finally, generation-safe batched log, set/attempt progress (#19,#20,#24)`).
 
 ---
 
-## Coverage check (all 25 findings → task)
+## Coverage check (all 25 → task)
 
-#1 T5+T6 · #2 T5+T14 · #3 T6 · #4 T6 · #5 T6 · #6 T7 · #7 T1+T8 · #8 T4+T8 · #9 T2+T8 · #10 T2+T8 · #11 T3 · #12 T3 · #13 T11 · #14 T4+T6 · #15 T9 · #17 T6 · #18 T13 · #19 T16 · #20 T16 · #21 T12 · #22 T10 · #23 T15 · #24 T16 · #25 T15 · #26 T5+T14. (#16 = verified false positive, no task.)
+#1 T6+T10 · #2 T6+T9 · #3 T3+T10 · #4 T10 · #5 T3+T10 · #6 T7+T11 · #7 T1+T12+T14 · #8 T5+T12 · #9 T2+T12 · #10 T2+T12 · #11 T4 · #12 T4 · #13 T8 · #14 T5+T10 · #15 T13 · #17 T10 · #18 T16 · #19 T18 · #20 T18 · #21 T15 · #22 T14 · #23 T17 · #24 T18 · #25 T17 · #26 T6+T9. (#16 = false positive, no task.) New enabling work: engine committed-files result (T3, for #3/#4/#5), format/version map (T7, for #6).
 
 ## Sequencing rationale (no broken intermediate state)
 
-Lib-first with backward-compatible keys (T1–T2) → app infra that later tasks depend on: normalization (T3), named verification snapshot (T4), path guards (T5) → the atomic work-root/relocation change (T6, which needs T5 and does not strand single-set output at any commit) → per-set matrices (T7, needs T3 + the off-thread cancellable builder from T11 — implement T11's builder cancellation as part of T7 if reached first, else T7 consumes it) → per-set CRC/hash/dirs (T8, needs T1/T2/T4) → import/config (T9–T10, T10 needs T1's seam) → robustness (T11–T13) → path guard consumer (T14, needs T5) → progress (T15–T16). Note: if executing strictly in order, move T11 (matrix cancellation/bounding) before T7 so T7's off-thread per-set builds reuse it; the coverage is unchanged.
+Lib-first with backward-compatible keys and the additive committed-files result (T1–T3, pointer bumped). App infra whose consumers come later: normalization (T4), verification snapshot **which also updates the planner in the same task** so nothing reads the old values-only member afterward (T5), path guards (T6), format/version map (T7), the cancellable matrix builder (T8) **before** the per-set matrices, the overlap guard (T9) **before** the destructive relocation (T10). The atomic T10 switches the work-root and relocates the engine-reported committed files in one commit (single-set never strands). Per-set matrices (T11) reuse T4/T7/T8; per-set CRC/dirs (T12) reuse T1/T2/T5. Import/config/robustness (T13–T16), progress (T17–T18). Every task ends green.
 
 ## Final verification (after all tasks)
 
-- [ ] Clean non-incremental build `-p:BaseOutputPath=bin2/` → 0 warnings / 0 errors.
-- [ ] Full suites green: `ReScene.App.Core.Tests`, `ReScene.Manager.Tests`, `ReScene.Lib/ReScene.Tests`; `PublicApi.ReScene.approved.txt` current.
+- [ ] Clean non-incremental build `-p:BaseOutputPath=bin2/` → 0 warnings / 0 errors; `PublicApi.ReScene.approved.txt` current.
+- [ ] Full suites green: `ReScene.App.Core.Tests`, `ReScene.Manager.Tests`, `ReScene.Lib/ReScene.Tests`.
 - [ ] Delete `bin2/` (worktree + `E:/Projects/avalonia-agent-mcp`).
-- [ ] Manual smoke (needs WinRAR + a real single-set SRR): reconstruct a single-set release; verified volumes land in `OutputPath\output\` — the definitive proof of #3.
+- [ ] Manual smoke (WinRAR + a real single-set SRR): verified volumes land in `OutputPath\output\` — the definitive proof of #3.
