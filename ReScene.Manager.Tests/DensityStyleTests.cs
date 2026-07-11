@@ -67,6 +67,38 @@ public class DensityStyleTests
     }
 
     [AvaloniaFact]
+    public void TabStrip_SelectedTabOpensIntoPage_UnselectedMuted()
+    {
+        // The WPF tab affordance (App.xaml:359-394): selected tab takes the window background with
+        // full-strength text (accent stays in the pipe); unselected tabs are muted. Pinned via the
+        // Fluent state resources overridden in Density.axaml.
+        var app = Avalonia.Application.Current!;
+        Assert.True(app.TryGetResource("TabItemHeaderBackgroundSelected", null, out object? selBg));
+        Assert.Equal(Avalonia.Media.Color.Parse("#FF1E1E1E"), Assert.IsType<SolidColorBrush>(selBg).Color);
+        Assert.True(app.TryGetResource("TabItemHeaderForegroundSelected", null, out object? selFg));
+        Assert.Equal(Avalonia.Media.Color.Parse("#FFE0E0E0"), Assert.IsType<SolidColorBrush>(selFg).Color);
+        Assert.True(app.TryGetResource("TabItemHeaderForegroundUnselected", null, out object? unselFg));
+        Assert.Equal(Avalonia.Media.Color.Parse("#FF9E9E9E"), Assert.IsType<SolidColorBrush>(unselFg).Color);
+
+        // And the live control: a selected TabItem must resolve those state brushes.
+        using var sink = new BindingErrorSink();
+        var tab = new TabItem { Header = "Home", IsSelected = true };
+        Window window = Show(new TabControl { Items = { tab, new TabItem { Header = "Other" } } });
+        try
+        {
+            Assert.Equal(Avalonia.Media.Color.Parse("#FF1E1E1E"),
+                Assert.IsType<SolidColorBrush>(tab.Background).Color);
+            Assert.Equal(Avalonia.Media.Color.Parse("#FFE0E0E0"),
+                Assert.IsType<SolidColorBrush>(tab.Foreground).Color);
+            Assert.Empty(sink.Messages);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
     public void FontChain_PrefersSegoeUi_WithEmbeddedInterFallback()
     {
         // The UIFontFamily token must lead with Segoe UI (WPF-original optics on Windows) and carry

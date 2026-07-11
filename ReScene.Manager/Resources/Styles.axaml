@@ -8,6 +8,23 @@
     <Setter Property="Padding" Value="4,0,0,0" />
   </Style>
 
+  <!-- Tab-strip band (pairs with the TabItemHeader* state brushes in Density.axaml): paint the
+       tab row's items panel with the surface color so the full-width strip reads as a tab bar,
+       WPF App.xaml:332-335 style. The Fluent TabControl's items host is a WrapPanel (the theme's
+       own ^ styles target "ItemsPresenter#PART_ItemsPresenter > WrapPanel"), so this selector
+       tracks the control theme's structure. -->
+  <Style Selector="TabControl /template/ ItemsPresenter#PART_ItemsPresenter > WrapPanel">
+    <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
+  </Style>
+  <!-- Selection pipe: Fluent renders it text-width, hugging the header like a hyperlink underline.
+       Make it the WPF selected-tab indicator instead — a 2px accent line across the FULL tab width
+       at the bottom edge (WPF App.xaml:372-389). The negative margin mirrors the 12,6 TabItem
+       padding (TabItemHeaderMargin in Density.axaml — keep the two in sync). Top placement only:
+       every TabControl in the app uses top tabs. -->
+  <Style Selector="TabItem[TabStripPlacement=Top] /template/ Border#PART_SelectedPipe">
+    <Setter Property="Margin" Value="-12,0,-12,-6" />
+  </Style>
+
   <!-- ═══════════════════════════════════════════════════════════
        ReScene Manager shared control style classes
        (functional-parity port of the ~10 SEMANTIC named styles from

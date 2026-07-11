@@ -57,4 +57,24 @@
   <x:Double x:Key="CheckBoxMinHeight">20</x:Double>
   <x:Double x:Key="RadioButtonMinHeight">20</x:Double>
   <x:Double x:Key="TreeViewItemMinHeight">20</x:Double>
+
+  <!-- ── Tab-strip affordance (WPF App.xaml:316-394 look) ─────────────────────────────────
+       Fluent's pivot-style tabs give no strip band and mark selection with accent-colored TEXT
+       only, which reads poorly as a tab control. Restore the classic WPF affordance: unselected
+       tabs are muted chips on the strip band (band itself = WrapPanel style in Styles.axaml),
+       hover lightens them, and the SELECTED tab takes the window background — visually "opening
+       into" the page — with full-strength text; the accent stays in the 2px selection pipe.
+       Colors mirror the Tokens.axaml brushes (WindowBackground/HoverBackground/Foreground*). -->
+  <SolidColorBrush x:Key="TabItemHeaderBackgroundUnselected" Color="Transparent" />
+  <SolidColorBrush x:Key="TabItemHeaderBackgroundUnselectedPointerOver" Color="#FF3E3E42" />
+  <SolidColorBrush x:Key="TabItemHeaderBackgroundUnselectedPressed" Color="#FF333333" />
+  <SolidColorBrush x:Key="TabItemHeaderBackgroundSelected" Color="#FF1E1E1E" />
+  <SolidColorBrush x:Key="TabItemHeaderBackgroundSelectedPointerOver" Color="#FF1E1E1E" />
+  <SolidColorBrush x:Key="TabItemHeaderBackgroundSelectedPressed" Color="#FF1E1E1E" />
+  <SolidColorBrush x:Key="TabItemHeaderForegroundUnselected" Color="#FF9E9E9E" />
+  <SolidColorBrush x:Key="TabItemHeaderForegroundUnselectedPointerOver" Color="#FFE0E0E0" />
+  <SolidColorBrush x:Key="TabItemHeaderForegroundUnselectedPressed" Color="#FFE0E0E0" />
+  <SolidColorBrush x:Key="TabItemHeaderForegroundSelected" Color="#FFE0E0E0" />
+  <SolidColorBrush x:Key="TabItemHeaderForegroundSelectedPointerOver" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="TabItemHeaderForegroundSelectedPressed" Color="#FFE0E0E0" />
 </ResourceDictionary>
