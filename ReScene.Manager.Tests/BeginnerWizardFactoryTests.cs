@@ -49,7 +49,7 @@ public class BeginnerWizardFactoryTests
         // CreateSRR: the Manage step generates sample/subtitle files at create time, so the Advanced
         // tab's create-time scan generation is off; OSO hashes are on by default for beginners.
         (WizardViewModel createSrr, _) = BeginnerWizardFactory.Create(BeginnerCard.CreateSRR, shell);
-        var creator = Assert.IsType<CreatorViewModel>(createSrr.Content);
+        CreatorViewModel creator = Assert.IsType<CreatorViewModel>(createSrr.Content);
         Assert.False(creator.AutoCreateSRS);
         Assert.False(creator.CreateVobsubSRR);
         Assert.True(creator.ComputeOSOHashes);
@@ -57,7 +57,7 @@ public class BeginnerWizardFactoryTests
 
         // Reconstruct: beginners want the full archive set, so CompleteAllVolumes is pre-checked.
         (WizardViewModel reconstruct, _) = BeginnerWizardFactory.Create(BeginnerCard.Reconstruct, shell);
-        var reconstructor = Assert.IsType<ReconstructorViewModel>(reconstruct.Content);
+        ReconstructorViewModel reconstructor = Assert.IsType<ReconstructorViewModel>(reconstruct.Content);
         Assert.True(reconstructor.CompleteAllVolumes);
         reconstruct.Dispose();
     }
@@ -77,7 +77,7 @@ public class BeginnerWizardFactoryTests
         var declining = new ConfirmStub { Result = false };
         (WizardViewModel declinedVm, _) = BeginnerWizardFactory.Create(
             BeginnerCard.CreateSRS, BeginnerShellTestFactory.Create(declining));
-        var declinedSrs = Assert.IsType<SRSCreatorViewModel>(declinedVm.Content);
+        SRSCreatorViewModel declinedSrs = Assert.IsType<SRSCreatorViewModel>(declinedVm.Content);
         Assert.False(declinedSrs.HasValidMainFile);           // no movie → the no-movie confirm fires
         Assert.False(declinedVm.Steps[1].ConfirmLeave!());    // user declined → do not advance
         Assert.False(declinedSrs.SuppressNoMovieConfirm);     // and the one-shot flag stays off
@@ -88,7 +88,7 @@ public class BeginnerWizardFactoryTests
         var accepting = new ConfirmStub { Result = true };
         (WizardViewModel acceptedVm, _) = BeginnerWizardFactory.Create(
             BeginnerCard.CreateSRS, BeginnerShellTestFactory.Create(accepting));
-        var acceptedSrs = Assert.IsType<SRSCreatorViewModel>(acceptedVm.Content);
+        SRSCreatorViewModel acceptedSrs = Assert.IsType<SRSCreatorViewModel>(acceptedVm.Content);
         Assert.True(acceptedVm.Steps[1].ConfirmLeave!());     // user accepted → advance
         Assert.True(acceptedSrs.SuppressNoMovieConfirm);      // and the one-shot flag is set
         acceptedVm.Dispose();

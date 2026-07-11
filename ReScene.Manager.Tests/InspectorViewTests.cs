@@ -133,7 +133,7 @@ public class InspectorViewTests
         Assert.Equal(32m, selector.Value);
 
         // The tree ContextMenu carries the expected command items in order.
-        var menu = Assert.IsType<ContextMenu>(tree.ContextMenu);
+        ContextMenu menu = Assert.IsType<ContextMenu>(tree.ContextMenu);
         string[] menuHeaders = [.. menu.Items.OfType<MenuItem>().Select(m => (string)m.Header!)];
         Assert.Equal(_expectedMenuHeaders, menuHeaders);
 
@@ -149,7 +149,7 @@ public class InspectorViewTests
         (Window window, _) = Show(vm);
 
         TreeView tree = window.GetVisualDescendants().OfType<TreeView>().Single();
-        var menu = Assert.IsType<ContextMenu>(tree.ContextMenu);
+        ContextMenu menu = Assert.IsType<ContextMenu>(tree.ContextMenu);
 
         // The header-only assertion elsewhere never opens the menu, so its per-item Command/IsVisible
         // bindings are not evaluated under the sink. Opening propagates the TreeView's DataContext (the

@@ -3,6 +3,7 @@ using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Media;
 using ReScene.Hex;
 
@@ -707,7 +708,7 @@ public class HexViewControl : Control
         }
 
         // Clipboard requires a hosting TopLevel; guarded so a detached/headless control is a no-op.
-        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        IClipboard? clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
         if (clipboard is not null)
         {
             _ = clipboard.SetTextAsync(text);

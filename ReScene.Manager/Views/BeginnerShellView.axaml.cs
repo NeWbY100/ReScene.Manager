@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using ReScene.App.Core.ViewModels;
+using ReScene.App.Core.ViewModels.Wizards;
 using ReScene.Manager.Views.Wizards;
 
 namespace ReScene.Manager.Views;
@@ -25,7 +26,7 @@ public partial class BeginnerShellView : UserControl
             return;
         }
 
-        (var wizardVm, var body) = BeginnerWizardFactory.Create(card, shell);
+        (WizardViewModel wizardVm, Control body) = BeginnerWizardFactory.Create(card, shell);
         var window = new WizardWindow(wizardVm, body);
 
         // Own the wizard to this view's window when there is one (so it centers on and is modal to the

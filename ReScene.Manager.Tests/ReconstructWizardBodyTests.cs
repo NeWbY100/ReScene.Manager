@@ -95,7 +95,7 @@ public class ReconstructWizardBodyTests
         (_, ReconstructWizardBody body, WizardViewModel wizard) = Show(vm);
 
         // The root grid's direct children are the three step panels, in order.
-        var root = Assert.IsType<Grid>(body.Content);
+        Grid root = Assert.IsType<Grid>(body.Content);
         Assert.Equal(3, root.Children.Count);
 
         wizard.CurrentStepIndex = 0;

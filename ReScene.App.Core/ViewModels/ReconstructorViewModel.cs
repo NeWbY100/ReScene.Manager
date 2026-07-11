@@ -1145,7 +1145,7 @@ public partial class ReconstructorViewModel : ViewModelBase
         try
         {
             string json = await File.ReadAllTextAsync(path);
-            var config = System.Text.Json.JsonSerializer.Deserialize<ReconstructorConfig>(json, _configSerializerOptions);
+            ReconstructorConfig? config = System.Text.Json.JsonSerializer.Deserialize<ReconstructorConfig>(json, _configSerializerOptions);
             if (config is null)
             {
                 Log(LogTarget.System, "Failed to import configuration: file is empty or invalid");

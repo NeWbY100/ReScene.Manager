@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
@@ -140,7 +141,7 @@ public partial class InspectorView : UserControl
 
     private void CopyToClipboard(string text)
     {
-        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        IClipboard? clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
         if (clipboard is not null)
         {
             _ = clipboard.SetTextAsync(text);

@@ -83,7 +83,7 @@ public class EditSRRWizardBodyTests
         using var sink = new BindingErrorSink();
         (_, EditSRRWizardBody body, WizardViewModel wizard) = Show(vm);
 
-        var root = Assert.IsType<Grid>(body.Content);
+        Grid root = Assert.IsType<Grid>(body.Content);
         Assert.Equal(4, root.Children.Count);
 
         wizard.CurrentStepIndex = 0;

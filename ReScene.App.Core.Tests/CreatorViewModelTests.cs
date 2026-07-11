@@ -256,7 +256,7 @@ public sealed class CreatorViewModelTests : IDisposable
 
         vm.BuildSampleAndSubtitlePlaceholders();
 
-        var placeholder = Assert.Single(vm.StoredFiles, f => f.Kind == CreatorViewModel.StoredFileKind.GeneratedSRS);
+        CreatorViewModel.StoredFileItem placeholder = Assert.Single(vm.StoredFiles, f => f.Kind == CreatorViewModel.StoredFileKind.GeneratedSRS);
         Assert.Equal("Sample/movie-sample.srs", placeholder.StoredName);
         Assert.Equal(string.Empty, placeholder.FullPath);    // nothing generated yet
         Assert.Equal(0, srr.Calls);                          // no creation happened
@@ -278,7 +278,7 @@ public sealed class CreatorViewModelTests : IDisposable
         // A wizard sample placeholder has an empty FullPath (Kind = GeneratedSRS).
         vm.ExtraSampleFiles.Add(Path.Combine(dirA, "Sample", "movie-sample.mkv"));
         vm.BuildSampleAndSubtitlePlaceholders();
-        var placeholder = Assert.Single(vm.StoredFiles, f => f.Kind == CreatorViewModel.StoredFileKind.GeneratedSRS);
+        CreatorViewModel.StoredFileItem placeholder = Assert.Single(vm.StoredFiles, f => f.Kind == CreatorViewModel.StoredFileKind.GeneratedSRS);
         Assert.Equal(string.Empty, placeholder.FullPath);
 
         // Changing the input path re-runs UpdateStoredNames over EVERY stored item, including the
@@ -288,7 +288,7 @@ public sealed class CreatorViewModelTests : IDisposable
 
         Assert.Null(ex);
         // The real item is recomputed against the new release dir; the placeholder is left untouched.
-        var real = vm.StoredFiles.Single(f => f.Kind == CreatorViewModel.StoredFileKind.Regular);
+        CreatorViewModel.StoredFileItem real = vm.StoredFiles.Single(f => f.Kind == CreatorViewModel.StoredFileKind.Regular);
         Assert.Equal("subs/real.nfo", real.StoredName);
         Assert.Equal(string.Empty, placeholder.FullPath);
     }
@@ -302,7 +302,7 @@ public sealed class CreatorViewModelTests : IDisposable
         vm.ExtraSampleFiles.Add(Path.Combine(dir, "a.mkv"));
         vm.ExtraSampleFiles.Add(Path.Combine(dir, "b.mkv"));
         vm.BuildSampleAndSubtitlePlaceholders();
-        var first = vm.StoredFiles.First(f => f.Kind != CreatorViewModel.StoredFileKind.Regular);
+        CreatorViewModel.StoredFileItem first = vm.StoredFiles.First(f => f.Kind != CreatorViewModel.StoredFileKind.Regular);
 
         vm.BuildSampleAndSubtitlePlaceholders();   // same sources → keep existing rows
 

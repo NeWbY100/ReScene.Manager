@@ -111,7 +111,7 @@ public class RestoreWizardBodyTests
         (_, RestoreWizardBody body, WizardViewModel wizard) = Show(vm);
 
         // The root grid's direct children are the three step panels, in order.
-        var root = Assert.IsType<Grid>(body.Content);
+        Grid root = Assert.IsType<Grid>(body.Content);
         Assert.Equal(3, root.Children.Count);
 
         // Step 0 renders with Kind=Unknown; both bulk/single sub-panels are collapsed.

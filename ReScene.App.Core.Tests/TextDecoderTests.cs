@@ -54,7 +54,7 @@ public class TextDecoderTests
     [Fact]
     public void Decode_Cp437_DecodesArtBytes()
     {
-        var cp437 = TextEncodingOptions.All.First(e => e.DisplayName == "CP437 (DOS)").Encoding;
+        Encoding cp437 = TextEncodingOptions.All.First(e => e.DisplayName == "CP437 (DOS)").Encoding;
         byte[] data = [0xC9, 0xB0]; // ╔ ░
         var source = new ByteArrayDataSource(data);
 

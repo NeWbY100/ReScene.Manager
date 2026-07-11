@@ -29,7 +29,7 @@ public class ArchiveSetPlannerTests
     [Fact]
     public void BuildExpectedVolumeCrcs_FromUserSfv_FilteredToSetVolumes()
     {
-        var set = MakeSet("DVD1/aln-re4a", "DVD1",
+        SRRArchiveSet set = MakeSet("DVD1/aln-re4a", "DVD1",
             ["DVD1\\aln-re4a.rar", "DVD1\\aln-re4a.r00"], [("aln-re4a.iso", "00000000")]);
         var userSfv = new SFVFile();
         userSfv.Entries.Add(new SFVFileEntry("aln-re4a.rar", "f1a3ec0d"));
@@ -46,7 +46,7 @@ public class ArchiveSetPlannerTests
     [Fact]
     public void BuildExpectedVolumeCrcs_PrefersEmbeddedSfvOverUserSfv()
     {
-        var set = MakeSet("DVD1/aln-re4a", "DVD1",
+        SRRArchiveSet set = MakeSet("DVD1/aln-re4a", "DVD1",
             ["DVD1\\aln-re4a.rar", "DVD1\\aln-re4a.r00"], [("aln-re4a.iso", "00000000")]);
 
         byte[] embedded = System.Text.Encoding.Latin1.GetBytes(
@@ -66,7 +66,7 @@ public class ArchiveSetPlannerTests
     [Fact]
     public void BuildOptionsForSet_UsesOnlyThisSetsContentAndNames()
     {
-        var set = MakeSet("DVD1/aln-re4a", "DVD1",
+        SRRArchiveSet set = MakeSet("DVD1/aln-re4a", "DVD1",
             ["DVD1\\aln-re4a.rar", "DVD1\\aln-re4a.r00"], [("aln-re4a.iso", "00000000")]);
         SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings();
 
@@ -83,7 +83,7 @@ public class ArchiveSetPlannerTests
     [Fact]
     public void BuildOptionsForSet_CarriesSharedReleaseWideFields()
     {
-        var set = MakeSet("DVD1/aln-re4a", "DVD1",
+        SRRArchiveSet set = MakeSet("DVD1/aln-re4a", "DVD1",
             ["DVD1\\aln-re4a.rar"], [("aln-re4a.iso", "00000000")]);
         SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with
         {
@@ -112,7 +112,7 @@ public class ArchiveSetPlannerTests
     [Fact]
     public void BuildOptionsForSet_UsesPerSetMetadata()
     {
-        var set = MakeSet("DVD1/aln-re4a", "DVD1",
+        SRRArchiveSet set = MakeSet("DVD1/aln-re4a", "DVD1",
             ["DVD1\\aln-re4a.rar"], [("aln-re4a.iso", "00000000")]);
         set.DetectedHostOS = 3;
         set.DetectedFileAttributes = 0x20;
@@ -135,7 +135,7 @@ public class ArchiveSetPlannerTests
     [Fact]
     public void WorkRootFor_SingleRootSet_IsOutputPath()
     {
-        var set = MakeSet("", "", ["x.rar"], [("x.iso", "00000000")]);
+        SRRArchiveSet set = MakeSet("", "", ["x.rar"], [("x.iso", "00000000")]);
         SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with { OutputPath = "C:\\out" };
 
         Assert.Equal("C:\\out", ArchiveSetPlanner.WorkRootFor(shared, set));
@@ -144,7 +144,7 @@ public class ArchiveSetPlannerTests
     [Fact]
     public void WorkRootFor_KeyedSet_IsIsolatedSubdir()
     {
-        var set = MakeSet("DVD1/aln-re4a", "DVD1", ["DVD1\\aln-re4a.rar"], [("aln-re4a.iso", "00000000")]);
+        SRRArchiveSet set = MakeSet("DVD1/aln-re4a", "DVD1", ["DVD1\\aln-re4a.rar"], [("aln-re4a.iso", "00000000")]);
         SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with { OutputPath = "C:\\out" };
 
         string root = ArchiveSetPlanner.WorkRootFor(shared, set);
@@ -187,7 +187,7 @@ public class ArchiveSetPlannerTests
     [Fact]
     public void ResolveSets_PrefersParsedArchiveSets()
     {
-        var existing = MakeSet("DVD1/x", "DVD1", ["DVD1\\x.rar"], [("x.iso", "00000000")]);
+        SRRArchiveSet existing = MakeSet("DVD1/x", "DVD1", ["DVD1\\x.rar"], [("x.iso", "00000000")]);
 
         IReadOnlyList<SRRArchiveSet> sets = ArchiveSetPlanner.ResolveSets(
             archiveSets: [existing], srrFilePath: null,

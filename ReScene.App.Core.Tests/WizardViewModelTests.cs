@@ -18,7 +18,7 @@ public class WizardViewModelTests
     [Fact]
     public void NewWizard_StartsAtFirstStep()
     {
-        var w = Make(true, true, true);
+        WizardViewModel w = Make(true, true, true);
         Assert.Equal(0, w.CurrentStepIndex);
         Assert.True(w.IsFirstStep);
         Assert.False(w.IsLastStep);
@@ -30,7 +30,7 @@ public class WizardViewModelTests
     [Fact]
     public void Next_AdvancesWhenStepValid_AndStopsAtLast()
     {
-        var w = Make(true, true);
+        WizardViewModel w = Make(true, true);
         Assert.True(w.NextCommand.CanExecute(null));
         w.NextCommand.Execute(null);
         Assert.Equal(1, w.CurrentStepIndex);
@@ -41,7 +41,7 @@ public class WizardViewModelTests
     [Fact]
     public void Next_BlockedWhenStepInvalid()
     {
-        var w = Make(false, true);
+        WizardViewModel w = Make(false, true);
         Assert.False(w.NextCommand.CanExecute(null));
         w.NextCommand.Execute(null);
         Assert.Equal(0, w.CurrentStepIndex);
@@ -50,7 +50,7 @@ public class WizardViewModelTests
     [Fact]
     public void Back_ReturnsToPreviousStep()
     {
-        var w = Make(true, true);
+        WizardViewModel w = Make(true, true);
         w.NextCommand.Execute(null);
         Assert.True(w.BackCommand.CanExecute(null));
         w.BackCommand.Execute(null);
@@ -140,7 +140,7 @@ public class WizardViewModelTests
     [Fact]
     public void Back_Hidden_OnFirstStep()
     {
-        var w = Make(true, true);
+        WizardViewModel w = Make(true, true);
 
         // Nothing to go back to on the first step, so the button is hidden outright.
         Assert.False(w.IsBackVisible);

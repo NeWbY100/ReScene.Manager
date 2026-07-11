@@ -112,7 +112,7 @@ public class CreateSRRWizardBodyTests
         (_, CreateSRRWizardBody body, WizardViewModel wizard) = Show(vm);
 
         // The root grid's direct children are the five step panels, in order.
-        var root = Assert.IsType<Grid>(body.Content);
+        Grid root = Assert.IsType<Grid>(body.Content);
         Assert.Equal(5, root.Children.Count);
 
         wizard.CurrentStepIndex = 0;

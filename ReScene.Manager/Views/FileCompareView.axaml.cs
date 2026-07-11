@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.LogicalTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
@@ -178,7 +179,7 @@ public partial class FileCompareView : UserControl
 
     private void CopyToClipboard(string text)
     {
-        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        IClipboard? clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
         if (clipboard is not null)
         {
             _ = clipboard.SetTextAsync(text);

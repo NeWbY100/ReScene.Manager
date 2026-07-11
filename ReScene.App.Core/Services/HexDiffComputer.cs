@@ -111,8 +111,8 @@ public class HexDiffComputer : IHexDiffComputer
             EmitRange(rightRanges, rightOffset + commonLen, rightLength - commonLen);
         }
 
-        var leftFinal = leftRanges.ToArray();
-        var rightFinal = rightRanges.ToArray();
+        HexMatchRange[] leftFinal = leftRanges.ToArray();
+        HexMatchRange[] rightFinal = rightRanges.ToArray();
         progress?.Report(new HexDiffProgress(100.0, leftFinal, rightFinal));
         return new HexDiffResult(leftFinal, rightFinal);
     }

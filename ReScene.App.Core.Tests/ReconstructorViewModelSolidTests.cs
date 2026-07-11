@@ -35,7 +35,7 @@ public class ReconstructorViewModelSolidTests
     [Fact]
     public void SwitchS_True_ClearsSwitchSDash()
     {
-        var vm = CreateVm();
+        ReconstructorViewModel vm = CreateVm();
         vm.SwitchSDash = true;
         vm.SwitchS = true;
         Assert.True(vm.SwitchS);
@@ -45,7 +45,7 @@ public class ReconstructorViewModelSolidTests
     [Fact]
     public void SwitchSDash_True_ClearsSwitchS()
     {
-        var vm = CreateVm();
+        ReconstructorViewModel vm = CreateVm();
         vm.SwitchS = true;
         vm.SwitchSDash = true;
         Assert.True(vm.SwitchSDash);
