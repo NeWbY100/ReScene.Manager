@@ -31,12 +31,15 @@
     <InternalsVisibleTo Include="ReScene.Manager.Tests" />
   </ItemGroup>
 
-  <!-- avalonia-agent-mcp bridge: local Debug only, and only if the external project exists.
-       This keeps CI/Release and any machine without the bridge building cleanly. -->
-  <PropertyGroup Condition="'$(Configuration)'=='Debug' AND Exists('E:\Projects\avalonia-agent-mcp\AvaDevBridge\AvaDevBridge.csproj')">
+  <!-- avalonia-agent-mcp bridge: local CLI Debug builds only, and only if the external project
+       exists. This keeps CI/Release and any machine without the bridge building cleanly.
+       The BuildingInsideVisualStudio guard is required: VS's NuGet restore only understands
+       projects loaded in the solution, so a ProjectReference to this external project fails
+       restore with NU1105 inside VS. Agent/CLI builds (dotnet build) resolve it fine. -->
+  <PropertyGroup Condition="'$(Configuration)'=='Debug' AND '$(BuildingInsideVisualStudio)' != 'true' AND Exists('E:\Projects\avalonia-agent-mcp\AvaDevBridge\AvaDevBridge.csproj')">
     <DefineConstants>$(DefineConstants);AGENT_BRIDGE</DefineConstants>
   </PropertyGroup>
-  <ItemGroup Condition="'$(Configuration)'=='Debug' AND Exists('E:\Projects\avalonia-agent-mcp\AvaDevBridge\AvaDevBridge.csproj')">
+  <ItemGroup Condition="'$(Configuration)'=='Debug' AND '$(BuildingInsideVisualStudio)' != 'true' AND Exists('E:\Projects\avalonia-agent-mcp\AvaDevBridge\AvaDevBridge.csproj')">
     <ProjectReference Include="E:\Projects\avalonia-agent-mcp\AvaDevBridge\AvaDevBridge.csproj" />
   </ItemGroup>
 </Project>
