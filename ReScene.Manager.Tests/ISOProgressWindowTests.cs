@@ -132,6 +132,32 @@ public class ISOProgressWindowTests
     }
 
     [AvaloniaFact]
+    public void OnProcessingChanged_True_AgainstShownWindowOwner_OpensDialog_ClosesOnFalse()
+    {
+        // Positive path mirroring real usage: the owner is a control inside a SHOWN window (the SRS
+        // Reconstructor tab under MainWindow). Flipping processing true must open the ISOProgressWindow
+        // modally over it; flipping false must close it. This is the "progress dialog for a rebuild"
+        // the SRS Reconstructor relies on (the VM sets ISOProcessing=true before every RebuildAsync).
+        var owner = new Window();
+        var content = new UserControl();
+        owner.Content = content;
+        owner.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var controller = new IsoProgressWindowController(content, () => true, () => { });
+
+        controller.OnProcessingChanged(true);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Single(owner.OwnedWindows.OfType<ISOProgressWindow>());
+
+        controller.OnProcessingChanged(false);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Empty(owner.OwnedWindows.OfType<ISOProgressWindow>());
+
+        owner.Close();
+    }
+
+    [AvaloniaFact]
     public void OnProcessingChanged_True_AgainstUnshownWindowOwner_SkipsAndOpensNothing()
     {
         // The owner is a real Window but is never shown. A Window is its own TopLevel, so the old bare

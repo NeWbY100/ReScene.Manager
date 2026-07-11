@@ -103,6 +103,33 @@ public class SRSReconstructorViewTests
     }
 
     [AvaloniaFact]
+    public void ISOProcessing_OpensAndClosesTheProgressModal_ViaViewSubscription()
+    {
+        // The SRS Reconstructor's progress dialog IS the ISOProgressWindow: the VM sets
+        // ISOProcessing=true before every rebuild, and this view subscribes to that flag and drives
+        // the shared IsoProgressWindowController. Prove the full VM -> view -> controller -> window
+        // chain end to end (the earlier port only launch-smoked it) so a broken subscription surfaces
+        // as a missing progress dialog here rather than in the running app.
+        SRSReconstructorViewModel vm = CreateViewModel();
+
+        using var sink = new BindingErrorSink();
+        var window = new Window { Width = 900, Height = 700, Content = new SRSReconstructorView { DataContext = vm } };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        vm.ISOProcessing = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Single(window.OwnedWindows.OfType<ISOProgressWindow>());
+
+        vm.ISOProcessing = false;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Empty(window.OwnedWindows.OfType<ISOProgressWindow>());
+
+        Assert.Empty(sink.Messages);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void ResultBanner_TracksShowResultAndSuccessTint_NoBindingErrors()
     {
         SRSReconstructorViewModel vm = CreateViewModel();
