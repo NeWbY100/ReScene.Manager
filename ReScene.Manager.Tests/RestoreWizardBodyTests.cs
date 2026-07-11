@@ -6,6 +6,7 @@ using ReScene.App.Core.Services;
 using ReScene.App.Core.ViewModels;
 using ReScene.App.Core.ViewModels.Wizards;
 using ReScene.Manager.Services;
+using ReScene.Manager.Views;
 using ReScene.Manager.Views.Wizards;
 using ReScene.SRS;
 
@@ -100,6 +101,33 @@ public class RestoreWizardBodyTests
         window.Show();
         Dispatcher.UIThread.RunJobs();
         return (window, body, wizard);
+    }
+
+    [AvaloniaFact]
+    public void SingleRebuild_OpensIsoProgressModal_OwnedByWizard_WithSingleRebuilderContext()
+    {
+        // Regression: the beginner "Restore a sample" wizard must show the ISO/media-scan progress modal
+        // during a single-.srs rebuild — exactly as the SRS Reconstructor tab does. The wizard runs
+        // without that tab realized, so RestoreWizardBody wires the controller for SingleRebuilder, owned
+        // by the hosting WizardWindow, with the SingleRebuilder VM as the modal's DataContext.
+        BeginnerRestoreViewModel vm = CreateViewModel();
+
+        using var sink = new BindingErrorSink();
+        (Window window, _, _) = Show(vm);
+
+        vm.SingleRebuilder!.ISOProcessing = true;
+        Dispatcher.UIThread.RunJobs();
+        ISOProgressWindow modal = Assert.Single(window.OwnedWindows.OfType<ISOProgressWindow>());
+        // The modal binds the SRSReconstructor VM's ISO* properties, so it must carry that VM, not the
+        // BeginnerRestoreViewModel that is the body's own DataContext.
+        Assert.Same(vm.SingleRebuilder, modal.DataContext);
+
+        vm.SingleRebuilder!.ISOProcessing = false;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Empty(window.OwnedWindows.OfType<ISOProgressWindow>());
+
+        Assert.Empty(sink.Messages);
+        window.Close();
     }
 
     [AvaloniaFact]

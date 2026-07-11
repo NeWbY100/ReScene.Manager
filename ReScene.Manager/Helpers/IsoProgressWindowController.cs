@@ -11,11 +11,18 @@ namespace ReScene.Manager.Helpers;
 /// owning control, the "is processing" check, and the cancel action differ between the two views.
 /// Avalonia port of the WPF <c>IsoProgressWindowController</c>.
 /// </summary>
-internal sealed class IsoProgressWindowController(Control owner, Func<bool> isProcessing, Action cancel)
+internal sealed class IsoProgressWindowController(
+    Control owner, Func<bool> isProcessing, Action cancel, Func<object?>? windowDataContext = null)
 {
     private readonly Control _owner = owner;
     private readonly Func<bool> _isProcessing = isProcessing;
     private readonly Action _cancel = cancel;
+
+    // The ISO window binds the SRS Creator/Reconstructor VM's ISO* properties. For the tab views (and
+    // the Create-SRS wizard) that VM is the owner's own DataContext, so this is left null. The beginner
+    // Restore wizard owns the modal from a body whose DataContext is the BeginnerRestoreViewModel — there
+    // the VM is a child (SingleRebuilder), supplied explicitly so the window binds the right object.
+    private readonly Func<object?>? _windowDataContext = windowDataContext;
 
     private ISOProgressWindow? _isoWindow;
 
@@ -41,7 +48,7 @@ internal sealed class IsoProgressWindowController(Control owner, Func<bool> isPr
 
                 _isoWindow = new ISOProgressWindow
                 {
-                    DataContext = _owner.DataContext
+                    DataContext = _windowDataContext is not null ? _windowDataContext() : _owner.DataContext,
                 };
 
                 _isoWindow.Closed += (_, _) =>

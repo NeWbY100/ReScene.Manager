@@ -7,6 +7,7 @@ using ReScene.App.Core.Services;
 using ReScene.App.Core.ViewModels;
 using ReScene.App.Core.ViewModels.Wizards;
 using ReScene.Manager.Services;
+using ReScene.Manager.Views;
 using ReScene.Manager.Views.Wizards;
 using ReScene.SRS;
 
@@ -83,6 +84,30 @@ public class CreateSRSWizardBodyTests
         window.Show();
         Dispatcher.UIThread.RunJobs();
         return (window, body, wizard);
+    }
+
+    [AvaloniaFact]
+    public void MediaScan_OpensIsoProgressModal_OwnedByWizard()
+    {
+        // Regression: the beginner "Create a sample SRS" wizard must show the ISO/media-scan progress
+        // modal while scanning the source, exactly as the SRS Creator tab does. The wizard runs without
+        // that tab realized, so CreateSRSWizardBody wires the controller itself, owned by the WizardWindow.
+        SRSCreatorViewModel vm = CreateViewModel();
+
+        using var sink = new BindingErrorSink();
+        (Window window, _, _) = Show(vm);
+
+        vm.ISOProcessing = true;
+        Dispatcher.UIThread.RunJobs();
+        ISOProgressWindow modal = Assert.Single(window.OwnedWindows.OfType<ISOProgressWindow>());
+        Assert.Same(vm, modal.DataContext);
+
+        vm.ISOProcessing = false;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Empty(window.OwnedWindows.OfType<ISOProgressWindow>());
+
+        Assert.Empty(sink.Messages);
+        window.Close();
     }
 
     [AvaloniaFact]
