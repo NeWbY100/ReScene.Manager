@@ -52,6 +52,13 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     private string _activeVersionKey = "";
     private string _activeSetLabel = "";
 
+    // Row index where the active set's own rows begin (snapshotted in SetActiveSet) and whether a
+    // SetActiveSet call is still "pending" — i.e. happened since the last progress event finished.
+    // Together these let a phase change tell an intra-set transition (e.g. Phase 1 -> Phase 2 of the
+    // SAME set) apart from a cross-set boundary: see ApplyProgress.
+    private int _activeSetStartIndex;
+    private bool _setBoundaryPending;
+
     public long LastOperationSize => _lastOperationSize;
     public TimeSpan Elapsed => _stopwatch.Elapsed;
     public bool HasActiveVersion => _activeVersionIndex >= 0 && _activeVersionIndex < _versionEntries.Count;
@@ -66,6 +73,8 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
         _activeVersionIndex = -1;
         _activeVersionKey = "";
         _activeSetLabel = "";
+        _activeSetStartIndex = 0;
+        _setBoundaryPending = false;
     }
 
     /// <summary>Stops the elapsed stopwatch (run finished/cancelled/errored).</summary>
@@ -74,8 +83,15 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     /// <summary>
     /// Sets the archive-set label that will be stamped onto new version rows. The view-model calls
     /// this before each set's <c>RunAsync</c>; an empty label is used for single-set releases.
+    /// Also snapshots where this set's own rows will begin and flags the upcoming progress event as
+    /// a potential set boundary (see <see cref="ApplyProgress"/>).
     /// </summary>
-    public void SetActiveSet(string label) => _activeSetLabel = label;
+    public void SetActiveSet(string label)
+    {
+        _activeSetLabel = label;
+        _activeSetStartIndex = _versionEntries.Count;
+        _setBoundaryPending = true;
+    }
 
     /// <summary>Clears all bookkeeping (used by Reset before a fresh run is configured).</summary>
     public void Clear()
@@ -89,6 +105,8 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
         _activeVersionIndex = -1;
         _activeVersionKey = "";
         _activeSetLabel = "";
+        _activeSetStartIndex = 0;
+        _setBoundaryPending = false;
         _versionEntries.Clear();
     }
 
@@ -154,17 +172,40 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
             };
         }
 
-        // Version list tracking. A phase change only resets which row is "active" — it must not
-        // wipe the collection, or an earlier archive set's already-finalized rows would be lost the
-        // moment the next set's own phase text differs from the previous set's last phase (#23).
+        // Version list tracking. A phase change resets which row is "active". WITHIN a single
+        // archive set (e.g. CommentPhaseBruteForcer's "Phase 1: Comment Block Filtering" giving way
+        // to Manager's "Phase 2: Full RAR Creation") this must clear that set's own intermediate
+        // rows, restoring the old clean-table-per-phase behavior. ACROSS a set boundary, though, the
+        // prior set's already-finalized row must survive (#23) — wiping it the moment the next
+        // set's first phase text differs from the previous set's last phase would lose it.
+        // _setBoundaryPending (raised by SetActiveSet, consumed below regardless of outcome) tells
+        // the two cases apart: it's still true only for the very first progress event of a set.
         string phaseDesc = e.PhaseDescription ?? "";
         if (phaseDesc != _lastPhaseDescription)
         {
-            FinalizeActiveRowAsNoMatch();
+            if (_setBoundaryPending)
+            {
+                // Cross-set boundary: preserve every row added so far, including prior sets'.
+                FinalizeActiveRowAsNoMatch();
+            }
+            else
+            {
+                // Intra-set phase change: drop only this set's own rows (added since SetActiveSet).
+                while (_versionEntries.Count > _activeSetStartIndex)
+                {
+                    _versionEntries.RemoveAt(_versionEntries.Count - 1);
+                }
+            }
+
             _activeVersionIndex = -1;
             _activeVersionKey = "";
             _lastPhaseDescription = phaseDesc;
         }
+
+        // Consumed after this event regardless of whether a phase change was seen above: a
+        // SetActiveSet call only marks the NEXT event as a possible set boundary, not every event
+        // until the next one that happens to differ in phase text (see field comment).
+        _setBoundaryPending = false;
 
         string key = string.Concat(e.RARVersionDirectoryPath, "|", e.RARCommandLineArguments);
         if (key != _activeVersionKey)

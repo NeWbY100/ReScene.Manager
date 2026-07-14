@@ -99,6 +99,31 @@ public class ReconstructionProgressTrackerTests
         Assert.Equal("Set2", entries[1].SetText);
     }
 
+    [Fact]
+    public void ApplyProgress_PhaseChangeWithinSameSet_ClearsThatSetsOwnIntermediateRows()
+    {
+        var entries = new ObservableCollection<TestRow>();
+        ReconstructionProgressTracker<TestRow> tracker = CreateTracker(entries);
+        tracker.StartRun();
+
+        // Single-set run: mirrors production, which calls SetActiveSet(string.Empty) once even for
+        // a single archive set (ReconstructorViewModel.SetActiveSet call site).
+        tracker.SetActiveSet("");
+
+        // Phase 1 (comment-block filtering) screens two version/args combos, neither matching.
+        tracker.ApplyProgress(MakeEvent("winrar-370", "-m0", "Phase 1: Comment Block Filtering", 1, 2, TimeSpan.FromSeconds(1)));
+        tracker.ApplyProgress(MakeEvent("winrar-400", "-m1", "Phase 1: Comment Block Filtering", 2, 2, TimeSpan.FromSeconds(1)));
+        Assert.Equal(2, entries.Count);
+
+        // Phase 2 (full RAR creation) begins with NO intervening SetActiveSet call — an intra-set
+        // phase change. This must restore the old clean-table-per-phase behavior for THIS set's own
+        // rows (unlike the cross-set-boundary case, which must preserve a prior set's finalized row).
+        tracker.ApplyProgress(MakeEvent("winrar-370", "-m0", "Phase 2: Full RAR Creation", 1, 1, TimeSpan.FromSeconds(1)));
+
+        Assert.Single(entries);
+        Assert.Equal("-m0", entries[0].Arguments);
+    }
+
     // ── #25: TimeProvider-based ETA ──
 
     [Fact]
