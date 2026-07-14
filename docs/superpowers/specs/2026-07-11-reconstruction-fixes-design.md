@@ -1,7 +1,7 @@
 # RAR Reconstruction Subsystem — Correctness Fixes (Design)
 
 **Date:** 2026-07-11
-**Status:** Draft (rev. 6) — refined after five codex reviews of the implementation plan; see Revision note below.
+**Status:** Draft (rev. 7, FROZEN for execution) — refined across six codex reviews; two out-of-scope reviewer pushes deliberately excluded (see Revision note clause 4 + the plan's Scope-boundary constraint).
 **Branch:** `avalonia-feature` (app + nested `ReScene.Lib` submodule)
 **Scope:** `ReScene.App.Core` reconstruction view-models/helpers and `ReScene.Lib`
 (`Manager` engine, `SRRFile`/`SRRFileParser`, `SRRArchiveSet`) — the RAR Reconstructor only.
@@ -40,10 +40,11 @@ Reading that spec sharpens three findings:
   "fix C"); the fields were added to `SRRArchiveSet` but the app-side wiring in `BuildOptionsForSet`
   was never finished. Our fix completes it.
 
-### Revision note (rev. 6, post-5×-codex-review) — clauses that supersede the original WS text
+### Revision note (rev. 7, FROZEN) — clauses that supersede the original WS text
 
-Five codex reviews of the implementation plan (grounded in a read of the engine and version-selection
-code) refined several decisions. Where the WS sections below differ from these, **these govern**:
+Six codex reviews of the implementation plan (grounded in a read of the engine and version-selection
+code) refined these decisions; rev. 7 freezes them for execution. Where the WS sections below differ,
+**these govern**:
 
 1. **Two reserved guarded roots, distinct & fail-closed** supersedes "no delete outside the output
    tree." Every destructive delete/move must target a strict descendant of a *validated* reserved
@@ -60,12 +61,17 @@ code) refined several decisions. Where the WS sections below differ from these, 
    **transactional** — precompute+validate the move map, then move, rolling back its own moves on any
    false return **or exception** (`Manager.cs:961` moves CAV volumes sequentially today, leaving earlier
    files behind on a later failure). A `CommittedMatch` is recorded **only when Complete**, where
-   `Complete` means the placed set matches the **expected volume identity** (count+names from SFV, else
-   the stored RAR list) **unconditionally** — not "however many `GetAllVolumeFiles` found," and not
-   gated on `RenameToReleaseNames`; custom reconstruction likewise requires the full expected set
-   (`SRRReconstructor.cs:345` today passes on `completedVolumes > 0`). An incomplete placement is not a
-   match, so a later complete combo can still be the seed. Exploratory runs keep the **first** fully-placed
-   combo as the seed (`Manager.cs:340` overwrites with the last today); all matches are byte-identical.
+   `Complete` means the placed set matches the **expected volume identity for the mode** — from
+   `RAROptions.OriginalRARFileNames` (not `expectedInOrder`, which omits CRC-less volumes,
+   `Manager.cs:147`): the **single first** volume for non-CAV, **all** volumes for CAV and custom —
+   by count + normalized name, unconditionally (not gated on `RenameToReleaseNames`; generated-name
+   output validated logically via a carried `(ExpectedName, Path)` per file). Custom reconstruction
+   likewise requires the full expected set (`SRRReconstructor.cs:345` today passes on
+   `completedVolumes > 0`). An incomplete placement is not a match, so a later complete combo can still
+   be the seed. `Matches` holds at most one per executable version (`TryProcessCommandLinesAsync`
+   returns on the first match per version, `Manager.cs:821`). Exploratory runs keep the **first**
+   fully-placed combo as the seed (`Manager.cs:340` overwrites with the last today); all matches are
+   byte-identical.
    The VM relocates them, guarding brute-force sources strictly under `<workRoot>\output` and custom
    sources under the custom work root, **canonicalizing before the uniqueness check and rejecting
    reparse-point sources** (a moved link would dangle after scratch deletion); relocation rollback is
@@ -81,16 +87,14 @@ code) refined several decisions. Where the WS sections below differ from these, 
    re-reads (`ResolveSfvVolumeNames`/`TryLoadUserSfv`) are removed. Only CRC32 snapshots feed
    `ExpectedVolumeCrcs`; SHA1 feeds `options.Hashes` only. Expected CRCs store **one canonical key per
    volume** (qualified-first, basename fallback in `Manager`) — never both aliases (double-counts).
-4. **`-mt` preserves `-mt0`** (byte-significant) and is correct **per executable version**, not per
-   format — `-mt` support is `<360` none / `360-499` max 16 / `>=500` max 64, so a 5.60 exe producing
-   RAR4 still allows 64. Because `FilterArgumentsForVersion` drops an inapplicable arg rather than
-   skipping the row (`RARVersionSelector.cs:117-122`), `RARCommandLineArgument` gains a `Required` flag
-   and the per-version loop **skips the whole combination** when a `Required` arg is filtered; `-mt{z}`
-   is then version-bounded (`Min = z<=16 ? 360 : 500`) and marked `Required`, so it prunes per exe
-   rather than degrading. Both `-mt` endpoints clamp to `0..64` before ordering. Plus a **checked
-   cardinality cap** and cooperative cancellation; the matrix builds off the UI thread, and the global
-   (flat) matrix is carried as a `SwitchSnapshot` and built **lazily** so a per-set imported run is
-   never aborted by the global cap. The installed-versions capture also **awaits an in-flight manual
+4. **`#13` is scoped to its filing** — `-mt` preserves `-mt0` (byte-significant), clamps **both**
+   endpoints to `0..64` before ordering, builds off the UI thread, and has a **checked cardinality
+   cap** + cooperative cancellation. `-mt` stays a uniform `new($"-mt{z}", 360)` arg (unchanged). Making
+   `-mt` correct *per executable version* (`<360` none / `360-499` max 16 / `>=500` max 64; the arg-drop
+   degradation in `FilterArgumentsForVersion:117-122`) is **deliberately out of scope** — a pre-existing
+   behavior and a candidate *new* finding, not `#13`, and it would require lib changes beyond the
+   settled `#7`/`#9` boundary. Likewise a unified run-plan/progress-accounting refactor is out of scope;
+   plan-before-mutate is a surgical reorder. The installed-versions capture **awaits an in-flight manual
    rescan** (`RescanVersions` does not clear `HasScannedVersions` for a valid folder,
    `ReconstructorViewModel.cs:457`) before capturing.
 5. **#6 uses an explicit format↔executable-version compatibility map matching the engine's real
