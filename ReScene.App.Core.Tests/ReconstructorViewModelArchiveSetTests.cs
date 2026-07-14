@@ -56,6 +56,19 @@ public class ReconstructorViewModelArchiveSetTests
     }
 
     /// <summary>
+    /// Dialog service that returns each of <paramref name="paths"/> in order from successive
+    /// <see cref="OpenFileAsync"/> calls (then <c>null</c> once exhausted) — for tests that import
+    /// more than one SRR into the same view model instance.
+    /// </summary>
+    private sealed class SequentialFixtureDialogService(params string[] paths) : NoOpFileDialogService
+    {
+        private int _index;
+
+        public override Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters) =>
+            Task.FromResult(_index < paths.Length ? paths[_index++] : null);
+    }
+
+    /// <summary>
     /// <see cref="ITempDirectoryService"/> that creates real temp directories and records every
     /// create/cleanup so a test can assert the SFV extract is tracked and released.
     /// </summary>
@@ -142,6 +155,40 @@ public class ReconstructorViewModelArchiveSetTests
         vm.Cleanup();
 
         // Shutdown cleanup deletes it — no temp directory leaks per SRR import.
+        Assert.Contains(sfvDir, temp.Cleaned);
+        Assert.False(Directory.Exists(sfvDir));
+    }
+
+    [Fact]
+    public async Task ImportSRR_NoStoredFiles_RetiresPreviousAutoExtractedSfv()
+    {
+        string sfvSrrPath = Path.Combine(AppContext.BaseDirectory, "TestData",
+            "cleanup_script", "007.A.View.To.A.Kill.1985.UE.iNTERNAL.DVDRip.XviD-iNCiTE.fine_2cd.srr");
+        string noStoredFilesSrrPath = Path.Combine(AppContext.BaseDirectory, "TestData", "store_little.srr");
+        Assert.True(File.Exists(sfvSrrPath), $"Fixture not found: {sfvSrrPath}");
+        Assert.True(File.Exists(noStoredFilesSrrPath), $"Fixture not found: {noStoredFilesSrrPath}");
+
+        var temp = new RecordingTempDirectoryService();
+        var vm = new ReconstructorViewModel(
+            new InertBruteForceService(),
+            new SequentialFixtureDialogService(sfvSrrPath, noStoredFilesSrrPath),
+            uiDispatcher: new InlineUiDispatcher(),
+            timerFactory: new TestUiTimerFactory(),
+            settingsService: null,
+            tempDir: temp);
+
+        // Import A: has an embedded SFV, so it auto-extracts and VerificationPath points into it.
+        await ImportAsync(vm);
+        string sfvDir = Assert.Single(temp.Created);
+        Assert.False(string.IsNullOrEmpty(vm.VerificationPath));
+
+        // Import B: no stored files at all. B must not be verified against A's stale SFV — the
+        // previous auto-extracted SFV is retired (VerificationPath cleared, temp dir deleted) even
+        // though B itself has nothing to extract.
+        await ImportAsync(vm);
+
+        Assert.Equal(string.Empty, vm.VerificationPath);
+        Assert.Null(vm.SfvTempDirForTest);
         Assert.Contains(sfvDir, temp.Cleaned);
         Assert.False(Directory.Exists(sfvDir));
     }

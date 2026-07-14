@@ -2688,17 +2688,18 @@ public partial class ReconstructorViewModel : ViewModelBase
         Log(LogTarget.System, $"Volume size: {VolumeSize} {VolumeSizeUnits[VolumeSizeUnitIndex]}");
     }
 
+    // Test seam (InternalsVisibleTo ReScene.App.Core.Tests): exposes the auto-extracted-SFV temp dir
+    // so a test can assert it was retired (set back to null) without reaching for reflection.
+    internal string? SfvTempDirForTest => _sfvTempDir;
+
     private void TryExtractStoredSFV(string srrFilePath, SRRFile srr)
     {
-        if (srr.StoredFiles.Count == 0)
-        {
-            return;
-        }
-
-        // Delete the SFV temp from a previous import before starting a new one so at most one
-        // is ever on disk. If the current VerificationPath points into that dir (i.e. it was the
-        // previous import's auto-extracted SFV, not a user-chosen path), clear it too so it never
-        // dangles at a file we just deleted.
+        // Delete the SFV temp from a previous import before starting a new one so at most one is
+        // ever on disk — even when THIS import has no stored files of its own (#15), otherwise the
+        // previous import's auto-extracted SFV would dangle and silently verify the wrong release.
+        // If the current VerificationPath points into that dir (i.e. it was the previous import's
+        // auto-extracted SFV, not a user-chosen path), clear it too so it never dangles at a file
+        // we just deleted.
         if (_sfvTempDir is not null
             && VerificationPath.StartsWith(_sfvTempDir, StringComparison.Ordinal))
         {
@@ -2707,6 +2708,11 @@ public partial class ReconstructorViewModel : ViewModelBase
 
         _tempDir.Cleanup(_sfvTempDir);
         _sfvTempDir = null;
+
+        if (srr.StoredFiles.Count == 0)
+        {
+            return;
+        }
 
         string? tempDir = null;
         try
