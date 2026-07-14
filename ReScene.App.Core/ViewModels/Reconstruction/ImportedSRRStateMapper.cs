@@ -22,7 +22,8 @@ internal static class ImportedSRRStateMapper
             || state.FileTimestamps.Count > 0
             || state.ArchiveFileCrcs.Count > 0
             || state.SRRFilePath is not null
-            || state.CmtCompressedData is { Length: > 0 };
+            || state.CmtCompressedData is { Length: > 0 }
+            || state.ArchiveSets.Count > 0;
 
         if (!hasState)
         {
@@ -31,6 +32,7 @@ internal static class ImportedSRRStateMapper
 
         return new ImportedSRRState
         {
+            SchemaVersion = ImportedSRRState.CurrentSchemaVersion,
             SRRFilePath = state.SRRFilePath,
             ArchiveFiles = [.. state.ArchiveFiles],
             ArchiveDirectories = [.. state.ArchiveDirectories],
@@ -42,6 +44,7 @@ internal static class ImportedSRRStateMapper
             FileAccessTimes = new Dictionary<string, DateTime>(state.FileAccessTimes),
             ArchiveFileCrcs = new Dictionary<string, string>(state.ArchiveFileCrcs),
             OriginalRARFileNames = [.. state.OriginalRARFileNames],
+            ArchiveSets = [.. state.ArchiveSets.Select(ToDto)],
             ArchiveComment = state.ArchiveComment,
             ArchiveCommentBytes = state.ArchiveCommentBytes,
             CmtCompressedData = state.CmtCompressedData,
@@ -70,6 +73,13 @@ internal static class ImportedSRRStateMapper
             return new ReconstructionImportState();
         }
 
+        // The restored set list is trusted only when SchemaVersion marks the DTO complete (a
+        // presence marker, not a "non-empty" check — empty dirs/null metadata on a set are still
+        // complete). Legacy DTOs (no set list, older/absent SchemaVersion) leave ArchiveSets empty
+        // here; the existing runtime fallback (ArchiveSetPlanner.ResolveSets, called before each
+        // run) re-derives them from SRRFilePath instead.
+        bool archiveSetsComplete = s.SchemaVersion >= ImportedSRRState.CurrentSchemaVersion;
+
         return new ReconstructionImportState
         {
             SRRFilePath = s.SRRFilePath,
@@ -83,6 +93,7 @@ internal static class ImportedSRRStateMapper
             FileAccessTimes = ToCi(s.FileAccessTimes),
             ArchiveFileCrcs = new Dictionary<string, string>(s.ArchiveFileCrcs, StringComparer.OrdinalIgnoreCase),
             OriginalRARFileNames = s.OriginalRARFileNames is { } names ? [.. names] : [],
+            ArchiveSets = archiveSetsComplete ? [.. s.ArchiveSets.Select(ToLiveSet)] : [],
             ArchiveComment = s.ArchiveComment,
             ArchiveCommentBytes = s.ArchiveCommentBytes,
             CmtCompressedData = s.CmtCompressedData,
@@ -102,5 +113,107 @@ internal static class ImportedSRRStateMapper
             src is null
                 ? new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, DateTime>(src, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Captures one live archive set's complete per-set data into its DTO.</summary>
+    private static ArchiveSetDto ToDto(SRRArchiveSet s) => new()
+    {
+        Key = s.Key,
+        Directory = s.Directory,
+        VolumeNames = [.. s.VolumeNames],
+        ArchivedFiles = [.. s.ArchivedFiles],
+        ArchivedFileCrcs = new Dictionary<string, string>(s.ArchivedFileCrcs),
+        ArchivedFileTimestamps = new Dictionary<string, DateTime>(s.ArchivedFileTimestamps),
+        ArchivedFileCreationTimes = new Dictionary<string, DateTime>(s.ArchivedFileCreationTimes),
+        ArchivedFileAccessTimes = new Dictionary<string, DateTime>(s.ArchivedFileAccessTimes),
+        ArchivedDirectories = [.. s.ArchivedDirectories],
+        ArchivedDirectoryTimestamps = new Dictionary<string, DateTime>(s.ArchivedDirectoryTimestamps),
+        ArchivedDirectoryCreationTimes = new Dictionary<string, DateTime>(s.ArchivedDirectoryCreationTimes),
+        ArchivedDirectoryAccessTimes = new Dictionary<string, DateTime>(s.ArchivedDirectoryAccessTimes),
+        CompressionMethod = s.CompressionMethod,
+        DictionarySize = s.DictionarySize,
+        RARVersion = s.RARVersion,
+        IsSolid = s.IsSolid,
+        HasRecoveryRecord = s.HasRecoveryRecord,
+        DetectedHostOS = s.DetectedHostOS,
+        DetectedFileAttributes = s.DetectedFileAttributes,
+        HasLargeFiles = s.HasLargeFiles,
+        DetectedHighPackSize = s.DetectedHighPackSize,
+        DetectedHighUnpSize = s.DetectedHighUnpSize,
+    };
+
+    /// <summary>
+    /// Rebuilds a live <see cref="SRRArchiveSet"/> from its DTO via the type's public
+    /// get-only-mutable collections and settable metadata — its config-restore seam — never by
+    /// re-parsing the SRR. Those collections are always constructed with
+    /// <see cref="StringComparer.OrdinalIgnoreCase"/> internally, so populating them here preserves
+    /// case-insensitive lookups regardless of the DTO's own (ordinal) dictionary comparer.
+    /// </summary>
+    private static SRRArchiveSet ToLiveSet(ArchiveSetDto d)
+    {
+        var set = new SRRArchiveSet { Key = d.Key, Directory = d.Directory };
+
+        foreach (string v in d.VolumeNames)
+        {
+            set.VolumeNames.Add(v);
+        }
+
+        foreach (string f in d.ArchivedFiles)
+        {
+            set.ArchivedFiles.Add(f);
+        }
+
+        foreach (KeyValuePair<string, string> kv in d.ArchivedFileCrcs)
+        {
+            set.ArchivedFileCrcs[kv.Key] = kv.Value;
+        }
+
+        foreach (KeyValuePair<string, DateTime> kv in d.ArchivedFileTimestamps)
+        {
+            set.ArchivedFileTimestamps[kv.Key] = kv.Value;
+        }
+
+        foreach (KeyValuePair<string, DateTime> kv in d.ArchivedFileCreationTimes)
+        {
+            set.ArchivedFileCreationTimes[kv.Key] = kv.Value;
+        }
+
+        foreach (KeyValuePair<string, DateTime> kv in d.ArchivedFileAccessTimes)
+        {
+            set.ArchivedFileAccessTimes[kv.Key] = kv.Value;
+        }
+
+        foreach (string dir in d.ArchivedDirectories)
+        {
+            set.ArchivedDirectories.Add(dir);
+        }
+
+        foreach (KeyValuePair<string, DateTime> kv in d.ArchivedDirectoryTimestamps)
+        {
+            set.ArchivedDirectoryTimestamps[kv.Key] = kv.Value;
+        }
+
+        foreach (KeyValuePair<string, DateTime> kv in d.ArchivedDirectoryCreationTimes)
+        {
+            set.ArchivedDirectoryCreationTimes[kv.Key] = kv.Value;
+        }
+
+        foreach (KeyValuePair<string, DateTime> kv in d.ArchivedDirectoryAccessTimes)
+        {
+            set.ArchivedDirectoryAccessTimes[kv.Key] = kv.Value;
+        }
+
+        set.CompressionMethod = d.CompressionMethod;
+        set.DictionarySize = d.DictionarySize;
+        set.RARVersion = d.RARVersion;
+        set.IsSolid = d.IsSolid;
+        set.HasRecoveryRecord = d.HasRecoveryRecord;
+        set.DetectedHostOS = d.DetectedHostOS;
+        set.DetectedFileAttributes = d.DetectedFileAttributes;
+        set.HasLargeFiles = d.HasLargeFiles;
+        set.DetectedHighPackSize = d.DetectedHighPackSize;
+        set.DetectedHighUnpSize = d.DetectedHighUnpSize;
+
+        return set;
     }
 }

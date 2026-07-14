@@ -5,6 +5,19 @@ namespace ReScene.App.Core.Models;
 /// </summary>
 public sealed class ImportedSRRState
 {
+    /// <summary>
+    /// Schema version marking that <see cref="ArchiveSets"/> carries the COMPLETE per-set snapshot.
+    /// This is a presence marker, not a "non-empty" check: a DTO whose <see cref="SchemaVersion"/>
+    /// is at least <see cref="CurrentSchemaVersion"/> is trusted as-is (empty directories or null
+    /// metadata on a set are legitimate captured values). Configs written before this feature have
+    /// <see cref="SchemaVersion"/> 0 (absent from older JSON) and no set list; those are legacy and
+    /// restore by re-parsing the SRR at <see cref="SRRFilePath"/> instead — see
+    /// <see cref="ReScene.App.Core.ViewModels.Reconstruction.ImportedSRRStateMapper"/>.
+    /// </summary>
+    public const int CurrentSchemaVersion = 1;
+
+    public int SchemaVersion { get; set; }
+
     public string? SRRFilePath { get; set; }
 
     public List<string> ArchiveFiles { get; set; } = [];
@@ -20,6 +33,13 @@ public sealed class ImportedSRRState
     public Dictionary<string, string> ArchiveFileCrcs { get; set; } = [];
 
     public List<string> OriginalRARFileNames { get; set; } = [];
+
+    /// <summary>
+    /// Complete per-archive-set snapshot (volumes, archived content, timestamps, header-derived
+    /// metadata). Only trustworthy as a full restore when <see cref="SchemaVersion"/> marks it
+    /// complete — see <see cref="ReScene.App.Core.ViewModels.Reconstruction.ImportedSRRStateMapper"/>.
+    /// </summary>
+    public List<ArchiveSetDto> ArchiveSets { get; set; } = [];
 
     public string? ArchiveComment { get; set; }
     public byte[]? ArchiveCommentBytes { get; set; }
