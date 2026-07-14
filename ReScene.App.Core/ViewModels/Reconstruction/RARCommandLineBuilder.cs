@@ -12,6 +12,16 @@ internal static class RARCommandLineBuilder
 {
     private const long DefaultVolumeSizeKb = 15000;
 
+    /// <summary>The highest thread count any WinRAR version accepts for <c>-mt</c>.</summary>
+    internal const int MaxThreadCount = 64;
+
+    /// <summary>
+    /// The cardinality cap for the cartesian-product matrix. Each combination spawns a WinRAR
+    /// process, so a matrix this large (hundreds of thousands of runs) is virtually always an
+    /// extreme/mistaken switch combination or <c>-mt</c> range rather than an intentional run.
+    /// </summary>
+    internal const long MaxMatrixCardinality = 100_000;
+
     /// <summary>Builds the enabled RAR version ranges, in the same order the UI lists them.</summary>
     public static List<VersionRange> BuildVersionRanges(RARSwitchSettings s)
     {
@@ -60,8 +70,17 @@ internal static class RARCommandLineBuilder
         return rarVersions;
     }
 
-    /// <summary>Builds the cartesian-product matrix of RAR argument sets to brute-force.</summary>
-    public static List<RARCommandLineArgument[]> BuildCommandLineArguments(RARSwitchSettings s)
+    /// <summary>
+    /// Builds the cartesian-product matrix of RAR argument sets to brute-force. Synchronous but
+    /// cancellable — callers with UI-thread concerns should invoke it via
+    /// <c>Task.Run(() =&gt; BuildCommandLineArguments(s, ct), ct)</c>.
+    /// </summary>
+    /// <exception cref="RARCommandLineMatrixTooLargeException">
+    /// The cartesian product would exceed <see cref="MaxMatrixCardinality"/> combinations — thrown
+    /// before the result list is allocated.
+    /// </exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
+    public static IReadOnlyList<RARCommandLineArgument[]> BuildCommandLineArguments(RARSwitchSettings s, CancellationToken ct)
     {
         List<RARCommandLineArgument> compressionLevels = [];
         if (s.SwitchM0)
@@ -259,13 +278,40 @@ internal static class RARCommandLineBuilder
             atimes.Add(new("-tsa4", 320, RARArchiveVersion.RAR4));
         }
 
-        List<RARCommandLineArgument[]> result = [];
+        // Normalise the thread-count (-mt) range: clamp EACH endpoint to 0..MaxThreadCount (the
+        // highest thread count any WinRAR version accepts) BEFORE ordering, so a reversed pair
+        // (Start > End, or a typo/imported config), an out-of-range value, or int.MaxValue never
+        // overflows or collapses the whole matrix to zero combinations — e.g. 100..200 clamps to
+        // 64..64 (a single -mt64 row), never an empty loop. 0 is a valid, byte-significant value
+        // (-mt0) and is no longer floored away.
+        int mtLo = 0;
+        int mtHi = 0;
+        if (s.SwitchMT)
+        {
+            int clampedStart = Math.Clamp(s.SwitchMTStart, 0, MaxThreadCount);
+            int clampedEnd = Math.Clamp(s.SwitchMTEnd, 0, MaxThreadCount);
+            mtLo = Math.Min(clampedStart, clampedEnd);
+            mtHi = Math.Max(clampedStart, clampedEnd);
+        }
 
-        // Normalise the thread-count (-mt) range so a reversed or empty pair (Start > End, or a
-        // typo/imported config) never collapses the whole matrix to zero combinations — which would
-        // otherwise complete instantly with a misleading "No match found". Thread counts start at 1.
-        int mtLo = s.SwitchMT ? Math.Max(1, Math.Min(s.SwitchMTStart, s.SwitchMTEnd)) : 0;
-        int mtHi = s.SwitchMT ? Math.Max(s.SwitchMTStart, s.SwitchMTEnd) : 0;
+        // Cardinality is computed with checked arithmetic (defensive against overflow if these
+        // dimensions grow) and rejected via a typed exception BEFORE the result list is allocated.
+        long cardinality = checked(
+            (long)Math.Max(compressionLevels.Count, 1)
+            * Math.Max(archiveFormats.Count, 1)
+            * Math.Max(dictSizes.Count, 1)
+            * Math.Max(mtimes.Count, 1)
+            * Math.Max(ctimes.Count, 1)
+            * Math.Max(atimes.Count, 1)
+            * (s.SwitchAI ? 2 : 1)
+            * (mtHi - mtLo + 1));
+
+        if (cardinality > MaxMatrixCardinality)
+        {
+            throw new RARCommandLineMatrixTooLargeException(cardinality, MaxMatrixCardinality);
+        }
+
+        List<RARCommandLineArgument[]> result = new((int)cardinality);
 
         for (int a = 0; a < Math.Max(compressionLevels.Count, 1); a++)
         {
@@ -283,6 +329,10 @@ internal static class RARCommandLineBuilder
                                 {
                                     for (int z = mtLo; z <= mtHi; z++)
                                     {
+                                        // Checked once per generated combination so a cancel during
+                                        // a large (but under-cap) matrix is honoured promptly.
+                                        ct.ThrowIfCancellationRequested();
+
                                         List<RARCommandLineArgument> switches = [new("a", 200)];
 
                                         if (x == 0 && s.SwitchAI)

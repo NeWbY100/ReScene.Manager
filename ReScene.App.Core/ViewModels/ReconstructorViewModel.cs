@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using ReScene.App.Core.Services;
 using ReScene.Core;
 using ReScene.Core.Cryptography;
+using ReScene.Core.Diagnostics;
 using ReScene.Core.IO;
 using ReScene.App.Core.Models;
 using ReScene.App.Core.ViewModels.Reconstruction;
@@ -781,6 +782,29 @@ public partial class ReconstructorViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Clamps to 0..64 (the highest thread count any WinRAR version accepts) so an unbounded or
+    /// pasted-in value (e.g. int.MaxValue) can never reach <see cref="RARCommandLineBuilder"/>.
+    /// The builder itself re-clamps defensively, but catching it here gives immediate UI feedback.
+    /// </summary>
+    partial void OnSwitchMTStartChanged(int value)
+    {
+        int clamped = Math.Clamp(value, 0, RARCommandLineBuilder.MaxThreadCount);
+        if (clamped != value)
+        {
+            SwitchMTStart = clamped;
+        }
+    }
+
+    partial void OnSwitchMTEndChanged(int value)
+    {
+        int clamped = Math.Clamp(value, 0, RARCommandLineBuilder.MaxThreadCount);
+        if (clamped != value)
+        {
+            SwitchMTEnd = clamped;
+        }
+    }
+
     // ── Computed enable/disable ──
 
     public bool IsMTRangeEnabled => SwitchMT;
@@ -1555,7 +1579,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// </summary>
     private async Task RunArchiveSetsAsync(CancellationToken token)
     {
-        SharedReconstructionSettings shared = BuildSharedSettings();
+        SharedReconstructionSettings shared = await BuildSharedSettingsAsync(token);
 
         // For the legacy / no-SRR single flat set the original RAR names may be empty; fall back to
         // the verification snapshot's RAR-volume entries so output renaming still works (matches the
@@ -1677,11 +1701,17 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// <summary>One archive set's reconstruction outcome.</summary>
     private readonly record struct SetOutcome(SRRArchiveSet Set, string Label, bool Success, bool Skipped);
 
-    /// <summary>Captures the non-per-set toggles, version ranges, command-line matrix, and release-wide SRR data.</summary>
-    internal SharedReconstructionSettings BuildSharedSettings()
+    /// <summary>
+    /// Captures the non-per-set toggles, version ranges, command-line matrix, and release-wide SRR
+    /// data. The matrix build is bounded (checked cardinality cap) but can still be tens of
+    /// thousands of iterations, so it runs off the UI thread via <see cref="Task.Run{TResult}(Func{TResult}, CancellationToken)"/>.
+    /// </summary>
+    internal async Task<SharedReconstructionSettings> BuildSharedSettingsAsync(CancellationToken ct)
     {
         RARSwitchSettings switches = BuildSwitchSettings();
         VerificationSnapshot snapshot = _verificationSnapshot ?? VerificationSnapshot.Empty;
+        IReadOnlyList<RARCommandLineArgument[]> commandLineArguments =
+            await Task.Run(() => RARCommandLineBuilder.BuildCommandLineArguments(switches, ct), ct);
 
         return new SharedReconstructionSettings
         {
@@ -1692,7 +1722,7 @@ public partial class ReconstructorViewModel : ViewModelBase
             // Only folder-filter when a real scan produced the tree; the no-scan fallback uses broad
             // major-version ranges and must NOT be restricted to specific folder names.
             SelectedVersionFolders = HasScannedVersions ? SelectedLeafFolders : [],
-            CommandLineArguments = RARCommandLineBuilder.BuildCommandLineArguments(switches),
+            CommandLineArguments = commandLineArguments,
             HashType = snapshot.HashType,
             VerificationHashes = snapshot.AllHashes,
             Verification = snapshot,

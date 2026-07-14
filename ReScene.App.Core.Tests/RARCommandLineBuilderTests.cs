@@ -66,7 +66,7 @@ public sealed class RARCommandLineBuilderTests
     {
         var settings = new RARSwitchSettings();
 
-        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
+        IReadOnlyList<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None);
 
         RARCommandLineArgument[] only = Assert.Single(matrix);
         RARCommandLineArgument add = Assert.Single(only);
@@ -79,7 +79,7 @@ public sealed class RARCommandLineBuilderTests
     {
         var settings = new RARSwitchSettings { SwitchM5 = true };
 
-        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
+        IReadOnlyList<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None);
 
         RARCommandLineArgument[] combo = Assert.Single(matrix);
         Assert.Equal(["a", "-m5"], combo.Select(c => c.Argument));
@@ -90,7 +90,7 @@ public sealed class RARCommandLineBuilderTests
     {
         var settings = new RARSwitchSettings { SwitchM0 = true, SwitchM3 = true, SwitchM5 = true };
 
-        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
+        IReadOnlyList<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None);
 
         Assert.Equal(3, matrix.Count);
         // Each combination is "a" followed by exactly one compression level.
@@ -113,7 +113,7 @@ public sealed class RARCommandLineBuilderTests
             SwitchMD256K = true,
         };
 
-        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
+        IReadOnlyList<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None);
 
         Assert.Equal(2 * 2 * 3, matrix.Count);
     }
@@ -123,7 +123,7 @@ public sealed class RARCommandLineBuilderTests
     {
         var settings = new RARSwitchSettings { SwitchMT = true, SwitchMTStart = 2, SwitchMTEnd = 4 };
 
-        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
+        IReadOnlyList<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None);
 
         Assert.Equal(3, matrix.Count);   // -mt2, -mt3, -mt4
         Assert.All(matrix, combo => Assert.Contains(combo, c => c.Argument is "-mt2" or "-mt3" or "-mt4"));
@@ -136,7 +136,7 @@ public sealed class RARCommandLineBuilderTests
         // zero combinations and a silent "No match found".
         var settings = new RARSwitchSettings { SwitchMT = true, SwitchMTStart = 4, SwitchMTEnd = 2 };
 
-        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
+        IReadOnlyList<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None);
 
         Assert.Equal(3, matrix.Count);   // normalised to 2..4
         Assert.Contains(matrix, combo => combo.Any(c => c.Argument == "-mt2"));
@@ -148,7 +148,7 @@ public sealed class RARCommandLineBuilderTests
     {
         var settings = new RARSwitchSettings { SwitchMA5 = true };
 
-        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings));
+        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None));
 
         RARCommandLineArgument ma5 = Assert.Single(combo, c => c.Argument == "-ma5");
         Assert.Equal(500, ma5.MinimumVersion);
@@ -160,7 +160,7 @@ public sealed class RARCommandLineBuilderTests
     {
         var settings = new RARSwitchSettings { SwitchMD8M = true };
 
-        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings));
+        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None));
 
         RARCommandLineArgument md8m = Assert.Single(combo, c => c.Argument == "-md8m");
         Assert.Equal(500, md8m.MinimumVersion);
@@ -172,7 +172,7 @@ public sealed class RARCommandLineBuilderTests
     {
         var settings = new RARSwitchSettings { SwitchAI = true };
 
-        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
+        IReadOnlyList<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None);
 
         // The -ai dimension iterates twice: once with -ai present, once without.
         Assert.Equal(2, matrix.Count);
@@ -188,7 +188,7 @@ public sealed class RARCommandLineBuilderTests
     {
         var settings = new RARSwitchSettings { SwitchMT = true, SwitchMTStart = 1, SwitchMTEnd = 4 };
 
-        List<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings);
+        IReadOnlyList<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None);
 
         // z runs from Start (1) through End (4) inclusive → 4 combinations.
         Assert.Equal(4, matrix.Count);
@@ -198,11 +198,107 @@ public sealed class RARCommandLineBuilderTests
     }
 
     [Fact]
+    public void BuildCommandLineArguments_ThreadRangeAboveMax_ClampsToMaxNoOverflow()
+    {
+        // #13: an unbounded End (e.g. int.MaxValue from a typo/imported config) must clamp to the
+        // highest thread count any WinRAR accepts, not overflow or hang the expansion loop.
+        var settings = new RARSwitchSettings { SwitchMT = true, SwitchMTStart = 1, SwitchMTEnd = int.MaxValue };
+
+        IReadOnlyList<RARCommandLineArgument[]> matrix = RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None);
+
+        Assert.Equal(RARCommandLineBuilder.MaxThreadCount, matrix.Count);   // -mt1 .. -mt64
+        Assert.Contains(matrix, combo => combo.Any(c => c.Argument == "-mt64"));
+        Assert.DoesNotContain(matrix, combo => combo.Any(c => c.Argument == "-mt65"));
+    }
+
+    [Fact]
+    public void BuildCommandLineArguments_ThreadRangeStartAndEndZero_PreservesMt0()
+    {
+        // -mt0 is byte-significant and must not be floored away to -mt1.
+        var settings = new RARSwitchSettings { SwitchMT = true, SwitchMTStart = 0, SwitchMTEnd = 0 };
+
+        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None));
+
+        Assert.Contains(combo, c => c.Argument == "-mt0");
+    }
+
+    [Fact]
+    public void BuildCommandLineArguments_ThreadRangeBothEndpointsOutOfRange_ClampsBeforeOrdering_SingleRow()
+    {
+        // Both endpoints are clamped to 0..64 BEFORE min/max ordering, so 100..200 (both > 64)
+        // becomes a single -mt64 row — never an empty loop.
+        var settings = new RARSwitchSettings { SwitchMT = true, SwitchMTStart = 100, SwitchMTEnd = 200 };
+
+        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None));
+
+        Assert.Contains(combo, c => c.Argument == "-mt64");
+    }
+
+    [Fact]
+    public void BuildCommandLineArguments_CardinalityExceedsCap_ThrowsBeforeAllocating()
+    {
+        // Every compression/archive-format/dict-size/mtime switch ticked, plus -ai and the full
+        // 0..64 -mt range: 6 * 2 * 15 * 5 * 2 * 65 = 117,000 combinations, over the 100,000 cap.
+        var settings = new RARSwitchSettings
+        {
+            SwitchM0 = true,
+            SwitchM1 = true,
+            SwitchM2 = true,
+            SwitchM3 = true,
+            SwitchM4 = true,
+            SwitchM5 = true,
+            SwitchMA4 = true,
+            SwitchMA5 = true,
+            SwitchMD64K = true,
+            SwitchMD128K = true,
+            SwitchMD256K = true,
+            SwitchMD512K = true,
+            SwitchMD1024K = true,
+            SwitchMD2048K = true,
+            SwitchMD4096K = true,
+            SwitchMD8M = true,
+            SwitchMD16M = true,
+            SwitchMD32M = true,
+            SwitchMD64M = true,
+            SwitchMD128M = true,
+            SwitchMD256M = true,
+            SwitchMD512M = true,
+            SwitchMD1G = true,
+            SwitchTSM0 = true,
+            SwitchTSM1 = true,
+            SwitchTSM2 = true,
+            SwitchTSM3 = true,
+            SwitchTSM4 = true,
+            SwitchAI = true,
+            SwitchMT = true,
+            SwitchMTStart = 0,
+            SwitchMTEnd = 64,
+        };
+
+        RARCommandLineMatrixTooLargeException ex = Assert.Throws<RARCommandLineMatrixTooLargeException>(
+            () => RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None));
+
+        Assert.Equal(RARCommandLineBuilder.MaxMatrixCardinality, ex.MaxCardinality);
+        Assert.True(ex.Cardinality > ex.MaxCardinality);
+    }
+
+    [Fact]
+    public void BuildCommandLineArguments_CancelledToken_ThrowsOperationCanceledPromptly()
+    {
+        var settings = new RARSwitchSettings();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Assert.Throws<OperationCanceledException>(
+            () => RARCommandLineBuilder.BuildCommandLineArguments(settings, cts.Token));
+    }
+
+    [Fact]
     public void BuildCommandLineArguments_SimpleSwitches_AppearInExpectedOrder()
     {
         var settings = new RARSwitchSettings { SwitchR = true, SwitchDS = true, SwitchSDash = true };
 
-        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings));
+        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None));
 
         Assert.Equal(["a", "-r", "-ds", "-s-"], combo.Select(c => c.Argument));
     }
@@ -212,7 +308,7 @@ public sealed class RARCommandLineBuilderTests
     {
         var settings = new RARSwitchSettings { Version2 = true, SwitchR = true, SwitchDS = true, SwitchS = true };
 
-        List<RARCommandLineArgument[]> result = RARCommandLineBuilder.BuildCommandLineArguments(settings);
+        IReadOnlyList<RARCommandLineArgument[]> result = RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None);
 
         string[] args = [.. result[0].Select(a => a.Argument)];
         Assert.Contains("-s", args);
@@ -226,7 +322,7 @@ public sealed class RARCommandLineBuilderTests
         // Defense in depth: even if both reach the builder, only -s is emitted.
         var settings = new RARSwitchSettings { Version2 = true, SwitchS = true, SwitchSDash = true };
 
-        string[] args = [.. RARCommandLineBuilder.BuildCommandLineArguments(settings)[0].Select(a => a.Argument)];
+        string[] args = [.. RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None)[0].Select(a => a.Argument)];
         Assert.Contains("-s", args);
         Assert.DoesNotContain("-s-", args);
     }
@@ -242,7 +338,7 @@ public sealed class RARCommandLineBuilderTests
             UseOldVolumeNaming = true,
         };
 
-        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings));
+        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None));
 
         Assert.Contains(combo, c => c.Argument == "-v100");
         RARCommandLineArgument vn = Assert.Single(combo, c => c.Argument == "-vn");
@@ -261,7 +357,7 @@ public sealed class RARCommandLineBuilderTests
             UseOldVolumeNaming = false,
         };
 
-        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings));
+        RARCommandLineArgument[] combo = Assert.Single(RARCommandLineBuilder.BuildCommandLineArguments(settings, CancellationToken.None));
 
         Assert.DoesNotContain(combo, c => c.Argument == "-vn");
     }

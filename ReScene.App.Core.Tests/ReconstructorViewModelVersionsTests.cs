@@ -223,7 +223,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
     ];
 
     [Fact]
-    public void BuildSharedSettings_UntickedVariantLeaf_ExcludesItsFolder()
+    public async Task BuildSharedSettings_UntickedVariantLeaf_ExcludesItsFolder()
     {
         // audit #36: unticking one same-version variant leaf must exclude ONLY that folder, even
         // though both leaves collapse to version 390.
@@ -234,7 +234,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
         RARVersionLeaf beta = vm.VersionGroups.SelectMany(g => g.Leaves).Single(l => l.FolderName == "winrar-390-beta1");
         beta.IsChecked = false;                             // untick the beta variant only
 
-        SharedReconstructionSettings shared = vm.BuildSharedSettings();
+        SharedReconstructionSettings shared = await vm.BuildSharedSettingsAsync(CancellationToken.None);
 
         Assert.Equal(["winrar-390"], shared.SelectedVersionFolders);
 
@@ -247,12 +247,12 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
     }
 
     [Fact]
-    public void BuildSharedSettings_NoScan_LeavesFolderAllowListEmpty()
+    public async Task BuildSharedSettings_NoScan_LeavesFolderAllowListEmpty()
     {
         // With no real scan (broad fallback ranges), the run must NOT be folder-filtered.
         ReconstructorViewModel vm = CreateVm();
 
-        SharedReconstructionSettings shared = vm.BuildSharedSettings();
+        SharedReconstructionSettings shared = await vm.BuildSharedSettingsAsync(CancellationToken.None);
 
         Assert.Empty(shared.SelectedVersionFolders);
     }
