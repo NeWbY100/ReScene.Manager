@@ -112,6 +112,45 @@ public class ArchiveSetPlannerTests
         Assert.Equal(set.VolumeNames.Count, crcs.Count);
     }
 
+    // ── Basename matching (#10): consumes VerificationSnapshot.HashesForVolumes/LastSegment (T5) ──
+
+    [Theory]
+    [InlineData("DVD1\\x.rar")]
+    [InlineData("DVD1/x.rar")]
+    public void BuildExpectedVolumeCrcs_BasenameFallback_MatchesEitherSeparator(string volumeName)
+    {
+        // #10: LastSegment splits on both '\' and '/' (unlike Path.GetFileName, which is
+        // platform-separator-only), so a bare basename entry in the verification file matches a
+        // set volume regardless of which separator the SRR captured it with.
+        SRRArchiveSet set = MakeSet("DVD1/x", "DVD1", [volumeName], []);
+        var snapshot = new VerificationSnapshot(HashType.CRC32, [("x.rar", "aaaaaaaa")]);
+
+        Dictionary<string, string> crcs = ArchiveSetPlanner.BuildExpectedVolumeCrcs(set, embeddedSfvBytes: null, snapshot);
+
+        Assert.Equal("aaaaaaaa", crcs["DVD1/x.rar"]);
+    }
+
+    [Fact]
+    public void BuildExpectedVolumeCrcs_SameBasenameDifferentSets_NoCrossSetAliasing()
+    {
+        // #10: CD1\x.rar and CD2\x.rar share a basename but must resolve to their OWN set's CRC —
+        // never each other's. Both snapshot entries are dir-qualified, so the qualified-key match
+        // wins outright (no ambiguous-basename fallback even needed here).
+        SRRArchiveSet setCd1 = MakeSet("CD1/x", "CD1", ["CD1\\x.rar"], []);
+        SRRArchiveSet setCd2 = MakeSet("CD2/x", "CD2", ["CD2\\x.rar"], []);
+        var snapshot = new VerificationSnapshot(HashType.CRC32,
+        [
+            ("CD1/x.rar", "aaaaaaaa"),
+            ("CD2/x.rar", "bbbbbbbb"),
+        ]);
+
+        Dictionary<string, string> crcsCd1 = ArchiveSetPlanner.BuildExpectedVolumeCrcs(setCd1, embeddedSfvBytes: null, snapshot);
+        Dictionary<string, string> crcsCd2 = ArchiveSetPlanner.BuildExpectedVolumeCrcs(setCd2, embeddedSfvBytes: null, snapshot);
+
+        Assert.Equal("aaaaaaaa", crcsCd1["CD1/x.rar"]);
+        Assert.Equal("bbbbbbbb", crcsCd2["CD2/x.rar"]);
+    }
+
     [Fact]
     public void BuildOptionsForSet_UsesOnlyThisSetsContentAndNames()
     {
@@ -179,6 +218,119 @@ public class ArchiveSetPlannerTests
         Assert.Equal(true, opts.RAROptions.DetectedLargeFlag);
         Assert.Equal((uint)1, opts.RAROptions.DetectedHighPackSize);
         Assert.Equal((uint)2, opts.RAROptions.DetectedHighUnpSize);
+    }
+
+    // ── Per-set hash gate (#8) ──────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void BuildOptionsForSet_HashesGate_ScopedToThisSetsVolumes_ExcludesOtherSetsFirstVolumeCrc()
+    {
+        // #8: the cheap first-volume Hashes gate must be seeded from only THIS set's own volumes —
+        // pouring every release verification hash into every set's gate would let a produced first
+        // volume matching ANOTHER set's CRC be falsely accepted.
+        SRRArchiveSet setB = MakeSet("DVD2/b", "DVD2", ["DVD2\\b.rar", "DVD2\\b.r00"], []);
+
+        var snapshot = new VerificationSnapshot(HashType.CRC32,
+        [
+            ("DVD1/a.rar", "aaaaaaaa"), // set A's first volume — must NOT gate set B
+            ("DVD1/a.r00", "bbbbbbbb"),
+            ("DVD2/b.rar", "cccccccc"), // set B's own first volume — must still gate set B
+            ("DVD2/b.r00", "dddddddd"),
+        ]);
+
+        SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with
+        {
+            Verification = snapshot,
+            VerificationHashes = snapshot.AllHashes, // the old (buggy) all-sets source
+        };
+
+        BruteForceOptions opts = ArchiveSetPlanner.BuildOptionsForSet(setB, shared,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+        Assert.DoesNotContain("aaaaaaaa", opts.Hashes);
+        Assert.DoesNotContain("bbbbbbbb", opts.Hashes);
+        Assert.Contains("cccccccc", opts.Hashes);
+    }
+
+    [Fact]
+    public void BuildOptionsForSet_Sha1Run_KeepsSeedingAllVerificationHashes_NoPerSetCrcFilterAvailable()
+    {
+        // #8 fallback: HashesForVolumes only resolves CRC32 entries — a SHA1 snapshot has no
+        // per-set filter available, so the gate must keep seeding every SHA1 hash exactly as
+        // before rather than being silently starved by the #8 fix.
+        SRRArchiveSet set = MakeSet("DVD1/a", "DVD1", ["DVD1\\a.rar"], []);
+        var snapshot = new VerificationSnapshot(HashType.SHA1,
+        [
+            ("movie.mkv", "0123456789abcdef0123456789abcdef01234567"),
+        ]);
+
+        SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with
+        {
+            HashType = HashType.SHA1,
+            Verification = snapshot,
+            VerificationHashes = snapshot.AllHashes,
+        };
+
+        BruteForceOptions opts = ArchiveSetPlanner.BuildOptionsForSet(set, shared,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+        Assert.Contains("0123456789abcdef0123456789abcdef01234567", opts.Hashes);
+    }
+
+    // ── Per-set directories + timestamps (#7) ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void BuildOptionsForSet_KeyedSet_DirectoriesAndTimesComeFromTheSet_NotSharedUnion()
+    {
+        // #7: a keyed (non-flat) set must carry only ITS OWN archived directories/timestamps — the
+        // release-wide union would leak another set's same-named subdirectory into this set's headers.
+        SRRArchiveSet set = MakeSet("DVD1/aln-re4a", "DVD1", ["DVD1\\aln-re4a.rar"], []);
+        set.ArchivedDirectories.Add("Subs");
+        var modified = new DateTime(2020, 1, 1);
+        var created = new DateTime(2020, 1, 2);
+        var accessed = new DateTime(2020, 1, 3);
+        set.ArchivedDirectoryTimestamps["Subs"] = modified;
+        set.ArchivedDirectoryCreationTimes["Subs"] = created;
+        set.ArchivedDirectoryAccessTimes["Subs"] = accessed;
+
+        SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with
+        {
+            ArchiveDirectories = ["OtherSetsDir"],
+            DirectoryTimestamps = new Dictionary<string, DateTime> { ["OtherSetsDir"] = DateTime.MinValue },
+            DirectoryCreationTimes = new Dictionary<string, DateTime> { ["OtherSetsDir"] = DateTime.MinValue },
+            DirectoryAccessTimes = new Dictionary<string, DateTime> { ["OtherSetsDir"] = DateTime.MinValue },
+        };
+
+        BruteForceOptions opts = ArchiveSetPlanner.BuildOptionsForSet(set, shared,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+        Assert.Contains("Subs", opts.RAROptions.ArchiveDirectoryPaths);
+        Assert.DoesNotContain("OtherSetsDir", opts.RAROptions.ArchiveDirectoryPaths);
+        Assert.Equal(modified, opts.RAROptions.DirectoryTimestamps["Subs"]);
+        Assert.Equal(created, opts.RAROptions.DirectoryCreationTimes["Subs"]);
+        Assert.Equal(accessed, opts.RAROptions.DirectoryAccessTimes["Subs"]);
+    }
+
+    [Fact]
+    public void BuildOptionsForSet_FlatSet_KeepsSharedUnionForDirectoriesAndTimes()
+    {
+        // #7 fallback: the legacy flat single-set path (Key=="") has no per-set directory data of
+        // its own (the synthesized flat SRRArchiveSet never populates it) — it keeps the shared
+        // release-wide union.
+        SRRArchiveSet set = MakeSet("", "", ["x.rar"], []);
+        var modified = new DateTime(2021, 5, 1);
+
+        SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with
+        {
+            ArchiveDirectories = ["Subs"],
+            DirectoryTimestamps = new Dictionary<string, DateTime> { ["Subs"] = modified },
+        };
+
+        BruteForceOptions opts = ArchiveSetPlanner.BuildOptionsForSet(set, shared,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+        Assert.Contains("Subs", opts.RAROptions.ArchiveDirectoryPaths);
+        Assert.Equal(modified, opts.RAROptions.DirectoryTimestamps["Subs"]);
     }
 
     // ── Per-set matrix (#6): metadata replaces switch groups, field by field ───────────────────────

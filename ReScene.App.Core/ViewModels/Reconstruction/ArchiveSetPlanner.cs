@@ -100,7 +100,10 @@ internal static class ArchiveSetPlanner
     /// command/version matrix is this set's own (#6): built via <see cref="ResolveSetMatrix"/>, which
     /// replaces only the switch groups the set's header metadata specifies, off the UI thread when the
     /// caller wraps this call in <c>Task.Run</c> — <paramref name="ct"/> is forwarded to the matrix
-    /// builder so a cancelled run is honoured promptly.
+    /// builder so a cancelled run is honoured promptly. The first-volume hash gate (#8) and the
+    /// archive directories/timestamps (#7) are likewise scoped to this set, falling back to the
+    /// release-wide union only for the legacy flat single-set path (<see cref="SRRArchiveSet.Key"/>
+    /// empty).
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// The set's <see cref="SRRArchiveSet.RARVersion"/> is known but no version in the user's
@@ -116,6 +119,10 @@ internal static class ArchiveSetPlanner
         (IReadOnlyList<RARCommandLineArgument[]> commandLineArguments,
             IReadOnlyList<VersionRange> versions,
             IReadOnlyList<string> versionFolders) = ResolveSetMatrix(set, shared, ct);
+
+        // The legacy flat single set (no SRR / no per-set parse) has no directory data of its own —
+        // it keeps the release-wide union exactly as before (#7).
+        bool isFlatSet = string.IsNullOrEmpty(set.Key);
 
         var options = new BruteForceOptions(shared.WinRARPath, shared.ReleasePath, WorkRootFor(shared, set))
         {
@@ -135,10 +142,14 @@ internal static class ArchiveSetPlanner
                 OriginalRARFileNames = [.. set.VolumeNames],
                 ArchiveFileCrcs = new Dictionary<string, string>(set.ArchivedFileCrcs, StringComparer.OrdinalIgnoreCase),
                 ArchiveFilePaths = new HashSet<string>(set.ArchivedFiles, StringComparer.OrdinalIgnoreCase),
-                ArchiveDirectoryPaths = new HashSet<string>(shared.ArchiveDirectories, StringComparer.OrdinalIgnoreCase),
-                DirectoryTimestamps = new Dictionary<string, DateTime>(shared.DirectoryTimestamps, StringComparer.OrdinalIgnoreCase),
-                DirectoryCreationTimes = new Dictionary<string, DateTime>(shared.DirectoryCreationTimes, StringComparer.OrdinalIgnoreCase),
-                DirectoryAccessTimes = new Dictionary<string, DateTime>(shared.DirectoryAccessTimes, StringComparer.OrdinalIgnoreCase),
+                ArchiveDirectoryPaths = new HashSet<string>(
+                    isFlatSet ? shared.ArchiveDirectories : set.ArchivedDirectories, StringComparer.OrdinalIgnoreCase),
+                DirectoryTimestamps = new Dictionary<string, DateTime>(
+                    isFlatSet ? shared.DirectoryTimestamps : set.ArchivedDirectoryTimestamps, StringComparer.OrdinalIgnoreCase),
+                DirectoryCreationTimes = new Dictionary<string, DateTime>(
+                    isFlatSet ? shared.DirectoryCreationTimes : set.ArchivedDirectoryCreationTimes, StringComparer.OrdinalIgnoreCase),
+                DirectoryAccessTimes = new Dictionary<string, DateTime>(
+                    isFlatSet ? shared.DirectoryAccessTimes : set.ArchivedDirectoryAccessTimes, StringComparer.OrdinalIgnoreCase),
                 FileTimestamps = new Dictionary<string, DateTime>(set.ArchivedFileTimestamps, StringComparer.OrdinalIgnoreCase),
                 FileCreationTimes = new Dictionary<string, DateTime>(set.ArchivedFileCreationTimes, StringComparer.OrdinalIgnoreCase),
                 FileAccessTimes = new Dictionary<string, DateTime>(set.ArchivedFileAccessTimes, StringComparer.OrdinalIgnoreCase),
@@ -163,12 +174,27 @@ internal static class ArchiveSetPlanner
             },
         };
 
-        // Seed the cheap first-volume gate (Hashes) with every verification hash plus this set's
+        // Seed the cheap first-volume gate (Hashes) with THIS SET's own verification hashes (#8) —
+        // pouring every release verification hash into every set's gate would let a produced first
+        // volume matching ANOTHER set's CRC be falsely accepted. HashesForVolumes only resolves
+        // CRC32 entries (Crc32ByName is empty for a SHA1 snapshot, by design — see
+        // VerificationSnapshot), so a SHA1 run has no per-set filter available; it keeps seeding
+        // every SHA1 hash exactly as before rather than starving the gate. Then seed this set's own
         // per-volume CRCs, and the full per-volume verification map (ExpectedVolumeCrcs) with this
         // set's CRCs, so the engine's gates are consistent.
-        foreach (string h in shared.VerificationHashes)
+        if (shared.HashType == HashType.CRC32)
         {
-            options.Hashes.Add(h);
+            foreach (string h in shared.Verification.HashesForVolumes(set.VolumeNames).Values)
+            {
+                options.Hashes.Add(h);
+            }
+        }
+        else
+        {
+            foreach (string h in shared.Verification.AllHashes)
+            {
+                options.Hashes.Add(h);
+            }
         }
 
         foreach (string crc in expectedVolumeCrcs.Values)
