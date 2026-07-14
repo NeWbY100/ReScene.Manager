@@ -54,7 +54,7 @@ public class ReconstructionPathGuardTests : TempDirTestBase
         string scratchRoot = ReconstructionPathGuard.ResolveScratchRoot(outputPath);
 
         Assert.True(ReconstructionPathGuard.IsStrictDescendant(scratchRoot, child));
-        Assert.StartsWith("DVD1_aln-re4a_", Path.GetFileName(child));
+        Assert.StartsWith("DVD1_aln-re4a_", Path.GetFileName(child), StringComparison.Ordinal);
     }
 
     [Fact]
