@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -48,10 +49,28 @@ public partial class ReconstructorViewModel : ViewModelBase
     private ReconstructionImportState _import = new();
 
     // Timestamp-preservation failures accumulated during the current run.
-    // Surfaced as a single MessageBox when the operation completes so the
-    // user is aware that the resulting RAR's File Time (DOS) may not match
-    // the original for those files.
+    // Surfaced as a single MessageBox from the run's finally so the user is aware that the resulting
+    // RAR's File Time (DOS) may not match the original for those files. Written from engine-callback
+    // threads and read at summary time, so every access is guarded by _timestampFailuresLock and the
+    // summary reads a snapshot taken under that lock (#19).
     private readonly List<TimestampPreservationFailedEventArgs> _timestampFailures = [];
+    private readonly Lock _timestampFailuresLock = new();
+
+    // ── Generation-safe batched log (#20) ──
+    // Log lines are enqueued (thread-safe) and applied to the bound log properties in batches on the UI
+    // thread. An atomic flush flag coalesces many enqueues into at most one pending UI dispatch, and a
+    // run-generation token stamped on each line lets a stale flush from a prior run discard its batch
+    // rather than repopulate a log the next run already cleared.
+    private readonly ConcurrentQueue<PendingLogLine> _logQueue = new();
+    // Accessed only through Interlocked/Volatile helpers (not declared volatile, which would conflict
+    // with passing it by ref and emit CS0420) — those calls carry the needed memory semantics.
+    private int _logGeneration;
+    private int _logFlushScheduled;
+
+    // The active set/attempt label prepended to progress messages (#24), so a seed→full progress reset
+    // within one set reads as a labelled stage change rather than an unexplained rewind. Volatile: it is
+    // written on the run's await continuation and read on the engine's progress-callback thread.
+    private volatile SetStageLabel? _setStageLabel;
 
     public ReconstructorViewModel(IBruteForceService bruteForceService, IFileDialogService fileDialog, IUiDispatcher uiDispatcher, IUiTimerFactory timerFactory, IAppSettingsService? settingsService = null, ITempDirectoryService? tempDir = null, ILauncherService? launcher = null)
         : this(bruteForceService, fileDialog, uiDispatcher, timerFactory, settingsService, tempDir, launcher, fileMover: null)
@@ -72,7 +91,6 @@ public partial class ReconstructorViewModel : ViewModelBase
         _fileMover = fileMover ?? new SystemFileMover();
 
         _bruteForceService.Progress += OnProgress;
-        _bruteForceService.StatusChanged += OnStatusChanged;
         _bruteForceService.LogMessage += OnLogMessage;
         _bruteForceService.FileCopyProgress += OnFileCopyProgress;
         _bruteForceService.CRCValidationProgress += OnCRCValidationProgress;
@@ -1538,10 +1556,12 @@ public partial class ReconstructorViewModel : ViewModelBase
         ShowProgress = true;
         ProgressPercent = 0;
         ProgressMessage = "Starting...";
-        SystemLog = string.Empty;
-        Phase1Log = string.Empty;
-        Phase2Log = string.Empty;
-        _timestampFailures.Clear();
+        BeginNewLogGeneration();
+        _setStageLabel = null;
+        lock (_timestampFailuresLock)
+        {
+            _timestampFailures.Clear();
+        }
 
         // Reset progress window state
         TestCountText = string.Empty;
@@ -1560,6 +1580,22 @@ public partial class ReconstructorViewModel : ViewModelBase
         // Yield so the dispatcher can open the progress window before heavy work starts
         await Task.Yield();
 
+        await ExecuteReconstructionAsync(token);
+    }
+
+    // ── Test seam (InternalsVisibleTo ReScene.App.Core.Tests) ──
+    // Drives the run body plus its try/catch/finally directly, so a test can prove the once-per-run
+    // timestamp summary and the synchronous final log drain both fire from the finally (#19, #20).
+    internal Task ExecuteReconstructionForTestAsync(CancellationToken token) => ExecuteReconstructionAsync(token);
+
+    /// <summary>
+    /// Runs the reconstruction under a single try/catch/finally. The finally is the sole place the run
+    /// finalises: it stops timers, releases the copy/verify flags and the cancellation source, drains
+    /// any batched log lines synchronously (#20), and surfaces the timestamp-preservation summary
+    /// exactly once (#19) — on normal completion, cancellation, and exception alike.
+    /// </summary>
+    private async Task ExecuteReconstructionAsync(CancellationToken token)
+    {
         try
         {
             Log(LogTarget.System, "Starting brute-force...");
@@ -1616,6 +1652,11 @@ public partial class ReconstructorViewModel : ViewModelBase
 
             _cts?.Dispose();
             _cts = null;
+
+            // Drain any log lines still queued between the last batched flush and now so the run's
+            // final messages are never lost (#20), then surface the timestamp summary once (#19).
+            DrainLogQueue();
+            ShowTimestampFailureWarningIfAny();
         }
     }
 
@@ -1708,7 +1749,7 @@ public partial class ReconstructorViewModel : ViewModelBase
                     // Tell the progress tracker which set is active so new rows are stamped with the label.
                     _progress.SetActiveSet(sets.Count > 1 ? label : string.Empty);
 
-                    result = await RunSingleSetAsync(label, options, seed, sets.Count, token);
+                    result = await RunSingleSetAsync(label, options, seed, i + 1, sets.Count, token);
                 }
                 catch (OperationCanceledException)
                 {
@@ -1771,21 +1812,26 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// relocation moves out of the scratch work-root).
     /// </summary>
     private async Task<BruteForceRunResult> RunSingleSetAsync(
-        string label, BruteForceOptions options, WinningCombo? seed, int setCount, CancellationToken token)
+        string label, BruteForceOptions options, WinningCombo? seed, int setIndex, int setCount, CancellationToken token)
     {
         BruteForceRunResult result;
         if (seed is not null && setCount > 1)
         {
+            // Label this set's progress as the seeded attempt so its high-% progress and the full
+            // attempt's fresh low-% progress read as distinct stages, not a rewind within the set (#24).
+            _setStageLabel = new SetStageLabel(setIndex, setCount, "seed");
             BruteForceOptions narrowed = ArchiveSetPlanner.NarrowToCombo(options, seed);
             result = await Task.Run(() => _bruteForceService.RunAsync(narrowed, token), token);
             if (!result.Success && !token.IsCancellationRequested)
             {
                 Log(LogTarget.System, $"Seed combo did not reproduce {label}; running full search.");
+                _setStageLabel = new SetStageLabel(setIndex, setCount, "full");
                 result = await Task.Run(() => _bruteForceService.RunAsync(options, token), token);
             }
         }
         else
         {
+            _setStageLabel = new SetStageLabel(setIndex, setCount, "full");
             result = await Task.Run(() => _bruteForceService.RunAsync(options, token), token);
         }
 
@@ -2352,7 +2398,7 @@ public partial class ReconstructorViewModel : ViewModelBase
 
             ProgressPercent = u.ProgressPercent;
             PhaseDescription = u.PhaseDescription;
-            ProgressMessage = u.ProgressMessage;
+            ProgressMessage = ComposeProgressMessage(u.ProgressMessage);
             TestCountText = u.TestCountText;
             ProgressPercentText = u.ProgressPercentText;
             CurrentDetailText = u.CurrentDetailText;
@@ -2383,32 +2429,30 @@ public partial class ReconstructorViewModel : ViewModelBase
         }
     }
 
-    private void OnStatusChanged(object? _, BruteForceStatusChangedEventArgs e)
+    private void OnTimestampPreservationFailed(object? _, TimestampPreservationFailedEventArgs e)
     {
-        _uiDispatcher.Invoke(() =>
+        // The library already logs a Warning via its logger (routed through OnLogMessage). Track the
+        // failure here — under the lock, since this fires from engine-callback threads — so the run's
+        // finally can surface a single summary MessageBox when the run finishes (#19).
+        lock (_timestampFailuresLock)
         {
-            if (e.NewStatus == OperationStatus.Completed)
-            {
-                // This fires once per underlying engine RunAsync call — per set, and again for a
-                // seeded set whose seed misses and falls back to the full matrix — so it must never
-                // assign whole-run status here (#23): ReportSetSummary owns LastRunSucceeded and
-                // ProgressMessage once, from the complete outcomes list, after every set is done.
-                ShowTimestampFailureWarningIfAny();
-            }
-        });
+            _timestampFailures.Add(e);
+        }
     }
-
-    private void OnTimestampPreservationFailed(object? _, TimestampPreservationFailedEventArgs e) =>
-        // The library already logs a Warning via its logger (routed through
-        // OnLogMessage). Track the failure here so we can show a single
-        // summary MessageBox when the run finishes.
-        _timestampFailures.Add(e);
 
     private void ShowTimestampFailureWarningIfAny()
     {
-        if (_timestampFailures.Count == 0)
+        // Snapshot under the lock, then read only the snapshot — so a concurrent add from an engine
+        // thread can never corrupt the enumeration below (#19).
+        TimestampPreservationFailedEventArgs[] failures;
+        lock (_timestampFailuresLock)
         {
-            return;
+            if (_timestampFailures.Count == 0)
+            {
+                return;
+            }
+
+            failures = [.. _timestampFailures];
         }
 
         const int MaxFilesToList = 10;
@@ -2417,17 +2461,17 @@ public partial class ReconstructorViewModel : ViewModelBase
                       "for the following file(s):");
         sb.AppendLine();
 
-        int shown = Math.Min(_timestampFailures.Count, MaxFilesToList);
+        int shown = Math.Min(failures.Length, MaxFilesToList);
         for (int i = 0; i < shown; i++)
         {
-            TimestampPreservationFailedEventArgs f = _timestampFailures[i];
+            TimestampPreservationFailedEventArgs f = failures[i];
             sb.AppendLine($"  • {f.DestinationPath}");
             sb.AppendLine($"      ({f.ErrorMessage})");
         }
 
-        if (_timestampFailures.Count > MaxFilesToList)
+        if (failures.Length > MaxFilesToList)
         {
-            sb.AppendLine($"  … and {_timestampFailures.Count - MaxFilesToList} more.");
+            sb.AppendLine($"  … and {failures.Length - MaxFilesToList} more.");
         }
 
         sb.AppendLine();
@@ -2438,13 +2482,74 @@ public partial class ReconstructorViewModel : ViewModelBase
         _fileDialog.ShowWarning("Timestamp Preservation Failed", sb.ToString());
     }
 
-    private void OnLogMessage(object? _, LogEventArgs e) => _uiDispatcher.Invoke(() => AppendLog(e.Target, e.Message));
+    /// <summary>Prepends the active <c>Set X/N · &lt;stage&gt;</c> label (if any) to a progress message (#24).</summary>
+    private string ComposeProgressMessage(string baseMessage)
+    {
+        SetStageLabel? label = _setStageLabel;
+        return label is null ? baseMessage : $"{label.Format()} | {baseMessage}";
+    }
+
+    // Engine log messages arrive on a background thread; enqueue directly (thread-safe) rather than
+    // marshalling per line — the batched flush owns the UI-thread hop (#20).
+    private void OnLogMessage(object? _, LogEventArgs e) => AppendLog(e.Target, e.Message);
 
     private void Log(LogTarget target, string message) => AppendLog(target, message);
 
+    /// <summary>
+    /// Enqueues a timestamped log line (thread-safe) stamped with the current run generation, then
+    /// schedules a single batched flush. Never mutates the bound log properties directly (#20).
+    /// </summary>
     private void AppendLog(LogTarget target, string message)
     {
         string line = $"{DateTime.Now:HH:mm:ss} {message}";
+        _logQueue.Enqueue(new PendingLogLine(target, line, Volatile.Read(ref _logGeneration)));
+        ScheduleLogFlush();
+    }
+
+    /// <summary>
+    /// Schedules exactly one UI-thread flush per pending batch: the atomic flag flips 0→1 only for the
+    /// first enqueue after a drain, so a burst of log events collapses into a single dispatch (#20).
+    /// </summary>
+    private void ScheduleLogFlush()
+    {
+        if (Interlocked.Exchange(ref _logFlushScheduled, 1) == 0)
+        {
+            _uiDispatcher.Post(FlushLogQueue);
+        }
+    }
+
+    /// <summary>
+    /// Runs on the UI thread. Releases the flush flag first (so lines enqueued during the drain
+    /// schedule the next flush), then applies the queued batch.
+    /// </summary>
+    private void FlushLogQueue()
+    {
+        Interlocked.Exchange(ref _logFlushScheduled, 0);
+        DrainLogQueue();
+    }
+
+    /// <summary>
+    /// Drains the queue onto the bound log properties, dropping any line whose generation is not the
+    /// current one — so a stale flush queued by a prior run cannot repopulate a log the next run has
+    /// already cleared (#20). Also called synchronously from the run's finally as the final drain.
+    /// </summary>
+    private void DrainLogQueue()
+    {
+        int generation = Volatile.Read(ref _logGeneration);
+        while (_logQueue.TryDequeue(out PendingLogLine entry))
+        {
+            if (entry.Generation != generation)
+            {
+                continue;
+            }
+
+            AppendLogLine(entry.Target, entry.Line);
+        }
+    }
+
+    /// <summary>Appends one already-formatted line to its target log property (UI thread only).</summary>
+    private void AppendLogLine(LogTarget target, string line)
+    {
         switch (target)
         {
             case LogTarget.Phase1:
@@ -2457,6 +2562,45 @@ public partial class ReconstructorViewModel : ViewModelBase
                 SystemLog = SystemLog.Length == 0 ? line : SystemLog + Environment.NewLine + line;
                 break;
         }
+    }
+
+    /// <summary>
+    /// Clears the visible log and starts a new log generation for a run. Bumping the generation makes
+    /// any lines still queued from a prior run drop on their (stale) flush, and resetting the flush flag
+    /// ensures this run's first line schedules a fresh dispatch (#20).
+    /// </summary>
+    private void BeginNewLogGeneration()
+    {
+        SystemLog = string.Empty;
+        Phase1Log = string.Empty;
+        Phase2Log = string.Empty;
+        Interlocked.Increment(ref _logGeneration);
+        Interlocked.Exchange(ref _logFlushScheduled, 0);
+    }
+
+    // ── Test seams (InternalsVisibleTo ReScene.App.Core.Tests) ──
+    internal void ShowTimestampSummaryForTest() => ShowTimestampFailureWarningIfAny();
+
+    internal int TimestampFailureCountForTest
+    {
+        get
+        {
+            lock (_timestampFailuresLock)
+            {
+                return _timestampFailures.Count;
+            }
+        }
+    }
+
+    internal void BeginNewLogGenerationForTest() => BeginNewLogGeneration();
+
+    /// <summary>One queued log line, tagged with the run generation it belongs to (#20).</summary>
+    private readonly record struct PendingLogLine(LogTarget Target, string Line, int Generation);
+
+    /// <summary>The active set/attempt label for progress messages: <c>Set X/N · &lt;stage&gt;</c> (#24).</summary>
+    private sealed record SetStageLabel(int SetIndex, int SetCount, string Stage)
+    {
+        public string Format() => $"Set {SetIndex}/{SetCount} · {Stage}";
     }
 
     // ── SRR Import Helpers ──
