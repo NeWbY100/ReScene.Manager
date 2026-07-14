@@ -1,7 +1,7 @@
 # RAR Reconstruction Subsystem — Correctness Fixes (Design)
 
 **Date:** 2026-07-11
-**Status:** Draft (rev. 3) — refined after two codex reviews of the implementation plan; see Revision note below.
+**Status:** Draft (rev. 4) — refined after three codex reviews of the implementation plan; see Revision note below.
 **Branch:** `avalonia-feature` (app + nested `ReScene.Lib` submodule)
 **Scope:** `ReScene.App.Core` reconstruction view-models/helpers and `ReScene.Lib`
 (`Manager` engine, `SRRFile`/`SRRFileParser`, `SRRArchiveSet`) — the RAR Reconstructor only.
@@ -51,19 +51,27 @@ code) refined several decisions. Where the WS sections below differ from these, 
    verified (resolving every path component / real links, not lexical `Path.GetFullPath`, and not
    `Directory.Exists`-gated) to resolve under the real `OutputPath`. Fail closed when safety is
    indeterminate for an existing path.
-2. **Relocation moves exactly the engine-reported committed files.** The engine result gains
-   `BruteForceRunResult.CommittedFiles` (a lib change); the VM relocates those, never files found by
-   scanning the work-root (which mixes the winner with `DeleteRARFiles==false` leftovers and `input\`
-   sources, indistinguishable by name when `RenameToReleaseNames==false`). Multi-set custom-packer
-   (`Combo==null`) is reported **unsupported/failed**, never a false success.
+2. **Relocation moves exactly the engine-reported committed files of the kept match.** The engine
+   result gains grouped `BruteForceRunResult.Matches` (`sealed record CommittedMatch(WinningCombo, Files)`,
+   one per verified combo, in discovery order) plus `CustomPackerFiles` (a lib change). Exploratory
+   runs (`StopOnFirstMatch==false`) keep the **first** verified combo as the seed (`Matches[0]`/`Combo`),
+   not the last-overwritten one (`Manager.cs:340` today overwrites); since all matches are
+   byte-identical, `Matches[0].Files` are the canonical committed output. The VM relocates
+   `Matches[0].Files`, guarding each as an existing, unique regular file strictly under the set's
+   work-root, never files found by scanning the work-root (which mixes the winner with
+   `DeleteRARFiles==false` leftovers and `input\` sources, indistinguishable by name when
+   `RenameToReleaseNames==false`). Multi-set custom-packer (`Combo==null`, `CustomPackerFiles`
+   populated) is reported **unsupported/failed**, never a false success.
 3. **Verification snapshot is the *sole* post-cleanup source.** A named `(name→hash)` snapshot is
    parsed once *before* cleanup; all downstream volume-name and CRC lookups read it; the post-cleanup
    re-reads (`ResolveSfvVolumeNames`/`TryLoadUserSfv`) are removed. Only CRC32 snapshots feed
    `ExpectedVolumeCrcs`; SHA1 feeds `options.Hashes` only. Expected CRCs store **one canonical key per
    volume** (qualified-first, basename fallback in `Manager`) — never both aliases (double-counts).
-4. **`-mt` preserves `-mt0`** (byte-significant) and clamps the high end to a **version-aware** max
-   (not a universal 1..64), plus a **checked cardinality cap** and cooperative cancellation; the
-   matrix builds off the UI thread.
+4. **`-mt` preserves `-mt0`** (byte-significant) and emits `-mt0..64` with each arg **version-bounded**
+   (`Min=360` for `z<=16`, `Min=500` for `z>16`) so `FilterArgumentsForVersion` drops `-mt17..64` for
+   RAR4 exes and keeps them for RAR5+ — a hard cap of 64, not a universal 1..64 — plus a **checked
+   cardinality cap** and cooperative cancellation; the matrix builds off the UI thread, and the global
+   (flat) matrix is built **lazily** so a per-set imported run is never aborted by the global cap.
 5. **#6 uses an explicit format↔executable-version compatibility map** (`SRRArchiveSet.RARVersion` is
    an unpack version → RAR4/5/7 → capable exe versions + `-ma` toggle, intersected with the user's
    selection, with empty-intersection reported honestly) — not a raw range from the unpack version.
