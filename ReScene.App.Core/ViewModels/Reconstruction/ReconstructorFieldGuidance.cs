@@ -104,7 +104,8 @@ internal static class ReconstructorFieldGuidance
             || NeedsAttention(EvaluateReleasePath(releasePath))
             || NeedsAttention(EvaluateVerificationPath(verificationPath))
             || NeedsAttention(EvaluateOutputPath(outputPath))
-            || PathsOverlap(releasePath, outputPath);
+            || PathsOverlap(releasePath, outputPath)
+            || PathsOverlap(verificationPath, outputPath);
     }
 
     /// <summary>A field needs attention unless its value is accepted (Ok) or merely informational (Info).</summary>
@@ -131,33 +132,42 @@ internal static class ReconstructorFieldGuidance
     }
 
     /// <summary>
-    /// True when two folder paths are the same folder, or one is nested inside the other —
-    /// configurations where deleting the output folder's contents would also remove the release.
-    /// Returns false for empty or unparseable paths (the per-path validation handles those).
+    /// True when <paramref name="candidatePath"/> real-resolves to the same location as, a
+    /// descendant of, or an ancestor of either reserved subtree reconstruction destructively
+    /// clears under <paramref name="outputPath"/> — <c>output</c> or <c>.rescene-work</c> —
+    /// following junctions/symlinks at any ancestor and comparing case-correctly for the current
+    /// filesystem (#2, #26). Deliberately does <em>not</em> flag a candidate that merely sits
+    /// elsewhere under the bare <paramref name="outputPath"/> root: multi-set runs legitimately
+    /// share that root, and cleanup only ever touches the two reserved subtrees. Fails closed
+    /// (returns true) when an existing path component cannot be resolved (e.g. access denied) —
+    /// never silently treated as "no overlap". Returns false for empty or unparseable paths (the
+    /// per-path validation handles those).
     /// </summary>
-    public static bool PathsOverlap(string pathA, string pathB)
+    public static bool PathsOverlap(string candidatePath, string outputPath)
     {
-        if (string.IsNullOrWhiteSpace(pathA) || string.IsNullOrWhiteSpace(pathB))
+        if (string.IsNullOrWhiteSpace(candidatePath) || string.IsNullOrWhiteSpace(outputPath))
         {
             return false;
         }
 
-        string a, b;
         try
         {
-            a = AppendSeparator(Path.GetFullPath(pathA));
-            b = AppendSeparator(Path.GetFullPath(pathB));
+            string reservedOutputRoot = ReconstructionPathGuard.ResolveOutputRoot(outputPath);
+            string reservedScratchRoot = ReconstructionPathGuard.ResolveScratchRoot(outputPath);
+
+            return ReconstructionPathGuard.Overlaps(candidatePath, reservedOutputRoot)
+                || ReconstructionPathGuard.Overlaps(candidatePath, reservedScratchRoot);
         }
         catch (Exception ex) when (ex is ArgumentException or PathTooLongException or NotSupportedException)
         {
+            // Malformed path — not a real overlap; per-path validation reports the format error.
             return false;
         }
-
-        return a.Equals(b, StringComparison.OrdinalIgnoreCase)
-            || a.StartsWith(b, StringComparison.OrdinalIgnoreCase)
-            || b.StartsWith(a, StringComparison.OrdinalIgnoreCase);
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // An existing path component could not be resolved (access denied, or a junction that
+            // escapes the output path) — fail closed rather than silently reporting no overlap.
+            return true;
+        }
     }
-
-    private static string AppendSeparator(string path) =>
-        path.EndsWith(Path.DirectorySeparatorChar) ? path : path + Path.DirectorySeparatorChar;
 }

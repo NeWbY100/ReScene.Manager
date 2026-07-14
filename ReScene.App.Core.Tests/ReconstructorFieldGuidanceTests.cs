@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using ReScene.App.Core.Models;
 using ReScene.App.Core.ViewModels.Reconstruction;
 
@@ -77,10 +78,88 @@ public class ReconstructorFieldGuidanceTests : TempDirTestBase
     }
 
     [Fact]
-    public void PathsOverlap_ReleaseNestedInOutput_IsTrue()
+    public void PathsOverlap_CandidateInOutputPathRootOnly_IsFalse()
     {
+        // "release" sits directly under the bare OutputPath root, but not under the "output" or
+        // ".rescene-work" reserved subtrees that reconstruction destructively clears — multi-set
+        // runs legitimately share the OutputPath root, so this must not be flagged.
         string release = Path.Combine(TempDir, "release");
-        Assert.True(ReconstructorFieldGuidance.PathsOverlap(release, TempDir));
+        Assert.False(ReconstructorFieldGuidance.PathsOverlap(release, TempDir));
+    }
+
+    [Fact]
+    public void PathsOverlap_VerificationUnderOutputReservedRoot_IsTrue()
+    {
+        string outputPath = Path.Combine(TempDir, "run_verify_under_output");
+        Directory.CreateDirectory(outputPath);
+        string verify = Path.Combine(outputPath, ReconstructionPathGuard.OutputDirName, "verify.sfv");
+
+        Assert.True(ReconstructorFieldGuidance.PathsOverlap(verify, outputPath));
+    }
+
+    [Fact]
+    public void PathsOverlap_VerificationUnderScratchReservedRoot_IsTrue()
+    {
+        string outputPath = Path.Combine(TempDir, "run_verify_under_scratch");
+        Directory.CreateDirectory(outputPath);
+        string verify = Path.Combine(outputPath, ReconstructionPathGuard.ScratchDirName, "verify.sfv");
+
+        Assert.True(ReconstructorFieldGuidance.PathsOverlap(verify, outputPath));
+    }
+
+    [Fact]
+    public void PathsOverlap_VerificationInOutputPathRootOnly_IsFalse()
+    {
+        // Same OutputPath root as above, but the verification file sits beside — not under —
+        // the reserved "output"/".rescene-work" subtrees: not flagged.
+        string outputPath = Path.Combine(TempDir, "run_verify_root_only");
+        Directory.CreateDirectory(outputPath);
+        string verify = Path.Combine(outputPath, "verify.sfv");
+
+        Assert.False(ReconstructorFieldGuidance.PathsOverlap(verify, outputPath));
+    }
+
+    [Fact]
+    public void PathsOverlap_JunctionAncestorResolvesUnderOutputRoot_IsTrue()
+    {
+        // (#2) Lexically, "junctionRoot/junction/leaf" looks nothing like the output path, but the
+        // junction real-resolves straight into the reserved "output" root — must still be caught.
+        string outputPath = Path.Combine(TempDir, "run_junction_target");
+        Directory.CreateDirectory(outputPath);
+        string outputRoot = Path.Combine(outputPath, ReconstructionPathGuard.OutputDirName);
+        Directory.CreateDirectory(Path.Combine(outputRoot, "leaf"));
+
+        string junctionRoot = Path.Combine(TempDir, "junction_root");
+        Directory.CreateDirectory(junctionRoot);
+        string junction = Path.Combine(junctionRoot, "junction");
+        CreateDirLink(junction, outputRoot);
+
+        string candidate = Path.Combine(junction, "leaf");
+
+        Assert.True(ReconstructorFieldGuidance.PathsOverlap(candidate, outputPath));
+    }
+
+    [Fact]
+    public void PathsOverlap_ResolutionFailureOnExistingPath_FailsClosed()
+    {
+        string outputPath = Path.Combine(TempDir, "run_denied_output");
+        Directory.CreateDirectory(outputPath);
+
+        string denied = Path.Combine(TempDir, "denied_release");
+        Directory.CreateDirectory(denied);
+        string candidate = Path.Combine(denied, "child");
+
+        DenyAccess(denied);
+        try
+        {
+            // An unresolvable existing path must be treated as attention-needed, never silently
+            // passed through as "no overlap".
+            Assert.True(ReconstructorFieldGuidance.PathsOverlap(candidate, outputPath));
+        }
+        finally
+        {
+            RestoreAccess(denied);
+        }
     }
 
     [Fact]
@@ -107,7 +186,19 @@ public class ReconstructorFieldGuidanceTests : TempDirTestBase
     public void PathsOverlap_EmptyPathB_IsFalse() => Assert.False(ReconstructorFieldGuidance.PathsOverlap(TempDir, ""));
 
     [Fact]
-    public void PathsOverlap_DiffersOnlyByCase_IsTrue() => Assert.True(ReconstructorFieldGuidance.PathsOverlap(TempDir.ToUpperInvariant(), TempDir.ToLowerInvariant()));
+    public void PathsOverlap_DiffersOnlyByCase_MatchesPlatformDefault()
+    {
+        // (#26) Case comparison must follow the current filesystem's default, not be hardcoded
+        // case-insensitive: candidate == outputPath (an ancestor of the reserved subtrees) only on
+        // Windows/macOS; elsewhere a different case is a distinct, nonexistent path.
+        string dir = Path.Combine(TempDir, "CaseFold");
+        Directory.CreateDirectory(dir);
+        string differentCase = Path.Combine(TempDir, "casefold");
+
+        bool overlaps = ReconstructorFieldGuidance.PathsOverlap(differentCase, dir);
+
+        Assert.Equal(OperatingSystem.IsWindows() || OperatingSystem.IsMacOS(), overlaps);
+    }
 
     [Fact]
     public void EvaluateReleasePath_OverlapsOutput_IsError()
@@ -159,5 +250,108 @@ public class ReconstructorFieldGuidanceTests : TempDirTestBase
         File.WriteAllText(verify, "");
         // WinRAR/Release/Verify/Output all otherwise valid, but Release == Output.
         Assert.True(ReconstructorFieldGuidance.PathsNeedAttention(TempDir, TempDir, verify, TempDir));
+    }
+
+    [Fact]
+    public void PathsNeedAttention_VerificationOverlapsReservedSubtree_IsTrue()
+    {
+        string release = Path.Combine(TempDir, "release2");
+        string output = Path.Combine(TempDir, "output2");
+        Directory.CreateDirectory(release);
+        string outputRoot = Path.Combine(output, ReconstructionPathGuard.OutputDirName);
+        Directory.CreateDirectory(outputRoot);
+        string verify = Path.Combine(outputRoot, "verify.sfv");
+        File.WriteAllText(verify, "");
+
+        // WinRAR/Release/Output all otherwise valid and non-overlapping, but Verify sits under the
+        // reserved "output" subtree beneath Output — reconstruction would overwrite it.
+        Assert.True(ReconstructorFieldGuidance.PathsNeedAttention(TempDir, release, verify, output));
+    }
+
+    /// <summary>
+    /// Creates a directory reparse point: a junction via <c>mklink /J</c> on Windows (no elevation
+    /// required), or a symlink via <see cref="Directory.CreateSymbolicLink"/> elsewhere. Fails the
+    /// test loudly (rather than skipping) if creation genuinely does not succeed.
+    /// </summary>
+    private static void CreateDirLink(string link, string target)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var psi = new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+
+            using Process proc = Process.Start(psi)
+                ?? throw new InvalidOperationException("Failed to start 'mklink /J' — cannot create the junction test fixture.");
+            proc.WaitForExit();
+
+            if (proc.ExitCode != 0)
+            {
+                throw new InvalidOperationException(
+                    $"'mklink /J \"{link}\" \"{target}\"' failed (exit {proc.ExitCode}): {proc.StandardError.ReadToEnd()}");
+            }
+        }
+        else
+        {
+            Directory.CreateSymbolicLink(link, target);
+        }
+    }
+
+    /// <summary>
+    /// Denies the current user access to <paramref name="path"/> itself (via <c>icacls</c> on
+    /// Windows, or clearing the Unix mode bits elsewhere) so a walk through it must fail closed.
+    /// Callers must pair this with <see cref="RestoreAccess"/> so cleanup can proceed.
+    /// </summary>
+    private static void DenyAccess(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            RunIcacls(path, "/deny", $"{Environment.UserName}:(OI)(CI)F");
+        }
+        else
+        {
+            File.SetUnixFileMode(path, UnixFileMode.None);
+        }
+    }
+
+    private static void RestoreAccess(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            RunIcacls(path, "/remove:d", Environment.UserName);
+        }
+        else
+        {
+            File.SetUnixFileMode(
+                path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    private static void RunIcacls(string path, params string[] args)
+    {
+        var psi = new ProcessStartInfo("icacls.exe")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add(path);
+        foreach (string a in args)
+        {
+            psi.ArgumentList.Add(a);
+        }
+
+        using Process proc = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start 'icacls' — cannot set up the access-denied test fixture.");
+        proc.WaitForExit();
+
+        if (proc.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"icacls {path} {string.Join(' ', args)} failed (exit {proc.ExitCode}): {proc.StandardError.ReadToEnd()}");
+        }
     }
 }
