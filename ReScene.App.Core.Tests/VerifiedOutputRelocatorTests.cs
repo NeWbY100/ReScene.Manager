@@ -349,4 +349,64 @@ public sealed class VerifiedOutputRelocatorTests : TempDirTestBase
         Assert.True(outcome.Success);
         Assert.True(File.Exists(Path.Combine(OutputPath, "output", "x.rar")));
     }
+
+    // ── destination-resolution path IO error is caught, not rethrown (final-review Important) ─────
+    // ResolveOutputChild (step 3) can throw IOException / UnauthorizedAccessException — not just the
+    // ArgumentException the step used to catch — via ResolveOutputRoot -> ResolveReal. Both must be
+    // reported as a failed relocation for THIS set (nothing has moved yet), never escape Relocate and
+    // abort the whole run.
+
+    [Fact]
+    public void Relocate_OutputRootResolutionThrowsIOException_ReturnsFailure_DoesNotThrow()
+    {
+        // A dedicated output root (a subdir of TempDir) whose reserved 'output' child is a junction that
+        // escapes it, so ResolveOutputRoot throws IOException when step 3 resolves the destination.
+        string outputPath = Path.Combine(TempDir, "run-io");
+        Directory.CreateDirectory(outputPath);
+        string escapeTarget = Path.Combine(TempDir, "escape-io"); // sibling of outputPath — outside it
+        CreateJunction(Path.Combine(outputPath, "output"), escapeTarget);
+
+        SRRArchiveSet set = MakeSet("k", "", "x.rar");
+        string workRoot = Path.Combine(outputPath, ".rescene-work", "k");
+        string source = WriteBruteVolume(workRoot, "x.rar");
+
+        VerifiedOutputRelocator.RelocationOutcome outcome = VerifiedOutputRelocator.Relocate(
+            outputPath, workRoot, set, setCount: 1, VerifiedOutputRelocator.Branch.BruteForce,
+            completeAllVolumes: true, [source], Real, _ => { });
+
+        Assert.False(outcome.Success);
+        Assert.False(outcome.ScratchPreserved); // nothing moved at step 3 — no scratch to preserve
+        Assert.True(File.Exists(source));       // untouched
+    }
+
+    [Fact]
+    public void Relocate_OutputRootResolutionThrowsUnauthorizedAccess_ReturnsFailure_DoesNotThrow()
+    {
+        // The reserved 'output' root exists but is denied inspection, so ResolveOutputRoot -> ResolveReal
+        // throws UnauthorizedAccessException (not ArgumentException) when step 3 resolves the destination.
+        string outputPath = Path.Combine(TempDir, "run-acl");
+        Directory.CreateDirectory(outputPath);
+        string outputDir = Path.Combine(outputPath, ReconstructionPathGuard.OutputDirName);
+        Directory.CreateDirectory(outputDir);
+
+        SRRArchiveSet set = MakeSet("k", "", "x.rar");
+        string workRoot = Path.Combine(outputPath, ".rescene-work", "k");
+        string source = WriteBruteVolume(workRoot, "x.rar");
+
+        AclDenyHelper.DenyAccess(outputDir);
+        try
+        {
+            VerifiedOutputRelocator.RelocationOutcome outcome = VerifiedOutputRelocator.Relocate(
+                outputPath, workRoot, set, setCount: 1, VerifiedOutputRelocator.Branch.BruteForce,
+                completeAllVolumes: true, [source], Real, _ => { });
+
+            Assert.False(outcome.Success);
+            Assert.False(outcome.ScratchPreserved);
+            Assert.True(File.Exists(source));
+        }
+        finally
+        {
+            AclDenyHelper.RestoreAccess(outputDir); // restore BEFORE temp-dir cleanup
+        }
+    }
 }

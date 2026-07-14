@@ -1728,11 +1728,27 @@ public partial class ReconstructorViewModel : ViewModelBase
                 continue;
             }
 
-            // Only the work-root path is needed before the try (it never depends on the set's own
-            // command/version matrix), so a per-set matrix failure below (#6 — no selected WinRAR
-            // version can produce this set's format) is raised INSIDE the try and never strands this
-            // path computation nor aborts sibling sets.
-            string workRoot = ArchiveSetPlanner.WorkRootFor(shared, set);
+            // The work-root path is resolved before the per-set try (it never depends on the set's own
+            // command/version matrix). Its own guarded resolution can throw a path-resolution error
+            // (e.g. a keyed set's scratch child real-resolves through an un-inspectable or junction-
+            // redirected reserved root): keep that scoped to THIS set — the loop records a failing set
+            // and continues — instead of letting it abort every remaining set. The `continue` runs
+            // BEFORE the outer try/finally below, so the finally never sees (nor tries to clean) an
+            // uncomputed work root. A per-set matrix failure (#6 — no selected WinRAR version can
+            // produce this set's format) is likewise raised INSIDE the try and handled there.
+            string workRoot;
+            try
+            {
+                workRoot = ArchiveSetPlanner.WorkRootFor(shared, set);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                Log(LogTarget.System, $"Set {label} failed: {ex.Message}");
+                _progress.CompleteActiveVersion("No Match");
+                outcomes.Add(new SetOutcome(set, label, Success: false, Skipped: false));
+                continue;
+            }
+
             bool committed = false;
             bool preserveScratch = false;
             try

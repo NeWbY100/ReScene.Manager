@@ -109,8 +109,13 @@ internal static class VerifiedOutputRelocator
             {
                 dest = ReconstructionPathGuard.ResolveOutputChild(outputPath, rel);
             }
-            catch (ArgumentException ex)
+            catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
             {
+                // ResolveOutputChild rejects an escaping relative path with ArgumentException, but its
+                // ResolveReal walk can also fail with IOException (an un-resolvable / junction-redirected
+                // component) or UnauthorizedAccessException (an un-inspectable component). No file has
+                // moved at this point, so all three are a clean per-set relocation failure — never let
+                // them escape and abort the whole run.
                 log($"Set {label}: refusing to relocate '{name}' — {ex.Message}");
                 return new RelocationOutcome(false, false);
             }
