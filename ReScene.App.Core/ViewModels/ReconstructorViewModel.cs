@@ -2493,6 +2493,30 @@ public partial class ReconstructorViewModel : ViewModelBase
                 case SRRSwitchMapper.DictionarySwitch.MD4096K:
                     SwitchMD4096K = true;
                     break;
+                case SRRSwitchMapper.DictionarySwitch.MD8M:
+                    SwitchMD8M = true;
+                    break;
+                case SRRSwitchMapper.DictionarySwitch.MD16M:
+                    SwitchMD16M = true;
+                    break;
+                case SRRSwitchMapper.DictionarySwitch.MD32M:
+                    SwitchMD32M = true;
+                    break;
+                case SRRSwitchMapper.DictionarySwitch.MD64M:
+                    SwitchMD64M = true;
+                    break;
+                case SRRSwitchMapper.DictionarySwitch.MD128M:
+                    SwitchMD128M = true;
+                    break;
+                case SRRSwitchMapper.DictionarySwitch.MD256M:
+                    SwitchMD256M = true;
+                    break;
+                case SRRSwitchMapper.DictionarySwitch.MD512M:
+                    SwitchMD512M = true;
+                    break;
+                case SRRSwitchMapper.DictionarySwitch.MD1G:
+                    SwitchMD1G = true;
+                    break;
             }
 
             Log(LogTarget.System, $"Dictionary: {dictionary.SizeKb} KB");

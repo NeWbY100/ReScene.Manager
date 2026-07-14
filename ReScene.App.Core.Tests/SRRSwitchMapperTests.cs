@@ -73,6 +73,20 @@ public sealed class SRRSwitchMapperTests
     }
 
     [Fact]
+    public void Map_CompressionMethodRAR5AsciiBest_NormalizesToMethod5()
+    {
+        // RAR5 archives report the method as the ASCII digit '5' (0x35), not raw index 5 (#11).
+        // The mapper must normalize this the same way a raw index-5 (RAR4) SRR would map.
+        SRRFile srr = MakeSRR(compressionMethod: 0x35);
+
+        SRRSwitchMapper.SwitchDiff diff = SRRSwitchMapper.Map(srr);
+
+        SRRSwitchMapper.CompressionMap comp = Assert.NotNull(diff.Compression);
+        Assert.Equal(5, comp.Method);
+        Assert.Equal("Best", comp.LogName);
+    }
+
+    [Fact]
     public void Map_CompressionMethodOutOfRange_LeavesCompressionGroupNull()
     {
         // 7 is outside the 0..5 method table; the mapper guards against it and returns null
@@ -135,17 +149,44 @@ public sealed class SRRSwitchMapperTests
     }
 
     [Fact]
-    public void Map_DictionarySizeUnmapped_GroupPresentButSwitchNone()
+    public void Map_DictionarySize8192_MapsToMD8M()
     {
-        // 8192 KB (8M) is in the deliberately-unmapped 8M..1G range: the group is still emitted
-        // (so the clear-then-set runs and clears old toggles) but no switch is re-enabled.
+        // 8192 KB (8 MiB) is the smallest of the large dictionary sizes RAR5/RAR7 can use; it must
+        // map to MD8M rather than being dropped to None (#12).
         SRRFile srr = MakeSRR(dictionarySize: 8192);
 
         SRRSwitchMapper.SwitchDiff diff = SRRSwitchMapper.Map(srr);
 
         SRRSwitchMapper.DictionaryMap dict = Assert.NotNull(diff.Dictionary);
-        Assert.Equal(SRRSwitchMapper.DictionarySwitch.None, dict.Switch);
+        Assert.Equal(SRRSwitchMapper.DictionarySwitch.MD8M, dict.Switch);
         Assert.Equal(8192, dict.SizeKb);
+    }
+
+    [Fact]
+    public void Map_DictionarySize1048576_MapsToMD1G()
+    {
+        // 1048576 KB (1 GiB) is the largest dictionary size RAR5/RAR7 can use (#12).
+        SRRFile srr = MakeSRR(dictionarySize: 1048576);
+
+        SRRSwitchMapper.SwitchDiff diff = SRRSwitchMapper.Map(srr);
+
+        SRRSwitchMapper.DictionaryMap dict = Assert.NotNull(diff.Dictionary);
+        Assert.Equal(SRRSwitchMapper.DictionarySwitch.MD1G, dict.Switch);
+        Assert.Equal(1048576, dict.SizeKb);
+    }
+
+    [Fact]
+    public void Map_DictionarySizeGenuinelyUnmapped_GroupPresentButSwitchNone()
+    {
+        // A size outside every known switch (small or large) still emits the group (so the
+        // clear-then-set still runs and clears old toggles) but no switch is re-enabled.
+        SRRFile srr = MakeSRR(dictionarySize: 100);
+
+        SRRSwitchMapper.SwitchDiff diff = SRRSwitchMapper.Map(srr);
+
+        SRRSwitchMapper.DictionaryMap dict = Assert.NotNull(diff.Dictionary);
+        Assert.Equal(SRRSwitchMapper.DictionarySwitch.None, dict.Switch);
+        Assert.Equal(100, dict.SizeKb);
     }
 
     // ── Solid flag ───────────────────────────────────────────────────────

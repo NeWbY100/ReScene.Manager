@@ -93,16 +93,28 @@ internal static class SRRImportParser
         : string.Join(Environment.NewLine, srr.StoredFiles.Select(
             s => $"{Path.GetFileName(s.FileName)} ({FormatUtilities.FormatSize(s.FileLength)})"));
 
-    /// <summary>Friendly label for a RAR compression method (0–5), mirroring the import log's names.</summary>
-    public static string DescribeCompression(int? method) => method switch
+    /// <summary>
+    /// Friendly label for a RAR compression method (0–5), mirroring the import log's names. Routes
+    /// through <see cref="RarMetadataNormalizer.NormalizeCompressionMethod"/> so a RAR5-reported
+    /// method (ASCII '0'..'5', i.e. 0x30..0x35) describes the same as an equivalent raw 0..5 one,
+    /// instead of falling through to the "Method N" catch-all (#11).
+    /// </summary>
+    public static string DescribeCompression(int? method)
     {
-        null => "Unknown",
-        0 => "Store / no compression (-m0)",
-        1 => "Fastest (-m1)",
-        2 => "Fast (-m2)",
-        3 => "Normal (-m3)",
-        4 => "Good (-m4)",
-        5 => "Best (-m5)",
-        _ => $"Method {method}",
-    };
+        if (method is null)
+        {
+            return "Unknown";
+        }
+
+        return RarMetadataNormalizer.NormalizeCompressionMethod(method.Value) switch
+        {
+            0 => "Store / no compression (-m0)",
+            1 => "Fastest (-m1)",
+            2 => "Fast (-m2)",
+            3 => "Normal (-m3)",
+            4 => "Good (-m4)",
+            5 => "Best (-m5)",
+            _ => $"Method {method}",
+        };
+    }
 }

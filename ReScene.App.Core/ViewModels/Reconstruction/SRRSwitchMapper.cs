@@ -21,7 +21,7 @@ internal static class SRRSwitchMapper
     /// <summary>Archive format (-ma4/-ma5) the SRR specifies, plus its log line (null = RAR7, no -ma).</summary>
     public readonly record struct FormatMap(bool MA4, bool MA5, string LogLine);
 
-    /// <summary>Which single dictionary-size toggle to enable, or <see cref="None"/> for the deliberately unmapped 8M..1G range.</summary>
+    /// <summary>Which single dictionary-size toggle to enable, or <see cref="None"/> when the SRR's dictionary size matches no known switch.</summary>
     public enum DictionarySwitch
     {
         None,
@@ -32,6 +32,14 @@ internal static class SRRSwitchMapper
         MD1024K,
         MD2048K,
         MD4096K,
+        MD8M,
+        MD16M,
+        MD32M,
+        MD64M,
+        MD128M,
+        MD256M,
+        MD512M,
+        MD1G,
     }
 
     /// <summary>
@@ -62,8 +70,10 @@ internal static class SRRSwitchMapper
             return null;
         }
 
-        int method = srr.CompressionMethod.Value;
-        if (method is < 0 or > 5)
+        // RAR4 reports the method as a raw 0..5 index; RAR5 reports it as the ASCII digit
+        // '0'..'5' (0x30..0x35). Normalize both encodings to the same 0..5 index (#11).
+        int method = RarMetadataNormalizer.NormalizeCompressionMethod(srr.CompressionMethod.Value);
+        if (method < 0)
         {
             return null;
         }
@@ -80,19 +90,10 @@ internal static class SRRSwitchMapper
 
         int size = srr.DictionarySize.Value;
 
-        // Note: the 8M..1G cases are deliberately not mapped here; the clear-then-set still runs so
-        // those toggles are cleared, but none is re-enabled for a large dictionary.
-        DictionarySwitch which = size switch
-        {
-            64 => DictionarySwitch.MD64K,
-            128 => DictionarySwitch.MD128K,
-            256 => DictionarySwitch.MD256K,
-            512 => DictionarySwitch.MD512K,
-            1024 => DictionarySwitch.MD1024K,
-            2048 => DictionarySwitch.MD2048K,
-            4096 => DictionarySwitch.MD4096K,
-            _ => DictionarySwitch.None,
-        };
+        // Covers both the small (64K..4096K) and large (8M..1G) dictionary sizes RAR5/RAR7
+        // archives can use; unrecognized sizes still emit the group so the clear-then-set runs,
+        // just with no switch re-enabled (#12).
+        DictionarySwitch which = RarMetadataNormalizer.DictionarySwitchFor(size);
 
         return new DictionaryMap(which, size);
     }
