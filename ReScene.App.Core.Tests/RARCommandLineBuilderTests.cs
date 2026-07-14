@@ -388,8 +388,33 @@ public sealed class RARCommandLineBuilderTests
 
         string arg = RARCommandLineBuilder.BuildVolumeArgument(settings);
 
-        // Default of 15000 KB is used when the size string cannot be parsed.
-        Assert.Equal("-v15000", arg);
+        // Default of 15000 KB (with the 'k' suffix) is used when the size string cannot be
+        // parsed, regardless of the selected unit — see #21.
+        Assert.Equal("-v15000k", arg);
+    }
+
+    [Fact]
+    public void BuildVolumeArgument_BlankSize_FallsBackToDefaultKilobytes()
+    {
+        // #21: a blank size (unedited/cleared field) must fall back to the default rather than
+        // parsing to 0 and producing a nonsense "-v0..." argument.
+        var settings = new RARSwitchSettings { VolumeSize = "", VolumeSizeUnitIndex = 3 }; // GB
+
+        string arg = RARCommandLineBuilder.BuildVolumeArgument(settings);
+
+        Assert.Equal("-v15000k", arg);
+    }
+
+    [Fact]
+    public void BuildVolumeArgument_SizeOverflowsUnitConversion_FallsBackToDefaultInsteadOfThrowing()
+    {
+        // #21: an extreme size (e.g. a pasted/typo'd value) must not overflow the per-unit
+        // multiplication into a wrapped/garbage "-v" argument; it falls back to the default.
+        var settings = new RARSwitchSettings { VolumeSize = long.MaxValue.ToString(), VolumeSizeUnitIndex = 3 }; // GB
+
+        string arg = RARCommandLineBuilder.BuildVolumeArgument(settings);
+
+        Assert.Equal("-v15000k", arg);
     }
 
     [Fact]

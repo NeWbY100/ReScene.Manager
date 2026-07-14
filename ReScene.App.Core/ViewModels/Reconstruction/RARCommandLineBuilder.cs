@@ -419,21 +419,33 @@ internal static class RARCommandLineBuilder
 
     public static string BuildVolumeArgument(RARSwitchSettings s)
     {
-        if (!long.TryParse(s.VolumeSize, out long sizeValue))
+        // #21: a blank/non-numeric/non-positive size can't be converted at all — fall back before
+        // ever reaching the per-unit multiplication below.
+        if (!long.TryParse(s.VolumeSize, out long sizeValue) || sizeValue <= 0)
         {
-            sizeValue = DefaultVolumeSizeKb;
+            return $"-v{DefaultVolumeSizeKb}k";
         }
 
-        return s.VolumeSizeUnitIndex switch
+        try
         {
-            0 => $"-v{sizeValue}b",       // Bytes
-            1 => $"-v{sizeValue}",         // KB (no suffix, ×1000)
-            2 => $"-v{sizeValue * 1000}",  // MB → KB
-            3 => $"-v{sizeValue * 1000 * 1000}", // GB → KB
-            4 => $"-v{sizeValue}k",        // KiB (k suffix, ×1024)
-            5 => $"-v{sizeValue * 1024}k", // MiB → KiB
-            6 => $"-v{sizeValue * 1024 * 1024}k", // GiB → KiB
-            _ => $"-v{sizeValue}"
-        };
+            // Checked so an extreme (but syntactically valid) size that overflows the per-unit
+            // multiplication falls back to the default instead of silently wrapping to a
+            // negative/garbage "-v" argument.
+            return checked(s.VolumeSizeUnitIndex switch
+            {
+                0 => $"-v{sizeValue}b",       // Bytes
+                1 => $"-v{sizeValue}",         // KB (no suffix, ×1000)
+                2 => $"-v{sizeValue * 1000}",  // MB → KB
+                3 => $"-v{sizeValue * 1000 * 1000}", // GB → KB
+                4 => $"-v{sizeValue}k",        // KiB (k suffix, ×1024)
+                5 => $"-v{sizeValue * 1024}k", // MiB → KiB
+                6 => $"-v{sizeValue * 1024 * 1024}k", // GiB → KiB
+                _ => $"-v{sizeValue}"
+            });
+        }
+        catch (OverflowException)
+        {
+            return $"-v{DefaultVolumeSizeKb}k";
+        }
     }
 }
