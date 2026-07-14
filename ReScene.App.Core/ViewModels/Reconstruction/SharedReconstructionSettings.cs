@@ -35,6 +35,14 @@ internal sealed record SharedReconstructionSettings
     /// per-volume CRCs are unavailable (e.g. a .sha1 run with no embedded/user SFV).
     /// </summary>
     public IReadOnlyCollection<string> VerificationHashes { get; init; } = [];
+
+    /// <summary>
+    /// The one-time parse of the user's verification file, taken at Start <em>before</em> the
+    /// destructive output-directory cleanup. The sole source for every downstream verification read
+    /// (per-set expected CRCs, the flat set's fallback volume names) — the file itself is never
+    /// re-read after Start (#14).
+    /// </summary>
+    public required VerificationSnapshot Verification { get; init; }
     public TriState SetFileArchiveAttribute { get; init; }
     public TriState SetFileNotContentIndexedAttribute { get; init; }
     public bool DeleteRARFiles { get; init; }

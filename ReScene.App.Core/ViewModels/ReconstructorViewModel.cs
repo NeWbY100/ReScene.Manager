@@ -30,6 +30,10 @@ public partial class ReconstructorViewModel : ViewModelBase
     // into it, so it must outlive the import). Replaced on the next import and deleted on Cleanup.
     private string? _sfvTempDir;
 
+    // The verification file, parsed once at Start before any destructive cleanup. The sole source
+    // for every downstream verification read for the run; null before the first Start (#14).
+    private VerificationSnapshot? _verificationSnapshot;
+
     // Elapsed timer — ticks every second so the clock doesn't freeze between progress events
     private readonly IUiTimer _elapsedTimer;
 
@@ -1311,6 +1315,12 @@ public partial class ReconstructorViewModel : ViewModelBase
         }
 
         // ── Verification file validation ──
+        //
+        // Parsed once, here, into an immutable snapshot — BEFORE the output-directory cleanup below
+        // (which deletes the file if it happens to sit inside OutputPath) and before any per-set
+        // work-dir cleanup. Every downstream verification read (per-set CRCs, first-volume gate
+        // hashes, flat-set fallback names) draws from this snapshot; the file itself is never
+        // re-read after this point (#14).
 
         if (string.IsNullOrWhiteSpace(VerificationPath))
         {
@@ -1334,12 +1344,10 @@ public partial class ReconstructorViewModel : ViewModelBase
             return;
         }
 
-        int hashCount;
+        VerificationSnapshot snapshot;
         try
         {
-            hashCount = verificationExt == ".sfv"
-                ? SFVFile.ReadFile(VerificationPath).Entries.Count
-                : SHA1File.ReadFile(VerificationPath).Entries.Count;
+            snapshot = VerificationSnapshot.Load(VerificationPath);
         }
         catch (Exception ex)
         {
@@ -1348,12 +1356,14 @@ public partial class ReconstructorViewModel : ViewModelBase
             return;
         }
 
-        if (hashCount == 0)
+        if (snapshot.Entries.Count == 0)
         {
             Log(LogTarget.System, "No hashes found in verification file.");
             _fileDialog.ShowError("Validation Error", "No hashes found in verification file.");
             return;
         }
+
+        _verificationSnapshot = snapshot;
 
         // ── Input file existence check ──
         //
@@ -1548,16 +1558,14 @@ public partial class ReconstructorViewModel : ViewModelBase
         SharedReconstructionSettings shared = BuildSharedSettings();
 
         // For the legacy / no-SRR single flat set the original RAR names may be empty; fall back to
-        // the verification SFV's RAR-volume entries so output renaming still works (matches the old
-        // ResolveOutputRenameNames behaviour). When an SRR was imported its names take precedence.
+        // the verification snapshot's RAR-volume entries so output renaming still works (matches the
+        // old ResolveOutputRenameNames behaviour). When an SRR was imported its names take precedence.
         IReadOnlyList<string> flatNames = _import.OriginalRARFileNames.Count > 0
             ? _import.OriginalRARFileNames
-            : ResolveSfvVolumeNames();
+            : shared.Verification.VolumeNames;
 
         IReadOnlyList<SRRArchiveSet> sets = ArchiveSetPlanner.ResolveSets(
             _import.ArchiveSets, _import.SRRFilePath, flatNames, _import.ArchiveFiles);
-
-        SFVFile? userSfv = TryLoadUserSfv(VerificationPath);
 
         var outcomes = new List<SetOutcome>();
         WinningCombo? seed = null;
@@ -1577,7 +1585,7 @@ public partial class ReconstructorViewModel : ViewModelBase
             }
 
             byte[]? embedded = LoadEmbeddedSfvBytes(set);
-            Dictionary<string, string> expected = ArchiveSetPlanner.BuildExpectedVolumeCrcs(set, embedded, userSfv);
+            Dictionary<string, string> expected = ArchiveSetPlanner.BuildExpectedVolumeCrcs(set, embedded, shared.Verification);
 
             // Full-volume verification needs a per-volume CRC for every volume; without them we
             // cannot honestly verify the set, so skip it rather than report a false success.
@@ -1673,9 +1681,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     internal SharedReconstructionSettings BuildSharedSettings()
     {
         RARSwitchSettings switches = BuildSwitchSettings();
-        HashType hashType = Path.GetExtension(VerificationPath).Equals(".sha1", StringComparison.OrdinalIgnoreCase)
-            ? HashType.SHA1
-            : HashType.CRC32;
+        VerificationSnapshot snapshot = _verificationSnapshot ?? VerificationSnapshot.Empty;
 
         return new SharedReconstructionSettings
         {
@@ -1687,8 +1693,9 @@ public partial class ReconstructorViewModel : ViewModelBase
             // major-version ranges and must NOT be restricted to specific folder names.
             SelectedVersionFolders = HasScannedVersions ? SelectedLeafFolders : [],
             CommandLineArguments = RARCommandLineBuilder.BuildCommandLineArguments(switches),
-            HashType = hashType,
-            VerificationHashes = LoadVerificationHashes(hashType),
+            HashType = snapshot.HashType,
+            VerificationHashes = snapshot.AllHashes,
+            Verification = snapshot,
             SetFileArchiveAttribute = ToTriState(FileA),
             SetFileNotContentIndexedAttribute = ToTriState(FileI),
             DeleteRARFiles = DeleteRARFiles,
@@ -1712,77 +1719,6 @@ public partial class ReconstructorViewModel : ViewModelBase
             DirectoryCreationTimes = _import.DirCreationTimes,
             DirectoryAccessTimes = _import.DirAccessTimes,
         };
-    }
-
-    /// <summary>
-    /// Reads every expected output hash from the verification file: CRC32 entries from a .sfv or
-    /// SHA1 entries from a .sha1. These seed each set's first-volume gate. Empty when the file is
-    /// missing or unreadable (validation has already confirmed it exists and parses by this point).
-    /// </summary>
-    private IReadOnlyCollection<string> LoadVerificationHashes(HashType hashType)
-    {
-        if (string.IsNullOrWhiteSpace(VerificationPath) || !File.Exists(VerificationPath))
-        {
-            return [];
-        }
-
-        try
-        {
-            return hashType == HashType.SHA1
-                ? [.. SHA1File.ReadFile(VerificationPath).Entries.Select(e => e.SHA1)]
-                : [.. SFVFile.ReadFile(VerificationPath).Entries.Select(e => e.CRC)];
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
-        {
-            Log(LogTarget.System, $"Could not read verification hashes: {ex.Message}");
-            return [];
-        }
-    }
-
-    /// <summary>Loads the user-supplied verification SFV (null for .sha1 or any non-SFV path).</summary>
-    private static SFVFile? TryLoadUserSfv(string verificationPath)
-    {
-        if (string.IsNullOrWhiteSpace(verificationPath)
-            || !Path.GetExtension(verificationPath).Equals(".sfv", StringComparison.OrdinalIgnoreCase)
-            || !File.Exists(verificationPath))
-        {
-            return null;
-        }
-
-        try
-        {
-            return SFVFile.ReadFile(verificationPath);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// The RAR-volume filenames listed in the verification SFV, in SFV order. Used as the flat set's
-    /// volume/rename names when no SRR supplied them. Empty when there is no readable .sfv.
-    /// </summary>
-    private List<string> ResolveSfvVolumeNames()
-    {
-        if (string.IsNullOrWhiteSpace(VerificationPath)
-            || !Path.GetExtension(VerificationPath).Equals(".sfv", StringComparison.OrdinalIgnoreCase)
-            || !File.Exists(VerificationPath))
-        {
-            return [];
-        }
-
-        try
-        {
-            return [.. SFVFile.ReadFile(VerificationPath).Entries
-                .Select(e => e.FileName)
-                .Where(RARVolumeIdentifier.IsRARVolume)];
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
-        {
-            Log(LogTarget.System, $"Could not read SFV for output naming: {ex.Message}");
-            return [];
-        }
     }
 
     /// <summary>

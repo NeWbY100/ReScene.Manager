@@ -18,6 +18,7 @@ internal static class ArchiveSetPlannerTestData
         RARVersions = [new VersionRange(300, 400)],
         CommandLineArguments = [[new RARCommandLineArgument("a", 200)]],
         HashType = HashType.CRC32,
+        Verification = VerificationSnapshot.Empty,
         SetFileArchiveAttribute = TriState.Unchecked,
         SetFileNotContentIndexedAttribute = TriState.Unchecked,
         DeleteRARFiles = false,

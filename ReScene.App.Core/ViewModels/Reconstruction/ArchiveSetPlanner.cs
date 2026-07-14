@@ -61,35 +61,35 @@ internal static class ArchiveSetPlanner
     }
 
     /// <summary>
-    /// Builds the per-volume expected CRC map (base filename -> CRC) for a set: embedded SFV bytes
-    /// first (when present), else the user verification SFV, filtered to this set's volume base names.
+    /// Builds the per-volume expected CRC32 map for a set, keyed by each volume's OWN canonical
+    /// dir-qualified key (never a basename alias — exactly one canonical key per volume, #9):
+    /// embedded SFV bytes first (when present), then the user verification <paramref name="snapshot"/>
+    /// fills any volume the embedded SFV did not cover. Empty when <paramref name="snapshot"/> is a
+    /// SHA1 snapshot and there is no embedded SFV — SHA1 entries feed <c>options.Hashes</c> only.
     /// </summary>
     public static Dictionary<string, string> BuildExpectedVolumeCrcs(
-        SRRArchiveSet set, byte[]? embeddedSfvBytes, SFVFile? userSfv)
+        SRRArchiveSet set, byte[]? embeddedSfvBytes, VerificationSnapshot? snapshot)
     {
-        var wanted = new HashSet<string>(set.VolumeNames.Select(Path.GetFileName)!, StringComparer.OrdinalIgnoreCase);
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        void Take(SFVFile sfv)
-        {
-            foreach (SFVFileEntry e in sfv.Entries)
-            {
-                string name = Path.GetFileName(e.FileName);
-                if (wanted.Contains(name) && !result.ContainsKey(name))
-                {
-                    result[name] = e.CRC;
-                }
-            }
-        }
 
         if (embeddedSfvBytes is { Length: > 0 })
         {
-            Take(SFVFile.ParseBytes(embeddedSfvBytes, tolerant: true));
+            SFVFile embedded = SFVFile.ParseBytes(embeddedSfvBytes, tolerant: true);
+            var embeddedSnapshot = new VerificationSnapshot(HashType.CRC32,
+                [.. embedded.Entries.Select(e => (e.FileName, e.CRC))]);
+
+            foreach (KeyValuePair<string, string> kv in embeddedSnapshot.HashesForVolumes(set.VolumeNames))
+            {
+                result[kv.Key] = kv.Value;
+            }
         }
 
-        if (result.Count < wanted.Count && userSfv != null)
+        if (result.Count < set.VolumeNames.Count && snapshot is not null)
         {
-            Take(userSfv);
+            foreach (KeyValuePair<string, string> kv in snapshot.HashesForVolumes(set.VolumeNames))
+            {
+                result.TryAdd(kv.Key, kv.Value);
+            }
         }
 
         return result;

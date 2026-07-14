@@ -35,8 +35,8 @@ public class ArchiveSetEmbeddedSfvTests
             Assert.NotNull(embedded);
             Assert.NotEmpty(embedded!);
 
-            // No user SFV — the embedded SFV alone must cover every volume in the set.
-            Dictionary<string, string> crcs = ArchiveSetPlanner.BuildExpectedVolumeCrcs(set, embedded, userSfv: null);
+            // No user verification snapshot — the embedded SFV alone must cover every volume in the set.
+            Dictionary<string, string> crcs = ArchiveSetPlanner.BuildExpectedVolumeCrcs(set, embedded, snapshot: null);
 
             // Full per-volume coverage: every volume name has a CRC.
             Assert.Equal(set.VolumeNames.Count, crcs.Count);

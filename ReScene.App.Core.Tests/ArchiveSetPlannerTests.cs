@@ -1,7 +1,6 @@
 using ReScene.Core;
 using ReScene.Core.Cryptography;
 using ReScene.Core.Diagnostics;
-using ReScene.Core.IO;
 using ReScene.App.Core.ViewModels.Reconstruction;
 using ReScene.SRR;
 
@@ -27,24 +26,28 @@ public class ArchiveSetPlannerTests
     }
 
     [Fact]
-    public void BuildExpectedVolumeCrcs_FromUserSfv_FilteredToSetVolumes()
+    public void BuildExpectedVolumeCrcs_FromUserSnapshot_FilteredToSetVolumes_QualifiedKeys()
     {
+        // #9: the result is keyed by each volume's OWN canonical dir-qualified key (not the bare
+        // basename the flat SFV happens to use), so same-basename volumes in another set never collide.
         SRRArchiveSet set = MakeSet("DVD1/aln-re4a", "DVD1",
             ["DVD1\\aln-re4a.rar", "DVD1\\aln-re4a.r00"], [("aln-re4a.iso", "00000000")]);
-        var userSfv = new SFVFile();
-        userSfv.Entries.Add(new SFVFileEntry("aln-re4a.rar", "f1a3ec0d"));
-        userSfv.Entries.Add(new SFVFileEntry("aln-re4a.r00", "88b361c9"));
-        userSfv.Entries.Add(new SFVFileEntry("aln-re4b.rar", "631d681c")); // other set — excluded
+        var snapshot = new VerificationSnapshot(HashType.CRC32,
+        [
+            ("aln-re4a.rar", "f1a3ec0d"),
+            ("aln-re4a.r00", "88b361c9"),
+            ("aln-re4b.rar", "631d681c"), // other set — excluded
+        ]);
 
-        Dictionary<string, string> crcs = ArchiveSetPlanner.BuildExpectedVolumeCrcs(set, embeddedSfvBytes: null, userSfv);
+        Dictionary<string, string> crcs = ArchiveSetPlanner.BuildExpectedVolumeCrcs(set, embeddedSfvBytes: null, snapshot);
 
         Assert.Equal(2, crcs.Count);
-        Assert.Equal("f1a3ec0d", crcs["aln-re4a.rar"]);
+        Assert.Equal("f1a3ec0d", crcs["DVD1/aln-re4a.rar"]);
         Assert.False(crcs.ContainsKey("aln-re4b.rar"));
     }
 
     [Fact]
-    public void BuildExpectedVolumeCrcs_PrefersEmbeddedSfvOverUserSfv()
+    public void BuildExpectedVolumeCrcs_PrefersEmbeddedSfvOverUserSnapshot()
     {
         SRRArchiveSet set = MakeSet("DVD1/aln-re4a", "DVD1",
             ["DVD1\\aln-re4a.rar", "DVD1\\aln-re4a.r00"], [("aln-re4a.iso", "00000000")]);
@@ -52,15 +55,61 @@ public class ArchiveSetPlannerTests
         byte[] embedded = System.Text.Encoding.Latin1.GetBytes(
             "aln-re4a.rar aaaaaaaa\r\naln-re4a.r00 bbbbbbbb\r\n");
 
-        var userSfv = new SFVFile();
-        userSfv.Entries.Add(new SFVFileEntry("aln-re4a.rar", "f1a3ec0d"));
-        userSfv.Entries.Add(new SFVFileEntry("aln-re4a.r00", "88b361c9"));
+        var snapshot = new VerificationSnapshot(HashType.CRC32,
+        [
+            ("aln-re4a.rar", "f1a3ec0d"),
+            ("aln-re4a.r00", "88b361c9"),
+        ]);
 
-        Dictionary<string, string> crcs = ArchiveSetPlanner.BuildExpectedVolumeCrcs(set, embedded, userSfv);
+        Dictionary<string, string> crcs = ArchiveSetPlanner.BuildExpectedVolumeCrcs(set, embedded, snapshot);
 
         Assert.Equal(2, crcs.Count);
-        Assert.Equal("aaaaaaaa", crcs["aln-re4a.rar"]);
-        Assert.Equal("bbbbbbbb", crcs["aln-re4a.r00"]);
+        Assert.Equal("aaaaaaaa", crcs["DVD1/aln-re4a.rar"]);
+        Assert.Equal("bbbbbbbb", crcs["DVD1/aln-re4a.r00"]);
+    }
+
+    [Fact]
+    public void BuildExpectedVolumeCrcs_UserSnapshotFillsGap_EmbeddedSfvOmitsAVolume()
+    {
+        // Embedded SFV covers only one volume; the user snapshot fills the other, and the embedded
+        // entry still wins where both cover the same volume.
+        SRRArchiveSet set = MakeSet("DVD1/aln-re4a", "DVD1",
+            ["DVD1\\aln-re4a.rar", "DVD1\\aln-re4a.r00"], [("aln-re4a.iso", "00000000")]);
+
+        byte[] embedded = System.Text.Encoding.Latin1.GetBytes("aln-re4a.rar aaaaaaaa\r\n"); // omits .r00
+
+        var snapshot = new VerificationSnapshot(HashType.CRC32,
+        [
+            ("aln-re4a.rar", "f1a3ec0d"),
+            ("aln-re4a.r00", "88b361c9"),
+        ]);
+
+        Dictionary<string, string> crcs = ArchiveSetPlanner.BuildExpectedVolumeCrcs(set, embedded, snapshot);
+
+        Assert.Equal(2, crcs.Count);
+        Assert.Equal("aaaaaaaa", crcs["DVD1/aln-re4a.rar"]);   // embedded wins
+        Assert.Equal("88b361c9", crcs["DVD1/aln-re4a.r00"]);   // user snapshot fills the gap
+    }
+
+    [Fact]
+    public void BuildExpectedVolumeCrcs_FlatSfv_OneCanonicalKeyPerVolume_NoDoubleCount()
+    {
+        // #9: the flat-SFV case (snapshot entries are bare basenames, set volumes are dir-qualified)
+        // must resolve every volume to EXACTLY one canonical key — never both a qualified alias and a
+        // basename alias for the same volume.
+        SRRArchiveSet set = MakeSet("DVD1/aln-re4a", "DVD1",
+            ["DVD1\\aln-re4a.rar", "DVD1\\aln-re4a.r00", "DVD1\\aln-re4a.r01"],
+            [("aln-re4a.iso", "00000000")]);
+        var snapshot = new VerificationSnapshot(HashType.CRC32,
+        [
+            ("aln-re4a.rar", "f1a3ec0d"),
+            ("aln-re4a.r00", "88b361c9"),
+            ("aln-re4a.r01", "12345678"),
+        ]);
+
+        Dictionary<string, string> crcs = ArchiveSetPlanner.BuildExpectedVolumeCrcs(set, embeddedSfvBytes: null, snapshot);
+
+        Assert.Equal(set.VolumeNames.Count, crcs.Count);
     }
 
     [Fact]
