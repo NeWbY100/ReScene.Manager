@@ -25,6 +25,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     private readonly IUiDispatcher _uiDispatcher;
     private readonly ITempDirectoryService _tempDir;
     private readonly ILauncherService _launcher;
+    private readonly IFileMover _fileMover;
     private CancellationTokenSource? _cts;
 
     // Temp directory holding the SFV extracted from the last imported SRR (VerificationPath points
@@ -53,6 +54,12 @@ public partial class ReconstructorViewModel : ViewModelBase
     private readonly List<TimestampPreservationFailedEventArgs> _timestampFailures = [];
 
     public ReconstructorViewModel(IBruteForceService bruteForceService, IFileDialogService fileDialog, IUiDispatcher uiDispatcher, IUiTimerFactory timerFactory, IAppSettingsService? settingsService = null, ITempDirectoryService? tempDir = null, ILauncherService? launcher = null)
+        : this(bruteForceService, fileDialog, uiDispatcher, timerFactory, settingsService, tempDir, launcher, fileMover: null)
+    {
+    }
+
+    /// <summary>Test-facing overload that injects the <see cref="IFileMover"/> relocation seam (default <see cref="SystemFileMover"/>).</summary>
+    internal ReconstructorViewModel(IBruteForceService bruteForceService, IFileDialogService fileDialog, IUiDispatcher uiDispatcher, IUiTimerFactory timerFactory, IAppSettingsService? settingsService, ITempDirectoryService? tempDir, ILauncherService? launcher, IFileMover? fileMover)
     {
         ArgumentNullException.ThrowIfNull(timerFactory);
 
@@ -62,6 +69,7 @@ public partial class ReconstructorViewModel : ViewModelBase
         _uiDispatcher = uiDispatcher;
         _tempDir = tempDir ?? new TempDirectoryService();
         _launcher = launcher ?? new SystemLauncherService();
+        _fileMover = fileMover ?? new SystemFileMover();
 
         _bruteForceService.Progress += OnProgress;
         _bruteForceService.StatusChanged += OnStatusChanged;
@@ -1253,6 +1261,46 @@ public partial class ReconstructorViewModel : ViewModelBase
         && !string.IsNullOrWhiteSpace(OutputPath)
         && !ReconstructorFieldGuidance.PathsOverlap(ReleasePath, OutputPath);
 
+    /// <summary>
+    /// The plan-before-mutate preflight: resolves the archive sets and makes every reject-the-run
+    /// decision (multi-set custom packer, reserved-root distinctness, live-input overlap, and the
+    /// no-file-list release/output self-inclusion) WITHOUT touching the filesystem destructively.
+    /// Returns null when the run may proceed, else the user-facing rejection reason. <see cref="StartAsync"/>
+    /// calls it before any cleanup, and the Beginner wizard calls it before its delete-confirmation, so
+    /// a run that will be rejected never erases existing output (#3, #17). Returns null when there is no
+    /// output path yet (the per-path validation reports that separately).
+    /// </summary>
+    public string? EvaluateRunPreflight()
+    {
+        if (string.IsNullOrWhiteSpace(OutputPath))
+        {
+            return null;
+        }
+
+        IReadOnlyList<SRRArchiveSet> sets;
+        try
+        {
+            IReadOnlyList<string> flatNames = _import.OriginalRARFileNames.Count > 0
+                ? _import.OriginalRARFileNames
+                : (_verificationSnapshot ?? VerificationSnapshot.Empty).VolumeNames;
+            sets = ArchiveSetPlanner.ResolveSets(_import.ArchiveSets, _import.SRRFilePath, flatNames, _import.ArchiveFiles);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            return $"The imported SRR could not be read:\n{ex.Message}";
+        }
+
+        IReadOnlyList<string> releaseInputs = string.IsNullOrWhiteSpace(ReleasePath)
+            ? []
+            : [.. _import.ArchiveFiles.Select(f => Path.Combine(ReleasePath, f))];
+
+        bool hasArchiveFileList = _import.ArchiveFiles.Count > 0 || _import.ArchiveDirectories.Count > 0;
+
+        return ReconstructionPreflight.Evaluate(new ReconstructionPreflight.Inputs(
+            sets, OutputPath, ReleasePath, WinRARPath, VerificationPath, _import.SRRFilePath,
+            releaseInputs, _import.CustomPackerType, hasArchiveFileList));
+    }
+
     private bool CanStart() => !IsRunning && PathsReadyToStart;
 
     [RelayCommand(CanExecute = nameof(CanStart))]
@@ -1315,13 +1363,23 @@ public partial class ReconstructorViewModel : ViewModelBase
             return;
         }
 
-        // Output must not be the release folder (or nested with it): the output-not-empty cleanup
-        // below deletes the output folder's contents, which would wipe the release input files.
-        if (ReconstructorFieldGuidance.PathsOverlap(ReleasePath, OutputPath))
+        if (string.IsNullOrWhiteSpace(OutputPath))
         {
-            Log(LogTarget.System, "Output folder overlaps the release folder.");
-            _fileDialog.ShowError("Validation Error",
-                "The Output folder must be different from the Release folder, and not inside it.");
+            Log(LogTarget.System, "Invalid output directory.");
+            _fileDialog.ShowError("Validation Error", "Invalid output directory.");
+            return;
+        }
+
+        // ── Plan before mutate ──
+        //
+        // Make every reject-the-run decision (multi-set custom packer, reserved-root distinctness,
+        // live-input overlap, and — with no archive file list — release/output self-inclusion) BEFORE
+        // the destructive output cleanup below and before any confirm dialog, so an already-known
+        // unsupported run never erases existing output (#3, #1, #17).
+        if (EvaluateRunPreflight() is { } rejection)
+        {
+            Log(LogTarget.System, $"Cannot start: {rejection}");
+            _fileDialog.ShowError("Validation Error", rejection);
             return;
         }
 
@@ -1426,13 +1484,10 @@ public partial class ReconstructorViewModel : ViewModelBase
         }
 
         // ── Output directory validation & cleanup ──
-
-        if (string.IsNullOrWhiteSpace(OutputPath))
-        {
-            Log(LogTarget.System, "Invalid output directory.");
-            _fileDialog.ShowError("Validation Error", "Invalid output directory.");
-            return;
-        }
+        //
+        // Reconstruction only ever writes into (and only ever clears) the two reserved subtrees under
+        // OutputPath — the final `output` tree and the `.rescene-work` scratch tree. Unrelated files at
+        // the OutputPath root are preserved (#4).
 
         if (!Directory.Exists(OutputPath))
         {
@@ -1448,34 +1503,18 @@ public partial class ReconstructorViewModel : ViewModelBase
                 return;
             }
         }
-        else if (Directory.EnumerateFileSystemEntries(OutputPath).Any())
+        else if (OutputHasReconstructionArtifacts())
         {
             bool proceed = outputNotEmptyConfirmed || await _fileDialog.ShowConfirmAsync("Output Directory Not Empty",
-                $"The output directory is not empty:\n\n{OutputPath}\n\nIts contents will be deleted before starting. Continue?");
+                OutputCleanupConfirmText(OutputPath));
             if (!proceed)
             {
                 Log(LogTarget.System, "Cancelled: output directory not empty.");
                 return;
             }
 
-            try
+            if (!ClearReservedSubtrees())
             {
-                foreach (string file in Directory.GetFiles(OutputPath))
-                {
-                    File.Delete(file);
-                }
-
-                foreach (string dir in Directory.GetDirectories(OutputPath))
-                {
-                    Directory.Delete(dir, true);
-                }
-
-                Log(LogTarget.System, "Output directory cleaned.");
-            }
-            catch (Exception ex)
-            {
-                Log(LogTarget.System, $"Failed to clean output directory: {ex.Message}");
-                _fileDialog.ShowError("Error", $"Failed to clean output directory:\n{ex.Message}");
                 return;
             }
         }
@@ -1577,6 +1616,13 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// failure in one set is recorded and the loop continues to the next; a cancellation stops the
     /// loop, cleans the in-flight set, and leaves completed sets intact.
     /// </summary>
+    // ── Test seams (InternalsVisibleTo ReScene.App.Core.Tests) ──
+    // The reconstruction run loop reads the imported-SRR state and drives the guarded scratch → output
+    // relocation; these let a test inject that state and drive the loop with a file-writing fake service.
+    internal void SetImportStateForTest(ReconstructionImportState import) => _import = import;
+
+    internal Task RunArchiveSetsForTestAsync(CancellationToken token) => RunArchiveSetsAsync(token);
+
     private async Task RunArchiveSetsAsync(CancellationToken token)
     {
         SharedReconstructionSettings shared = await BuildSharedSettingsAsync(token);
@@ -1628,44 +1674,59 @@ public partial class ReconstructorViewModel : ViewModelBase
             // Tell the progress tracker which set is active so new rows are stamped with the label.
             _progress.SetActiveSet(sets.Count > 1 ? label : string.Empty);
 
-            bool success;
-            WinningCombo? combo;
+            string workRoot = options.OutputDirectoryPath;
+            bool committed = false;
+            bool preserveScratch = false;
             try
             {
-                (success, combo) = await RunSingleSetAsync(label, options, seed, sets.Count, token);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // A set's own failure (e.g. an InvalidDataException from input-CRC validation) must
-                // not abort the whole run — record it and move on to the next set.
-                Log(LogTarget.System, $"Set {label} failed: {ex.Message}");
-                CleanupWorkRoot(options.OutputDirectoryPath, set, sets.Count);
-                outcomes.Add(new SetOutcome(set, label, Success: false, Skipped: false));
-                continue;
-            }
-
-            if (token.IsCancellationRequested)
-            {
-                CleanupWorkRoot(options.OutputDirectoryPath, set, sets.Count);
-                break;
-            }
-
-            if (success)
-            {
-                seed ??= combo;
-                if (!RelocateVerifiedOutput(options.OutputDirectoryPath, set, sets.Count))
+                BruteForceRunResult result;
+                try
                 {
-                    // Relocation failure: the set was reconstructed correctly but output could not be
-                    // moved to its final location. Report it as failed so the caller is not misled.
-                    success = false;
+                    result = await RunSingleSetAsync(label, options, seed, sets.Count, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // A set's own failure (e.g. an InvalidDataException from input-CRC validation) must
+                    // not abort the whole run — record it and move on to the next set.
+                    Log(LogTarget.System, $"Set {label} failed: {ex.Message}");
+                    outcomes.Add(new SetOutcome(set, label, Success: false, Skipped: false));
+                    continue;
+                }
+
+                if (token.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                if (!result.Success)
+                {
+                    outcomes.Add(new SetOutcome(set, label, Success: false, Skipped: false));
+                    continue;
+                }
+
+                seed ??= result.Combo;
+
+                // Relocate the verified volumes out of the guarded scratch work-root into the real
+                // output tree. Only a successful relocation counts as a committed set; a relocation
+                // failure whose rollback could not complete preserves the scratch for recovery.
+                (bool relocated, preserveScratch) = RelocateVerifiedOutput(workRoot, set, sets.Count, result);
+                committed = relocated;
+                outcomes.Add(new SetOutcome(set, label, relocated, Skipped: false));
+            }
+            finally
+            {
+                // A committed set's scratch was already removed by the relocation; a set whose rollback
+                // could not complete keeps its scratch (recoverable output). Everything else — a failed,
+                // errored, or cancelled set — has its scratch work-root removed here.
+                if (!committed && !preserveScratch)
+                {
+                    CleanupWorkRoot(workRoot, set);
                 }
             }
-
-            outcomes.Add(new SetOutcome(set, label, success, Skipped: false));
         }
 
         ReportSetSummary(outcomes, sets.Count, token.IsCancellationRequested);
@@ -1673,10 +1734,11 @@ public partial class ReconstructorViewModel : ViewModelBase
 
     /// <summary>
     /// Runs one set's brute force. For later sets a captured winning combo is tried first (seeding);
-    /// only if it fails (and the run was not cancelled) is the full option matrix run. Returns the
-    /// set's success and the winning combo (for seeding subsequent sets).
+    /// only if it fails (and the run was not cancelled) is the full option matrix run. Returns the full
+    /// run result (success, winning combo for seeding, and the committed/custom-packer file paths the
+    /// relocation moves out of the scratch work-root).
     /// </summary>
-    private async Task<(bool Success, WinningCombo? Combo)> RunSingleSetAsync(
+    private async Task<BruteForceRunResult> RunSingleSetAsync(
         string label, BruteForceOptions options, WinningCombo? seed, int setCount, CancellationToken token)
     {
         BruteForceRunResult result;
@@ -1695,7 +1757,7 @@ public partial class ReconstructorViewModel : ViewModelBase
             result = await Task.Run(() => _bruteForceService.RunAsync(options, token), token);
         }
 
-        return (result.Success, result.Combo);
+        return result;
     }
 
     /// <summary>One archive set's reconstruction outcome.</summary>
@@ -1810,86 +1872,131 @@ public partial class ReconstructorViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Moves a multi-set's verified volumes from its isolated work dir into the subfolder-preserving
-    /// final layout (<c>OutputPath\output\&lt;set.Directory&gt;\</c>), then deletes the scratch dir. A
-    /// single root set is a no-op: its output already sits at <c>OutputPath\output\</c>.
+    /// Relocates a set's verified volumes out of its guarded scratch work-root into the real output
+    /// tree (<c>OutputPath\output\…</c>) via <see cref="VerifiedOutputRelocator"/>, then removes the
+    /// now-emptied scratch. The legacy single-root set (empty key, work dir == OutputPath) is a no-op:
+    /// its output already sits at <c>OutputPath\output\</c>, byte-identical to before.
     /// </summary>
     /// <returns>
-    /// True if relocation succeeded (or was a no-op for a single set); false if an I/O or
-    /// authorization error prevented the move so the caller can record the set as failed.
+    /// <c>Relocated</c> is true when the verified volumes reached their final location (or for the
+    /// legacy no-op set); <c>ScratchPreserved</c> is true when a failed relocation could not fully roll
+    /// back, so the caller must NOT delete the scratch work-root (recoverable output still lives there).
     /// </returns>
-    private bool RelocateVerifiedOutput(string workRoot, SRRArchiveSet set, int setCount)
+    private (bool Relocated, bool ScratchPreserved) RelocateVerifiedOutput(
+        string workRoot, SRRArchiveSet set, int setCount, BruteForceRunResult result)
     {
-        if (setCount <= 1)
+        // Legacy single-root set: its brute-force output is already at OutputPath\output — nothing to move.
+        if (string.IsNullOrEmpty(set.Key))
         {
-            return true;
+            return (true, false);
         }
 
-        try
+        bool custom = result.CustomPackerFiles.Count > 0;
+        VerifiedOutputRelocator.Branch branch = custom
+            ? VerifiedOutputRelocator.Branch.CustomPacker
+            : VerifiedOutputRelocator.Branch.BruteForce;
+        IReadOnlyList<string> files = custom
+            ? result.CustomPackerFiles
+            : (result.Matches.Count > 0 ? result.Matches[0].Files : []);
+
+        VerifiedOutputRelocator.RelocationOutcome outcome = VerifiedOutputRelocator.Relocate(
+            OutputPath, workRoot, set, setCount, branch, CompleteAllVolumes, files, _fileMover,
+            message => Log(LogTarget.System, message));
+
+        if (outcome.Success)
         {
-            string sourceDir = Path.Combine(workRoot, "output");
-            if (!Directory.Exists(sourceDir))
-            {
-                return true;
-            }
-
-            string targetDir = Path.Combine(OutputPath, "output", set.Directory.Replace('/', Path.DirectorySeparatorChar));
-
-            // Clean a pre-existing target subfolder so re-runs are deterministic. Only when this set
-            // owns a distinct subfolder — multiple root-level sets (e.g. cd1/cd2 with Directory == "")
-            // share OutputPath\output\ and are distinguished by filename, so deleting it would wipe a
-            // sibling root set's already-relocated volumes.
-            if (!string.IsNullOrEmpty(set.Directory) && Directory.Exists(targetDir))
-            {
-                Directory.Delete(targetDir, recursive: true);
-            }
-
-            Directory.CreateDirectory(targetDir);
-
-            foreach (string file in Directory.GetFiles(sourceDir))
-            {
-                string dest = Path.Combine(targetDir, Path.GetFileName(file));
-                File.Move(file, dest, overwrite: true);
-            }
-
-            Directory.Delete(workRoot, recursive: true);
-            Log(LogTarget.System, $"Set {set.Key}: output -> {targetDir}");
-            return true;
+            CleanupWorkRoot(workRoot, set); // remove the now-emptied scratch work-root
+            return (true, false);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            Log(LogTarget.System, $"Failed to relocate output for {set.Key}: {ex.Message}");
-            return false;
-        }
+
+        return (false, outcome.ScratchPreserved);
     }
 
     /// <summary>
-    /// Removes an in-flight multi-set's scratch dir and any partial final subfolder so a cancelled
-    /// or failed set leaves no half-written output behind. No-op for a single root set.
+    /// Removes a set's guarded scratch work-root (a strict descendant of the reserved
+    /// <c>.rescene-work</c> tree) so a cancelled, failed, or committed set leaves no scratch behind.
+    /// No-op for the legacy single-root set (empty key) whose work dir is <c>OutputPath</c> itself, and
+    /// for a work-root a junction would redirect outside the reserved scratch tree (fail-closed).
     /// </summary>
-    private void CleanupWorkRoot(string workRoot, SRRArchiveSet set, int setCount)
+    private void CleanupWorkRoot(string workRoot, SRRArchiveSet set)
     {
-        if (setCount <= 1)
+        if (string.IsNullOrEmpty(set.Key))
         {
             return;
         }
 
         try
         {
-            if (Directory.Exists(workRoot))
+            string scratchRoot = ReconstructionPathGuard.ResolveScratchRoot(OutputPath);
+            if (Directory.Exists(workRoot) && ReconstructionPathGuard.IsStrictDescendant(scratchRoot, workRoot))
             {
                 Directory.Delete(workRoot, recursive: true);
             }
-
-            string targetDir = Path.Combine(OutputPath, "output", set.Directory.Replace('/', Path.DirectorySeparatorChar));
-            if (!string.IsNullOrEmpty(set.Directory) && Directory.Exists(targetDir))
-            {
-                Directory.Delete(targetDir, recursive: true);
-            }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
             Log(LogTarget.System, $"Failed to clean up work dir for {set.Key}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// The confirmation shown before the pre-run cleanup: it clears only the two reserved subtrees
+    /// (<c>output</c> and <c>.rescene-work</c>) under <paramref name="outputPath"/>, preserving unrelated
+    /// root files. Shared verbatim by the Start command and the Beginner wizard so the two never drift.
+    /// </summary>
+    public static string OutputCleanupConfirmText(string outputPath) =>
+        $"The output directory already contains reconstruction output:\n\n{outputPath}\n\n" +
+        $"Its '{ReconstructionPathGuard.OutputDirName}' and '{ReconstructionPathGuard.ScratchDirName}' subfolders " +
+        "will be cleared before starting (other files are left untouched). Continue?";
+
+    /// <summary>
+    /// Whether either reserved subtree under <c>OutputPath</c> currently holds content the pre-run
+    /// cleanup would clear. Shared by Start and the Beginner wizard so both prompt on the same
+    /// condition. Fails closed (returns true → prompt) if the roots cannot be resolved.
+    /// </summary>
+    public bool OutputHasReconstructionArtifacts()
+    {
+        try
+        {
+            (string outputRoot, string scratchRoot) = ReconstructionPathGuard.ResolveReservedRoots(OutputPath);
+            return HasContent(outputRoot) || HasContent(scratchRoot);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return true;
+        }
+
+        static bool HasContent(string dir) => Directory.Exists(dir) && Directory.EnumerateFileSystemEntries(dir).Any();
+    }
+
+    /// <summary>
+    /// Clears the two reserved subtrees (<c>output</c> + <c>.rescene-work</c>) under <c>OutputPath</c>,
+    /// resolved through the path guard so a junction cannot redirect the delete. Unrelated files at the
+    /// OutputPath root are untouched (#4). Returns false (after surfacing the error) if the delete fails.
+    /// </summary>
+    internal bool ClearReservedSubtrees()
+    {
+        try
+        {
+            (string outputRoot, string scratchRoot) = ReconstructionPathGuard.ResolveReservedRoots(OutputPath);
+            DeleteIfExists(outputRoot);
+            DeleteIfExists(scratchRoot);
+            Log(LogTarget.System, "Output directory cleaned.");
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            Log(LogTarget.System, $"Failed to clean output directory: {ex.Message}");
+            _fileDialog.ShowError("Error", $"Failed to clean output directory:\n{ex.Message}");
+            return false;
+        }
+
+        static void DeleteIfExists(string dir)
+        {
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, recursive: true);
+            }
         }
     }
 

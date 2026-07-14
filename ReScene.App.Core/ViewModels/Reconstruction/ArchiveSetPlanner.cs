@@ -178,11 +178,16 @@ internal static class ArchiveSetPlanner
     public static bool ShouldSkipUnverifiableSet(bool completeAllVolumes, HashType hashType, int expectedCrcCount, int volumeCount)
         => completeAllVolumes && hashType == HashType.CRC32 && expectedCrcCount > 0 && expectedCrcCount < volumeCount;
 
-    /// <summary>The working directory for a set's run: OutputPath for a single root set, else an isolated subdir.</summary>
+    /// <summary>
+    /// The working directory for a set's run: <c>OutputPath</c> for the legacy single root set (empty
+    /// key — byte-identical behaviour, its output already lands under <c>OutputPath\output</c>), else a
+    /// guarded, per-key isolated scratch child under <c>OutputPath\.rescene-work</c> that its verified
+    /// output is later relocated out of.
+    /// </summary>
     public static string WorkRootFor(SharedReconstructionSettings shared, SRRArchiveSet set) =>
         string.IsNullOrEmpty(set.Key)
             ? shared.OutputPath
-            : Path.Combine(shared.OutputPath, ".rescene-work", Sanitize(set.Key));
+            : ReconstructionPathGuard.ResolveScratchChild(shared.OutputPath, set.Key);
 
     /// <summary>Narrows options to a single winning combo (one version, one args set) for seeding.</summary>
     public static BruteForceOptions NarrowToCombo(BruteForceOptions full, WinningCombo combo)
@@ -254,14 +259,4 @@ internal static class ArchiveSetPlanner
             CustomPackerDetected = src.CustomPackerDetected,
             SRRFilePath = src.SRRFilePath,
         };
-
-    private static string Sanitize(string key)
-    {
-        foreach (char c in Path.GetInvalidFileNameChars())
-        {
-            key = key.Replace(c, '_');
-        }
-
-        return key.Replace('/', '_');
-    }
 }

@@ -201,26 +201,21 @@ public static class BeginnerWizardFactory
                         vm.SuppressSubdirTimestampConfirm = true;
                     }
 
-                    bool outputNotEmpty;
-                    try
+                    // Plan before mutate: if the run would be rejected outright, do NOT ask to clear the
+                    // output — let Start surface the specific reason without deleting anything.
+                    if (vm.EvaluateRunPreflight() is not null)
                     {
-                        outputNotEmpty = Directory.Exists(vm.OutputPath)
-                            && Directory.EnumerateFileSystemEntries(vm.OutputPath).Any();
-                    }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                    {
-                        // Unreadable directory — let Start surface the real error.
                         return true;
                     }
 
-                    if (!outputNotEmpty)
+                    if (!vm.OutputHasReconstructionArtifacts())
                     {
                         return true;
                     }
 
                     if (!shell.FileDialog.Confirm(
                             "Output directory not empty",
-                            $"The output directory is not empty:\n\n{vm.OutputPath}\n\nIts contents will be deleted before starting. Continue?"))
+                            ReconstructorViewModel.OutputCleanupConfirmText(vm.OutputPath)))
                     {
                         return false;
                     }
