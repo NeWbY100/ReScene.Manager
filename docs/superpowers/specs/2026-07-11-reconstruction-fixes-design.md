@@ -1,7 +1,7 @@
 # RAR Reconstruction Subsystem — Correctness Fixes (Design)
 
 **Date:** 2026-07-11
-**Status:** Draft (rev. 4) — refined after three codex reviews of the implementation plan; see Revision note below.
+**Status:** Draft (rev. 5) — refined after four codex reviews of the implementation plan; see Revision note below.
 **Branch:** `avalonia-feature` (app + nested `ReScene.Lib` submodule)
 **Scope:** `ReScene.App.Core` reconstruction view-models/helpers and `ReScene.Lib`
 (`Manager` engine, `SRRFile`/`SRRFileParser`, `SRRArchiveSet`) — the RAR Reconstructor only.
@@ -40,41 +40,56 @@ Reading that spec sharpens three findings:
   "fix C"); the fields were added to `SRRArchiveSet` but the app-side wiring in `BuildOptionsForSet`
   was never finished. Our fix completes it.
 
-### Revision note (rev. 3, post-codex-review) — clauses that supersede the original WS text
+### Revision note (rev. 5, post-4×-codex-review) — clauses that supersede the original WS text
 
-Two codex reviews of the implementation plan (grounded in a read of the engine and version-selection
+Four codex reviews of the implementation plan (grounded in a read of the engine and version-selection
 code) refined several decisions. Where the WS sections below differ from these, **these govern**:
 
-1. **Two reserved guarded roots, fail-closed** supersedes "no delete outside the output tree." Every
-   destructive delete/move must target a strict descendant of a *validated* reserved root — the
-   **output tree** (`OutputPath\output`) or the **scratch tree** (`OutputPath\.rescene-work`) — each
-   verified (resolving every path component / real links, not lexical `Path.GetFullPath`, and not
-   `Directory.Exists`-gated) to resolve under the real `OutputPath`. Fail closed when safety is
-   indeterminate for an existing path.
-2. **Relocation moves exactly the engine-reported committed files of the kept match.** The engine
-   result gains grouped `BruteForceRunResult.Matches` (`sealed record CommittedMatch(WinningCombo, Files)`,
-   one per verified combo, in discovery order) plus `CustomPackerFiles` (a lib change). Exploratory
-   runs (`StopOnFirstMatch==false`) keep the **first** verified combo as the seed (`Matches[0]`/`Combo`),
-   not the last-overwritten one (`Manager.cs:340` today overwrites); since all matches are
-   byte-identical, `Matches[0].Files` are the canonical committed output. The VM relocates
-   `Matches[0].Files`, guarding each as an existing, unique regular file strictly under the set's
-   work-root, never files found by scanning the work-root (which mixes the winner with
-   `DeleteRARFiles==false` leftovers and `input\` sources, indistinguishable by name when
-   `RenameToReleaseNames==false`). Multi-set custom-packer (`Combo==null`, `CustomPackerFiles`
-   populated) is reported **unsupported/failed**, never a false success.
+1. **Two reserved guarded roots, distinct & fail-closed** supersedes "no delete outside the output
+   tree." Every destructive delete/move must target a strict descendant of a *validated* reserved
+   root — the **output tree** (`OutputPath\output`) or the **scratch tree** (`OutputPath\.rescene-work`) —
+   resolved together and verified (resolving every path component / real links, not lexical
+   `Path.GetFullPath`, and not `Directory.Exists`-gated) to resolve under the real `OutputPath` **and**
+   to be mutually distinct/non-overlapping (a junction must not collapse them). Fail closed when safety
+   is indeterminate. **No live input** (imported SRR, verification file, concrete release input files,
+   selected WinRAR executable/dir) may resolve same-as/under/above either reserved subtree — Start is
+   rejected (`Overlaps`), because cleanup would otherwise delete a live input.
+2. **Relocation moves exactly the engine-reported committed files of the kept match, all-or-none.** The
+   engine result gains grouped `BruteForceRunResult.Matches` (`sealed record CommittedMatch(WinningCombo,
+   Files)`, one per verified combo, in discovery order) plus `CustomPackerFiles` (a lib change).
+   `RenameMatchedOutput` returns `(Placed, Complete)`; a `CommittedMatch` is recorded **only when
+   Complete** (all required volumes placed) — an incomplete placement is not a match, so a later
+   complete combo can still be the seed (today `MoveMatchedFile` failures are logged while `Found=true`
+   is still returned, `Manager.cs:816-821`). Exploratory runs (`StopOnFirstMatch==false`) keep the
+   **first** fully-placed combo as the seed (`Matches[0]`/`Combo`), not the last-overwritten one
+   (`Manager.cs:340`); since all matches are byte-identical, `Matches[0].Files` are canonical. The VM
+   relocates them, guarding brute-force sources strictly under `<workRoot>\output` and custom sources
+   strictly under the custom work root, never files found by scanning (which mixes the winner with
+   `DeleteRARFiles==false` leftovers and `input\` sources). **Single-set** custom-packer (`Combo==null`,
+   `CustomPackerFiles`) is relocated with the same guards; **multi-set** custom-packer is rejected
+   **before the engine runs**, never a false success.
 3. **Verification snapshot is the *sole* post-cleanup source.** A named `(name→hash)` snapshot is
    parsed once *before* cleanup; all downstream volume-name and CRC lookups read it; the post-cleanup
    re-reads (`ResolveSfvVolumeNames`/`TryLoadUserSfv`) are removed. Only CRC32 snapshots feed
    `ExpectedVolumeCrcs`; SHA1 feeds `options.Hashes` only. Expected CRCs store **one canonical key per
    volume** (qualified-first, basename fallback in `Manager`) — never both aliases (double-counts).
-4. **`-mt` preserves `-mt0`** (byte-significant) and emits `-mt0..64` with each arg **version-bounded**
-   (`Min=360` for `z<=16`, `Min=500` for `z>16`) so `FilterArgumentsForVersion` drops `-mt17..64` for
-   RAR4 exes and keeps them for RAR5+ — a hard cap of 64, not a universal 1..64 — plus a **checked
+4. **`-mt` preserves `-mt0`** (byte-significant) and is **band-pruned at build time** — clamp both
+   endpoints to `0..maxThreads` (`maxThreads` = 16 for RAR4, 64 for RAR5/7) before ordering, so
+   invalid rows are never generated. It is **not** version-bounded per arg: `FilterArgumentsForVersion`
+   drops an inapplicable arg rather than skipping the row (`RARVersionSelector.cs:117-122`), so a
+   bounded `-mt20` on a RAR4 exe would degrade to a duplicate no-`-mt` command. Plus a **checked
    cardinality cap** and cooperative cancellation; the matrix builds off the UI thread, and the global
    (flat) matrix is built **lazily** so a per-set imported run is never aborted by the global cap.
-5. **#6 uses an explicit format↔executable-version compatibility map** (`SRRArchiveSet.RARVersion` is
-   an unpack version → RAR4/5/7 → capable exe versions + `-ma` toggle, intersected with the user's
-   selection, with empty-intersection reported honestly) — not a raw range from the unpack version.
+5. **#6 uses an explicit format↔executable-version compatibility map matching the engine's real
+   policy** — RAR4 = `<500` native or `500-699`+`-ma4`; RAR5 = `500-699`+**required** `-ma5` (700+
+   cannot make RAR5: `-ma5` is bounded `(500,699)` and 700 is RAR7-native); RAR7 = `>=700` native — the
+   capable band intersected with the user's selection, empty-intersection reported honestly (verified
+   against `RARCommandLineBuilder.cs:100,105`, `RARVersionSelector.ParseRARArchiveVersion` /
+   `ShouldSkipRAR6TimestampCombination`). Metadata **replaces only the switch groups whose field is
+   present** (compression/dictionary/solid/format each independently nullable); a set with no relevant
+   metadata falls back to the global matrix regardless of `set.Key`. The installed-versions capture is
+   scan-state-guarded (`HasScannedVersions ? [.. _lastScan] : []`) so a stale scan after a `WinRARPath`
+   change is not intersected against.
 6. **Config restore uses a *public* lib construction seam** and a versioned/complete DTO (empty dirs
    and null metadata are legitimate — completeness is a schema marker, not "non-empty").
 
