@@ -95,12 +95,28 @@ internal static class ArchiveSetPlanner
         return result;
     }
 
-    /// <summary>Builds the brute-force options for one set, using only its content/names/metadata.</summary>
+    /// <summary>
+    /// Builds the brute-force options for one set, using only its content/names/metadata. The
+    /// command/version matrix is this set's own (#6): built via <see cref="ResolveSetMatrix"/>, which
+    /// replaces only the switch groups the set's header metadata specifies, off the UI thread when the
+    /// caller wraps this call in <c>Task.Run</c> — <paramref name="ct"/> is forwarded to the matrix
+    /// builder so a cancelled run is honoured promptly.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The set's <see cref="SRRArchiveSet.RARVersion"/> is known but no version in the user's
+    /// selection can produce its archive format — see <see cref="ResolveSetMatrix"/>. Raised so the
+    /// run loop's per-set <c>try</c> records this set as failed without aborting its siblings.
+    /// </exception>
     public static BruteForceOptions BuildOptionsForSet(
         SRRArchiveSet set,
         SharedReconstructionSettings shared,
-        Dictionary<string, string> expectedVolumeCrcs)
+        Dictionary<string, string> expectedVolumeCrcs,
+        CancellationToken ct = default)
     {
+        (IReadOnlyList<RARCommandLineArgument[]> commandLineArguments,
+            IReadOnlyList<VersionRange> versions,
+            IReadOnlyList<string> versionFolders) = ResolveSetMatrix(set, shared, ct);
+
         var options = new BruteForceOptions(shared.WinRARPath, shared.ReleasePath, WorkRootFor(shared, set))
         {
             HashType = shared.HashType,
@@ -108,9 +124,9 @@ internal static class ArchiveSetPlanner
             {
                 SetFileArchiveAttribute = shared.SetFileArchiveAttribute,
                 SetFileNotContentIndexedAttribute = shared.SetFileNotContentIndexedAttribute,
-                CommandLineArguments = [.. shared.CommandLineArguments],
-                RARVersions = [.. shared.RARVersions],
-                AllowedVersionFolders = [.. shared.SelectedVersionFolders],
+                CommandLineArguments = commandLineArguments,
+                RARVersions = versions,
+                AllowedVersionFolders = versionFolders,
                 DeleteRARFiles = shared.DeleteRARFiles,
                 DeleteDuplicateCRCFiles = shared.DeleteDuplicateCRCFiles,
                 StopOnFirstMatch = shared.StopOnFirstMatch,
@@ -167,6 +183,109 @@ internal static class ArchiveSetPlanner
 
         return options;
     }
+
+    /// <summary>
+    /// Resolves this set's own command-line matrix and version/folder selection (#6): replaces each
+    /// switch group in the global snapshot with the set's own header metadata, field by field, ONLY
+    /// for the groups the set's metadata actually specifies — compression, dictionary, and solid each
+    /// independently (a compression raw value that normalizes to invalid, T4, counts as not known —
+    /// same as the SRR-import diff), plus format/version together (gated on
+    /// <see cref="SRRArchiveSet.RARVersion"/>). Every other group — including the version/folder
+    /// selection when no format applies — is left exactly as the global snapshot carries it. A set
+    /// with no relevant metadata at all returns the global matrix untouched, regardless of
+    /// <see cref="SRRArchiveSet.Key"/>.
+    /// </summary>
+    private static (IReadOnlyList<RARCommandLineArgument[]> Args, IReadOnlyList<VersionRange> Versions, IReadOnlyList<string> Folders)
+        ResolveSetMatrix(SRRArchiveSet set, SharedReconstructionSettings shared, CancellationToken ct)
+    {
+        int normalizedCompression = set.CompressionMethod is int rawCompression
+            ? RarMetadataNormalizer.NormalizeCompressionMethod(rawCompression)
+            : -1;
+        bool hasCompression = normalizedCompression >= 0;
+        bool hasDictionary = set.DictionarySize.HasValue;
+        bool hasSolid = set.IsSolid.HasValue;
+        bool hasFormat = set.RARVersion.HasValue;
+
+        if (!hasCompression && !hasDictionary && !hasSolid && !hasFormat)
+        {
+            return (shared.CommandLineArguments, shared.RARVersions, shared.SelectedVersionFolders);
+        }
+
+        RARSwitchSettings switches = shared.Switches;
+        IReadOnlyList<VersionRange> versions = shared.RARVersions;
+        IReadOnlyList<string> folders = shared.SelectedVersionFolders;
+
+        if (hasCompression)
+        {
+            switches = switches with
+            {
+                SwitchM0 = normalizedCompression == 0,
+                SwitchM1 = normalizedCompression == 1,
+                SwitchM2 = normalizedCompression == 2,
+                SwitchM3 = normalizedCompression == 3,
+                SwitchM4 = normalizedCompression == 4,
+                SwitchM5 = normalizedCompression == 5,
+            };
+        }
+
+        if (hasDictionary)
+        {
+            SRRSwitchMapper.DictionarySwitch which = RarMetadataNormalizer.DictionarySwitchFor(set.DictionarySize!.Value);
+            switches = switches with
+            {
+                SwitchMD64K = which == SRRSwitchMapper.DictionarySwitch.MD64K,
+                SwitchMD128K = which == SRRSwitchMapper.DictionarySwitch.MD128K,
+                SwitchMD256K = which == SRRSwitchMapper.DictionarySwitch.MD256K,
+                SwitchMD512K = which == SRRSwitchMapper.DictionarySwitch.MD512K,
+                SwitchMD1024K = which == SRRSwitchMapper.DictionarySwitch.MD1024K,
+                SwitchMD2048K = which == SRRSwitchMapper.DictionarySwitch.MD2048K,
+                SwitchMD4096K = which == SRRSwitchMapper.DictionarySwitch.MD4096K,
+                SwitchMD8M = which == SRRSwitchMapper.DictionarySwitch.MD8M,
+                SwitchMD16M = which == SRRSwitchMapper.DictionarySwitch.MD16M,
+                SwitchMD32M = which == SRRSwitchMapper.DictionarySwitch.MD32M,
+                SwitchMD64M = which == SRRSwitchMapper.DictionarySwitch.MD64M,
+                SwitchMD128M = which == SRRSwitchMapper.DictionarySwitch.MD128M,
+                SwitchMD256M = which == SRRSwitchMapper.DictionarySwitch.MD256M,
+                SwitchMD512M = which == SRRSwitchMapper.DictionarySwitch.MD512M,
+                SwitchMD1G = which == SRRSwitchMapper.DictionarySwitch.MD1G,
+            };
+        }
+
+        if (hasSolid)
+        {
+            switches = switches with { SwitchS = set.IsSolid!.Value, SwitchSDash = !set.IsSolid!.Value };
+        }
+
+        if (hasFormat)
+        {
+            RarFormatCompatibility.RarFormat format = RarFormatCompatibility.FormatForUnpackVersion(set.RARVersion!.Value);
+            RarFormatCompatibility.FormatSelection selection = RarFormatCompatibility.SelectFor(
+                format, shared.RARVersions, shared.SelectedVersionFolders, shared.InstalledVersions);
+
+            if (selection.Empty)
+            {
+                throw new InvalidOperationException($"no selected WinRAR version can produce {FormatLabel(format)}");
+            }
+
+            versions = selection.Ranges;
+            folders = selection.Folders;
+            switches = switches with { SwitchMA4 = selection.NeedsMa4, SwitchMA5 = selection.NeedsMa5 };
+        }
+
+        // TODO(-rr): recovery-record (set.HasRecoveryRecord) is not yet threaded into the per-set
+        // matrix — deferred, no -rr switch exists in RARCommandLineBuilder.
+
+        IReadOnlyList<RARCommandLineArgument[]> args = RARCommandLineBuilder.BuildCommandLineArguments(switches, ct);
+        return (args, versions, folders);
+    }
+
+    private static string FormatLabel(RarFormatCompatibility.RarFormat format) => format switch
+    {
+        RarFormatCompatibility.RarFormat.Rar4 => "RAR4",
+        RarFormatCompatibility.RarFormat.Rar5 => "RAR5",
+        RarFormatCompatibility.RarFormat.Rar7 => "RAR7",
+        _ => format.ToString(),
+    };
 
     /// <summary>
     /// True when full per-volume verification was requested and is genuinely incomplete:

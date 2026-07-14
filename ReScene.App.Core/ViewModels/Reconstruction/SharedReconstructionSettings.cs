@@ -27,6 +27,24 @@ internal sealed record SharedReconstructionSettings
     /// </summary>
     public IReadOnlyList<string> SelectedVersionFolders { get; init; } = [];
     public required IReadOnlyList<RARCommandLineArgument[]> CommandLineArguments { get; init; }
+
+    /// <summary>
+    /// The switch-toggle snapshot <see cref="CommandLineArguments"/>/<see cref="RARVersions"/> were
+    /// built from. <see cref="ArchiveSetPlanner.BuildOptionsForSet"/> reuses it (#6) to rebuild a
+    /// per-set matrix that replaces only the switch groups a set's own header metadata specifies
+    /// (compression/dictionary/solid/format), leaving every other group exactly as the global run
+    /// carries it.
+    /// </summary>
+    public RARSwitchSettings Switches { get; init; } = new();
+
+    /// <summary>
+    /// The installed WinRAR executables from the last completed folder scan — scan-state-guarded
+    /// (empty for a no-scan run, or for a stale scan left behind by a <c>WinRARPath</c> change) the
+    /// same way as <see cref="SelectedVersionFolders"/>. Intersected with a set's own format
+    /// requirement via <see cref="RarFormatCompatibility.SelectFor"/>.
+    /// </summary>
+    public IReadOnlyList<InstalledRARVersion> InstalledVersions { get; init; } = [];
+
     public required HashType HashType { get; init; }
 
     /// <summary>

@@ -1625,6 +1625,12 @@ public partial class ReconstructorViewModel : ViewModelBase
 
     private async Task RunArchiveSetsAsync(CancellationToken token)
     {
+        // Await any in-flight version scan (e.g. a manual Rescan whose Task hasn't landed yet) BEFORE
+        // capturing the shared settings below — RescanVersions does not clear HasScannedVersions for a
+        // valid folder, so without this a still-running rescan's stale _lastScan could be captured
+        // even though HasScannedVersions correctly reads true.
+        await (LastVersionScan ?? Task.CompletedTask);
+
         SharedReconstructionSettings shared = await BuildSharedSettingsAsync(token);
 
         // For the legacy / no-SRR single flat set the original RAR names may be empty; fall back to
@@ -1669,12 +1675,11 @@ public partial class ReconstructorViewModel : ViewModelBase
                 continue;
             }
 
-            BruteForceOptions options = ArchiveSetPlanner.BuildOptionsForSet(set, shared, expected);
-
-            // Tell the progress tracker which set is active so new rows are stamped with the label.
-            _progress.SetActiveSet(sets.Count > 1 ? label : string.Empty);
-
-            string workRoot = options.OutputDirectoryPath;
+            // Only the work-root path is needed before the try (it never depends on the set's own
+            // command/version matrix), so a per-set matrix failure below (#6 — no selected WinRAR
+            // version can produce this set's format) is raised INSIDE the try and never strands this
+            // path computation nor aborts sibling sets.
+            string workRoot = ArchiveSetPlanner.WorkRootFor(shared, set);
             bool committed = false;
             bool preserveScratch = false;
             try
@@ -1682,6 +1687,15 @@ public partial class ReconstructorViewModel : ViewModelBase
                 BruteForceRunResult result;
                 try
                 {
+                    // Build this set's own per-set command/version matrix off the UI thread (#6) —
+                    // it can rebuild the full cartesian matrix via RARCommandLineBuilder, matching how
+                    // BuildSharedSettingsAsync already offloads the global build.
+                    BruteForceOptions options = await Task.Run(
+                        () => ArchiveSetPlanner.BuildOptionsForSet(set, shared, expected, token), token);
+
+                    // Tell the progress tracker which set is active so new rows are stamped with the label.
+                    _progress.SetActiveSet(sets.Count > 1 ? label : string.Empty);
+
                     result = await RunSingleSetAsync(label, options, seed, sets.Count, token);
                 }
                 catch (OperationCanceledException)
@@ -1690,8 +1704,9 @@ public partial class ReconstructorViewModel : ViewModelBase
                 }
                 catch (Exception ex)
                 {
-                    // A set's own failure (e.g. an InvalidDataException from input-CRC validation) must
-                    // not abort the whole run — record it and move on to the next set.
+                    // A set's own failure (e.g. an InvalidDataException from input-CRC validation, or
+                    // an InvalidOperationException from an unsatisfiable per-set format/version
+                    // requirement) must not abort the whole run — record it and move on to the next set.
                     Log(LogTarget.System, $"Set {label} failed: {ex.Message}");
                     outcomes.Add(new SetOutcome(set, label, Success: false, Skipped: false));
                     continue;
@@ -1785,6 +1800,11 @@ public partial class ReconstructorViewModel : ViewModelBase
             // major-version ranges and must NOT be restricted to specific folder names.
             SelectedVersionFolders = HasScannedVersions ? SelectedLeafFolders : [],
             CommandLineArguments = commandLineArguments,
+            Switches = switches,
+            // Scan-state-guarded exactly like SelectedVersionFolders above: a WinRARPath change clears
+            // HasScannedVersions synchronously but leaves _lastScan stale until the new scan lands, so
+            // a stale scan must contribute no installed versions rather than the old folder's list.
+            InstalledVersions = HasScannedVersions ? [.. _lastScan] : [],
             HashType = snapshot.HashType,
             VerificationHashes = snapshot.AllHashes,
             Verification = snapshot,

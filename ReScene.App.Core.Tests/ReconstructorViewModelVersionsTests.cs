@@ -256,4 +256,100 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
 
         Assert.Empty(shared.SelectedVersionFolders);
     }
+
+    // ── #6: scan-safe InstalledVersions capture ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task BuildSharedSettings_StaleScanAfterHasScannedVersionsCleared_InstalledVersionsEmpty()
+    {
+        // Mirrors OnWinRARPathChanged: a WinRARPath change clears HasScannedVersions synchronously
+        // but leaves _lastScan stale until the new folder's scan lands. InstalledVersions must read
+        // the scan-state guard (like SelectedVersionFolders already does), not the stale list.
+        ReconstructorViewModel vm = CreateVm();
+        vm.ApplyScanResult(Installed, folderScanned: true); // _lastScan = Installed, HasScannedVersions = true
+        vm.HasScannedVersions = false;                       // simulate the WinRARPath-change effect
+
+        SharedReconstructionSettings shared = await vm.BuildSharedSettingsAsync(CancellationToken.None);
+
+        Assert.Empty(shared.InstalledVersions);
+    }
+
+    /// <summary>Fake brute-force service that runs a supplied handler for each set and writes real files.</summary>
+    private sealed class ScriptedBruteForceService : IBruteForceService
+    {
+        public event EventHandler<BruteForceProgressEventArgs>? Progress { add { } remove { } }
+        public event EventHandler<BruteForceStatusChangedEventArgs>? StatusChanged { add { } remove { } }
+        public event EventHandler<LogEventArgs>? LogMessage { add { } remove { } }
+        public event EventHandler<FileCopyProgressEventArgs>? FileCopyProgress { add { } remove { } }
+        public event EventHandler<CRCValidationProgressEventArgs>? CRCValidationProgress { add { } remove { } }
+        public event EventHandler<TimestampPreservationFailedEventArgs>? TimestampPreservationFailed { add { } remove { } }
+
+        public required Func<BruteForceOptions, BruteForceRunResult> OnRun { get; init; }
+
+        public Task<BruteForceRunResult> RunAsync(BruteForceOptions options, CancellationToken cancellationToken = default)
+            => Task.FromResult(OnRun(options));
+    }
+
+    /// <summary>Writes one brute-force committed volume under the run's scratch <c>output</c> dir.</summary>
+    private static BruteForceRunResult WriteBruteSuccess(BruteForceOptions options, string volumeName)
+    {
+        string dir = Path.Combine(options.OutputDirectoryPath, "output");
+        Directory.CreateDirectory(dir);
+        string file = Path.Combine(dir, volumeName);
+        File.WriteAllText(file, "vol");
+        var combo = new WinningCombo(500, []);
+        return new BruteForceRunResult(true, combo) { Matches = [new CommittedMatch(combo, [file])] };
+    }
+
+    [Fact]
+    public async Task RunArchiveSetsForTestAsync_AwaitsInFlightRescan_UsesCompletedScanForFormatSelection()
+    {
+        // Pad the folder with many non-WinRAR subdirectories so the second (in-flight) scan below
+        // takes measurably longer than the run loop's own incidental delays elsewhere — without this
+        // padding, a fast scan could race-complete "by accident" even without the fix under test.
+        string folder = MakeWinRARFolder(390);
+        for (int i = 0; i < 3000; i++)
+        {
+            Directory.CreateDirectory(Path.Combine(folder, $"decoy-{i}"));
+        }
+
+        string releaseDir = Path.Combine(Path.GetTempPath(), "rvm-release-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(releaseDir);
+        _tempDirs.Add(releaseDir);
+
+        var brute = new ScriptedBruteForceService { OnRun = o => WriteBruteSuccess(o, "b.rar") };
+        ReconstructorViewModel vm = new(brute, new NoOpFileDialogService(), new InlineUiDispatcher(), new TestUiTimerFactory(), settingsService: null);
+
+        vm.WinRARPath = folder;
+        await vm.LastVersionScan!;
+        Assert.True(vm.HasScannedVersions);
+        Assert.Equal(new[] { 390 }, Ticked(vm)); // only 3.90 so far — not RAR5-capable
+
+        // A new WinRAR 5.60 appears in the same folder. Major 5 was silently cleared by the first
+        // scan's SyncMajorsFromTree (no 5.x leaf existed yet to keep it ticked) — re-enable it, as a
+        // user would by ticking the major-5 checkbox, before the manual rescan below.
+        vm.Version5 = true;
+        string dir560 = Path.Combine(folder, "winrar-560");
+        Directory.CreateDirectory(dir560);
+        File.WriteAllText(Path.Combine(dir560, "rar.exe"), "stub");
+
+        // RescanVersions kicks off a new scan that is deliberately NOT awaited here —
+        // RunArchiveSetsForTestAsync itself must await it (the fix under test).
+        vm.RescanVersionsCommand.Execute(null);
+        Assert.True(vm.HasScannedVersions); // RescanVersions never clears it for a valid folder (#39)
+
+        vm.ReleasePath = releaseDir;
+        vm.OutputPath = releaseDir;
+        vm.CompleteAllVolumes = false;
+
+        var set = new SRRArchiveSet { Key = "b", Directory = "" };
+        set.VolumeNames.Add("b.rar");
+        set.RARVersion = 50; // RAR5 — only satisfiable once the new 5.60 scan has landed
+        vm.SetImportStateForTest(new ReconstructionImportState { ArchiveSets = [set], OriginalRARFileNames = ["b.rar"] });
+
+        await vm.RunArchiveSetsForTestAsync(CancellationToken.None);
+
+        Assert.True(vm.LastRunSucceeded, vm.SystemLog);
+        Assert.Equal(new[] { 390, 560 }, Ticked(vm)); // proves the completed (not stale) scan landed
+    }
 }

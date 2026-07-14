@@ -181,6 +181,158 @@ public class ArchiveSetPlannerTests
         Assert.Equal((uint)2, opts.RAROptions.DetectedHighUnpSize);
     }
 
+    // ── Per-set matrix (#6): metadata replaces switch groups, field by field ───────────────────────
+
+    [Fact]
+    public void BuildOptionsForSet_Rar4NativeCompressionAndSolidDash_NoMa()
+    {
+        // A: {unpack 29, m0, s-} — RAR4 (unpack < 50), native on a <=499 exe, no -ma.
+        SRRArchiveSet set = MakeSet("DVD1/a", "DVD1", ["DVD1\\a.rar"], []);
+        set.CompressionMethod = 0;
+        set.IsSolid = false;
+        set.RARVersion = 29;
+
+        SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with
+        {
+            RARVersions = [new VersionRange(200, 800)],
+            InstalledVersions = [new InstalledRARVersion(390, "winrar-390", "p390")],
+        };
+
+        BruteForceOptions opts = ArchiveSetPlanner.BuildOptionsForSet(set, shared,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+        RARCommandLineArgument[] row = Assert.Single(opts.RAROptions.CommandLineArguments);
+        Assert.Contains(row, a => a.Argument == "-m0");
+        Assert.Contains(row, a => a.Argument == "-s-");
+        Assert.DoesNotContain(row, a => a.Argument.StartsWith("-ma", StringComparison.Ordinal));
+
+        VersionRange range = Assert.Single(opts.RAROptions.RARVersions);
+        Assert.Equal((390, 391), (range.Start, range.End));
+        Assert.Equal(["winrar-390"], opts.RAROptions.AllowedVersionFolders);
+    }
+
+    [Fact]
+    public void BuildOptionsForSet_Rar5CompressionAndSolid_AddsVersionBoundedMa5()
+    {
+        // B: {unpack 50, m5, s} — RAR5; -ma5 is REQUIRED (500-699 cannot natively make RAR5) and
+        // version-bounded (Min=500,Max=699), matching RARCommandLineBuilder.cs's own -ma5 argument.
+        SRRArchiveSet set = MakeSet("DVD1/b", "DVD1", ["DVD1\\b.rar"], []);
+        set.CompressionMethod = 0x35; // RAR5-encoded ASCII digit for method 5
+        set.IsSolid = true;
+        set.RARVersion = 50;
+
+        SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with
+        {
+            RARVersions = [new VersionRange(200, 800)],
+            InstalledVersions =
+            [
+                new InstalledRARVersion(390, "winrar-390", "p390"),
+                new InstalledRARVersion(560, "winrar-560", "p560"),
+            ],
+        };
+
+        BruteForceOptions opts = ArchiveSetPlanner.BuildOptionsForSet(set, shared,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+        RARCommandLineArgument[] row = Assert.Single(opts.RAROptions.CommandLineArguments);
+        Assert.Contains(row, a => a.Argument == "-m5");
+        Assert.Contains(row, a => a.Argument == "-s");
+        RARCommandLineArgument ma5 = Assert.Single(row, a => a.Argument == "-ma5");
+        Assert.Equal(500, ma5.MinimumVersion);
+        Assert.Equal(699, ma5.MaximumVersion);
+
+        VersionRange range = Assert.Single(opts.RAROptions.RARVersions);
+        Assert.Equal((560, 561), (range.Start, range.End)); // 390 excluded — not RAR5-capable
+        Assert.Equal(["winrar-560"], opts.RAROptions.AllowedVersionFolders);
+    }
+
+    [Fact]
+    public void BuildOptionsForSet_Rar5FormatButOnly700ExeSelected_FailsHonestly()
+    {
+        // 7.x is RAR7-native and cannot be coerced down to RAR5 (-ma5 is bounded 500-699) — the set
+        // must fail rather than silently fall back to the global matrix.
+        SRRArchiveSet set = MakeSet("DVD1/b", "DVD1", ["DVD1\\b.rar"], []);
+        set.RARVersion = 50;
+
+        SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with
+        {
+            RARVersions = [new VersionRange(200, 800)],
+            InstalledVersions = [new InstalledRARVersion(700, "winrar-700", "p700")],
+        };
+
+        InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() =>
+            ArchiveSetPlanner.BuildOptionsForSet(set, shared, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)));
+        Assert.Contains("no selected WinRAR version can produce RAR5", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildOptionsForSet_Rar5FormatButOnly390ExeSelected_EmptyIntersectionFailsHonestly()
+    {
+        // A 3.90-only selection is RAR4-only — no exe in the surviving selection can make RAR5 either.
+        SRRArchiveSet set = MakeSet("DVD1/b", "DVD1", ["DVD1\\b.rar"], []);
+        set.RARVersion = 55;
+
+        SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with
+        {
+            RARVersions = [new VersionRange(200, 800)],
+            InstalledVersions = [new InstalledRARVersion(390, "winrar-390", "p390")],
+        };
+
+        InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() =>
+            ArchiveSetPlanner.BuildOptionsForSet(set, shared, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)));
+        Assert.Contains("no selected WinRAR version can produce RAR5", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildOptionsForSet_FormatKnownOnly_CompressionDictionarySolidSurviveFromSnapshot()
+    {
+        // RARVersion present but compression/dictionary/solid all null: ONLY the format/version group
+        // is replaced — the snapshot's own -m3/-md64k/-s toggles (baked into shared.Switches) survive.
+        SRRArchiveSet set = MakeSet("DVD1/b", "DVD1", ["DVD1\\b.rar"], []);
+        set.RARVersion = 50;
+
+        SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with
+        {
+            RARVersions = [new VersionRange(200, 800)],
+            InstalledVersions = [new InstalledRARVersion(560, "winrar-560", "p560")],
+            Switches = new RARSwitchSettings { SwitchM3 = true, SwitchMD64K = true, SwitchS = true },
+        };
+
+        BruteForceOptions opts = ArchiveSetPlanner.BuildOptionsForSet(set, shared,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+        RARCommandLineArgument[] row = Assert.Single(opts.RAROptions.CommandLineArguments);
+        Assert.Contains(row, a => a.Argument == "-m3");     // survives from the snapshot
+        Assert.Contains(row, a => a.Argument == "-md64k");  // survives from the snapshot
+        Assert.Contains(row, a => a.Argument == "-s");      // survives from the snapshot
+        Assert.Contains(row, a => a.Argument == "-ma5");    // added — the only group replaced
+
+        VersionRange range = Assert.Single(opts.RAROptions.RARVersions);
+        Assert.Equal((560, 561), (range.Start, range.End));
+    }
+
+    [Fact]
+    public void BuildOptionsForSet_NoRelevantMetadata_FallsBackToGlobalMatrix_EvenWithNonEmptyKey()
+    {
+        // No compression/dictionary/solid/RARVersion at all: falls back to the global matrix
+        // regardless of whether set.Key is empty — this set's Key is non-empty.
+        SRRArchiveSet set = MakeSet("DVD1/a", "DVD1", ["DVD1\\a.rar"], []);
+
+        SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with
+        {
+            RARVersions = [new VersionRange(300, 400)],
+            CommandLineArguments = [[new RARCommandLineArgument("a", 200), new RARCommandLineArgument("-m3", 200)]],
+            SelectedVersionFolders = ["winrar-390"],
+        };
+
+        BruteForceOptions opts = ArchiveSetPlanner.BuildOptionsForSet(set, shared,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+        Assert.Same(shared.CommandLineArguments, opts.RAROptions.CommandLineArguments);
+        Assert.Same(shared.RARVersions, opts.RAROptions.RARVersions);
+        Assert.Same(shared.SelectedVersionFolders, opts.RAROptions.AllowedVersionFolders);
+    }
+
     [Fact]
     public void WorkRootFor_SingleRootSet_IsOutputPath()
     {
