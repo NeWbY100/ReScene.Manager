@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using ReScene.App.Core.Services;
 using ReScene.Core;
 using ReScene.App.Core.Models;
@@ -178,6 +179,90 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
         Assert.Single(dialog.Confirms);
         Assert.Equal(0, brute.RunCalls);
         Assert.False(vm.IsRunning);
+    }
+
+    [Fact]
+    public async Task Start_WhenReleaseDirectoryCannotBeEnumerated_ShowsValidationError_AndDoesNotRun()
+    {
+        ReconstructorViewModel vm = CreateVm(out RecordingFileDialogService dialog, out FakeBruteForceService brute);
+        await SetWinRARWithVersionAsync(vm);
+
+        string release = NewTempDir();
+        // Deny only "list directory" so Directory.Exists(release) still succeeds (the earlier existence
+        // check must pass) while Directory.EnumerateDirectories(release) — the subdirectory-timestamp
+        // preflight check (#18) — throws UnauthorizedAccessException instead of silently seeing "empty".
+        DenyListing(release);
+        try
+        {
+            vm.ReleasePath = release;
+            vm.OutputPath = NewTempDir();
+
+            await vm.StartCommand.ExecuteAsync(null);
+
+            Assert.Contains(dialog.Errors, e => e.Title == "Validation Error");
+            Assert.Equal(0, brute.RunCalls);
+            Assert.False(vm.IsRunning);
+        }
+        finally
+        {
+            RestoreListing(release);
+        }
+    }
+
+    /// <summary>
+    /// Denies only "list directory contents" on <paramref name="path"/> itself — via <c>icacls</c>'s
+    /// granular (RD) right on Windows, or clearing the read bit while keeping execute on Unix — so
+    /// <see cref="Directory.Exists"/> still sees the folder while <see cref="Directory.EnumerateDirectories"/>
+    /// throws <see cref="UnauthorizedAccessException"/>. Callers must pair this with
+    /// <see cref="RestoreListing"/> so cleanup (<see cref="Dispose"/>) can proceed.
+    /// </summary>
+    private static void DenyListing(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            RunIcacls(path, "/deny", $"{Environment.UserName}:(OI)(CI)(RD)");
+        }
+        else
+        {
+            File.SetUnixFileMode(path, UnixFileMode.UserExecute);
+        }
+    }
+
+    private static void RestoreListing(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            RunIcacls(path, "/remove:d", Environment.UserName);
+        }
+        else
+        {
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    private static void RunIcacls(string path, params string[] args)
+    {
+        var psi = new ProcessStartInfo("icacls.exe")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add(path);
+        foreach (string a in args)
+        {
+            psi.ArgumentList.Add(a);
+        }
+
+        using Process proc = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start 'icacls' — cannot set up the access-denied test fixture.");
+        proc.WaitForExit();
+
+        if (proc.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"icacls {path} {string.Join(' ', args)} failed (exit {proc.ExitCode}): {proc.StandardError.ReadToEnd()}");
+        }
     }
 
     [Fact]

@@ -1385,7 +1385,19 @@ public partial class ReconstructorViewModel : ViewModelBase
 
         // ── Subdirectory timestamp warning ──
 
-        if (Directory.EnumerateDirectories(ReleasePath).Any() && _import.DirTimestamps.Count == 0)
+        bool releaseHasSubdirectories;
+        try
+        {
+            releaseHasSubdirectories = Directory.EnumerateDirectories(ReleasePath).Any();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log(LogTarget.System, $"Could not inspect the release directory: {ex.Message}");
+            _fileDialog.ShowError("Validation Error", $"Could not inspect the release directory:\n{ex.Message}");
+            return;
+        }
+
+        if (releaseHasSubdirectories && _import.DirTimestamps.Count == 0)
         {
             bool proceed = subdirTimestampsConfirmed || await _fileDialog.ShowConfirmAsync("Warning: modified date",
                 SubdirTimestampWarningText);
