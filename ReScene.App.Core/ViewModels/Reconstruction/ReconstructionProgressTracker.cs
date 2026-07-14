@@ -23,7 +23,8 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     Action<TVersionRow, string> setResult,
     Action<TVersionRow, string> setSetText,
     Func<TVersionRow, string> getFullCommandLine,
-    Action<LogTarget, string> appendLog)
+    Action<LogTarget, string> appendLog,
+    TimeProvider? timeProvider = null)
 {
     private readonly ObservableCollection<TVersionRow> _versionEntries = versionEntries;
     private readonly Func<string, string, string, TVersionRow> _createRow = createRow;
@@ -32,6 +33,7 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     private readonly Action<TVersionRow, string> _setSetText = setSetText;
     private readonly Func<TVersionRow, string> _getFullCommandLine = getFullCommandLine;
     private readonly Action<LogTarget, string> _appendLog = appendLog;
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     // Main brute-force run timing.
     private readonly Stopwatch _stopwatch = new();
@@ -40,8 +42,9 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     private readonly Stopwatch _copyStopwatch = new();
     private readonly Stopwatch _verifyStopwatch = new();
 
-    private double _lastSecondsPerOperation; // cached rate from last progress event
-    private long _lastOperationRemaining;    // cached remaining count from last progress event
+    // Fixed target completion instant cached from the last progress event; Tick() counts down
+    // against this (via _timeProvider) rather than recomputing a flat estimate every second.
+    private DateTimeOffset? _cachedCompletionInstant;
     private long _lastOperationSize;         // cached total count from last progress event
 
     private string _lastPhaseDescription = "";
@@ -56,8 +59,7 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     /// <summary>Resets all per-run state and (re)starts the elapsed stopwatch. Clears the version table.</summary>
     public void StartRun()
     {
-        _lastSecondsPerOperation = 0;
-        _lastOperationRemaining = 0;
+        _cachedCompletionInstant = null;
         _stopwatch.Restart();
         _versionEntries.Clear();
         _lastPhaseDescription = "";
@@ -81,8 +83,7 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
         _stopwatch.Reset();
         _copyStopwatch.Reset();
         _verifyStopwatch.Reset();
-        _lastSecondsPerOperation = 0;
-        _lastOperationRemaining = 0;
+        _cachedCompletionInstant = null;
         _lastOperationSize = 0;
         _lastPhaseDescription = "";
         _activeVersionIndex = -1;
@@ -100,7 +101,13 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
         }
     }
 
-    /// <summary>Marks the active version row complete with the given match/no-match result.</summary>
+    /// <summary>
+    /// Marks the active version row complete with the given match/no-match result and releases the
+    /// active-row pointer. The view-model calls this once per archive set, right when that set's own
+    /// outcome is known (#23) — releasing the pointer here means the next set's first progress event
+    /// (a "key changed" transition in <see cref="ApplyProgress"/>) never re-labels this now-finalized
+    /// row, even though its key no longer matches.
+    /// </summary>
     public void CompleteActiveVersion(string result)
     {
         if (HasActiveVersion)
@@ -108,6 +115,9 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
             _setStatus(_versionEntries[_activeVersionIndex], "Complete");
             _setResult(_versionEntries[_activeVersionIndex], result);
         }
+
+        _activeVersionIndex = -1;
+        _activeVersionKey = "";
     }
 
     /// <summary>
@@ -134,8 +144,7 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
 
         if (e.OperationProgressed > 0)
         {
-            _lastSecondsPerOperation = e.TimeElapsed.TotalSeconds / e.OperationProgressed;
-            _lastOperationRemaining = e.OperationRemaining;
+            _cachedCompletionInstant = _timeProvider.GetLocalNow() + e.TimeRemaining;
             update = update with
             {
                 HasTiming = true,
@@ -145,11 +154,13 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
             };
         }
 
-        // Version list tracking
+        // Version list tracking. A phase change only resets which row is "active" — it must not
+        // wipe the collection, or an earlier archive set's already-finalized rows would be lost the
+        // moment the next set's own phase text differs from the previous set's last phase (#23).
         string phaseDesc = e.PhaseDescription ?? "";
         if (phaseDesc != _lastPhaseDescription)
         {
-            _versionEntries.Clear();
+            FinalizeActiveRowAsNoMatch();
             _activeVersionIndex = -1;
             _activeVersionKey = "";
             _lastPhaseDescription = phaseDesc;
@@ -158,11 +169,7 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
         string key = string.Concat(e.RARVersionDirectoryPath, "|", e.RARCommandLineArguments);
         if (key != _activeVersionKey)
         {
-            if (_activeVersionIndex >= 0 && _activeVersionIndex < _versionEntries.Count)
-            {
-                _setStatus(_versionEntries[_activeVersionIndex], "Complete");
-                _setResult(_versionEntries[_activeVersionIndex], "No Match");
-            }
+            FinalizeActiveRowAsNoMatch();
 
             TVersionRow entry = _createRow(versionLabel, e.RARCommandLineArguments, e.RARVersionDirectoryPath);
             _setSetText(entry, _activeSetLabel);
@@ -181,21 +188,42 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     }
 
     /// <summary>
-    /// Recomputes elapsed/remaining/ETA between progress events (driven by the 1-second timer),
-    /// extrapolating from the last cached rate.
+    /// Marks the currently active row (if any) "Complete"/"No Match" — used when the engine has
+    /// moved on from it without a match, whether because a new version/args combo began testing or
+    /// because the phase changed. Shared by both transitions in <see cref="ApplyProgress"/>.
+    /// </summary>
+    private void FinalizeActiveRowAsNoMatch()
+    {
+        if (_activeVersionIndex >= 0 && _activeVersionIndex < _versionEntries.Count)
+        {
+            _setStatus(_versionEntries[_activeVersionIndex], "Complete");
+            _setResult(_versionEntries[_activeVersionIndex], "No Match");
+        }
+    }
+
+    /// <summary>
+    /// Recomputes elapsed/remaining/ETA between progress events (driven by the 1-second timer).
+    /// Remaining counts down against the fixed completion instant cached at the last progress event
+    /// (#25) — <c>cached instant − now</c> — rather than re-deriving a flat estimate from the last
+    /// cached rate every tick, which never decayed between events.
     /// </summary>
     public ElapsedTick Tick()
     {
         var tick = new ElapsedTick { ElapsedText = ReconstructorFormatting.FormatTimeSpan(_stopwatch.Elapsed) };
 
-        if (_lastSecondsPerOperation > 0 && _lastOperationRemaining > 0)
+        if (_cachedCompletionInstant is { } completion)
         {
-            var remaining = TimeSpan.FromSeconds(_lastSecondsPerOperation * _lastOperationRemaining);
+            TimeSpan remaining = completion - _timeProvider.GetLocalNow();
+            if (remaining < TimeSpan.Zero)
+            {
+                remaining = TimeSpan.Zero;
+            }
+
             tick = tick with
             {
                 HasTiming = true,
                 RemainingText = ReconstructorFormatting.FormatTimeSpan(remaining),
-                EtaText = DateTime.Now.Add(remaining).ToString("HH:mm:ss"),
+                EtaText = completion.ToString("HH:mm:ss"),
             };
         }
 

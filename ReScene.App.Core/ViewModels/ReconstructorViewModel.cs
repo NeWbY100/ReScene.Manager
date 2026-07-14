@@ -1720,6 +1720,9 @@ public partial class ReconstructorViewModel : ViewModelBase
                     // an InvalidOperationException from an unsatisfiable per-set format/version
                     // requirement) must not abort the whole run — record it and move on to the next set.
                     Log(LogTarget.System, $"Set {label} failed: {ex.Message}");
+                    // Finalize THIS set's own row now, from its own outcome (#23) — a later set's
+                    // progress events must never be the ones that decide whether this row reads Match.
+                    _progress.CompleteActiveVersion("No Match");
                     outcomes.Add(new SetOutcome(set, label, Success: false, Skipped: false));
                     continue;
                 }
@@ -1731,6 +1734,7 @@ public partial class ReconstructorViewModel : ViewModelBase
 
                 if (!result.Success)
                 {
+                    _progress.CompleteActiveVersion("No Match");
                     outcomes.Add(new SetOutcome(set, label, Success: false, Skipped: false));
                     continue;
                 }
@@ -1742,6 +1746,7 @@ public partial class ReconstructorViewModel : ViewModelBase
                 // failure whose rollback could not complete preserves the scratch for recovery.
                 (bool relocated, preserveScratch) = RelocateVerifiedOutput(workRoot, set, sets.Count, result);
                 committed = relocated;
+                _progress.CompleteActiveVersion(relocated ? "Match" : "No Match");
                 outcomes.Add(new SetOutcome(set, label, relocated, Skipped: false));
             }
             finally
@@ -2070,11 +2075,10 @@ public partial class ReconstructorViewModel : ViewModelBase
             TestCountText = $"Test {_progress.LastOperationSize:N0} of {_progress.LastOperationSize:N0}";
         }
 
+        // Each set's own row was already finalized from its own outcome at set completion (#23) — no
+        // per-row relabeling here. This method only owns the run-wide aggregate below.
         bool attemptedAll = outcomes.Count == totalSets;
         bool allOk = attemptedAll && outcomes.All(o => o is { Success: true, Skipped: false });
-        bool anySuccess = outcomes.Any(o => o is { Success: true, Skipped: false });
-
-        _progress.CompleteActiveVersion(anySuccess ? "Match" : "No Match");
 
         ProgressMessage = allOk ? "Match found!" : "No match found.";
         PhaseDescription = allOk ? "Complete — Match Found!" : "Complete — No Match";
@@ -2385,16 +2389,10 @@ public partial class ReconstructorViewModel : ViewModelBase
         {
             if (e.NewStatus == OperationStatus.Completed)
             {
-                ProgressMessage = e.CompletionStatus switch
-                {
-                    OperationCompletionStatus.Success => "Completed successfully!",
-                    OperationCompletionStatus.Error => "Failed.",
-                    OperationCompletionStatus.Cancelled => "Cancelled.",
-                    _ => "Completed."
-                };
-
-                LastRunSucceeded = e.CompletionStatus == OperationCompletionStatus.Success;
-
+                // This fires once per underlying engine RunAsync call — per set, and again for a
+                // seeded set whose seed misses and falls back to the full matrix — so it must never
+                // assign whole-run status here (#23): ReportSetSummary owns LastRunSucceeded and
+                // ProgressMessage once, from the complete outcomes list, after every set is done.
                 ShowTimestampFailureWarningIfAny();
             }
         });
