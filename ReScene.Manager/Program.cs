@@ -18,7 +18,7 @@ internal static class Program
             .WithInterFont()
             .LogToTrace();
 #if AGENT_BRIDGE
-        builder = builder.WithAgentBridge(); // avalonia-agent-mcp: local Debug only
+        builder = builder.WithAgentBridge(o => o.EnableMutations = true); // avalonia-agent-mcp: local Debug only, writes enabled
 #endif
         return builder;
     }
