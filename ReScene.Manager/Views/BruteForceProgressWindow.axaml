@@ -108,8 +108,10 @@
         <!-- Widths account for Avalonia's DataGrid header chrome (a sort-indicator reserve WPF's custom
              template lacked): the WPF-copied widths clipped "Duration"→"Dura", "No Match"→"No Matc" and
              the HH:mm:ss timestamps. Sized to fit header + content at the 11px/6,4 header density above.
-             Set auto-sizes to its content so full set names are visible without manual widening, and
-             CanUserResizeColumns (on the DataGrid) lets the user resize any column. -->
+             Set and Arguments auto-size to their content: full set names are visible without manual
+             widening, and Arguments sizes to its full text so the grid overflows and shows a horizontal
+             scrollbar to reach the rest (no star column, which would fill and clip instead). Combined
+             with CanUserResizeColumns (on the DataGrid), the user can also resize any column. -->
         <DataGridTextColumn Header="Set" Binding="{Binding SetText}" Width="Auto" MinWidth="50" />
         <DataGridTextColumn Header="Version" Binding="{Binding VersionName}" Width="140" />
         <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
@@ -117,7 +119,7 @@
         <DataGridTextColumn Header="Start" Binding="{Binding StartText}" Width="82" />
         <DataGridTextColumn Header="End" Binding="{Binding EndText}" Width="82" />
         <DataGridTextColumn Header="Duration" Binding="{Binding DurationText}" Width="92" />
-        <DataGridTextColumn Header="Arguments" Binding="{Binding Arguments}" Width="*" MinWidth="180" />
+        <DataGridTextColumn Header="Arguments" Binding="{Binding Arguments}" Width="Auto" MinWidth="180" />
       </DataGrid.Columns>
     </DataGrid>
 
