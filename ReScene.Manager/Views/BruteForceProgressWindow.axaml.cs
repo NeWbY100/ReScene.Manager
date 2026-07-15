@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
@@ -41,9 +42,34 @@ public partial class BruteForceProgressWindow : Window
         _versionGrid = this.FindControl<DataGrid>("VersionGrid")!;
         _stopCloseButton = this.FindControl<Button>("btnStopClose")!;
 
+        _versionGrid.TemplateApplied += OnVersionGridTemplateApplied;
+
         // Avalonia's DataContextChanged carries no old/new values (unlike WPF's
         // DependencyPropertyChangedEventArgs), so the previously-subscribed VM is tracked in a field.
         DataContextChanged += OnDataContextChanged;
+    }
+
+    // Switch this grid's scrollbars from Fluent's OVERLAY layout to the reserved one, so the
+    // horizontal bar sits below the last row instead of being drawn across it. DataGrid decides
+    // overlay vs. reserved by reading two spans back off its own template parts at layout time
+    // (IsHorizontalScrollBarOverCells is "headers ColumnSpan == 2", IsVerticalScrollBarOverCells is
+    // "rows RowSpan == 2"); either being true makes ComputeScrollBarsLayout skip reserving that bar's
+    // thickness. Both must flip together: reserving the horizontal bar's height is only computed
+    // correctly when the rows presenter no longer spans its row. These are the spans Avalonia's own
+    // Simple theme uses for the reserved layout. Fluent sets the header span inline on the template
+    // child, which outranks a Style setter, so it has to be overwritten as a local value here.
+    private static void OnVersionGridTemplateApplied(object? sender, TemplateAppliedEventArgs e)
+    {
+        if (e.NameScope.Find<Control>("PART_ColumnHeadersPresenter") is { } headers)
+        {
+            Grid.SetColumnSpan(headers, 1);
+        }
+
+        if (e.NameScope.Find<Control>("PART_RowsPresenter") is { } rows)
+        {
+            Grid.SetRowSpan(rows, 1);
+            Grid.SetColumnSpan(rows, 2);
+        }
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)

@@ -110,12 +110,11 @@
              template lacked): the WPF-copied widths clipped "Duration"→"Dura", "No Match"→"No Matc" and
              the HH:mm:ss timestamps. Sized to fit header + content at the 11px/6,4 header density above.
              Set auto-sizes so full set names are visible. Arguments auto-sizes too, so long command lines
-             overflow and the grid gets a horizontal scrollbar; ScrollViewer.AllowAutoHide="False" (on the
-             DataGrid) keeps that bar a fixed classic one instead of the Fluent overlay that expands on
-             hover. The Fluent template always draws the h-scrollbar over the cells (DataGrid treats it as
-             "over cells" whenever the column-headers ColumnSpan is 2, which the theme hard-codes as a
-             local value), so the last row's bottom edge stays clipped; the per-cell ToolTip stays as the
-             way to read full text. CanUserResizeColumns (on the DataGrid) also lets the user widen columns. -->
+             overflow and the grid gets a horizontal scrollbar; ScrollViewer.AllowAutoHide="False" keeps
+             that bar always visible instead of the Fluent overlay one that expands on hover. That bar is
+             moved below the rows, rather than drawn across the last one, from code-behind: see
+             OnVersionGridTemplateApplied. The per-cell ToolTip stays as a quick way to read full text, and
+             CanUserResizeColumns (on the DataGrid) lets the user widen columns. -->
         <DataGridTextColumn Header="Set" Binding="{Binding SetText}" Width="Auto" MinWidth="50" />
         <DataGridTextColumn Header="Version" Binding="{Binding VersionName}" Width="140" />
         <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
