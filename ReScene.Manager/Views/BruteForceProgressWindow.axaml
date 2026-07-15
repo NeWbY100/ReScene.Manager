@@ -86,6 +86,7 @@
               AutoGenerateColumns="False"
               IsReadOnly="True"
               CanUserReorderColumns="False"
+              CanUserResizeColumns="True"
               HeadersVisibility="Column"
               SelectionMode="Single"
               GridLinesVisibility="None"
@@ -106,8 +107,10 @@
       <DataGrid.Columns>
         <!-- Widths account for Avalonia's DataGrid header chrome (a sort-indicator reserve WPF's custom
              template lacked): the WPF-copied widths clipped "Duration"→"Dura", "No Match"→"No Matc" and
-             the HH:mm:ss timestamps. Sized to fit header + content at the 11px/6,4 header density above. -->
-        <DataGridTextColumn Header="Set" Binding="{Binding SetText}" Width="70" />
+             the HH:mm:ss timestamps. Sized to fit header + content at the 11px/6,4 header density above.
+             Set auto-sizes to its content so full set names are visible without manual widening, and
+             CanUserResizeColumns (on the DataGrid) lets the user resize any column. -->
+        <DataGridTextColumn Header="Set" Binding="{Binding SetText}" Width="Auto" MinWidth="50" />
         <DataGridTextColumn Header="Version" Binding="{Binding VersionName}" Width="140" />
         <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
         <DataGridTextColumn Header="Result" Binding="{Binding Result}" Width="100" />
