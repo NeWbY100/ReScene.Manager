@@ -87,6 +87,7 @@
               IsReadOnly="True"
               CanUserReorderColumns="False"
               CanUserResizeColumns="True"
+              ScrollViewer.AllowAutoHide="False"
               HeadersVisibility="Column"
               SelectionMode="Single"
               GridLinesVisibility="None"
@@ -108,10 +109,13 @@
         <!-- Widths account for Avalonia's DataGrid header chrome (a sort-indicator reserve WPF's custom
              template lacked): the WPF-copied widths clipped "Duration"→"Dura", "No Match"→"No Matc" and
              the HH:mm:ss timestamps. Sized to fit header + content at the 11px/6,4 header density above.
-             Set auto-sizes so full set names are visible. Arguments fills the row (star width) and shows
-             an ellipsis when too long; its full text appears in a per-cell ToolTip on hover. A horizontal
-             scrollbar was deliberately avoided: the DataGrid's overlay auto-hide scrollbar expands over
-             and hides the last row. CanUserResizeColumns (on the DataGrid) also lets the user widen columns. -->
+             Set auto-sizes so full set names are visible. Arguments auto-sizes too, so long command lines
+             overflow and the grid gets a horizontal scrollbar; ScrollViewer.AllowAutoHide="False" (on the
+             DataGrid) keeps that bar a fixed classic one instead of the Fluent overlay that expands on
+             hover. The Fluent template always draws the h-scrollbar over the cells (DataGrid treats it as
+             "over cells" whenever the column-headers ColumnSpan is 2, which the theme hard-codes as a
+             local value), so the last row's bottom edge stays clipped; the per-cell ToolTip stays as the
+             way to read full text. CanUserResizeColumns (on the DataGrid) also lets the user widen columns. -->
         <DataGridTextColumn Header="Set" Binding="{Binding SetText}" Width="Auto" MinWidth="50" />
         <DataGridTextColumn Header="Version" Binding="{Binding VersionName}" Width="140" />
         <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
@@ -119,7 +123,7 @@
         <DataGridTextColumn Header="Start" Binding="{Binding StartText}" Width="82" />
         <DataGridTextColumn Header="End" Binding="{Binding EndText}" Width="82" />
         <DataGridTextColumn Header="Duration" Binding="{Binding DurationText}" Width="92" />
-        <DataGridTemplateColumn Header="Arguments" Width="*">
+        <DataGridTemplateColumn Header="Arguments" Width="Auto" MinWidth="180">
           <DataGridTemplateColumn.CellTemplate>
             <DataTemplate>
               <TextBlock Text="{Binding Arguments}" ToolTip.Tip="{Binding Arguments}"
