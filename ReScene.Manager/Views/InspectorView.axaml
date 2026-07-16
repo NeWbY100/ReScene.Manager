@@ -187,6 +187,7 @@
                         HeadersVisibility="Column"
                         SelectionMode="Single"
                         BorderThickness="0"
+                        Foreground="{DynamicResource ForegroundPrimary}"
                         AutoGenerateColumns="False">
                 <DataGrid.ContextMenu>
                   <ContextMenu>
@@ -206,6 +207,7 @@
                         <TextBlock Text="{Binding Name}"
                                    TextTrimming="CharacterEllipsis"
                                    VerticalAlignment="Center"
+                                   FontSize="{DynamicResource FontSizeCaption}"
                                    Margin="{Binding IsIndented, Converter={StaticResource IndentToMarginConverter}}"
                                    Foreground="{Binding IsIndented, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=SystemControlForegroundBaseMediumBrush}" />
                       </DataTemplate>
@@ -217,6 +219,7 @@
                         <TextBlock Text="{Binding Value}"
                                    TextTrimming="CharacterEllipsis"
                                    VerticalAlignment="Center"
+                                   FontSize="{DynamicResource FontSizeCaption}"
                                    Foreground="{Binding IsWarning, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=WarningForeground}" />
                       </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
