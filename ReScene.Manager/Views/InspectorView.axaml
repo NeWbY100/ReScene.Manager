@@ -12,6 +12,21 @@
     <KeyBinding Gesture="Shift+F3" Command="{Binding FindPreviousCommand}" />
   </UserControl.KeyBindings>
 
+  <!-- Properties-grid density, scoped to this view so other grids are untouched. Fluent's DataGridCell
+       theme defaults to a roomy 32px MinHeight and paints a white per-cell focus rectangle
+       (DataGridCellFocusVisualPrimaryBrush) on the clicked cell; the WPF Inspector had neither. Restore
+       the compact single-row-selection look: shrink the cell floor and keep the theme's :focus
+       FocusVisual hidden (the selected-row highlight is the focus indicator here). -->
+  <UserControl.Styles>
+    <Style Selector="DataGridCell">
+      <Setter Property="MinHeight" Value="22" />
+      <Setter Property="Padding" Value="6,2" />
+    </Style>
+    <Style Selector="DataGridCell:focus /template/ Grid#FocusVisual">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+  </UserControl.Styles>
+
   <!-- ── Inspector panels ──────────────────────────────────── -->
   <DockPanel Margin="{DynamicResource PageMargin}">
     <TextBlock DockPanel.Dock="Top"
