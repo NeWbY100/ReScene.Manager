@@ -26,6 +26,7 @@ public partial class InspectorView : UserControl
     private readonly TreeView _tree;
     private readonly TextBox _hexSearchBox;
     private readonly DataGrid _propertiesGrid;
+    private readonly Controls.HexView _hexViewer;
 
     // The VM currently subscribed to; tracked across DataContextChanged (which has no old/new args)
     // so the previous VM's PropertyChanged handler is detached before attaching the new one.
@@ -38,6 +39,7 @@ public partial class InspectorView : UserControl
         _tree = this.FindControl<TreeView>("StructureTree")!;
         _hexSearchBox = this.FindControl<TextBox>("HexSearchBox")!;
         _propertiesGrid = this.FindControl<DataGrid>("PropertiesGrid")!;
+        _hexViewer = this.FindControl<Controls.HexView>("HexViewer")!;
 
         // Right-click selects the tree item under the pointer so the context menu operates on the
         // right-clicked node, not the previously selected one. Avalonia has no WPF PreviewMouse tunnel
@@ -67,8 +69,12 @@ public partial class InspectorView : UserControl
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(InspectorViewModel.IsHexSearchVisible)
-            && _viewModel?.IsHexSearchVisible == true)
+        if (e.PropertyName != nameof(InspectorViewModel.IsHexSearchVisible))
+        {
+            return;
+        }
+
+        if (_viewModel?.IsHexSearchVisible == true)
         {
             // Post so the focus lands after the search bar has become visible/laid out.
             Dispatcher.UIThread.Post(() =>
@@ -76,6 +82,15 @@ public partial class InspectorView : UserControl
                 _hexSearchBox.Focus();
                 _hexSearchBox.SelectAll();
             });
+        }
+        else
+        {
+            // Closing the bar (Close button or Esc) collapses the element holding keyboard focus,
+            // and Avalonia — unlike WPF — does not relocate focus out of a hidden subtree. Focus
+            // would be stranded outside this view, leaving its KeyBindings (including the Ctrl+F
+            // that reopens this very bar) dead until the user clicks back in. Hand focus to the
+            // hex surface instead.
+            Dispatcher.UIThread.Post(() => _hexViewer.FocusContent());
         }
     }
 

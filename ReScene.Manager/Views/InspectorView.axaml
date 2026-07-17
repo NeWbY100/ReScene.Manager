@@ -279,17 +279,19 @@
                         BorderThickness="0,0,0,1"
                         Padding="4">
                   <DockPanel>
+                    <!-- Dock="Right" stacks right-to-left in declaration order, so this reads
+                         backwards: Close is rightmost, then Next, then Prev to its left. -->
                     <Button DockPanel.Dock="Right" Content="Close"
                             Command="{Binding HideHexSearchCommand}"
-                            Classes="ghost"
-                            MinWidth="55" Margin="4,0,0,0" />
-                    <Button DockPanel.Dock="Right" Content="Prev"
-                            Command="{Binding FindPreviousCommand}"
                             Classes="ghost"
                             MinWidth="55" Margin="4,0,0,0" />
                     <Button DockPanel.Dock="Right" Content="Next"
                             Command="{Binding FindNextCommand}"
                             Classes="primary"
+                            MinWidth="55" Margin="4,0,0,0" />
+                    <Button DockPanel.Dock="Right" Content="Prev"
+                            Command="{Binding FindPreviousCommand}"
+                            Classes="ghost"
                             MinWidth="55" Margin="4,0,0,0" />
                     <TextBlock DockPanel.Dock="Right"
                                Text="{Binding HexSearchStatus}"
@@ -316,7 +318,8 @@
                   </DockPanel>
                 </Border>
 
-                <controls:HexView DataSource="{Binding HexDataSource}"
+                <controls:HexView x:Name="HexViewer"
+                                  DataSource="{Binding HexDataSource}"
                                   BlockOffset="{Binding HexBlockOffset}"
                                   BlockLength="{Binding HexBlockLength}"
                                   SelectionOffset="{Binding HexSelectionOffset}"

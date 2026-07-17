@@ -75,6 +75,14 @@ public partial class HexView : UserControl
         _initialized = true;
     }
 
+    /// <summary>
+    /// Moves keyboard focus onto the inner drawing surface (the composite's only focusable part).
+    /// Hosts call this when a transient element that held focus collapses — e.g. the Inspector's
+    /// hex-search bar on close — because Avalonia, unlike WPF, does not relocate focus out of a
+    /// hidden subtree; stranded focus leaves the host view's KeyBindings dead.
+    /// </summary>
+    public bool FocusContent() => _inner.Focus();
+
     /// <summary>The hex data source shown by the embedded drawing surface.</summary>
     public IHexDataSource? DataSource
     {
