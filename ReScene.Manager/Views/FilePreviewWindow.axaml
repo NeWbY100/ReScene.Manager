@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:ReScene.Manager.Controls"
         xmlns:conv="clr-namespace:ReScene.Manager.Converters"
+        xmlns:sys="using:System"
         x:Class="ReScene.Manager.Views.FilePreviewWindow"
         x:CompileBindings="False"
         Title="{Binding TitleText}"
@@ -37,14 +38,20 @@
             <TextBlock Text="Bytes/Row:" VerticalAlignment="Center"
                        Foreground="{DynamicResource ForegroundSecondary}"
                        FontSize="{DynamicResource FontSizeCaption}" />
-            <!-- Avalonia has no editable ComboBox: a NumericUpDown gives free integer entry
-                 (the WPF presets 8/16/24/32/48/64 were only a convenience). -->
-            <NumericUpDown Value="{Binding HexBytesPerLine, Mode=TwoWay}"
-                           Minimum="1" Maximum="256" Increment="8"
-                           FormatString="0"
-                           Width="120"
-                           FontSize="{DynamicResource FontSizeCaption}"
-                           VerticalAlignment="Center" />
+            <!-- Preset bytes-per-row dropdown to match WPF. Avalonia's ComboBox is not editable, so the
+                 WPF presets 8/16/24/32/48/64 are fixed choices (no free integer entry). Int32 items so
+                 SelectedItem round-trips the int HexBytesPerLine. -->
+            <ComboBox SelectedItem="{Binding HexBytesPerLine}"
+                      Width="64" Padding="8,3"
+                      FontSize="{DynamicResource FontSizeCaption}"
+                      VerticalAlignment="Center">
+              <sys:Int32>8</sys:Int32>
+              <sys:Int32>16</sys:Int32>
+              <sys:Int32>24</sys:Int32>
+              <sys:Int32>32</sys:Int32>
+              <sys:Int32>48</sys:Int32>
+              <sys:Int32>64</sys:Int32>
+            </ComboBox>
           </StackPanel>
           <ScrollViewer HorizontalScrollBarVisibility="Auto"
                         VerticalScrollBarVisibility="Auto">

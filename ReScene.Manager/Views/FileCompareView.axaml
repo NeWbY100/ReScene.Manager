@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:ReScene.Manager.Controls"
+             xmlns:sys="using:System"
              x:Class="ReScene.Manager.Views.FileCompareView"
              x:CompileBindings="False">
 
@@ -209,12 +210,19 @@
                                Foreground="{DynamicResource ForegroundSecondary}"
                                FontSize="{DynamicResource FontSizeCaption}"
                                Margin="0,0,4,0" />
-                    <NumericUpDown Value="{Binding HexBytesPerLine}"
-                                   Minimum="1" Maximum="128" Increment="8"
-                                   FormatString="0"
-                                   Width="64"
-                                   FontSize="{DynamicResource FontSizeCaption}"
-                                   VerticalAlignment="Center" />
+                    <!-- Preset bytes-per-row dropdown; see InspectorView for the Avalonia ComboBox
+                         (non-editable) rationale. Int32 items so SelectedItem round-trips the int. -->
+                    <ComboBox SelectedItem="{Binding HexBytesPerLine}"
+                              Width="64" Padding="8,3"
+                              FontSize="{DynamicResource FontSizeCaption}"
+                              VerticalAlignment="Center">
+                      <sys:Int32>8</sys:Int32>
+                      <sys:Int32>16</sys:Int32>
+                      <sys:Int32>24</sys:Int32>
+                      <sys:Int32>32</sys:Int32>
+                      <sys:Int32>48</sys:Int32>
+                      <sys:Int32>64</sys:Int32>
+                    </ComboBox>
                   </StackPanel>
                   <TextBlock Classes="panelHeader" Text="Left Hex View" />
                 </DockPanel>
@@ -344,12 +352,19 @@
                                Foreground="{DynamicResource ForegroundSecondary}"
                                FontSize="{DynamicResource FontSizeCaption}"
                                Margin="0,0,4,0" />
-                    <NumericUpDown Value="{Binding HexBytesPerLine}"
-                                   Minimum="1" Maximum="128" Increment="8"
-                                   FormatString="0"
-                                   Width="64"
-                                   FontSize="{DynamicResource FontSizeCaption}"
-                                   VerticalAlignment="Center" />
+                    <!-- Preset bytes-per-row dropdown; see InspectorView for the Avalonia ComboBox
+                         (non-editable) rationale. Int32 items so SelectedItem round-trips the int. -->
+                    <ComboBox SelectedItem="{Binding HexBytesPerLine}"
+                              Width="64" Padding="8,3"
+                              FontSize="{DynamicResource FontSizeCaption}"
+                              VerticalAlignment="Center">
+                      <sys:Int32>8</sys:Int32>
+                      <sys:Int32>16</sys:Int32>
+                      <sys:Int32>24</sys:Int32>
+                      <sys:Int32>32</sys:Int32>
+                      <sys:Int32>48</sys:Int32>
+                      <sys:Int32>64</sys:Int32>
+                    </ComboBox>
                   </StackPanel>
                   <TextBlock Classes="panelHeader" Text="Right Hex View" />
                 </DockPanel>
