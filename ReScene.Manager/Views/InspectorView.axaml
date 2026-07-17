@@ -25,15 +25,6 @@
     <Style Selector="DataGridCell:focus /template/ Grid#FocusVisual">
       <Setter Property="IsVisible" Value="False" />
     </Style>
-    <!-- Cell text colour. The name/value TextBlocks bind Foreground through BoolToBrushConverter, which
-         returns UnsetValue for ordinary rows so the value falls back to a lower priority. Inherited
-         Foreground (set on the grid) reaches most rows but NOT the alternating tinted even rows, which
-         then dropped to TextBlock's Brushes.Black default. Supply ForegroundPrimary at Style priority
-         instead: it fills the UnsetValue case on every row, and the converter's own brushes (indented =
-         BaseMedium, warnings = WarningForeground) are local values that still win where they apply. -->
-    <Style Selector="DataGridCell TextBlock">
-      <Setter Property="Foreground" Value="{DynamicResource ForegroundPrimary}" />
-    </Style>
   </UserControl.Styles>
 
   <!-- ── Inspector panels ──────────────────────────────────── -->
@@ -233,7 +224,7 @@
                                    VerticalAlignment="Center"
                                    FontSize="{DynamicResource FontSizeCaption}"
                                    Margin="{Binding IsIndented, Converter={StaticResource IndentToMarginConverter}}"
-                                   Foreground="{Binding IsIndented, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=SystemControlForegroundBaseMediumBrush}" />
+                                   Foreground="{Binding IsIndented, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=SystemControlForegroundBaseMediumBrush|ForegroundPrimary}" />
                       </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                   </DataGridTemplateColumn>
@@ -244,7 +235,7 @@
                                    TextTrimming="CharacterEllipsis"
                                    VerticalAlignment="Center"
                                    FontSize="{DynamicResource FontSizeCaption}"
-                                   Foreground="{Binding IsWarning, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=WarningForeground}" />
+                                   Foreground="{Binding IsWarning, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=WarningForeground|ForegroundPrimary}" />
                       </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                   </DataGridTemplateColumn>
