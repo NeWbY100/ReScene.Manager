@@ -265,33 +265,12 @@
         <!-- Hex / Text view panel -->
         <Border Grid.Row="3"
                 Classes="section">
+          <Grid>
           <TabControl>
             <!-- Hex tab -->
             <TabItem Header="Hex" IsSelected="{Binding IsHexViewActive, Mode=OneWay}">
               <DockPanel>
-                <!-- Hex toolbar: Bytes/Row -->
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal"
-                            HorizontalAlignment="Right" Margin="4,4,4,2">
-                  <TextBlock Text="Bytes/Row:" VerticalAlignment="Center"
-                             Foreground="{DynamicResource ForegroundSecondary}"
-                             FontSize="{DynamicResource FontSizeCaption}"
-                             Margin="0,0,4,0" />
-                  <!-- Preset bytes-per-row dropdown (WPF used an editable ComboBox; Avalonia's ComboBox
-                       is not editable, so this offers the same presets as fixed choices). Items are
-                       Int32 so SelectedItem round-trips the int HexBytesPerLine directly. -->
-                  <ComboBox SelectedItem="{Binding HexBytesPerLine}"
-                            Width="64" Padding="8,3"
-                            FontSize="{DynamicResource FontSizeCaption}"
-                            VerticalAlignment="Center">
-                    <sys:Int32>8</sys:Int32>
-                    <sys:Int32>16</sys:Int32>
-                    <sys:Int32>24</sys:Int32>
-                    <sys:Int32>32</sys:Int32>
-                    <sys:Int32>48</sys:Int32>
-                    <sys:Int32>64</sys:Int32>
-                  </ComboBox>
-                </StackPanel>
-
+                <!-- Bytes/Row toolbar lives on the tab-strip row now; see the Panel overlay below. -->
                 <!-- Search bar -->
                 <Border DockPanel.Dock="Top"
                         IsVisible="{Binding IsHexSearchVisible}"
@@ -350,29 +329,7 @@
             <!-- Text tab -->
             <TabItem Header="Text" IsSelected="{Binding IsTextViewActive, Mode=TwoWay}">
               <DockPanel>
-                <!-- Text toolbar: Encoding + word wrap -->
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal"
-                            HorizontalAlignment="Right" Margin="4,4,4,2">
-                  <TextBlock Text="Encoding:" VerticalAlignment="Center"
-                             Foreground="{DynamicResource ForegroundSecondary}"
-                             FontSize="{DynamicResource FontSizeCaption}"
-                             Margin="0,0,4,0" />
-                  <ComboBox ItemsSource="{Binding TextEncodings}"
-                            SelectedItem="{Binding SelectedEncoding}"
-                            Width="160" FontSize="{DynamicResource FontSizeCaption}"
-                            VerticalAlignment="Center" Padding="4,1">
-                    <ComboBox.ItemTemplate>
-                      <DataTemplate>
-                        <TextBlock Text="{Binding DisplayName}" />
-                      </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                  </ComboBox>
-                  <CheckBox Content="Word wrap"
-                            IsChecked="{Binding TextWordWrap}"
-                            VerticalAlignment="Center"
-                            Margin="10,0,0,0" />
-                </StackPanel>
-
+                <!-- Encoding + Word wrap toolbar lives on the tab-strip row now; see the Panel overlay. -->
                 <!-- Truncation note -->
                 <Border DockPanel.Dock="Bottom"
                         IsVisible="{Binding TextViewTruncated}"
@@ -397,6 +354,52 @@
               </DockPanel>
             </TabItem>
           </TabControl>
+
+          <!-- Bytes/Row and Encoding toolbars sit on the tab-strip row (right-aligned), overlaying the
+               TabControl so they appear beside the Hex/Text tabs instead of below them. Only the active
+               tab's toolbar is shown (IsHexViewActive is the computed inverse of IsTextViewActive). -->
+          <Panel HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,8,0">
+            <StackPanel Orientation="Horizontal" IsVisible="{Binding IsHexViewActive}">
+              <TextBlock Text="Bytes/Row:" VerticalAlignment="Center"
+                         Foreground="{DynamicResource ForegroundSecondary}"
+                         FontSize="{DynamicResource FontSizeCaption}"
+                         Margin="0,0,4,0" />
+              <!-- Preset bytes-per-row dropdown (Avalonia's ComboBox is not editable, so the WPF presets
+                   are fixed choices). Int32 items so SelectedItem round-trips the int HexBytesPerLine. -->
+              <ComboBox SelectedItem="{Binding HexBytesPerLine}"
+                        Width="64" Padding="8,3"
+                        FontSize="{DynamicResource FontSizeCaption}"
+                        VerticalAlignment="Center">
+                <sys:Int32>8</sys:Int32>
+                <sys:Int32>16</sys:Int32>
+                <sys:Int32>24</sys:Int32>
+                <sys:Int32>32</sys:Int32>
+                <sys:Int32>48</sys:Int32>
+                <sys:Int32>64</sys:Int32>
+              </ComboBox>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" IsVisible="{Binding IsTextViewActive}">
+              <TextBlock Text="Encoding:" VerticalAlignment="Center"
+                         Foreground="{DynamicResource ForegroundSecondary}"
+                         FontSize="{DynamicResource FontSizeCaption}"
+                         Margin="0,0,4,0" />
+              <ComboBox ItemsSource="{Binding TextEncodings}"
+                        SelectedItem="{Binding SelectedEncoding}"
+                        Width="160" FontSize="{DynamicResource FontSizeCaption}"
+                        VerticalAlignment="Center" Padding="4,1">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding DisplayName}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <CheckBox Content="Word wrap"
+                        IsChecked="{Binding TextWordWrap}"
+                        VerticalAlignment="Center"
+                        Margin="10,0,0,0" />
+            </StackPanel>
+          </Panel>
+          </Grid>
         </Border>
 
       </Grid>
