@@ -74,6 +74,21 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     public partial int SelectedTabIndex { get; set; }
 
+    // Index of the Compare tab in the advanced shell's TabControl (AdvancedShellView.axaml order).
+    private const int CompareTabIndex = 7;
+
+    // Leaving the Compare tab closes both compare panes: they hold memory-mapped handles —
+    // OS-level file locks — on the compared files, and a hidden tab must not keep user files
+    // locked. Fire-and-forget in house style; CloseAllAsync no-ops when nothing is loaded and
+    // waits out an in-flight compare before disposing.
+    partial void OnSelectedTabIndexChanged(int oldValue, int newValue)
+    {
+        if (oldValue == CompareTabIndex && newValue != CompareTabIndex)
+        {
+            _ = FileCompare.CloseAllAsync();
+        }
+    }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsAdvancedMode))]
     [NotifyPropertyChangedFor(nameof(IsBeginnerMode))]
@@ -93,6 +108,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnModeChanged(UserMode value)
     {
+        // Mode switching swaps the entire shell, hiding the Compare tab; release any files it
+        // holds open (see OnSelectedTabIndexChanged). Applies to external mode changes too,
+        // so it runs before the save-suppression check. No-ops during construction: the
+        // initial Mode assignment happens after the child VMs exist and nothing is loaded.
+        _ = FileCompare.CloseAllAsync();
+
         if (_applyingExternalModeChange)
         {
             return;

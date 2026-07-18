@@ -186,6 +186,32 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
     [RelayCommand]
     private Task CloseRightAsync() => ClosePaneAsync(false);
 
+    /// <summary>
+    /// Closes both panes, releasing the memory-mapped file handles and clearing all compare
+    /// state (paths, trees, properties, hex, diff). Invoked by the shell when the user
+    /// navigates away from the Compare tab or switches mode: the panes hold OS-level locks
+    /// on the compared files, and a hidden tab must not keep user files locked.
+    /// </summary>
+    public async Task CloseAllAsync()
+    {
+        if (LeftFilePath.Length == 0 && RightFilePath.Length == 0)
+        {
+            return;
+        }
+
+        // Stop the cancellable byte-diff immediately, then wait out any non-cancellable
+        // in-flight load/compare build: ClosePaneAsync disposes the pane sources, and
+        // disposing them under a running compare would fault its reads.
+        CancelDiff();
+        while (IsComparing)
+        {
+            await Task.Delay(50);
+        }
+
+        await ClosePaneAsync(isLeft: true);
+        await ClosePaneAsync(isLeft: false);
+    }
+
     private async Task ClosePaneAsync(bool isLeft)
     {
         CancelDiff();
