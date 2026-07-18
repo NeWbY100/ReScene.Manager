@@ -11,13 +11,26 @@
        DataTrigger is ported at the CELL level: DataGridCell's CellBorder Background and the cell
        ContentPresenter Foreground are both TemplateBound, so these setters render reliably. The cell's
        DataContext is the PropertyItem, so IsDifferent drives the tint. An indented "Property" name
-       keeps its own (local) secondary Foreground, overriding the inherited AccentError — matching WPF. -->
+       keeps its own (local) secondary Foreground, overriding the inherited AccentError — matching WPF.
+
+       The Foreground uses the two-key converter form: non-diff cells must resolve a REAL brush
+       (ForegroundPrimary), because an UnsetValue falls back to inherited Foreground, which does not
+       reliably reach the alternating tinted rows — they then render TextBlock's black default (the
+       same bug the Inspector grid had; see BoolToBrushConverter). The density/focus overrides mirror
+       the Inspector's approved treatment: caption-size text instead of Fluent's 15px cell default,
+       a compact row floor instead of MinHeight 32, and no white per-cell focus rectangle. -->
   <UserControl.Styles>
     <Style Selector="DataGrid.propertyGrid DataGridCell">
       <Setter Property="Background"
               Value="{Binding IsDifferent, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=DiffRowBackground}" />
       <Setter Property="Foreground"
-              Value="{Binding IsDifferent, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=AccentError}" />
+              Value="{Binding IsDifferent, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=AccentError|ForegroundPrimary}" />
+      <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
+      <Setter Property="MinHeight" Value="22" />
+      <Setter Property="Padding" Value="6,2" />
+    </Style>
+    <Style Selector="DataGrid.propertyGrid DataGridCell:focus /template/ Grid#FocusVisual">
+      <Setter Property="IsVisible" Value="False" />
     </Style>
   </UserControl.Styles>
 
