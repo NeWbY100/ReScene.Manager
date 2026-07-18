@@ -73,10 +73,12 @@ public Task<SRRCreationResult> CreateFromInputsAsync(
 
 All stored-file and volume names pass through one canonicalizer:
 
-- Source paths are resolved (`Path.GetFullPath`); with `storeRelativePaths`, every source MUST
-  resolve under `rootFolder` (also resolved) — anything outside → error result naming the file.
-  Symlinks/junctions are not followed out of the root (resolved path decides; a junction target
-  outside the root is outside the root).
+- Source paths are resolved to their FINAL path (`Path.GetFullPath` +
+  `FileSystemInfo.ResolveLinkTarget(returnFinalTarget: true)` when a link/junction is present);
+  with `storeRelativePaths`, every *input-file* source MUST resolve under `rootFolder` — anything
+  outside → error result naming the file. Explicit `StoredFileEntry` items carry their own logical
+  name and MAY have sources outside the root (generated artifacts live in a temp working dir, §3);
+  their logical names still pass separator/traversal/collision validation.
 - Logical name = resolved path relative to root, separators normalized to `/`. SFV volume entries
   are interpreted with both separator kinds, stripped of any drive/root or `..` segments — an
   entry that escapes the SFV's own directory → error result (malicious/malformed SFV).
@@ -136,42 +138,58 @@ music-extension entry (`.mp3/.flac/.mp2`, case-sensitive `endswith` like pyresce
 multi-entry RAR SFVs become main sets as in pyrescene. Zero SFVs after rescue → warning
 ("might be missing an SFV file") + RAR-only discovery (2e).
 
-**Excluded-SFV destinations** *(finding 2's destination question, from `generate_srr`)*: every
-excluded SFV (rules 1-6) goes to `SubtitleSfvs` — pyrescene treats ALL `extra_sfvs` as nested-SRR
-candidates — EXCEPT proof-linked SFVs (rule 4: SFV + its RAR → `StoredFiles`) and SFVs in a
-`dirfix` subdir (skipped entirely, warning). The nested-SRR pipeline itself (existing wizard
-step) also stores each subtitle SFV, preserving pyrescene's stored-SFV behavior.
+**Excluded-SFV destinations** *(finding 2's destination question, from `generate_srr`; rev 3 —
+new-2)*: every excluded SFV (rules 1-6) goes to `SubtitleSfvs` — pyrescene treats ALL
+`extra_sfvs` as nested-SRR candidates — EXCEPT proof-linked SFVs (rule 4: SFV + its RAR →
+`StoredFiles`) and SFVs in a `dirfix` subdir (skipped entirely, warning). Additionally, when the
+release name contains `subpack` or `subfix`, every MAIN SFV is ALSO queued for nested-SRR
+processing (the excerpt's final block). The nested-SRR pipeline itself (existing wizard step)
+also stores each subtitle SFV, preserving pyrescene's stored-SFV behavior.
 
-**2b. Music detection** *(finding 6)*: an SFV among the main-set candidates whose entries contain a
-music extension (`.mp3/.flac/.mp2`, pyrescene's case-sensitive `endswith`) → `MusicSfvs` +
-warning. **Mixed releases** (video sets AND music SFVs): video sets are created; music SFVs are
-reported unsupported; creation is NOT disabled. Only a release whose every candidate is music (or
-empty after rescue) disables folder-mode creation. Empty/corrupt SFVs → warning, stored-only.
+**2b. Music detection** *(finding 6; rev 3 — new-4)*: `has_music` runs ONLY in the zero-survivor
+rescue, exactly as the excerpt does — SFVs surviving 2a rules 1-7 are main sets even if they also
+list music files. In the rescue, music-entry SFVs (case-sensitive `.mp3/.flac/.mp2` `endswith`) →
+`MusicSfvs` + warning **[DIVERGENCE: pyrescene admits them as sets; Spec 2 restores that]**.
+Music-only after rescue → folder-mode Create disabled. Empty/corrupt SFVs → warning, stored-only
+**[DIVERGENCE: hardening — pyrescene lets parse failures propagate]**.
 
-**2c. Samples (`get_sample_files`, both phases)** *(finding 7)*: phase 1 — files with
-`FileType.VideoExtensions` = `.mp4 .m4v .avi .mkv .wmv .vob .m2ts .ts .mpeg .mpg .m2v .m2p`
-whose path contains `sample` (case-insensitive) or with a same-name `.sfv` sibling; phase 2 —
-remaining videos whose **basename appears in any SFV's entries** anywhere in the release.
+**2c. Samples (`get_sample_files`, both phases)** *(finding 7; rev 3 — new-10)*: phase 1 — files
+with `FileType.VideoExtensions` = `.mp4 .m4v .avi .mkv .wmv .vob .m2ts .ts .mpeg .mpg .m2v .m2p`
+whose path contains `sample` (case-insensitive), or where the literal `sample[:-4] + ".sfv"`
+sibling exists (pyrescene's exact slice — for extensions ≠ 3 chars, e.g. `.m2ts`/`.mpeg`, this
+tests a quirky name; the quirk is preserved and tested); phase 2 — remaining videos whose
+**basename appears case-sensitively in any SFV's entries** anywhere in the release.
 
-**2d. Stored files (`get_proof_files` chain, exact port)** *(findings 8, 9)*: every `*.nfo`;
-proof images: keyword-path images (path contains `proof`/`sample`/`cover`/`screenshots`/`compare`)
-are accepted **before** `always_skip` runs (a `Proof/Folder.jpg` IS stored — excerpt ordering);
-root images pass `always_skip` (exact predicates: space in basename, stem ending `folder`,
-basename containing `albumartsmall`, basename starting `albumart_{`) then `store_rls_root`
-(basename starting `00`/`01`/`001` → accept; else >100 KB AND similar-named to nfo/sfv/rars AND
-not a fixed-resolution cover → accept; else skip + warning). Independent pass
-`filter_proof_rar_files`: ANY `*.rar` under the root with `proof` in its path whose packed blocks
-include an image → stored. `strip_zeros`/`similar_to_good_name`/`fixed_resolution_cover` ported
-per the excerpt.
+**2d. Stored files (`generate_srr` consumption + `get_proof_files` chain, exact port)**
+*(findings 8, 9; rev 3 — new-1, new-6)*: `*.nfo` with pyrescene's filtering (skip `imdb.nfo`,
+`tvmaze.nfo`; `no.nfo` per the excerpt's condition); `*.m3u`; `*.log` with pyrescene's log filter;
+`*.cue`; pre-existing `*.srs` files; the conditional fix RAR the excerpt stores. NON-keyword
+images = ALL images outside keyword paths (not just root-level) run `always_skip` (exact
+predicates: space in basename, stem ending `folder`, basename containing `albumartsmall`,
+basename starting `albumart_{`) then `store_rls_root` (basename starting `00`/`01`/`001` →
+accept; else size **> 100000 bytes exactly** AND similar-named to nfo/sfv/rars AND not a
+fixed-resolution cover → accept; else skip + warning). Keyword-path images (path contains
+`proof`/`sample`/`cover`/`screenshots`/`compare`) are accepted **before** `always_skip` runs.
+The `more_images` CLI option is not exposed; its default-off behavior is what is ported.
+Independent pass `filter_proof_rar_files`: ANY `*.rar` under the root with `proof` in its path
+whose packed blocks include an image → stored. `strip_zeros`/`similar_to_good_name`/
+`fixed_resolution_cover` ported per the excerpt (including M3U-similarity).
 
-**2e. RAR-only discovery** *(finding 12)*: when no main-set SFVs exist, first-volume RARs
-(`.rar` not preceded by another volume of the same chain, via the existing lib volume-naming
-logic) found outside excluded dirs become `MainSets` entries (pyrescene `main_rars` path). Sets
+**2e. First-RAR handling** *(finding 12, rev 3)*: pyrescene's `get_start_rar_files` derives
+`main_rars` ONLY from the selected SFVs' entries — it never discovers loose RAR sets, and an SFV
+listing multiple chains contributes EVERY first RAR it references (one set input may carry
+multiple chains; the writer handles each chain — new-7, with test). Loose-RAR-folder discovery is
+therefore **[DIVERGENCE: extension]**, active only when zero SFVs exist anywhere under the root:
+first-volume RARs found outside dirs excluded by 2a rules 3-6 become `MainSets` entries. Sets
 found via SFV subsume their volumes (no double-discovery).
 
-**Ordering** *(finding 13)*: every collection in `ReleaseScanResult` is sorted by natural sort
-(numeric-aware ordinal-ignore-case) of the root-relative path. `Warnings` are sorted by the path
-they concern. This plus §1a's writer determinism makes output byte-stable.
+**Ordering** *(finding 13, rev 3)*: byte-order parity requires pyrescene's traversal order, not a
+natural sort. Every collection is ordered by a deterministic emulation of `os.walk` top-down
+traversal with ORDINAL case-sensitive sorting of directory and file names at each level, applied
+per category pass in pyrescene's `generate_srr` sequence (nfo → m3u → proof → log → cue → srs →
+sfvs/sets). Case-only distinct paths are therefore totally ordered (ordinal). The UI may *display*
+`DetectedSets` natural-sorted, but creation consumes traversal order. `Warnings` sort by concerned
+path (ordinal).
 
 **Error contract** *(finding 14)*: scanner I/O failures are per-item warnings (item classified
 stored-only when readable metadata suffices, otherwise skipped); enumeration failure of the root
@@ -195,11 +213,16 @@ itself → error result via a `Warnings`-only result with empty collections. The
   refines the existing blank-only convention). Default: `<releaseRoot parent>/<releaseRootName>.srr`
   built with `Path.Combine` on the normalized root (trailing separators trimmed; filesystem roots
   like `D:\` produce an error status instead of a name).
-- **Generated artifacts** *(finding 11)*: SRS and nested-SRR outputs mirror pyrescene's working-dir
-  layout — artifact logical name = root-relative source path with the extension swapped; when two
-  sources share a base name (e.g. `CD1/Sample/x.mkv`, `CD2/Sample/x.mkv` — or pyrescene's
-  `.mkv`/`.m2ts` case), the full source extension is kept (`x.mkv.srs`) exactly as the excerpt
-  does. Remaining logical-name collisions → per-item error, item skipped with warning.
+- **Generated artifacts** *(findings 10, 11; rev 3 — new-3)*: SRS and nested-SRR outputs are
+  produced in a TEMP working directory mirroring the root-relative layout (pyrescene's model) and
+  handed to the writer as explicit `StoredFileEntry` (source in temp, logical name root-relative —
+  permitted by §1a). Collision keying matches the excerpt exactly: by full relative STEM (same
+  stem in *different* directories is NOT a collision); only same-stem collisions keep the full
+  source extension (`x.mkv.srs`). One subtitle SFV may yield MULTIPLE nested SRRs (per the
+  excerpt's `create_srr_for_subs` returning a list). Excerpt edge behaviors ported: an
+  SRS-creation failure stores the failure `.txt` pyrescene writes; a RAR-backed `.vob` sample
+  produces a nested SRR. Cancellation deletes the temp working dir; artifacts never overwrite
+  user files (temp dir is exclusive per scan generation).
 - Creation (folder mode): `CreateFromInputsAsync(outputPath, DetectedSets paths in order,
   releaseRoot, storeRelativePaths: true, storedFiles, options, ct)`. File mode: unchanged.
 - `ISRRCreationService`/`SRRCreationService` gain the pass-through.
@@ -239,7 +262,7 @@ Both surfaces (Advanced `CreatorView.axaml`, wizard `CreateSRRWizardBody.axaml` 
 | Case | Behavior |
 |---|---|
 | Zero main sets, storable files exist (fix release) | Storage-only SRR (§1 zero-input mode) + warning. |
-| Nothing storable at all | Error status; Create disabled. |
+| Nothing storable at all | Header-only SRR (pyrescene parity — its header-only creation path); warning status. |
 | Music-only release | Error status naming Spec 2; Create disabled (folder mode). Mixed → §2b. |
 | SFV references a missing volume | Error result naming the file; no partial output; existing destination preserved. |
 | Non-first-volume `.rar` input | Error result (pyrescene `ValueError` parity). |
@@ -251,12 +274,15 @@ Both surfaces (Advanced `CreatorView.axaml`, wizard `CreateSRRWizardBody.axaml` 
 
 ## 6. Testing
 
-**Golden fixtures (non-circular oracle)** *(finding 16)*: a committed generator script
-(`ReScene.Lib/ReScene.Tests/TestData/multiset/generate-golden.py` + README) builds synthetic
-release trees (2-disc RAR sets via SRRTestDataBuilder-equivalent store-mode RARs + real SFVs +
-nfo + Sample/ + Subs/ + junk files) and runs the **local pyrescene**
-(`E:\git\extern\pyrescene\bin\pyrescene.py`) over them; the resulting `.srr` files are committed
-as golden fixtures. Lib tests assert OUR `CreateFromInputsAsync` output is **byte-identical** to
+**Golden fixtures (non-circular oracle)** *(finding 16; rev 3 — new-8)*: a committed generator
+script (`ReScene.Lib/ReScene.Tests/TestData/multiset/generate-golden.py` + README) builds
+synthetic release trees (2-disc RAR sets via SRRTestDataBuilder-equivalent store-mode RARs + real
+SFVs + nfo + Sample/ + Subs/ + junk files) and runs the **local pyrescene** over them. The README
+records the pyrescene git commit hash, Python version, exact command line, and options used;
+regeneration asserts the checkout matches that hash. "App-name normalized" is defined: before
+byte comparison, each SRR's header-block app-name field (and only it) is replaced by the fixed
+string `NORMALIZED`, via an independent minimal block-splitter in the test (documented offsets,
+not the production parser). The resulting `.srr` files are committed as golden fixtures. Lib tests assert OUR `CreateFromInputsAsync` output is **byte-identical** to
 the golden SRR for the same tree (app-name field normalized), which proves separators, stored
 names, volume names, and block order in one stroke. The existing pyrescene 2-CD fixture stays as
 a read-side regression anchor.
@@ -274,8 +300,12 @@ rescue fallback (multi-entry re-admission; music → `MusicSfvs`); mixed release
 phases (incl. differently-located SFV reference); `always_skip` exact predicates + keyword-dir
 bypass (`Proof/Folder.jpg` stored, root `Folder.jpg` skipped, `MyFolder.png` skipped,
 `AlbumArtLarge` NOT skipped, `AlbumArt_{...}` skipped); `store_rls_root` 00/01-prefix + size +
-similar-name + resolution branches; independent proof-RAR pass; RAR-only discovery; natural sort
-incl. `cd10 > cd2` and case-only names; per-item I/O warning; cancellation.
+similar-name + resolution branches (exact 100000-byte boundary; M3U-only similarity);
+non-singleton and no-packed-block proof SFVs; independent proof-RAR pass; multi-chain SFV (all
+first RARs retained); loose-RAR divergence gating; traversal ordering incl. case-only names;
+`sample[:-4]` quirk extensions; nfo filtering (`imdb.nfo`/`tvmaze.nfo`); m3u/log/cue/srs storage;
+subpack main-SFV nested processing; per-item I/O warning; cancellation (incl. temp-artifact
+cleanup).
 
 **VM:** stub-scanner population; generation guard (reverse completion order — old scan result
 discarded); `IsScanning` gates; auto vs user-edited output path across re-scans; music-only
