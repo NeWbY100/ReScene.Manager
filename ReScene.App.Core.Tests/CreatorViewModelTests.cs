@@ -598,4 +598,39 @@ public sealed class CreatorViewModelTests : IDisposable
         Assert.False(vm.BuildSucceeded);
         Assert.True(vm.AutoIncludeFiles);   // option defaults restored
     }
+
+    // ── Stored-file reordering ──────────────────────────────
+
+    /// <summary>
+    /// Move must be implemented as Remove+Insert, not ObservableCollection.Move: Avalonia's
+    /// DataGridCollectionView drops Move notifications, so a Move reorders the list without the
+    /// grid ever repainting. The remove clears the grid-bound selection, so the command must
+    /// restore it — otherwise the second click of a double-move lands on a null selection.
+    /// </summary>
+    [Fact]
+    public void MoveStoredFile_ReordersAndKeepsSelection()
+    {
+        CreatorViewModel vm = CreateVm(out _);
+        vm.AddStoredFiles([@"X:\r\a.nfo", @"X:\r\b.sfv", @"X:\r\c.jpg"]);
+
+        vm.SelectedStoredFile = vm.StoredFiles[2]; // c.jpg
+        vm.MoveStoredFileUpCommand.Execute(null);
+
+        Assert.Equal(["a.nfo", "c.jpg", "b.sfv"], vm.StoredFiles.Select(f => f.StoredName));
+        Assert.Same(vm.StoredFiles[1], vm.SelectedStoredFile);
+
+        vm.MoveStoredFileUpCommand.Execute(null);
+
+        Assert.Equal(["c.jpg", "a.nfo", "b.sfv"], vm.StoredFiles.Select(f => f.StoredName));
+        Assert.Same(vm.StoredFiles[0], vm.SelectedStoredFile);
+
+        // At the top: a further up-move is a no-op, selection intact.
+        vm.MoveStoredFileUpCommand.Execute(null);
+        Assert.Equal(["c.jpg", "a.nfo", "b.sfv"], vm.StoredFiles.Select(f => f.StoredName));
+        Assert.Same(vm.StoredFiles[0], vm.SelectedStoredFile);
+
+        vm.MoveStoredFileDownCommand.Execute(null);
+        Assert.Equal(["a.nfo", "c.jpg", "b.sfv"], vm.StoredFiles.Select(f => f.StoredName));
+        Assert.Same(vm.StoredFiles[1], vm.SelectedStoredFile);
+    }
 }

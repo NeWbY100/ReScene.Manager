@@ -549,19 +549,25 @@ public partial class CreatorViewModel : OperationViewModelBase
     /// </summary>
     private void MoveSelectedStoredFile(int offset)
     {
-        if (SelectedStoredFile is null)
+        if (SelectedStoredFile is not { } item)
         {
             return;
         }
 
-        int index = StoredFiles.IndexOf(SelectedStoredFile);
+        int index = StoredFiles.IndexOf(item);
         int target = index + offset;
         if (index < 0 || target < 0 || target >= StoredFiles.Count)
         {
             return;
         }
 
-        StoredFiles.Move(index, target);
+        // NOT ObservableCollection.Move: Avalonia's DataGridCollectionView.ProcessCollectionChanged
+        // handles Add/Remove/Replace/Reset but silently drops Move notifications, so a Move reorders
+        // the list without the grid ever repainting — the buttons look dead. Remove+Insert raises
+        // two events the view does handle; the removal clears the grid selection, so restore it.
+        StoredFiles.RemoveAt(index);
+        StoredFiles.Insert(target, item);
+        SelectedStoredFile = item;
     }
 
     /// <summary>
