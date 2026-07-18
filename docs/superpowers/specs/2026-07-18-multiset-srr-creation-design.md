@@ -191,8 +191,11 @@ found via SFV subsume their volumes (no double-discovery).
 filesystem-dependent and not reproducible in general. **[DIVERGENCE: determinism]** we order every
 collection by top-down traversal with ORDINAL case-sensitive sorting of directory and file names
 at each level, applied per category pass in pyrescene's `generate_srr` sequence (nfo → m3u →
-proof → log → cue → srs → sfvs/sets; excluded-SFV lists keep the same traversal order the
-all-SFV list had, mirroring the excerpt's list-comprehension subtraction). On NTFS — where the
+proof → log → cue → srs → sfvs/sets). Excluded-SFV order has NO parity target at all: the
+excerpt's `get_unwanted_sfvs` is `list(set(allsfvs) - set(wantedsfvs))` — a hash-dependent set
+difference, nondeterministic even across pyrescene runs — so our canonical traversal order for
+`SubtitleSfvs` is definitionally a **[DIVERGENCE: determinism]**, and each golden-fixture tree
+contains at most ONE excluded SFV so nested-SRR ordering can never differ from pyrescene's. On NTFS — where the
 golden fixtures are generated — directory enumeration is name-ordered, so the golden comparison
 holds in practice; on other filesystems pyrescene itself is nondeterministic and our order is the
 documented canonical one. UI may *display* `DetectedSets` natural-sorted; creation consumes
