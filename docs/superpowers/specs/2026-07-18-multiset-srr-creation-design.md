@@ -216,6 +216,24 @@ Both surfaces (Advanced `CreatorView.axaml`, wizard `CreateSRRWizardBody.axaml` 
   pre-populated lists; all existing add/remove/reorder controls keep working. Manual edits persist
   until the input changes (re-scan replaces collections).
 
+### 4a. Accessibility contract (from the codex accessibility addendum, proportionate scope)
+
+- **Naming:** the two browse buttons get distinct `AutomationProperties.Name` values ("Browse
+  input file", "Browse release folder"); the input box gets a `HelpText` stating it accepts a
+  file or release-folder path; the `DetectedSets` ItemsControl and each pre-populated list get
+  automation names including counts ("Detected RAR sets, 2 items").
+- **Status announcements:** scan start/finish/warnings/errors flow through the existing
+  `FieldStatusLine`/status text (already the app's live-status pattern); stale-generation results
+  are discarded before reaching it, so no stale announcements. Create-disabled reasons appear in
+  the same status text, not only as a disabled button.
+- **Keyboard & focus:** the path box is never disabled while focused (scan gating disables
+  Create, not the editor); focus returns to the invoking browse button after the native picker
+  closes; tab order is input box → browse file → browse folder → detected list → onward.
+- **Detected-sets list:** bounded height with vertical scrolling (never grows the window).
+- **Verification (Spec 1 scope):** automation names/help text asserted via the agent bridge
+  (`ava_props` on the live controls) and unit-level peer checks; full NVDA/Narrator/high-DPI/
+  contrast-theme lab passes are explicitly out of scope for Spec 1 and tracked as a follow-up.
+
 ## 5. Error handling
 
 | Case | Behavior |
