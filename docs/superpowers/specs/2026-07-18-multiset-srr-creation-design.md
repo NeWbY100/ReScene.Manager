@@ -73,10 +73,12 @@ public Task<SRRCreationResult> CreateFromInputsAsync(
 
 All stored-file and volume names pass through one canonicalizer:
 
-- Source paths are resolved to their FINAL path (`Path.GetFullPath` +
-  `FileSystemInfo.ResolveLinkTarget(returnFinalTarget: true)` when a link/junction is present);
-  with `storeRelativePaths`, every *input-file* source MUST resolve under `rootFolder` — anything
-  outside → error result naming the file. Explicit `StoredFileEntry` items carry their own logical
+- Containment is evaluated on **OS final paths** for BOTH `rootFolder` and each source — the
+  `GetFinalPathNameByHandle` semantics obtained by opening the file/directory and reading the
+  handle's final path (this resolves EVERY ancestor junction/symlink component, which
+  `FileSystemInfo.ResolveLinkTarget` alone does not: it returns null for a normal leaf beneath a
+  junction). With `storeRelativePaths`, every *input-file* final path MUST sit under the root's
+  final path — anything outside → error result naming the file. Explicit `StoredFileEntry` items carry their own logical
   name and MAY have sources outside the root (generated artifacts live in a temp working dir, §3);
   their logical names still pass separator/traversal/collision validation.
 - Logical name = resolved path relative to root, separators normalized to `/`. SFV volume entries
@@ -163,7 +165,9 @@ tests a quirky name; the quirk is preserved and tested); phase 2 — remaining v
 **2d. Stored files (`generate_srr` consumption + `get_proof_files` chain, exact port)**
 *(findings 8, 9; rev 3 — new-1, new-6)*: `*.nfo` with pyrescene's filtering (skip `imdb.nfo`,
 `tvmaze.nfo`; `no.nfo` per the excerpt's condition); `*.m3u`; `*.log` with pyrescene's log filter;
-`*.cue`; pre-existing `*.srs` files; the conditional fix RAR the excerpt stores. NON-keyword
+`*.cue`; pre-existing `*.srs` files — with the excerpt's precedence: a freshly GENERATED SRS for
+the same relative path supersedes a pre-existing one (single stored entry, no collision error);
+the conditional fix RAR the excerpt stores. NON-keyword
 images = ALL images outside keyword paths (not just root-level) run `always_skip` (exact
 predicates: space in basename, stem ending `folder`, basename containing `albumartsmall`,
 basename starting `albumart_{`) then `store_rls_root` (basename starting `00`/`01`/`001` →
@@ -183,17 +187,22 @@ therefore **[DIVERGENCE: extension]**, active only when zero SFVs exist anywhere
 first-volume RARs found outside dirs excluded by 2a rules 3-6 become `MainSets` entries. Sets
 found via SFV subsume their volumes (no double-discovery).
 
-**Ordering** *(finding 13, rev 3)*: byte-order parity requires pyrescene's traversal order, not a
-natural sort. Every collection is ordered by a deterministic emulation of `os.walk` top-down
-traversal with ORDINAL case-sensitive sorting of directory and file names at each level, applied
-per category pass in pyrescene's `generate_srr` sequence (nfo → m3u → proof → log → cue → srs →
-sfvs/sets). Case-only distinct paths are therefore totally ordered (ordinal). The UI may *display*
-`DetectedSets` natural-sorted, but creation consumes traversal order. `Warnings` sort by concerned
-path (ordinal).
+**Ordering** *(finding 13, rev 4)*: pyrescene's byte order is RAW `os.walk` enumeration —
+filesystem-dependent and not reproducible in general. **[DIVERGENCE: determinism]** we order every
+collection by top-down traversal with ORDINAL case-sensitive sorting of directory and file names
+at each level, applied per category pass in pyrescene's `generate_srr` sequence (nfo → m3u →
+proof → log → cue → srs → sfvs/sets; excluded-SFV lists keep the same traversal order the
+all-SFV list had, mirroring the excerpt's list-comprehension subtraction). On NTFS — where the
+golden fixtures are generated — directory enumeration is name-ordered, so the golden comparison
+holds in practice; on other filesystems pyrescene itself is nondeterministic and our order is the
+documented canonical one. UI may *display* `DetectedSets` natural-sorted; creation consumes
+traversal order. `Warnings` sort by concerned path (ordinal).
 
-**Error contract** *(finding 14)*: scanner I/O failures are per-item warnings (item classified
-stored-only when readable metadata suffices, otherwise skipped); enumeration failure of the root
-itself → error result via a `Warnings`-only result with empty collections. The scanner takes a
+**Error contract** *(finding 14; rev 4)*: **[DIVERGENCE: hardening]** scanner I/O failures are
+per-item warnings (item classified stored-only when readable metadata suffices, otherwise
+skipped) — the excerpt catches only selected exceptions (`TypeError` in walking, `ValueError` in
+RAR reading) and would crash on the rest; we degrade gracefully and say so per item. Enumeration
+failure of the root itself → error result via a `Warnings`-only result with empty collections. The scanner takes a
 `CancellationToken` and throws `OperationCanceledException` promptly.
 
 ## 3. App.Core — CreatorViewModel
