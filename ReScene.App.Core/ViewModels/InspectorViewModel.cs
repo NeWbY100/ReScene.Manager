@@ -53,6 +53,30 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
         }
     }
 
+    /// <summary>
+    /// Loads the file whose path was typed or pasted into the file box (bound to Enter there).
+    /// The box is editable so a path can be entered without the OS file dialog —
+    /// keyboard-friendly, and the only file-dialog-free load path automation can drive.
+    /// </summary>
+    [RelayCommand]
+    private async Task LoadFromPathAsync()
+    {
+        // Explorer's "Copy as path" wraps the path in quotes; trim them so a paste loads as-is.
+        string path = LoadedFilePath.Trim().Trim('"');
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        if (!File.Exists(path))
+        {
+            StatusMessage = $"File not found: {path}";
+            return;
+        }
+
+        await LoadFileAsync(path);
+    }
+
     private bool CanCloseFile() => HasFile;
 
     [RelayCommand(CanExecute = nameof(CanCloseFile))]

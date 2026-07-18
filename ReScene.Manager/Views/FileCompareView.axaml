@@ -64,10 +64,15 @@
                 Classes="ghost"
                 Margin="4,0,0,0"
                 Padding="8,4" />
+        <!-- Editable: type or paste a path and press Enter to load (no dialog needed). -->
         <TextBox x:Name="LeftFilePathTextBox"
                  Text="{Binding LeftFilePath}"
-                 IsReadOnly="True"
-                 FontSize="{DynamicResource FontSizeBody}" />
+                 Watermark="Type a path and press Enter, or Browse"
+                 FontSize="{DynamicResource FontSizeBody}">
+          <TextBox.KeyBindings>
+            <KeyBinding Gesture="Enter" Command="{Binding LoadLeftFromPathCommand}" />
+          </TextBox.KeyBindings>
+        </TextBox>
       </DockPanel>
 
       <!-- Swap button centered between sides -->
@@ -97,10 +102,15 @@
                 Classes="ghost"
                 Margin="4,0,0,0"
                 Padding="8,4" />
+        <!-- Editable: type or paste a path and press Enter to load (no dialog needed). -->
         <TextBox x:Name="RightFilePathTextBox"
                  Text="{Binding RightFilePath}"
-                 IsReadOnly="True"
-                 FontSize="{DynamicResource FontSizeBody}" />
+                 Watermark="Type a path and press Enter, or Browse"
+                 FontSize="{DynamicResource FontSizeBody}">
+          <TextBox.KeyBindings>
+            <KeyBinding Gesture="Enter" Command="{Binding LoadRightFromPathCommand}" />
+          </TextBox.KeyBindings>
+        </TextBox>
       </DockPanel>
     </Grid>
 

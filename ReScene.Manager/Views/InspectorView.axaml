@@ -47,10 +47,15 @@
                 Command="{Binding BrowseFileCommand}"
                 Classes="ghost"
                 Margin="4,0,0,0" MinWidth="75" />
+        <!-- Editable: type or paste a path and press Enter to load (no dialog needed). -->
         <TextBox x:Name="LoadedFilePathTextBox"
                  Text="{Binding LoadedFilePath}"
-                 IsReadOnly="True"
-                 FontSize="{DynamicResource FontSizeBody}" />
+                 Watermark="Type a path and press Enter, or Browse"
+                 FontSize="{DynamicResource FontSizeBody}">
+          <TextBox.KeyBindings>
+            <KeyBinding Gesture="Enter" Command="{Binding LoadFromPathCommand}" />
+          </TextBox.KeyBindings>
+        </TextBox>
       </DockPanel>
     </StackPanel>
 

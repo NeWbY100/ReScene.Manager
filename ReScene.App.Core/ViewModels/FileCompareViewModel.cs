@@ -215,6 +215,37 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
     }
 
     [RelayCommand]
+    private Task LoadLeftFromPathAsync() => LoadFromPathAsync(isLeft: true);
+
+    [RelayCommand]
+    private Task LoadRightFromPathAsync() => LoadFromPathAsync(isLeft: false);
+
+    /// <summary>
+    /// Loads the file whose path was typed or pasted into a pane's path box (bound to Enter
+    /// there). The box is editable so a path can be entered without the OS file dialog —
+    /// keyboard-friendly, and the only file-dialog-free load path automation can drive.
+    /// </summary>
+    private Task LoadFromPathAsync(bool isLeft)
+    {
+        // Explorer's "Copy as path" wraps the path in quotes; trim them so a paste loads as-is.
+        string path = (isLeft ? LeftFilePath : RightFilePath).Trim().Trim('"');
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return Task.CompletedTask;
+        }
+
+        // Guarded here rather than left to LoadFileAsync's catch: that path clears the pane and
+        // the typed text, which would throw away a path the user only mistyped one character of.
+        if (!File.Exists(path))
+        {
+            StatusMessage = $"File not found: {path}";
+            return Task.CompletedTask;
+        }
+
+        return LoadFileAsync(isLeft, path);
+    }
+
+    [RelayCommand]
     private Task SwapAsync() => RunBusyAsync(async () =>
     {
         CancelDiff();
