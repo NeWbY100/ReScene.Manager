@@ -32,3 +32,8 @@ Task 1 final re-review: peer reviewer Needs-more -- 1 Critical SFV latch escape
   (drop latch, per-component resolve via ApplyComponent; REQUIRED regression test
   ResolveSfvEntry_MissingPrefixThenLink_Throws; + 2 minors: split-both-separators, POSIX link test).
   Codex final re-review: still running (may add findings -> same fix round). Task 1 NOT closed.
+  Latch fix landed (lib 9205a93, outer 9b8bcf2): latch removed, per-component re-resolve;
+  new test fail-before/pass-after CONFIRMED; 31/31, 1331/1331, gate 0/0 -- all re-verified by lead.
+  Closing: peer re-review of latch fix dispatched; codex final review STILL RUNNING on the
+  pre-fix diff (base->314d392) -- when it returns, re-point at current base->9205a93 for the
+  definitive codex verdict. Task 1 closes only on both clean.
