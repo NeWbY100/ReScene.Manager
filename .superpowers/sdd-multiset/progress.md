@@ -17,3 +17,11 @@ Task 1: implemented (lib 579020b, outer 4f84565); task-review Spec PASS / Qualit
   Fix applied (lib 2eb04bf, outer dbdd33d): CA1032/CA1816 -- gate re-verified 0/0 by lead;
   fix re-review: Approved (no contract change, pure API addition, scope clean).
   Awaiting: codex diff verdict to close Task 1.
+
+Task 1: codex diff review REVISE -- 7 findings (2 Critical containment escapes), all REAL and
+  in the plan's verbatim code (plan-review approves structure, not deep code semantics; the peer
+  task-review also missed the symlink escape). Fix dispatched to impl-task1: centralized final-
+  path containment helper (symlink/junction escape #1/#2, root boundary math #3, long-path retry
+  + error capture #4, \?\UNC\ #5, host-independent grammar #6, POSIX+long+UNC+link tests #7).
+  Findings: .superpowers/sdd-multiset/task-1-codex-findings.txt. NOT closed until fix + both
+  re-reviews clean.
