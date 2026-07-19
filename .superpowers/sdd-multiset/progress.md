@@ -25,3 +25,10 @@ Task 1: codex diff review REVISE -- 7 findings (2 Critical containment escapes),
   + error capture #4, \?\UNC\ #5, host-independent grammar #6, POSIX+long+UNC+link tests #7).
   Findings: .superpowers/sdd-multiset/task-1-codex-findings.txt. NOT closed until fix + both
   re-reviews clean.
+
+Task 1 final re-review: peer reviewer Needs-more -- 1 Critical SFV latch escape
+  (ResolveExistingPrefixThenAppend one-way stillExisting latch: x/../J/evil bypasses containment
+  through an unresolved junction). CONFIRMED against code by lead. Fix re-dispatched to impl-task1
+  (drop latch, per-component resolve via ApplyComponent; REQUIRED regression test
+  ResolveSfvEntry_MissingPrefixThenLink_Throws; + 2 minors: split-both-separators, POSIX link test).
+  Codex final re-review: still running (may add findings -> same fix round). Task 1 NOT closed.
