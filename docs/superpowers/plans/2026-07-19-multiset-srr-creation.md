@@ -1,10 +1,10 @@
 # Multi-Set SRR Creation (Spec 1: Video Releases) Implementation Plan
 
-> **STATUS: r4 — codex r3 left 6 items (10/16 resolved); all 6 fixed: CreateJunction helper
-> defined, ResolveAncestorChain as real compiled member, Task 7 uses only the public lib
-> RarProofInspector, TraversalResult consumed correctly in tests and Task 5, prefix-matching
-> similarity fixtures + negative control, computed BASE commands, stub-first rule binding for
-> all tasks. Pending codex r4 re-review; execution on APPROVE per standing user approval.**
+> **STATUS: r5 — codex r4 left 4 items (f12/f18 resolved); all fixed: junction helper and
+> ResolveAncestorChain as real compiled code with GetFinalPath structure repaired, production
+> proof-reader test placed in Task 5's lib companion, 10-character-slice similarity fixtures
+> with boundary negative, Task 11 computes merge-base. Pending codex r5 re-review; execution on
+> APPROVE per standing user approval.**
 >
 > **Standing execution approval (user, 2026-07-19):** once codex APPROVEs this plan, execution
 > proceeds WITHOUT a further user gate, using the execution approach recommended jointly by the
@@ -160,18 +160,9 @@ public class SrrNameCanonicalizerTests : IDisposable
         Directory.CreateDirectory(target);
         File.WriteAllText(Path.Combine(target, "x.bin"), "x");
         string link = Path.Combine(_root, "J");
-        // NTFS JUNCTIONS need no privilege (unlike symlinks) — runs unconditionally
-        // (codex r2b f1; repo xUnit 2.9.3 has no Assert.Skip).
+        // NTFS JUNCTIONS need no privilege (unlike symlinks) — runs unconditionally on
+        // Windows (codex r2b f1 / r4 f1; xUnit 2.9.3 has no Assert.Skip, none needed).
         CreateJunction(link, target);
-        // Helper in this test class (codex r3 f1):
-        // private static void CreateJunction(string link, string target)
-        // {
-        //     var psi = new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
-        //     { CreateNoWindow = true, UseShellExecute = false };
-        //     using var proc = Process.Start(psi)!;
-        //     proc.WaitForExit();
-        //     Assert.Equal(0, proc.ExitCode); // junction creation must succeed — never skipped
-        // }
         try
         {
             string rootFinal = SrrNameCanonicalizer.GetFinalPath(_root);
@@ -209,6 +200,19 @@ public class SrrNameCanonicalizerTests : IDisposable
     [InlineData("a//b.nfo")]
     public void CanonicalizeLogicalName_Degenerate_Throws(string bad) =>
         Assert.Throws<SrrNameException>(() => SrrNameCanonicalizer.CanonicalizeLogicalName(bad));
+
+    private static void CreateJunction(string link, string target)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo(
+            "cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false,
+        };
+        using var proc = System.Diagnostics.Process.Start(psi)!;
+        proc.WaitForExit();
+        Assert.Equal(0, proc.ExitCode); // junction creation must succeed — never skipped
+    }
 
     [Fact]
     public void ResolveSfvEntry_BothSeparatorKinds_ResolveIdentically()
@@ -260,15 +264,24 @@ public static class SrrNameCanonicalizer
     {
         if (!OperatingSystem.IsWindows())
         {
-            // POSIX realpath equivalence requires resolving EVERY ancestor, not just the leaf
-            // (codex r1 f1): walk from the filesystem root down, resolving each existing
-            // component via ResolveLinkTarget(returnFinalTarget: true) before descending.
+            // POSIX realpath equivalence: resolve EVERY ancestor (codex r1 f1 / r4 f1).
             return ResolveAncestorChain(path);
         }
+
+        using SafeFileHandle handle = OpenForMetadata(path);
+        var buffer = new char[1024];
+        uint length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Length, 0);
+        if (length == 0 || length > buffer.Length)
+        {
+            throw new SrrNameException($"Cannot resolve final path: {path}");
+        }
+
+        string final = new(buffer, 0, (int)length);
+        return final.StartsWith(@"\\?\", StringComparison.Ordinal) ? final[4..] : final;
     }
 
-    // POSIX final-path: resolve EVERY ancestor component (codex r1 f1 / r3 f1 — real member,
-    // not commentary; compiled on all platforms, exercised on POSIX).
+    // POSIX final-path helper: resolves each existing component while walking down from
+    // the filesystem root (codex r1 f1 / r4 f1 — real compiled member).
     private static string ResolveAncestorChain(string path)
     {
         string full = Path.GetFullPath(path);
@@ -281,18 +294,8 @@ public static class SrrNameCanonicalizer
             FileSystemInfo resolved = info.ResolveLinkTarget(returnFinalTarget: true) ?? info;
             current = resolved.FullName;
         }
+
         return current;
-
-        using SafeFileHandle handle = OpenForMetadata(path);
-        var buffer = new char[1024];
-        uint length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Length, 0);
-        if (length == 0 || length > buffer.Length)
-        {
-            throw new SrrNameException($"Cannot resolve final path: {path}");
-        }
-
-        string final = new(buffer, 0, (int)length);
-        return final.StartsWith(@"\\?\", StringComparison.Ordinal) ? final[4..] : final;
     }
 
     public static string CanonicalizeRelative(string rootFinalPath, string sourcePath)
@@ -854,8 +857,10 @@ public static class ReleaseTraversal
   injectable seam with fact literals only. Rule 4 consumes
   `LastPackedIsImage` (last-block-wins), the independent proof-RAR pass consumes `AnyImage` —
   one seam serves both distinct predicates (codex r1 f3). Production reader implements it over
-  the lib `RARHeaderReader`; Task 7 adds one test routing a REAL fixture RAR (RarFixtures)
-  through the production reader so the seam is not a circular oracle.
+  the lib `RARHeaderReader`; the lib companion change in THIS task (Task 5) adds the ReScene.Tests test routing a REAL
+  fixture RAR (RarFixtures) through `RarProofInspector.Inspect` — the seam is not a circular
+  oracle and no cross-test-assembly reference exists (codex r4 f3); Task 7 only consumes the
+  already-tested public API.
 
 Implementation is the ordered decision tree of spec §2a — implement by transcribing the excerpt
 (`pyrescene-rules-excerpt.txt`, `remove_unwanted_sfvs` section) branch by branch IN ORDER, each
@@ -1042,10 +1047,11 @@ Rules (all excerpt-cited; `generate_srr` consumption + `get_proof_files` chain):
 | root `Folder.jpg`, `MyFolder.png`, `AlbumArtSmall.jpg`, `AlbumArt_{guid}_Large.jpg`, `has space.jpg` | all skipped (always_skip) |
 | root `AlbumArtLarge.jpg` 150KB similar-named | STORED (predicate is `albumartsmall` contains + `albumart_{` prefix only) |
 | root `00-cover.jpg` 5KB | stored (prefix accept, size irrelevant) |
-| sfv `grp-movie.sfv`, root image `grp-movie-front.jpg` 150KB | stored — image stem STARTS WITH the good stem `grp-movie` (excerpt `similar_to_good_name` prefix branch; non-keyword name, >100000 B, so no earlier rule masks it — codex r3 f13) |
-| nfo `00-grp-movie.nfo` (only good name), root image `grp-movie-front.jpg` 150KB | stored — good stem normalized by `strip_zeros` to `grp-movie` before the prefix compare; image itself not 00-prefixed |
-| only `grp-movie.m3u` present, root image `grp-movie-front.jpg` 150KB | stored (M3U-only similarity via same prefix branch) |
-| sfv `grp-movie.sfv`, root image `unrelated-shot.jpg` 150KB | skipped + warning (no predicate matches — negative control) |
+| sfv `grp-movienight.sfv` (stem 14 chars), root image `grp-movienight-front.jpg` 150KB | stored — `similar_to_good_name` compares TEN-character slices (excerpt), so the shared prefix must be >= 10 chars (codex r4 f13) |
+| nfo `00-grp-movienight.nfo` (only good name), root image `grp-movienight-front.jpg` 150KB | stored — good stem strip_zeros-normalized to `grp-movienight` before the 10-char compare |
+| only `grp-movienight.m3u`, root image `grp-movienight-front.jpg` 150KB | stored (M3U-only similarity, same 10-char branch) |
+| sfv `grp-movienight.sfv`, root image `unrelated-shot9.jpg` 150KB | skipped + warning (negative control) |
+| sfv `grp-movie.sfv` (stem 9 chars), root image `grp-movie-front.jpg` 150KB | SKIPPED — shared prefix under 10 chars fails the slice compare (boundary negative — codex r4 f13) |
 | root `big-cover.jpg` exactly 630x1200 px, similar-named, 150KB | skipped (fixed_resolution_cover) |
 | `rip.log` matching the excerpt's log blacklist | not stored; non-blacklisted `x.log` stored |
 | `no.nfo` sized per the excerpt's byte condition vs off-by-one | stored/skipped per exact excerpt predicate |
@@ -1232,9 +1238,10 @@ Markup contract (both surfaces, spec §4/§4a exactly):
 - [ ] **Step 3:** wizard surface: Beginner mode → Create an SRR → type folder on step 1 → steps
   2-3 pre-populated (bridge-verify list contents) → cancel (no creation needed twice).
 - [ ] **Step 4:** full gates: lib + App.Core + Manager suites, forced-rebuild gate 0/0.
-- [ ] **Step 5:** final whole-branch review: `scripts/review-package MERGE_BASE HEAD` + codex
-  whole-branch review (runner-script pattern, scoped prompt); dispatch ONE fix subagent for any
-  findings; re-verify; commit.
+- [ ] **Step 5:** final whole-branch review: `BASE=$(git merge-base main HEAD)`, then the
+  Execution Regime's review-package invocation with that `$BASE` (no placeholders — codex r4
+  f17) + codex whole-branch review (runner-script pattern, scoped prompt); dispatch ONE fix
+  subagent for the complete findings list; re-verify; commit.
 
 ## Execution Regime (binding)
 
