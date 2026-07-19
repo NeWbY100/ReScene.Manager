@@ -849,3 +849,432 @@ def generate_srr(reldir, working_dir, options, mthread):
 	def __init__(self, file_type, archived_file):
 		self.file_type = file_type
 		self.archived_file = archived_file
+
+== PINNED REFERENCE REVISION: 04da213cef6765ed98e0d1735683822a41ea0103 (2026-03-05) ==
+
+== bin/pyrescene.py lines 90-140 (rar_file_blacklist) ==
+rescene.subscribe(o)
+
+rescene.change_rescene_name_version("pyReScene Auto %s" % rescene.__version__)
+
+unrar_executable = None
+
+def rar_file_blacklist():
+	return [
+# these RARs contain cracked .exe files and are not wanted on srrdb.com
+"BEYOND.THE.FUTURE.FIX.THE.TIME.ARROWS.EBOOT.PATCH.100.JPN.PS3-N0DRM",
+"The.Raven.Legacy.of.a.Master.Thief.FIX-RELOADED",
+"CHAMPIONSHIP.MANAGER.2003.2004.UPDATE.V4.1.3.PATCH.FIX.CRACKED-DEViANCE",
+"CHAMPIONSHIP.MANAGER.2003.2004.UPDATE.V4.1.4.TIMER.FIX.CRACKED-DEViANCE",
+"CHROME.CRACK.FIX-DEViANCE",
+"F1.Racing.Championship.FIX.READ.NFO-HOTDOX",
+"Hunting_Unlimited_3_V1.1_NOCD_CRACK_NFOFIX-RVL",
+"LMA.Manager.2007.FiX-RELOADED",
+"MSC.PATRAN.V2001.R2A.FIX.FOR.RISE-TFL",
+"RUNAWAY.A.ROAD.ADVENTURE.FIX-DEViANCE",
+"Company.of.Heroes.Tales.of.Valor.FIX.GERMAN-0x0007",
+"Dishonored.GERMAN.FIX-0x0007",
+"OPERATION.FLASHPOINT.RESISTANCE.ADDON.FIX-DEViANCE",
+"Deus.Ex.Mankind.Divided.A.Criminal.Past.DLC.FIX-SKIDROW",
+# contains vobsubs
+"Bubble.Boy.DVDRip.DiVX.FIX-FIXRUS",
+"Herbie.Fully.Loaded.SUB.FIX-DiAMOND",
+# missing file main release
+"Super.Streetfighter.IV.SSFIV.Arcade.Edition.DLC.FIX.READNFO.XBOX360-MoNGoLS",
+"Arrested.Development.S02E07.FiX.DVDRip.XviD-SAPHiRE",
+"Friends.Trivia.Game.GERMAN.LAME.SITE.SCRIPTS.FIX-SiLENTGATE",
+"Warhammer.40000.Dawn.Of.War.Winter.Assault.GERMAN.CD2.LAME.SITE.SCRIPTS.FIX-SiLENTGATE",
+"Broken.Oath.1977.DVDRiP.XviD.DiRFiX-GREiD",
+"Abraham.Lincoln.Vs.Zombies.3D.2012.1080p.BluRay.RAR.FiX.x264-LiViDiTY",
+# TODO: never include .rar with .iso, .mkv file
+"Game.Of.Thrones.S3.D4.RAR.FIX.MULTiSUBS.COMPLETE.BLURAY-CLASSiC",
+"OPUS.Rocket.of.Whispers.RAR.FIX-TiNYiSO",
+		]
+
+def get_unrar():
+	"""Locate unrar executable only once"""
+	global unrar_executable
+	if not unrar_executable:
+		unrar_executable = locate_unrar()
+	return unrar_executable
+
+def unrar_is_available():
+	return os.path.isfile(os.path.abspath(get_unrar()))
+
+def can_create(always_yes, path):
+	retvalue = True
+	if not always_yes and os.path.isfile(path):
+
+== bin/pyrescene.py lines 300-440 (similar_to_good_name, fixed_resolution_cover, strip_zeros full) ==
+		# log and print the small files info too
+		msg = skip_tpl.format(
+			os.path.basename(proof),
+			rescene.utility.sep(os.path.getsize(proof)),
+			os.path.basename(reldir))
+		logging.info(msg)
+		print(msg)
+	return False
+
+def similar_to_good_name(lproof, rar_files, reldir):
+	basenames = collect_known_good_filenames(reldir, rar_files)
+	s = 10  # first X characters
+	p = os.path.basename(lproof)
+
+	# for music releases, NFOs not always start with 00
+	# while all the other files do (sfv, m3u, jpg, cue,...)
+	# e.g. Hmc_-_187_(UDR011)-VLS-1996-TR
+	for bn in basenames:
+		if (bn[:s].lower() == p[:s] or
+			strip_zeros(bn)[:s].lower() == strip_zeros(p)[:s]):
+			return True
+		else:
+			# checks possible group name before the extension
+			# e.g. Global_Underground_017_-_Danny_Tenaglia
+			# _(London)-2000-tronik
+			#   /gu_017_tracklisting-tronik.jpg
+			#   /00-global_underground_017_-_danny_tenaglia
+			#     _(london)-2000-tronik.sfv
+			#   /01_gu_017_-_london_(cd_1)-tronik.cue
+			grprls = bn.lower().split('-')[-1]
+			grpimg = os.path.splitext(lproof)[0].split('-')[-1]
+			if grprls == grpimg:
+				return True
+	return False
+
+def collect_known_good_filenames(reldir, rar_files):
+	# grab all interesting extensions
+	checklist = (get_files(reldir, "*.sfv") + get_files(reldir, "*.nfo") +
+				 get_files(reldir, "*.m3u") + rar_files)
+	return (os.path.basename(good_name)[:-4] for good_name in checklist)
+
+def filter_proof_rar_files(rar_files):
+	include_in_srr = []
+	for proof in rar_files:
+		# RAR file must contain image file
+		# Space.Dogs.3D.2010.GERMAN.1080p.BLURAY.x264-HDViSiON (bmp proof)
+		if "proof" in proof.lower() and has_stored_proof_ext(proof):
+			include_in_srr.append(proof)
+	return include_in_srr
+
+def has_stored_proof_ext(proof_rarfile):
+	try:
+		for block in RarReader(proof_rarfile):
+			if (block.rawtype == BlockType.RarPackedFile and
+				block.file_name[-4:].lower() in PROOF_IMAGE_EXTS):
+					return True
+	except ValueError as e:
+		# No RAR5 support yet
+		logging.warning("{0}: {1}".format(str(e), proof_rarfile))
+
+	return False
+
+def strip_zeros(file_name):
+	"""Sometimes the covers don't have the same leading characters as
+	the .nfo and .sfv file. In this case the .nfo file is most likely
+	renamed too. e.g. Gentleman-Runaway-EP-2003-TLT"""
+	if file_name.startswith(("00-", "00_", "01-", "01_")):
+		return file_name[3:]
+	elif file_name.startswith(("000-", "000_", "001-", "001_")):
+		return file_name[4:]
+	elif file_name.startswith(("0000-", "0000_", "0001-", "0001_")):
+		return file_name[5:]
+	else:
+		return file_name
+	
+def fixed_resolution_cover(root_image):
+	"""Cut off movie poster image most likely added by a site script"""
+	try:
+		width, height = get_image_size(root_image)
+		return width == 630 and height == 1200
+	except TypeError:
+		return False;
+
+# image resolution check from https://stackoverflow.com/a/39778771/654160
+def test_jpeg(h, _f):
+	# SOI APP2 + ICC_PROFILE
+	if h[0:4] == b"\xff\xd8\xff\xe2" and h[6:17] == b"ICC_PROFILE":
+		return "jpeg"
+	# SOI APP14 + Adobe
+	if h[0:4] == b"\xff\xd8\xff\xee" and h[6:11] == b"Adobe":
+		return "jpeg"
+	# SOI DQT
+	if h[0:4] == "\xff\xd8\xff\xdb":
+		return "jpeg"
+imghdr.tests.append(test_jpeg)
+
+def get_image_size(fname):
+	"""Determine the image type of fhandle and return its size. from draco"""
+	with open(fname, "rb") as fhandle:
+		head = fhandle.read(24)
+		if len(head) != 24:
+			return
+		what = imghdr.what(None, head)
+		if what == "png":
+			check = struct.unpack(">i", head[4:8])[0]
+			if check != 0x0d0a1a0a:
+				return
+			width, height = struct.unpack(">ii", head[16:24])
+		elif what == "gif":
+			width, height = struct.unpack("<HH", head[6:10])
+		elif what == "jpeg":
+			try:
+				fhandle.seek(0)  # Read 0xff next
+				size = 2
+				ftype = 0
+				while not 0xc0 <= ftype <= 0xcf or ftype in (0xc4, 0xc8, 0xcc):
+					fhandle.seek(size, 1)
+					byte = fhandle.read(1)
+					while ord(byte) == 0xff:
+						byte = fhandle.read(1)
+					ftype = ord(byte)
+					size = struct.unpack(">H", fhandle.read(2))[0] - 2
+				# We are at a SOFn block
+				fhandle.seek(1, 1)  # Skip `precision" byte.
+				height, width = struct.unpack(">HH", fhandle.read(4))
+			except Exception:  #IGNORE:W0703
+				return
+		else:
+			return
+		return width, height
+
+def remove_unwanted_sfvs(sfv_list, release_dir):
+	"""
+	Remove SFVs from subs and certain rarred proof files.
+	"""
+	wanted_sfvs = []
+	lcrelease_name = os.path.basename(release_dir).lower()
+	for sfv in sfv_list:
+		sfv_name = os.path.basename(sfv)
+
+		# Not for actual subpack releases:
+
+== bin/pyrescene.py lines 645-780 (is_storable_fix, create_srr_for_subs full) ==
+
+def key_sort_music_files(name):
+	# nfo files at the top
+	if name[-4:].lower() == ".nfo":
+		return "-"
+	else:
+		return name
+
+def is_storable_fix(release_name):
+	"""Tests if we can store the main RAR file of this release."""
+	# Rules.of.Engagement.S02E03.Mr.Fix.It.DVDRip.XviD-SAiNTS
+	# Ron.White.You.Cant.Fix.Stupid.XviD-LMG
+	# not: Rar|sub|audio|sample|
+	return (re.match(
+			r".*(SFV|PPF|sync|proof?|dir|nfo|Interleaving|Trackorder).?"
+			r"(Fix|Patch).*", release_name, re.IGNORECASE) or
+			re.match(r".*\.(FiX|FIX)(\.|-).*", release_name) or
+			re.match(r".*\.DVDR.Fix-.*", release_name) or
+			re.match(r".*\.DVDR.REPACK.Fix-.*", release_name))
+
+def create_srr_for_subs(unrar, sfv, working_dir, release_dir):
+	"""
+	unrar: location to the unrar executable
+	sfv: the sfv file from the vobsubs
+	working_dir: our current working directory
+		where the generated SRR file will be placed
+	release_dir: used to determine in which subfolders the resulting SRR
+		file should be placed in the working_dir
+	
+	return: list of SRR files to add to the main SRR
+	"""
+	# replicate subdirs from the release folder
+	path = os.path.relpath(sfv, release_dir)
+	dest_file = os.path.join(working_dir, path)
+	try:
+		# try to create only the path without SFV/RAR file part
+		os.makedirs(os.path.dirname(dest_file))
+	except:
+		pass  # the path already exists
+
+	idx_lang = os.path.join(working_dir, "languages.diz")
+
+	# recursively create SRR and extract RARs
+	def extract_and_create_srr(folder, srr_out=None, first_rars=None):
+		"""
+		folder: working dir location for .srr output
+		srr_out: location and name of the .srr file to create (first step only)
+		first_rars: the first .rar files from the .sfv
+		"""
+		# find first RAR files in folder
+		if first_rars:
+			first_level = True  # RARS not somewhere in the temp folder
+		else:
+			first_rars = rescene.utility.first_rars(os.listdir(folder))
+			first_rars = [os.path.join(folder, x) for x in first_rars]
+			first_level = False
+		if not len(first_rars):
+			return []
+		if not os.path.isdir(folder):
+			# create the missing folder
+			head, tail = os.path.split(folder)
+			if os.name == "nt" and win32api_available:
+				head = win32api.GetShortPathName(head)
+			try:
+				os.mkdir(os.path.join(head, tail))
+			except OSError:
+				pass
+
+		result = []
+
+		for fr in first_rars:
+			srr_files_to_store = []
+
+			# dest srr name
+			new_srr = os.path.join(folder, os.path.basename(fr)[:-4]) + ".srr"
+
+			# use a short random name for the folder
+			random_subfolder = (hex(hash(fr)))[-3:]
+			dest = os.path.join(folder, random_subfolder)
+			counter = 1
+			while os.path.exists(dest):
+				# for the very rare cases it exists (hash collision)
+				dest = os.path.join(folder, str(counter))
+				counter += 1
+			mk_long_dir(dest)
+
+			if not os.path.isdir(dest):
+				# otherwise unrar will still extract the files,
+				# but it'll put them in the source folder
+				# this is never wanted (especially for RAR Subs/ folder!)
+				logging.error("Failed to create temp folder for vobsubs: {0}"
+				              .format(dest))
+				continue
+
+			# extract archives
+			success = extract_rar(unrar, fr, dest)
+			if not success:  # probably too long paths issue
+				logging.error("Failed to unrar vobsubs: {0}".format(fr))
+				continue
+
+			# search for idx files and store their language info
+			for efile in sorted(os.listdir(dest)):
+				if efile[-4:].lower() == ".idx":
+					language_lines = []
+					with open(os.path.join(dest, efile), "rb") as idx:
+						for line in idx:
+							if line.startswith(b"id: "):
+								language_lines.append(line)
+					with open(idx_lang, "ab") as diz:
+						line = "# %s\n" % fsunicode(efile)
+						line = line.encode("utf-8", "replace")
+						diz.write(line)
+						for line in language_lines:
+							diz.write(line)
+
+			# recursive step for each of the archives
+			for srr in extract_and_create_srr(dest):
+				srr_files_to_store.append(srr)
+
+			if first_level:
+				# at same level as SFV (in main SRR), (in temp folder)
+				# not in extract folder to prevent possible collisions too
+				srr = srr_out  # RAR/SFV without extension
+
+				# only possible for main vobsub set from SFV with multiple RARs
+				# Asterix.and.Obelix.Mission.Cleopatra.2002.DVDRip.XviD-AEN
+				if srr_out and len(first_rars) > 1:
+					# There will be only one root .srr file normally.
+					# This could give problems: make one for each set.
+					spath = os.path.dirname(srr_out)
+					fname = os.path.basename(new_srr)
+					srr = os.path.join(spath, fname)
+			else:
+				srr = new_srr
+			# create SRRs and add SRRs from previous steps
+			tmp_srr_name = create_temp_file_name(srr)
+
+== bin/pyrescene.py lines 1170-1260 (generate_srr tail: final SFV copy/reordering, srr assembly) ==
+	copied_sfvs = []  # SFVs in the working dir
+	for sfv in sfvs:
+		copied_sfvs.append(copy_to_working_dir(working_dir, reldir, sfv))
+
+	# add RAR sfv files at the bottom
+	rarsfv = []
+	for sfv in sfvs:
+		handled = False
+		for msfv in main_sfvs:
+			if sfv == msfv:
+				handled = True
+				rarsfv.append(copied_sfvs[sfvs.index(sfv)])
+		if not handled:
+			copied_files.append(copied_sfvs[sfvs.index(sfv)])
+	for sfv in rarsfv:
+		copied_files.append(sfv)
+
+	if is_music:
+		# sort files on filename, but nfo file first
+		copied_files.sort(key=key_sort_music_files)
+
+		# don't add files that fail sfv
+		crclist = {}
+		for sfv in sfvs:
+			for sfvf in rescene.utility.parse_sfv_file(sfv)[0]:
+				crclist[sfvf.file_name.lower()] = sfvf.crc32
+
+		to_remove = []
+		for stored_file in copied_files:
+			if stored_file[-4:].lower() == ".srs":
+				try:
+					sample = sample_class_factory(
+						file_type_info(stored_file).file_type)
+					srs_data, _tracks = sample.load_srs(stored_file)
+					# accept SRS if it isn't in the SFV
+					crc = int(crclist.get(srs_data.name.lower(), "-1"), 16)
+					if srs_data.crc32 != crc and crc != -1:
+						to_remove.append(stored_file)
+						logging.critical("%s: SFV verification failed for %s."
+										% (reldir, srs_data.name))
+				except Exception:
+					# previously: for FLAC with ID3 tags (always ok now?)
+					# now: to prevent failure of srr creation due to bugs
+					logging.critical("%s: Couldn't load srs data of %s." %
+						             (reldir, os.path.basename(stored_file)))
+					to_remove.append(stored_file)
+
+		for removed_file in to_remove:
+			copied_files.remove(removed_file)
+	else:
+		# put vobsub SRRs and proof RARs above their SFV file in the list
+		to_move = []
+		for cfile in copied_files:
+			if (cfile[-4:].lower() in (".srr", ".rar") and
+				cfile[:-4].lower() + ".sfv" in
+				[x.lower() for x in copied_files]):
+				to_move.append(cfile)
+		for move in to_move:
+			copied_files.remove(move)
+			index = [x.lower() for x in copied_files
+			        ].index(move[:-4].lower() + ".sfv")
+			copied_files.insert(index, move)
+
+	# apply exclude list
+	for cfile in copied_files[:]:
+		if os.path.basename(cfile) in options.skip_list:
+			print("Skipped over stored file: %s" % os.path.basename(cfile))
+			copied_files.remove(cfile)
+		if options.skip_regex:
+			retestpath = os.path.relpath(cfile, working_dir)
+			if skipre.match(retestpath):
+				copied_files.remove(cfile)
+				print("Skipped over stored file: %s" % os.path.basename(cfile))
+
+	# some of copied_files can not exist
+	# this can be the case when the disk isn't readable
+	rescene.add_stored_files(
+		tmp_srr_name, copied_files, working_dir, True, False)
+	replace_result(tmp_srr_name, srr)
+
+	try:
+		empty_folder(working_dir)
+	except OSError as oserr:
+		mthread.wait_for_output()
+		print("Could not empty temporary working directory:")
+		print(working_dir)
+		print("This is a know problem for PyPy users.")
+		print("(And sadly others too, but less often.)")
+		# TODO: sure this isn't because of left open file handles?
+		# extracted files had read only attributes. fixed everywhere?
+		if _DEBUG:
