@@ -1,8 +1,10 @@
 # Multi-Set SRR Creation (Spec 1: Video Releases) Implementation Plan
 
-> **STATUS: r3 — all 16 open codex r2b findings resolved by coherent region rewrites (see
-> `codex r2b f<N>` markers); excerpt completed to 1564 lines incl. full create_srr_for_subs and
-> first-rar rules. Pending codex r3 re-review; execution on APPROVE per standing user approval.**
+> **STATUS: r4 — codex r3 left 6 items (10/16 resolved); all 6 fixed: CreateJunction helper
+> defined, ResolveAncestorChain as real compiled member, Task 7 uses only the public lib
+> RarProofInspector, TraversalResult consumed correctly in tests and Task 5, prefix-matching
+> similarity fixtures + negative control, computed BASE commands, stub-first rule binding for
+> all tasks. Pending codex r4 re-review; execution on APPROVE per standing user approval.**
 >
 > **Standing execution approval (user, 2026-07-19):** once codex APPROVEs this plan, execution
 > proceeds WITHOUT a further user gate, using the execution approach recommended jointly by the
@@ -42,10 +44,12 @@ create_srr_for_subs, and the generate_srr tail; pyrescene PINNED at
   consolidated fix/re-review loop covering the task reviewer AND a codex diff review; ledger is
   `.superpowers/sdd-multiset/progress.md`; implementer dispatches for Tasks 2-7 and 9 include the
   spec + full excerpt paths as required reading.
-- RED discipline (codex r1 f18): each task first adds COMPILING stubs (types/methods throwing
-  NotImplementedException) so the recorded RED shows assertion-level failures per contract row,
-  not compile errors; then targeted GREEN; then the full suite. Record all three outputs in the
-  task report.
+- RED discipline (codex r1 f18 / r3 f18, BINDING FOR EVERY TASK 1-11 whether or not an explicit
+  'Step 1b' appears in its step list): before the recorded RED run, add COMPILING stubs for every
+  new type/member the task introduces (throwing NotImplementedException) and any new test fixture
+  helpers, so RED shows assertion-level failures per contract row — never compile errors. Then
+  targeted GREEN; then the full suite. Record all three outputs in the task report. Implementer
+  dispatches MUST restate this rule.
 
 ## Task List (locked)
 
@@ -156,10 +160,18 @@ public class SrrNameCanonicalizerTests : IDisposable
         Directory.CreateDirectory(target);
         File.WriteAllText(Path.Combine(target, "x.bin"), "x");
         string link = Path.Combine(_root, "J");
-        // NTFS JUNCTIONS need no privilege (unlike symlinks) — the test runs unconditionally
-        // (codex r2b f1; repo xUnit 2.9.3 has no Assert.Skip). Helper shells out:
-        //   cmd /c mklink /J "<link>" "<target>"
+        // NTFS JUNCTIONS need no privilege (unlike symlinks) — runs unconditionally
+        // (codex r2b f1; repo xUnit 2.9.3 has no Assert.Skip).
         CreateJunction(link, target);
+        // Helper in this test class (codex r3 f1):
+        // private static void CreateJunction(string link, string target)
+        // {
+        //     var psi = new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
+        //     { CreateNoWindow = true, UseShellExecute = false };
+        //     using var proc = Process.Start(psi)!;
+        //     proc.WaitForExit();
+        //     Assert.Equal(0, proc.ExitCode); // junction creation must succeed — never skipped
+        // }
         try
         {
             string rootFinal = SrrNameCanonicalizer.GetFinalPath(_root);
@@ -253,22 +265,23 @@ public static class SrrNameCanonicalizer
             // component via ResolveLinkTarget(returnFinalTarget: true) before descending.
             return ResolveAncestorChain(path);
         }
+    }
 
-        /* POSIX helper (same class):
-        private static string ResolveAncestorChain(string path)
+    // POSIX final-path: resolve EVERY ancestor component (codex r1 f1 / r3 f1 — real member,
+    // not commentary; compiled on all platforms, exercised on POSIX).
+    private static string ResolveAncestorChain(string path)
+    {
+        string full = Path.GetFullPath(path);
+        string current = Path.GetPathRoot(full)!;
+        foreach (string seg in Path.GetRelativePath(current, full).Split(Path.DirectorySeparatorChar))
         {
-            string full = Path.GetFullPath(path);
-            string current = Path.GetPathRoot(full)!;
-            foreach (string seg in Path.GetRelativePath(current, full).Split(Path.DirectorySeparatorChar))
-            {
-                current = Path.Combine(current, seg);
-                FileSystemInfo info = Directory.Exists(current)
-                    ? new DirectoryInfo(current) : new FileInfo(current);
-                FileSystemInfo resolved = info.ResolveLinkTarget(returnFinalTarget: true) ?? info;
-                current = resolved.FullName;
-            }
-            return current;
-        } */
+            current = Path.Combine(current, seg);
+            FileSystemInfo info = Directory.Exists(current)
+                ? new DirectoryInfo(current) : new FileInfo(current);
+            FileSystemInfo resolved = info.ResolveLinkTarget(returnFinalTarget: true) ?? info;
+            current = resolved.FullName;
+        }
+        return current;
 
         using SafeFileHandle handle = OpenForMetadata(path);
         var buffer = new char[1024];
@@ -715,7 +728,7 @@ public class ReleaseTraversalTests : TempDirTestBase
         Make("CD10", "z.sfv");    // ordinal: "CD10" < "CD2" (char '1' < '2')
         Make("CD2", "sub", "q.txt");
 
-        var files = ReleaseTraversal.EnumerateFiles(TempDir)
+        var files = ReleaseTraversal.EnumerateFiles(TempDir).Files
             .Select(f => Path.GetRelativePath(TempDir, f).Replace('\\', '/'))
             .ToList();
 
@@ -727,7 +740,7 @@ public class ReleaseTraversalTests : TempDirTestBase
     {
         Make("a.nfo");
         Make("A.nfo1");           // distinct names differing in case sort deterministically
-        var files = ReleaseTraversal.EnumerateFiles(TempDir).Select(Path.GetFileName).ToList();
+        var files = ReleaseTraversal.EnumerateFiles(TempDir).Files.Select(Path.GetFileName).ToList();
         Assert.Equal(["A.nfo1", "a.nfo"], files);
     }
 
@@ -737,7 +750,7 @@ public class ReleaseTraversalTests : TempDirTestBase
         Make("CD2", "b.SFV");
         Make("CD1", "a.sfv");
         Make("CD1", "x.nfo");
-        var all = ReleaseTraversal.EnumerateFiles(TempDir);
+        var all = ReleaseTraversal.EnumerateFiles(TempDir).Files;
         var sfvs = ReleaseTraversal.FilterByExtension(all, ".sfv")
             .Select(f => Path.GetFileName(f)).ToList();
         Assert.Equal(["a.sfv", "b.SFV"], sfvs);
@@ -890,17 +903,22 @@ display/logical hints; the WRITER re-canonicalizes with final paths at §1a stri
 public ReleaseScanResult Scan(string releaseRoot, CancellationToken ct = default)
 {
     ct.ThrowIfCancellationRequested();
-    IReadOnlyList<string> all;
-    try { all = ReleaseTraversal.EnumerateFiles(releaseRoot); }
-    catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-    { return ReleaseScanResult.RootError(releaseRoot, e.Message); }
+    TraversalResult traversal = ReleaseTraversal.EnumerateFiles(releaseRoot, ct);
+    if (traversal.RootFailed)
+    {
+        return ReleaseScanResult.RootError(releaseRoot, traversal.Issues[0].Message);
+    }
+
+    IReadOnlyList<string> all = traversal.Files;
+    var warnings = new List<string>(
+        traversal.Issues.Select(i => $"Unreadable: {i.Path} ({i.Message})")); // codex r3 f12
 
     string releaseName = Path.GetFileName(Path.TrimEndingDirectorySeparator(releaseRoot));
     string lcRelease = releaseName.ToLowerInvariant();
     var sfvs = ReleaseTraversal.FilterByExtension(all, ".sfv");
 
     var main = new List<string>(); var subs = new List<string>();
-    var stored = new List<string>(); var warnings = new List<string>();
+    var stored = new List<string>(); // warnings list created above from traversal issues
 
     foreach (string sfv in sfvs)
     {
@@ -974,7 +992,8 @@ Rules (each excerpt-cited in code):
 
 **Files:**
 - Modify: `ReScene.App.Core/Services/ReleaseScanner.cs`
-- Modify: `ReScene.App.Core/Services/ProofRarFacts.cs` usage (created in Task 5)
+- Consume: `ReScene.RAR.RarProofInspector` / `ProofRarFacts` (PUBLIC lib API from Task 5's lib
+  companion change — nothing App.Core-local; codex r3 f3)
 - Test: `ReScene.App.Core.Tests/ReleaseScannerStoredTests.cs`
 
 **Interfaces:**
@@ -1010,8 +1029,8 @@ Rules (all excerpt-cited; `generate_srr` consumption + `get_proof_files` chain):
   dimension list) → stored; else skip + warning (size logged like pyrescene).
 - Proof RARs (independent pass): every `*.rar` whose path contains `proof` (case-insensitive) and
   whose packed blocks include an image ext (via the Task 5 injectable `proofRarReader`;
-  production impl uses lib `RARHeaderReader`, `ValueError`-equivalent → warning + not stored) →
-  stored. Conditional fix RAR: transcribe the excerpt's fix-RAR storage condition.
+  production delegate = `RarProofInspector.Inspect` — the PUBLIC lib API; unreadable →
+  warning + not stored) → stored. Conditional fix RAR: transcribe the excerpt's fix-RAR storage condition.
 
 - [ ] **Step 1: failing tests** — `ReleaseScannerStoredTests.cs` matrix:
 
@@ -1023,9 +1042,10 @@ Rules (all excerpt-cited; `generate_srr` consumption + `get_proof_files` chain):
 | root `Folder.jpg`, `MyFolder.png`, `AlbumArtSmall.jpg`, `AlbumArt_{guid}_Large.jpg`, `has space.jpg` | all skipped (always_skip) |
 | root `AlbumArtLarge.jpg` 150KB similar-named | STORED (predicate is `albumartsmall` contains + `albumart_{` prefix only) |
 | root `00-cover.jpg` 5KB | stored (prefix accept, size irrelevant) |
-| root `grp-movie.jpg` 150KB, sfv named `grp-movie.sfv` | stored (true stem-prefix similarity; non-keyword name so the branch is exercised — codex r2b f13) |
-| nfo named `00-grp.nfo`, root image `grp-front.jpg` 150KB | stored (similarity via strip_zeros-normalized good name; the IMAGE is not 00-prefixed so prefix-accept cannot short-circuit) |
-| root `grp-movie.jpg` 150KB, only `grp-movie.m3u` present | stored (M3U-only similarity) |
+| sfv `grp-movie.sfv`, root image `grp-movie-front.jpg` 150KB | stored — image stem STARTS WITH the good stem `grp-movie` (excerpt `similar_to_good_name` prefix branch; non-keyword name, >100000 B, so no earlier rule masks it — codex r3 f13) |
+| nfo `00-grp-movie.nfo` (only good name), root image `grp-movie-front.jpg` 150KB | stored — good stem normalized by `strip_zeros` to `grp-movie` before the prefix compare; image itself not 00-prefixed |
+| only `grp-movie.m3u` present, root image `grp-movie-front.jpg` 150KB | stored (M3U-only similarity via same prefix branch) |
+| sfv `grp-movie.sfv`, root image `unrelated-shot.jpg` 150KB | skipped + warning (no predicate matches — negative control) |
 | root `big-cover.jpg` exactly 630x1200 px, similar-named, 150KB | skipped (fixed_resolution_cover) |
 | `rip.log` matching the excerpt's log blacklist | not stored; non-blacklisted `x.log` stored |
 | `no.nfo` sized per the excerpt's byte condition vs off-by-one | stored/skipped per exact excerpt predicate |
@@ -1221,12 +1241,15 @@ Markup contract (both surfaces, spec §4/§4a exactly):
 Per the standing approval in the header: subagent-driven development
 (superpowers:subagent-driven-development), fresh implementer per task, task-reviewer per task,
 PLUS a codex diff review per task (runner-script pattern with fidelity-scoped prompts; the
-scanner tasks' prompts must point codex at the excerpt file). Ledger: `.superpowers/sdd-multiset/progress.md` (plan-specific — codex r1 f17). review-package invocation (script verified to exist 2026-07-19):
-`bash "$HOME/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/review-package" BASE HEAD`
+scanner tasks' prompts must point codex at the excerpt file). Ledger: `.superpowers/sdd-multiset/progress.md` (plan-specific — codex r1 f17). review-package invocation (script verified to exist 2026-07-19); BASE is COMPUTED, never a
+placeholder (codex r3 f17): per task, `BASE=$(git rev-parse HEAD)` recorded IMMEDIATELY BEFORE
+dispatching that task's implementer; for the Task 11 whole-branch review,
+`BASE=$(git merge-base main HEAD)`. Then:
+`bash "$HOME/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/review-package" "$BASE" HEAD`
 (if the plugin version dir moved, locate with
-`ls "$HOME/.claude/plugins/cache/claude-plugins-official/superpowers"`; fallback = manual
-`git log --oneline BASE..HEAD && git diff --stat BASE HEAD && git diff -U10 BASE HEAD` to one
-file, per the sdd skill).
+`ls "$HOME/.claude/plugins/cache/claude-plugins-official/superpowers"`; fallback:
+`git log --oneline "$BASE"..HEAD && git diff --stat "$BASE" HEAD && git diff -U10 "$BASE" HEAD`
+redirected to one file, per the sdd skill).
 Bridge provisioning: the worktree Debug build carries AvaDevBridge (dotnet run via ava_launch);
 no extra install. Model selection per the sdd skill's
 guidance; Task 5 and Task 7 implementers get the excerpt path in their dispatch as required
