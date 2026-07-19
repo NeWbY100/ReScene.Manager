@@ -1,0 +1,45 @@
+codex plan review r2b (findings only)
+
+Reviewed the r2 plan, rev 5a spec, normative excerpt, and relevant repository APIs. The r1 log was not read.
+
+1. **NOT-RESOLVED** 窶・[Task 1, lines 151窶・68 and 236窶・44](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:151): ancestor-link coverage exists, but `Assert.Skip` is unavailable under the repository窶冱 xUnit 2.9.3, no fallback utility exists, and `ResolveAncestorChain` remains undefined.
+
+2. **NOT-RESOLVED** 窶・[Task 2, lines 339窶・48](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:339): basename-only grouping merges same-named chains in different directories, while first-volume rules omit supported forms such as `.part1.rar` and numbered-volume sets.
+
+3. **NOT-RESOLVED** 窶・[Task 5, lines 769窶・76](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:769): the last-block/any-image facts are correct, but App.Core cannot access Lib窶冱 internal `RARHeaderReader`, and App.Core.Tests cannot access `RarFixtures` housed in ReScene.Tests.
+
+4. **NOT-RESOLVED** 窶・[Task 3, lines 530窶・44 and 608窶・10](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:530): the writer-only tree both includes and forbids `Sample/`; Task 9 never enables the promised full-pipeline golden, and its pyrescene command lacks `--vobsub-srr`.
+
+5. **NOT-RESOLVED** 窶・[Normative-source declaration, lines 27窶・1](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:27): the excerpt窶冱 supposedly full `create_srr_for_subs` body stops mid-function, and the relied-upon `first_rars` rules remain absent.
+
+6. **NOT-RESOLVED** 窶・[Task 7, lines 913窶・24](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:913): pass 10 mentions moving matching SRRs only, whereas the normative tail moves both `.srr` and proof `.rar`; Task 9 supplies no executable full-order/reordering step.
+
+7. **RESOLVED** 窶・[Task 6, lines 883窶・92](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:883): the matrix correctly covers MP3 SFVs outside rescue, `clip..sfv`, and disabling loose-RAR discovery whenever any SFV exists.
+
+8. **RESOLVED** 窶・[Task 9, lines 1055窶・065](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:1055): it specifies an injected work directory, basename-plus-`.txt` gating, both VOB artifacts, and ordered multi-SRR returns.
+
+9. **NOT-RESOLVED** 窶・[Task 2, lines 337窶・38 and 433窶・40](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:337): the contract still makes zero-input/zero-stored an error while its test expects header-only success; cancellation is unified.
+
+10. **NOT-RESOLVED** 窶・[Task 1, lines 102窶・04 and 219窶・08](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:102): `CanonicalizeLogicalName` is declared but omitted from the implementation block and dedicated tests.
+
+11. **RESOLVED** 窶・[Task 2, lines 503窶・11](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:503): the plan uses the real `SRRFile.Load` API, introduces `RarFixtures`, and adds the requested writer regression matrix.
+
+12. **NOT-RESOLVED** 窶・[Task 4, lines 623窶・37 and 715窶・43](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:623): the implementation still returns `IReadOnlyList<string>`, references undefined `issues`, and omits cancellation, `RootFailed`, structured results, and reparse suppression.
+
+13. **NOT-RESOLVED** 窶・[Task 7, lines 956窶・58](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:956): `grp-cover` is not similar to `grp-movie` or `grp.m3u`, while `00/000/0000` images short-circuit through prefix acceptance and never exercise `strip_zeros`.
+
+14. **NOT-RESOLVED** 窶・[Task 8, lines 990窶・94](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:990): naming, constructors, and placement are addressed, but [Task 10 still defers composition-root registration](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:1082), contradicting Task 8窶冱 atomic requirement.
+
+15. **NOT-RESOLVED** 窶・[Task 8, lines 997窶・004 and 1028窶・032](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:997): behavior covers only directory-input invalidation and the first warning, while tests require every-input invalidation, current-generation cleanup, and all warnings.
+
+16. **NOT-RESOLVED** 窶・[Tasks 10窶・1, lines 1085窶・109 and 1114窶・123](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:1085): executable steps never run the binding test RED/GREEN, test only `CreatorView`, and bridge-click only Advanced while typing directly in the wizard.
+
+17. **NOT-RESOLVED** 窶・[Task 11 and Execution Regime, lines 1125窶・136](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:1125): hash, shim, and ledger are present, but `scripts/review-package` does not exist and the later absolute path retains unresolved `<user>`.
+
+18. **NOT-RESOLVED** 窶・[Global constraints, lines 45窶・8](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:45): stub-first RED discipline is contradicted by explicit missing-type and missing-method compile failures in Tasks 1 and 2; the normalizer vectors are resolved.
+
+19. **NOT-RESOLVED** 窶・[Normative-spec label, line 27](E:/Projects/ReScene.Manager/.claude/worktrees/port-phase0/docs/superpowers/plans/2026-07-19-multiset-srr-creation.md:27): the plan calls the spec rev 5a, but the linked spec header still identifies itself as rev 2 and task annotations retain stale revision labels.
+
+No additional Critical findings fall outside these 19 items.
+
+**Verdict: REVISE**

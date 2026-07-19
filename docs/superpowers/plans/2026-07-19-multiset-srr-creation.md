@@ -1,8 +1,9 @@
 # Multi-Set SRR Creation (Spec 1: Video Releases) Implementation Plan
 
-> **STATUS: REVISED (r2) — all 19 codex r1 findings folded in (r1 log:
-> `2026-07-19-plan-review-codex-r1.log`); pending codex r2 re-review. Execution starts on its
-> APPROVE per the standing user approval and the AMENDED regime in Execution Regime.**
+> **STATUS: UNDER REVISION r3 — codex r2b: 3 resolved, 16 not-resolved (findings:
+> `2026-07-19-plan-review-codex-r2b.log`; root cause of residue: surgical patches left
+> contradicting older text — r3 rewrites each flagged REGION coherently). Execution on codex
+> APPROVE per standing user approval.**
 >
 > **Standing execution approval (user, 2026-07-19):** once codex APPROVEs this plan, execution
 > proceeds WITHOUT a further user gate, using the execution approach recommended jointly by the
