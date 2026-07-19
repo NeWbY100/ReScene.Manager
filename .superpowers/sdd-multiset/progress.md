@@ -37,3 +37,9 @@ Task 1 final re-review: peer reviewer Needs-more -- 1 Critical SFV latch escape
   Closing: peer re-review of latch fix dispatched; codex final review STILL RUNNING on the
   pre-fix diff (base->314d392) -- when it returns, re-point at current base->9205a93 for the
   definitive codex verdict. Task 1 closes only on both clean.
+  Codex final review (on stale base->314d392) REVISE: its 2 Criticals (latch #2, ResolveAncestor
+  single-separator) BOTH already closed in 9205a93 (lead traced + verified: latch gone,
+  ResolveAncestorChain splits both, SFV walker single-split ok because ResolveSfvEntry
+  pre-normalizes). Sole residual: codex #7 test-gap -- no test exercises the forward-slash
+  long-path case (code correct, coverage missing). Test-only fix dispatched. Then: definitive
+  codex re-run on final diff + peer re-review confirm -> close.
