@@ -1,6 +1,15 @@
 # Multi-Set SRR Creation (Spec 1: Video Releases) Implementation Plan
 
-> **STATUS: COMPLETE — all 11 tasks written; pending codex plan review before execution.**
+> **STATUS: UNDER REVISION — codex plan review r1 returned REVISE with 19 findings (full text:
+> `2026-07-19-plan-review-codex-r1.log` in this directory) and AMENDED the execution mode
+> (adopted: sequential subagent-driven, consolidated task-reviewer+codex fix/re-review loop,
+> plan-specific ledger `.superpowers/sdd-multiset/progress.md`, recorded RED/GREEN/full-suite
+> evidence per task; spec+excerpt handed to Tasks 2-7/9 and reviewers). Environment facts verified
+> 2026-07-19: Python 3.14 only — pyrescene needs a vendored `imghdr` shim (commit under
+> `TestData/multiset/compat/`, PYTHONPATH-injected by the generator); `review-package` is at
+> `C:/Users/<user>/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/review-package`;
+> pyrescene commit hash must be pinned before Task 3. Do not execute until all 19 findings are
+> folded in and codex re-review returns APPROVE.**
 >
 > **Standing execution approval (user, 2026-07-19):** once codex APPROVEs this plan, execution
 > proceeds WITHOUT a further user gate, using the execution approach recommended jointly by the
