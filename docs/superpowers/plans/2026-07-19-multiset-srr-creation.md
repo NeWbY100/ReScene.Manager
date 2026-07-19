@@ -582,4 +582,222 @@ public class GoldenFixtureTests
 - [ ] **Step 4:** full lib suite green.
 - [ ] **Step 5:** commit `test(lib): pyrescene golden fixtures + byte-equality harness`.
 
+### Task 4: App.Core — deterministic release traversal
+
+**Files:**
+- Create: `ReScene.App.Core/Services/ReleaseTraversal.cs`
+- Test: `ReScene.App.Core.Tests/ReleaseTraversalTests.cs`
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces (Tasks 5-7 depend on these exact members):
+  `public static class ReleaseTraversal` with
+  `public static IReadOnlyList<string> EnumerateFiles(string root)` — full paths, deterministic
+  os.walk-emulating order, and
+  `public static IReadOnlyList<string> FilterByExtension(IReadOnlyList<string> files, string extension)`
+  — preserves traversal order, OrdinalIgnoreCase extension match.
+
+Spec §2 Ordering (rev 4/5): top-down traversal; at each directory level sort child DIRECTORY
+names and FILE names with `StringComparer.Ordinal` (case-sensitive); files of a directory are
+emitted before descending into its subdirectories (matching `os.walk` top-down consumption in
+the excerpt's `get_files`). This is `[DIVERGENCE: determinism]` vs pyrescene's raw enumeration —
+cite the spec paragraph in the class doc comment.
+
+- [ ] **Step 1: failing tests** — `ReleaseTraversalTests.cs`:
+
+```csharp
+using ReScene.App.Core.Services;
+
+namespace ReScene.App.Core.Tests;
+
+public class ReleaseTraversalTests : TempDirTestBase
+{
+    private string Make(params string[] rel)
+    {
+        string p = Path.Combine([TempDir, .. rel]);
+        Directory.CreateDirectory(Path.GetDirectoryName(p)!);
+        File.WriteAllText(p, "x");
+        return p;
+    }
+
+    [Fact]
+    public void EnumerateFiles_TopDown_OrdinalPerLevel_FilesBeforeSubdirs()
+    {
+        Make("b.txt");
+        Make("A.txt");            // ordinal: 'A' (65) < 'b' (98)
+        Make("CD2", "y.sfv");
+        Make("CD10", "z.sfv");    // ordinal: "CD10" < "CD2" (char '1' < '2')
+        Make("CD2", "sub", "q.txt");
+
+        var files = ReleaseTraversal.EnumerateFiles(TempDir)
+            .Select(f => Path.GetRelativePath(TempDir, f).Replace('\\', '/'))
+            .ToList();
+
+        Assert.Equal(["A.txt", "b.txt", "CD10/z.sfv", "CD2/y.sfv", "CD2/sub/q.txt"], files);
+    }
+
+    [Fact]
+    public void EnumerateFiles_CaseOnlyNames_TotallyOrdered()
+    {
+        Make("a.nfo");
+        Make("A.nfo1");           // distinct names differing in case sort deterministically
+        var files = ReleaseTraversal.EnumerateFiles(TempDir).Select(Path.GetFileName).ToList();
+        Assert.Equal(["A.nfo1", "a.nfo"], files);
+    }
+
+    [Fact]
+    public void FilterByExtension_PreservesOrder_IgnoresCase()
+    {
+        Make("CD2", "b.SFV");
+        Make("CD1", "a.sfv");
+        Make("CD1", "x.nfo");
+        var all = ReleaseTraversal.EnumerateFiles(TempDir);
+        var sfvs = ReleaseTraversal.FilterByExtension(all, ".sfv")
+            .Select(f => Path.GetFileName(f)).ToList();
+        Assert.Equal(["a.sfv", "b.SFV"], sfvs);
+    }
+}
+```
+
+- [ ] **Step 2:** `dotnet test ReScene.App.Core.Tests/... --filter ReleaseTraversal` → FAIL.
+- [ ] **Step 3: implement**:
+
+```csharp
+namespace ReScene.App.Core.Services;
+
+/// <summary>
+/// Deterministic release-tree traversal. [DIVERGENCE: determinism] — pyrescene's byte order is
+/// raw os.walk enumeration (filesystem-dependent); this emulation sorts each level's directory
+/// and file names with StringComparer.Ordinal and emits a directory's files before descending,
+/// per the spec's Ordering paragraph (rev 4). All scanner category passes consume this order.
+/// </summary>
+public static class ReleaseTraversal
+{
+    public static IReadOnlyList<string> EnumerateFiles(string root)
+    {
+        var result = new List<string>();
+        Walk(root, result);
+        return result;
+    }
+
+    private static void Walk(string dir, List<string> result)
+    {
+        string[] files;
+        string[] subdirs;
+        try
+        {
+            files = Directory.GetFiles(dir);
+            subdirs = Directory.GetDirectories(dir);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return; // per-item warning is the SCANNER's job (Task 5); traversal skips silently
+        }
+
+        Array.Sort(files, StringComparer.Ordinal);
+        Array.Sort(subdirs, StringComparer.Ordinal);
+        result.AddRange(files);
+        foreach (string sub in subdirs)
+        {
+            Walk(sub, result);
+        }
+    }
+
+    public static IReadOnlyList<string> FilterByExtension(IReadOnlyList<string> files, string extension) =>
+        files.Where(f => string.Equals(Path.GetExtension(f), extension, StringComparison.OrdinalIgnoreCase))
+             .ToList();
+}
+```
+
+- [ ] **Step 4:** filter PASS. **Step 5:** commit
+  `feat(app): deterministic release traversal (ordinal os.walk emulation)`.
+
+### Task 5: App.Core — ReleaseScanner records + main-set decision tree (spec §2a)
+
+**Files:**
+- Create: `ReScene.App.Core/Services/ReleaseSetInput.cs`
+  (`public sealed record ReleaseSetInput(string SfvOrRarPath, string RelativeName);`)
+- Create: `ReScene.App.Core/Services/ReleaseScanResult.cs` (record per spec §2 with the six lists)
+- Create: `ReScene.App.Core/Services/IReleaseScanner.cs`
+  (`ReleaseScanResult Scan(string releaseRoot, CancellationToken ct = default);`)
+- Create: `ReScene.App.Core/Services/ReleaseScanner.cs`
+- Test: `ReScene.App.Core.Tests/ReleaseScannerMainSetTests.cs`
+
+**Interfaces:**
+- Consumes: Task 4's `ReleaseTraversal` members.
+- Produces: the four types above with EXACTLY the spec §2 record shape (Tasks 6-8 extend/consume);
+  internal seams for Tasks 6-7: `internal ReleaseScanner(Func<string, IReadOnlyList<string>>? sfvEntryReader = null, Func<string, ProofRarContent>? proofRarReader = null)`
+  where `internal enum ProofRarContent { Image, NonImage, Unreadable }` (own file) — injectable so
+  rule-4 tests need no real RARs.
+
+Implementation is the ordered decision tree of spec §2a — implement by transcribing the excerpt
+(`pyrescene-rules-excerpt.txt`, `remove_unwanted_sfvs` section) branch by branch IN ORDER, each
+branch commented with its excerpt line range. Sequential first-match: rule 2's false-positive
+regex `^(000?-)|(.*(cd\d|flac).*)` (IgnoreCase) FALLS THROUGH (pyrescene `pass`), it does not
+accept. Rescue fallback + destinations per spec (`SubtitleSfvs` for excluded, proof-linked SFV+RAR
+→ `StoredFiles`, `dirfix` subdir → skip + warning, subpack/subfix release name → main SFVs ALSO
+queued to `SubtitleSfvs` for nested processing). `MainSets.RelativeName` =
+root-relative path with `/` separators (plain `Path.GetRelativePath` here — scanner names are
+display/logical hints; the WRITER re-canonicalizes with final paths at §1a strictness).
+
+- [ ] **Step 1: failing tests** — `ReleaseScannerMainSetTests.cs`. Test matrix (one Fact per row;
+  build each tree with `TempDirTestBase` + tiny text files; SFV contents via helper
+  `WriteSfv(path, params string[] entries)` writing `"{entry} 00000000"` lines; the injectable
+  `sfvEntryReader` default reads real files so most tests use the real path):
+
+| Tree | Expectation |
+|---|---|
+| `CD1/a.sfv`, `CD2/b.sfv` (rar entries) | 2 MainSets, order `CD1/a.sfv` then `CD2/b.sfv`, RelativeNames `CD1/a.sfv`/`CD2/b.sfv` |
+| `x.vobsubs.sfv` in root, release dir named `Some.Movie-GRP` | excluded → SubtitleSfvs (rule 1) |
+| same SFV, release dir named `Some.SUBPACK-GRP` | MAIN set (rule 1 exception) AND also queued to SubtitleSfvs (subpack release) |
+| `grp-subs.sfv` (rule 2, no carve-out) | excluded → SubtitleSfvs |
+| `00-grp-subs.sfv` (matches `^000?-`) with rar entries | falls through rule 2 → MAIN set |
+| `grp.subs.cd1.sfv` under dir `Cover/` | falls through rule 2, then rule 3 excludes (pardir cover) — proves `pass` semantics |
+| `Subs/x.sfv` | rule 3 exclusion → SubtitleSfvs |
+| `Proof/p.sfv` listing exactly `p.rar`, proofRarReader→Image | rule 4: SFV+RAR → StoredFiles, not a set |
+| `Proof/p.sfv` listing `p.rar`, reader→NonImage | NOT proof → continues; with rar entries it becomes MAIN set |
+| `Proof/p.sfv` listing `p.rar`, reader→Unreadable | warning + excluded (treated proof) |
+| `Proof/p.sfv` listing two entries | rule 4 requires singleton → falls through to rules 5-7 |
+| `Subs/CD1/s.sfv` | rule 5 (`.*Subs.?CD\d$`) → SubtitleSfvs |
+| `SubpackStuff/x.sfv`, release `Movie-GRP` | rule 6 substring pardir → excluded |
+| `MyFix/x.sfv`, release `Movie.FIX-GRP` | rule 6 `fix` exception (release name has fix) → MAIN |
+| all SFVs subs-named + one has 2 rar entries | rescue re-admits the 2-entry one as MAIN |
+| `Subs/dirfix.stuff/x.sfv` under a `dirfix` dir | skipped entirely + warning |
+| root unreadable (ACL deny via existing `AclDenyHelper`) | Warnings-only result, empty lists |
+| cancellation token pre-cancelled | `OperationCanceledException` |
+
+- [ ] **Step 2:** run filter `ReleaseScannerMainSet` → FAIL.
+- [ ] **Step 3:** implement `ReleaseScanner.Scan` decision tree (skeleton):
+
+```csharp
+public ReleaseScanResult Scan(string releaseRoot, CancellationToken ct = default)
+{
+    ct.ThrowIfCancellationRequested();
+    IReadOnlyList<string> all;
+    try { all = ReleaseTraversal.EnumerateFiles(releaseRoot); }
+    catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+    { return ReleaseScanResult.RootError(releaseRoot, e.Message); }
+
+    string releaseName = Path.GetFileName(Path.TrimEndingDirectorySeparator(releaseRoot));
+    string lcRelease = releaseName.ToLowerInvariant();
+    var sfvs = ReleaseTraversal.FilterByExtension(all, ".sfv");
+
+    var main = new List<string>(); var subs = new List<string>();
+    var stored = new List<string>(); var warnings = new List<string>();
+
+    foreach (string sfv in sfvs)
+    {
+        ct.ThrowIfCancellationRequested();
+        SfvClass cls = ClassifySfv(sfv, lcRelease, warnings);   // rules 1-7, excerpt-cited
+        switch (cls) { /* Main -> main; Subs -> subs; Proof -> stored(sfv + rar); Skip -> warning already added */ }
+    }
+    // rescue fallback (excerpt tail), subpack/subfix main->subs queue, then Tasks 6/7 passes...
+}
+```
+
+  The full `ClassifySfv` is the excerpt transcription; every `if` carries
+  `// excerpt: remove_unwanted_sfvs L<from>-<to>`.
+- [ ] **Step 4:** filter PASS + full App.Core suite green. **Step 5:** commit
+  `feat(app): ReleaseScanner main-set decision tree (pyrescene 2a port)`.
+
 (Per-task steps with complete code follow; each task section replaces this line as it is written.)
