@@ -14,3 +14,6 @@ Task 1: implemented (lib 579020b, outer 4f84565); task-review Spec PASS / Qualit
   - POSIX branch: OrdinalIgnoreCase on case-sensitive FS + IsPathRooted("C:\...") false on Linux
   - GetFinalPath \?\ strip ignores \?\UNC\ form (self-consistent but malformed absolute)
   Codex diff review: pending.
+  Fix applied (lib 2eb04bf, outer dbdd33d): CA1032/CA1816 -- gate re-verified 0/0 by lead;
+  fix re-review: Approved (no contract change, pure API addition, scope clean).
+  Awaiting: codex diff verdict to close Task 1.
