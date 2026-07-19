@@ -43,3 +43,6 @@ Task 1 final re-review: peer reviewer Needs-more -- 1 Critical SFV latch escape
   pre-normalizes). Sole residual: codex #7 test-gap -- no test exercises the forward-slash
   long-path case (code correct, coverage missing). Test-only fix dispatched. Then: definitive
   codex re-run on final diff + peer re-review confirm -> close.
+  Peer reviewer FINAL: Approved (latch fix closes x/../J/evil, no new hole, walkers symmetric,
+  separator scoping correct -- corroborates lead's trace). Task-reviewer half DONE.
+  Remaining to close: forward-slash test lands -> definitive codex pass on final diff.
