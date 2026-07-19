@@ -1278,3 +1278,287 @@ def create_srr_for_subs(unrar, sfv, working_dir, release_dir):
 		# TODO: sure this isn't because of left open file handles?
 		# extracted files had read only attributes. fixed everywhere?
 		if _DEBUG:
+
+== bin/pyrescene.py lines 578-660 (get_start_rar_files / first_rars rules) ==
+def get_start_rar_files(sfv_list):
+	"""
+	Get the main first RAR files to check sample against.
+	Also used for storable fixes check.
+	"""
+	wanted_rars = []
+	for sfv in sfv_list:
+		firsts = rescene.utility.first_rars(x.file_name for x in
+		         rescene.utility.parse_sfv_file(sfv)[0])
+		# Asterix.and.Obelix.Mission.Cleopatra.2002.DVDRip.XviD-AEN/Subs/
+		# aaomc-nl-subs-aen.sfv contains two different RAR sets:
+		# aaomc-nl-subs-aen.rar and aaomc-uk-subs-aen.rar
+		for first in firsts:
+			wanted_rars.append(os.path.join(os.path.dirname(sfv), first))
+	return wanted_rars
+
+def work_dir_file(relfile, release_dir, working_dir):
+	"""Constructs path to working directory for a release file."""
+	path = os.path.relpath(relfile, release_dir)
+	dest_file = os.path.join(working_dir, path)
+	return dest_file
+
+def copy_to_working_dir(working_dir, release_dir, copy_file):
+	"""
+	working_dir: temporary directory with all the files to store in the SRR
+	release_dir: release folder with path
+	copy_file: file somewhere inside the release_dir
+	Tries to preserve capitalization on copy from file or sfv.
+	Passed in from copy_file.
+	
+	Returns path to destination file.
+	"""
+	# find the proper file on disk (copy_file) and
+	# choose the file name with capitals (capitals)
+	# - not conclusive? use original input file name
+	copy_file, capitals = capitalized_fn(copy_file)
+
+	# construct the path for the destination
+	dest_file = work_dir_file(copy_file, release_dir, working_dir)
+
+	# and use proper file captalization
+	cpath = os.path.dirname(dest_file)
+	dest_file = os.path.join(cpath, os.path.basename(capitals))
+
+	try:
+		os.makedirs(os.path.dirname(dest_file))
+	except:
+		pass
+
+	try:
+		shutil.copyfile(copy_file, dest_file)
+	except IOError as e:
+		print("Could not copy %s." % copy_file)
+		print("Reason: %s" % e)
+		log = True
+		if "[Errno 2] No such file or directory" in str(e) and os.name == "nt":
+			print("Trying again!")
+			try:
+				shutil.copyfile("\\\\?\\" + copy_file, dest_file)
+				log = False
+			except IOError:
+				print("Failed again...")
+				log = True
+		if log:
+			logging.error("Failed to copy {0}: {1}".format(copy_file, e))
+
+	return dest_file
+
+def key_sort_music_files(name):
+	# nfo files at the top
+	if name[-4:].lower() == ".nfo":
+		return "-"
+	else:
+		return name
+
+def is_storable_fix(release_name):
+	"""Tests if we can store the main RAR file of this release."""
+	# Rules.of.Engagement.S02E03.Mr.Fix.It.DVDRip.XviD-SAiNTS
+	# Ron.White.You.Cant.Fix.Stupid.XviD-LMG
+	# not: Rar|sub|audio|sample|
+	return (re.match(
+			r".*(SFV|PPF|sync|proof?|dir|nfo|Interleaving|Trackorder).?"
+			r"(Fix|Patch).*", release_name, re.IGNORECASE) or
+
+== bin/pyrescene.py lines 660-856 (create_srr_for_subs COMPLETE + helpers to generate_srr) ==
+			r"(Fix|Patch).*", release_name, re.IGNORECASE) or
+			re.match(r".*\.(FiX|FIX)(\.|-).*", release_name) or
+			re.match(r".*\.DVDR.Fix-.*", release_name) or
+			re.match(r".*\.DVDR.REPACK.Fix-.*", release_name))
+
+def create_srr_for_subs(unrar, sfv, working_dir, release_dir):
+	"""
+	unrar: location to the unrar executable
+	sfv: the sfv file from the vobsubs
+	working_dir: our current working directory
+		where the generated SRR file will be placed
+	release_dir: used to determine in which subfolders the resulting SRR
+		file should be placed in the working_dir
+	
+	return: list of SRR files to add to the main SRR
+	"""
+	# replicate subdirs from the release folder
+	path = os.path.relpath(sfv, release_dir)
+	dest_file = os.path.join(working_dir, path)
+	try:
+		# try to create only the path without SFV/RAR file part
+		os.makedirs(os.path.dirname(dest_file))
+	except:
+		pass  # the path already exists
+
+	idx_lang = os.path.join(working_dir, "languages.diz")
+
+	# recursively create SRR and extract RARs
+	def extract_and_create_srr(folder, srr_out=None, first_rars=None):
+		"""
+		folder: working dir location for .srr output
+		srr_out: location and name of the .srr file to create (first step only)
+		first_rars: the first .rar files from the .sfv
+		"""
+		# find first RAR files in folder
+		if first_rars:
+			first_level = True  # RARS not somewhere in the temp folder
+		else:
+			first_rars = rescene.utility.first_rars(os.listdir(folder))
+			first_rars = [os.path.join(folder, x) for x in first_rars]
+			first_level = False
+		if not len(first_rars):
+			return []
+		if not os.path.isdir(folder):
+			# create the missing folder
+			head, tail = os.path.split(folder)
+			if os.name == "nt" and win32api_available:
+				head = win32api.GetShortPathName(head)
+			try:
+				os.mkdir(os.path.join(head, tail))
+			except OSError:
+				pass
+
+		result = []
+
+		for fr in first_rars:
+			srr_files_to_store = []
+
+			# dest srr name
+			new_srr = os.path.join(folder, os.path.basename(fr)[:-4]) + ".srr"
+
+			# use a short random name for the folder
+			random_subfolder = (hex(hash(fr)))[-3:]
+			dest = os.path.join(folder, random_subfolder)
+			counter = 1
+			while os.path.exists(dest):
+				# for the very rare cases it exists (hash collision)
+				dest = os.path.join(folder, str(counter))
+				counter += 1
+			mk_long_dir(dest)
+
+			if not os.path.isdir(dest):
+				# otherwise unrar will still extract the files,
+				# but it'll put them in the source folder
+				# this is never wanted (especially for RAR Subs/ folder!)
+				logging.error("Failed to create temp folder for vobsubs: {0}"
+				              .format(dest))
+				continue
+
+			# extract archives
+			success = extract_rar(unrar, fr, dest)
+			if not success:  # probably too long paths issue
+				logging.error("Failed to unrar vobsubs: {0}".format(fr))
+				continue
+
+			# search for idx files and store their language info
+			for efile in sorted(os.listdir(dest)):
+				if efile[-4:].lower() == ".idx":
+					language_lines = []
+					with open(os.path.join(dest, efile), "rb") as idx:
+						for line in idx:
+							if line.startswith(b"id: "):
+								language_lines.append(line)
+					with open(idx_lang, "ab") as diz:
+						line = "# %s\n" % fsunicode(efile)
+						line = line.encode("utf-8", "replace")
+						diz.write(line)
+						for line in language_lines:
+							diz.write(line)
+
+			# recursive step for each of the archives
+			for srr in extract_and_create_srr(dest):
+				srr_files_to_store.append(srr)
+
+			if first_level:
+				# at same level as SFV (in main SRR), (in temp folder)
+				# not in extract folder to prevent possible collisions too
+				srr = srr_out  # RAR/SFV without extension
+
+				# only possible for main vobsub set from SFV with multiple RARs
+				# Asterix.and.Obelix.Mission.Cleopatra.2002.DVDRip.XviD-AEN
+				if srr_out and len(first_rars) > 1:
+					# There will be only one root .srr file normally.
+					# This could give problems: make one for each set.
+					spath = os.path.dirname(srr_out)
+					fname = os.path.basename(new_srr)
+					srr = os.path.join(spath, fname)
+			else:
+				srr = new_srr
+			# create SRRs and add SRRs from previous steps
+			tmp_srr_name = create_temp_file_name(srr)
+			rescene.create_srr(srr, fr, store_files=srr_files_to_store,
+			            save_paths=False, compressed=True, oso_hash=False,
+			            tmp_srr_name=tmp_srr_name)
+			replace_result(tmp_srr_name, srr)
+			result.append(srr)
+
+		return result
+
+	results = []
+
+	# get first RARs from SFV file to extract for vobsub SRR
+	first_rars = get_start_rar_files([sfv])
+	if not len(first_rars):
+		# it was a bad SFV, but an archive with a similar same name might exist
+		sfv_base = sfv[:-4]
+		if os.path.isfile(sfv_base + ".rar"):
+			first_rars = [sfv_base + ".rar"]
+		elif os.path.isfile(sfv_base + ".part1.rar"):
+			first_rars = [sfv_base + ".part1.rar"]
+		elif os.path.isfile(sfv_base + ".part01.rar"):
+			first_rars = [sfv_base + ".part01.rar"]
+		elif os.path.isfile(sfv_base + ".001"):
+			first_rars = [sfv_base + ".001"]
+	if len(first_rars):
+		# use a short random name for the first folder
+		rand = (hex(hash(first_rars[0])))[-3:]
+		srr_folder = os.path.join(os.path.dirname(dest_file), rand)
+		counter = 1
+		while os.path.exists(srr_folder):
+			# for the very rare cases it exists (hash collision)
+			srr_folder = os.path.join(os.path.dirname(dest_file), str(counter))
+			counter += 1
+		# RAR/SFV without extension
+		srr = dest_file[:-4] + ".srr"
+		for sfile in extract_and_create_srr(srr_folder, srr, first_rars):
+			results.append(sfile)
+
+	# add languages.diz to the first SRR file only (more SRRs are possible)
+	# the file can be missing when the subs are in the .srt format
+	# e.g. Battlestar.Galactica.2003.WS.DVDRip.XviD-SFM
+	if len(results) and os.path.isfile(idx_lang):
+		rescene.add_stored_files(results[0], [idx_lang], save_paths=False)
+
+	return results
+
+def extract_rar(unrar, rarfile, destination):
+	"""Returns a boolean whether extraction was successful or not."""
+	if os.name == "nt" and win32api_available:
+		head, tail = os.path.split(rarfile)
+		head = win32api.GetShortPathName(head)
+		rarfile = os.path.join(head, tail)
+	extract = custom_popen([unrar, "e", "-ep", "-o+", "-ai",
+	                        rarfile, "*", destination])
+	(stdout, _) = extract.communicate()
+	# even if 'rarfile' isn't the first volume, exctraction still succeeds
+
+	if extract.returncode != 0:
+		print("Some unrar error occurred:")
+		stdout = decodetext(stdout, errors="replace")
+		print(encodeerrors(stdout, sys.stdout))
+		return False
+	return True
+
+def mk_long_dir(destination):
+	if not os.path.isdir(destination):
+		try:
+			os.mkdir(destination)
+		except OSError:
+			# WindowsError: [Error 3]
+			try:
+				os.mkdir("\\\\?\\" + destination)
+			except OSError as e:
+				# happens when there is a file with the same name as the dir
+				print(e)
+
+def generate_srr(reldir, working_dir, options, mthread):
