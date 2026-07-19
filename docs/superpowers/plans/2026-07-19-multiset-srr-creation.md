@@ -41,10 +41,9 @@ codex-APPROVED) + `docs/superpowers/specs/pyrescene-rules-excerpt.txt` (rule sou
 1. **Lib — SrrNameCanonicalizer** (`ReScene.Lib/ReScene/SRR/SrrNameCanonicalizer.cs` + tests):
    final-path (GetFinalPathNameByHandle-semantics) containment for root+sources, `/` separators,
    SFV-entry both-separator interpretation + escape rejection, collision policy, flat mode.
-   Produces: `SrrNameCanonicalizer.Canonicalize(root, sourcePath) -> string logicalName` +
-   `TryValidateLogicalName`.
+   Produces: `GetFinalPath`, `CanonicalizeRelative`, `ResolveSfvEntry` (see Task 1 Interfaces).
 2. **Lib — CreateFromInputsAsync** (`SRRWriter.cs` + tests): N≥0 inputs, per-input volume blocks
-   in order, stored dedup, temp-in-destination-dir + atomic move, zero/zero rejection,
+   in order, stored dedup, temp-in-destination-dir + atomic move, header-only on empty,
    non-first-RAR error, multi-chain SFV support; existing `CreateFromSFVAsync`/RAR path delegate.
 3. **Lib — golden fixture harness** (`ReScene.Tests/TestData/multiset/generate-golden.py`,
    README with pinned pyrescene hash/command, committed fixtures; byte-equality test with
@@ -412,11 +411,13 @@ public class SRRWriterMultiInputTests : IDisposable
     }
 
     [Fact]
-    public async Task ZeroInputs_ZeroStored_ReturnsError()
+    public async Task ZeroInputs_ZeroStored_WritesHeaderOnlySrr()
     {
         SRRCreationResult r = await _writer.CreateFromInputsAsync(_out, [], null, false);
-        Assert.NotNull(r.ErrorMessage);
-        Assert.False(File.Exists(_out));
+        Assert.Null(r.ErrorMessage);
+        SRRFileData srr = SRRFile.Load(_out);
+        Assert.Empty(srr.StoredFiles);
+        Assert.Empty(srr.RarFiles);
     }
 
     [Fact]

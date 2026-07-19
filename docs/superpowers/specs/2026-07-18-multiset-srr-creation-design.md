@@ -53,9 +53,9 @@ public Task<SRRCreationResult> CreateFromInputsAsync(
     CancellationToken ct = default);
 ```
 
-- **Zero inputs is valid** when at least one stored file results (storage-only / fix-release SRR:
-  header block + stored-file blocks, no volume blocks). Zero inputs AND zero stored files → error
-  result (nothing to write). *(Review finding 1.)*
+- **Zero inputs is valid**: with stored files → storage-only / fix-release SRR (header + stored
+  blocks); with zero stored files → header-only SRR (pyrescene reaches header-only creation —
+  §5 row 2 and codex new-5 parity). Never an error for emptiness. *(Review finding 1, rev 5a.)*
 - Existing `CreateFromSFVAsync` delegates (single-item list, `storeRelativePaths: false`); existing
   single-**RAR** input flow likewise delegates and stays byte-identical — both guarded by the
   existing tests. *(Finding 12, file-mode half.)*
