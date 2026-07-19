@@ -1,9 +1,8 @@
 # Multi-Set SRR Creation (Spec 1: Video Releases) Implementation Plan
 
-> **STATUS: UNDER REVISION r3 — codex r2b: 3 resolved, 16 not-resolved (findings:
-> `2026-07-19-plan-review-codex-r2b.log`; root cause of residue: surgical patches left
-> contradicting older text — r3 rewrites each flagged REGION coherently). Execution on codex
-> APPROVE per standing user approval.**
+> **STATUS: r3 — all 16 open codex r2b findings resolved by coherent region rewrites (see
+> `codex r2b f<N>` markers); excerpt completed to 1564 lines incl. full create_srr_for_subs and
+> first-rar rules. Pending codex r3 re-review; execution on APPROVE per standing user approval.**
 >
 > **Standing execution approval (user, 2026-07-19):** once codex APPROVEs this plan, execution
 > proceeds WITHOUT a further user gate, using the execution approach recommended jointly by the
@@ -157,17 +156,10 @@ public class SrrNameCanonicalizerTests : IDisposable
         Directory.CreateDirectory(target);
         File.WriteAllText(Path.Combine(target, "x.bin"), "x");
         string link = Path.Combine(_root, "J");
-        try
-        {
-            Directory.CreateSymbolicLink(link, target);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            Assert.Skip("symlink creation not permitted on this machine"); // xunit.v3 skip —
-            // recorded as SKIPPED, never silently green (codex r1 f1). If the repo is on xunit
-            // v2, use Assert.Fail-guarded [SkippableFact] from the existing test utilities.
-            return;
-        }
+        // NTFS JUNCTIONS need no privilege (unlike symlinks) — the test runs unconditionally
+        // (codex r2b f1; repo xUnit 2.9.3 has no Assert.Skip). Helper shells out:
+        //   cmd /c mklink /J "<link>" "<target>"
+        CreateJunction(link, target);
         try
         {
             string rootFinal = SrrNameCanonicalizer.GetFinalPath(_root);
@@ -191,6 +183,21 @@ public class SrrNameCanonicalizerTests : IDisposable
             SrrNameCanonicalizer.ResolveSfvEntry(Path.Combine(_root, "CD1"), entry));
     }
 
+    [Theory]
+    [InlineData("CD1\\a.sfv", "CD1/a.sfv")]
+    public void CanonicalizeLogicalName_NormalizesBackslashes(string input, string expected) =>
+        Assert.Equal(expected, SrrNameCanonicalizer.CanonicalizeLogicalName(input));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData("a/../b.nfo")]
+    [InlineData("C:/abs/x.nfo")]
+    [InlineData("a//b.nfo")]
+    public void CanonicalizeLogicalName_Degenerate_Throws(string bad) =>
+        Assert.Throws<SrrNameException>(() => SrrNameCanonicalizer.CanonicalizeLogicalName(bad));
+
     [Fact]
     public void ResolveSfvEntry_BothSeparatorKinds_ResolveIdentically()
     {
@@ -202,10 +209,13 @@ public class SrrNameCanonicalizerTests : IDisposable
 }
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [ ] **Step 1b (stubs):** add `SrrNameCanonicalizer`/`SrrNameException` with every declared
+  member throwing `NotImplementedException` — the suite COMPILES (codex r1 f18).
+- [ ] **Step 2: Run to verify assertion-level RED**
 
 Run: `dotnet test ReScene.Lib/ReScene.Tests/ReScene.Tests.csproj --filter SrrNameCanonicalizer`
-Expected: FAIL — `SrrNameCanonicalizer` not found (CS0103/CS0246).
+Expected: FAIL — every test fails with `NotImplementedException` (recorded per contract row),
+not compile errors.
 
 - [ ] **Step 3: Implement** — `SrrNameException.cs`:
 
@@ -241,8 +251,24 @@ public static class SrrNameCanonicalizer
             // POSIX realpath equivalence requires resolving EVERY ancestor, not just the leaf
             // (codex r1 f1): walk from the filesystem root down, resolving each existing
             // component via ResolveLinkTarget(returnFinalTarget: true) before descending.
-            return ResolveAncestorChain(path); // private helper; loops components, resolves each
+            return ResolveAncestorChain(path);
         }
+
+        /* POSIX helper (same class):
+        private static string ResolveAncestorChain(string path)
+        {
+            string full = Path.GetFullPath(path);
+            string current = Path.GetPathRoot(full)!;
+            foreach (string seg in Path.GetRelativePath(current, full).Split(Path.DirectorySeparatorChar))
+            {
+                current = Path.Combine(current, seg);
+                FileSystemInfo info = Directory.Exists(current)
+                    ? new DirectoryInfo(current) : new FileInfo(current);
+                FileSystemInfo resolved = info.ResolveLinkTarget(returnFinalTarget: true) ?? info;
+                current = resolved.FullName;
+            }
+            return current;
+        } */
 
         using SafeFileHandle handle = OpenForMetadata(path);
         var buffer = new char[1024];
@@ -266,6 +292,18 @@ public static class SrrNameCanonicalizer
         }
 
         return source[(root.Length + 1)..].Replace('\\', '/');
+    }
+
+    public static string CanonicalizeLogicalName(string logicalName)
+    {
+        string name = logicalName.Replace('\\', '/');
+        if (string.IsNullOrWhiteSpace(name) || Path.IsPathRooted(name)
+            || name == "." || name.Split('/').Any(seg => seg is "." or ".." or ""))
+        {
+            throw new SrrNameException($"Invalid stored logical name: {logicalName}");
+        }
+
+        return name;
     }
 
     public static string ResolveSfvEntry(string sfvDirectory, string entryName)
@@ -335,16 +373,21 @@ public Task<SRRCreationResult> CreateFromInputsAsync(
 
 Behavior contract (spec §1 + §1a — every clause below gets a test in Step 1):
 
-1. Zero inputs + at least one stored file → storage-only SRR (header + stored blocks). Zero + zero
-   → error result "Nothing to write: no inputs and no stored files."
+1. Zero inputs + stored files → storage-only SRR (header + stored blocks). Zero inputs + zero
+   stored files → HEADER-ONLY SRR, `Success = true` (spec §5 pyrescene parity; codex r2b f9 —
+   emptiness is NEVER an error in this overload).
 2. Per input, in list order: `.sfv` → parse entries (reuse the existing SFV line parser), resolve
    each via `ResolveSfvEntry(sfvDir, entryName)`, keep `RARVolumeIdentifier.IsRARVolume` matches,
-   then GROUP BY CHAIN (codex r1 f2): chain key = the volume's base archive name (strip the
-   volume suffix: `.rar`/`.rNN`/`.partNN.rar`, OrdinalIgnoreCase); chains keep FIRST-SEEN order
-   from the SFV entry sequence; volumes sort with `RARVolumeNameComparer.Instance` ONLY within
-   their chain (a global sort would interleave `a.rar, b.rar, a.r00` — tested with two
-   interleaved chains). First-volume rule: `.rar` without a preceding `.partNN` numbering, or
-   `.part01.rar` (OrdinalIgnoreCase); a lone `.rNN` is NOT a first volume. `.rar` → walk its
+   then GROUP BY CHAIN (codex r1 f2 / r2b f2): chain key = the volume's DIRECTORY plus base
+   archive name (strip the volume suffix `.rar`/`.rNN`/`.partN.rar` with N of ANY digit count,
+   OrdinalIgnoreCase) — same basename in different directories is a DIFFERENT chain; chains keep
+   FIRST-SEEN order from the SFV entry sequence; volumes sort with
+   `RARVolumeNameComparer.Instance` ONLY within their chain (a global sort would interleave
+   `a.rar, b.rar, a.r00` — tested with two interleaved chains AND cross-directory same-basename
+   chains). First-volume rule: plain `.rar` with no `.partN` numbering, or the LOWEST-numbered
+   `.partN.rar` present (`.part1.rar`, `.part01.rar`, `.part001.rar` all covered by numeric
+   parse, OrdinalIgnoreCase); a lone `.rNN` is NOT a first volume. Tests cover part1/part01/
+   part001 first-volume acceptance and `.part02.rar` rejection. `.rar` → walk its
    chain (existing logic); if the file is not its chain's first volume → error result
    "'{name}' is not a first RAR volume." (pyrescene ValueError parity).
 3. Volume block names: `storeRelativePaths ? SrrNameCanonicalizer.CanonicalizeRelative(rootFinal,
@@ -511,7 +554,10 @@ byte-equality vs pre-change outputs; additionalFiles order + identical-source de
 existing destination on success; failure AFTER tmp exists (inject via a stored file deleted
 mid-run) leaves destination + no tmp.)
 
-- [ ] **Step 2:** `dotnet test ... --filter SRRWriterMultiInput` → FAIL (no such method).
+- [ ] **Step 1b (stubs):** add the `CreateFromInputsAsync` stub (throws NotImplementedException)
+  and the `RarFixtures` helper so everything COMPILES.
+- [ ] **Step 2:** `dotnet test ... --filter SRRWriterMultiInput` → assertion-level RED
+  (NotImplementedException per row), not compile errors.
 - [ ] **Step 3:** implement per the 6-clause contract + refactor prerequisite.
 - [ ] **Step 4:** filter PASS, then FULL lib suite (`dotnet test ReScene.Lib/ReScene.Tests/...`)
   → all green (proves legacy byte-identity refactor safe).
@@ -532,7 +578,7 @@ mid-run) leaves destination + no tmp.)
   `tree-2disc/` — `CD1/` + `CD2/` each with a 2-volume store-mode RAR set (64-byte payload, made
   with Python's struct writing the same RAR4 store-mode layout the C# builder uses — or simplest:
   invoke the committed C# builder via `dotnet run` on a tiny helper; choose ONE and document it),
-  correct-CRC SFVs, `release.nfo`, `Sample/tiny.sample.avi` (name contains "sample" → phase 1),
+  correct-CRC SFVs, `release.nfo`,
   and at most ONE excluded SFV (`Subs/subs.sfv` + its single RAR); NO Sample/ dir in the
   writer-only trees (generated artifacts join in the post-Task-9 full-pipeline golden — codex r1
   f4). Then: assert `git -C E:\git\extern\pyrescene rev-parse HEAD` ==
@@ -713,34 +759,51 @@ namespace ReScene.App.Core.Services;
 /// </summary>
 public static class ReleaseTraversal
 {
-    public static IReadOnlyList<string> EnumerateFiles(string root)
+    public static TraversalResult EnumerateFiles(string root, CancellationToken ct = default)
     {
-        var result = new List<string>();
-        Walk(root, result);
-        return result;
+        var files = new List<string>();
+        var issues = new List<TraversalIssue>();
+        try
+        {
+            _ = Directory.GetFiles(root); // probe: root failure is fatal (codex r1 f12)
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return new TraversalResult([], [new TraversalIssue(root, e.Message)], RootFailed: true);
+        }
+
+        Walk(root, files, issues, ct);
+        return new TraversalResult(files, issues, RootFailed: false);
     }
 
-    private static void Walk(string dir, List<string> result)
+    private static void Walk(string dir, List<string> files, List<TraversalIssue> issues, CancellationToken ct)
     {
-        string[] files;
+        ct.ThrowIfCancellationRequested();
+        string[] dirFiles;
         string[] subdirs;
         try
         {
-            files = Directory.GetFiles(dir);
+            dirFiles = Directory.GetFiles(dir);
             subdirs = Directory.GetDirectories(dir);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            issues.Add(new TraversalIssue(dir, e.Message)); // surfaced; scanner maps to Warnings
+            issues.Add(new TraversalIssue(dir, e.Message)); // scanner maps to Warnings
             return;
         }
 
-        Array.Sort(files, StringComparer.Ordinal);
+        Array.Sort(dirFiles, StringComparer.Ordinal);
         Array.Sort(subdirs, StringComparer.Ordinal);
-        result.AddRange(files);
+        files.AddRange(dirFiles);
         foreach (string sub in subdirs)
         {
-            Walk(sub, result);
+            // pyrescene's os.walk does not follow directory reparse points (codex r1 f12).
+            if ((File.GetAttributes(sub) & FileAttributes.ReparsePoint) != 0)
+            {
+                continue;
+            }
+
+            Walk(sub, files, issues, ct);
         }
     }
 
@@ -770,7 +833,12 @@ public static class ReleaseTraversal
   public production ctor `public ReleaseScanner()` PLUS internal test ctor
   `internal ReleaseScanner(Func<string, IReadOnlyList<string>>? sfvEntryReader, Func<string, ProofRarFacts>? proofRarReader)`
   (codex r1 f14). `public sealed record ProofRarFacts(bool Readable, bool HasPackedBlocks, bool AnyImage, bool LastPackedIsImage)`
-  in `ReScene.App.Core/Services/ProofRarFacts.cs`, created HERE (f14): rule 4 consumes
+  and the production inspector `public static class RarProofInspector { public static ProofRarFacts Inspect(string rarPath); }`
+  live in **ReScene.Lib** (`ReScene.Lib/ReScene/RAR/ProofRarFacts.cs` + `RarProofInspector.cs`) —
+  the lib owns RAR parsing and `RARHeaderReader` is lib-internal, so App.Core consumes the PUBLIC
+  inspector (codex r2b f3). The inspector's own tests (real fixture RARs via RarFixtures) live in
+  ReScene.Tests and are added in THIS task's lib companion change; App.Core.Tests drive the
+  injectable seam with fact literals only. Rule 4 consumes
   `LastPackedIsImage` (last-block-wins), the independent proof-RAR pass consumes `AnyImage` —
   one seam serves both distinct predicates (codex r1 f3). Production reader implements it over
   the lib `RARHeaderReader`; Task 7 adds one test routing a REAL fixture RAR (RarFixtures)
@@ -918,8 +986,9 @@ Rules (each excerpt-cited in code):
   7) remaining pre-existing .srs not superseded by 6,
   8) conditional fix RAR (`is_storable_fix` — excerpt),
   9) subtitle nested SRRs + their stored subtitle SFVs,
-  10) FINAL SFV pass: input SFVs appended; any nested/proof SRR whose stem matches an SFV is
-     MOVED immediately before that SFV (excerpt tail reordering).
+  10) FINAL SFV pass: input SFVs appended; any nested/proof `.srr` AND any proof `.rar` whose
+     stem matches an SFV is MOVED immediately before that SFV (excerpt tail L1243: extension
+     check is `('.srr', '.rar')` — codex r2b f6).
   Task 7 implements passes 1-5 + the pass-10 skeleton for input SFVs; Task 9 splices 6-9 and the
   full pass-10 reordering. A mixed-tree test in Task 9 asserts the COMPLETE ordered logical-name
   list.
@@ -954,9 +1023,9 @@ Rules (all excerpt-cited; `generate_srr` consumption + `get_proof_files` chain):
 | root `Folder.jpg`, `MyFolder.png`, `AlbumArtSmall.jpg`, `AlbumArt_{guid}_Large.jpg`, `has space.jpg` | all skipped (always_skip) |
 | root `AlbumArtLarge.jpg` 150KB similar-named | STORED (predicate is `albumartsmall` contains + `albumart_{` prefix only) |
 | root `00-cover.jpg` 5KB | stored (prefix accept, size irrelevant) |
-| root `grp-cover.jpg` 150KB, sfv named `grp-movie.sfv` | stored (similar name; renamed from grp-proof.jpg — 'proof' keyword would mask the branch, codex r1 f13) |
-| root `00-grp.jpg` vs `000-grp.jpg` vs `0000-grp.jpg` | strip_zeros variants all similarity-match `grp.nfo` |
-| root `grp-cover.jpg` 150KB, only `grp.m3u` present | stored (M3U-only similarity) |
+| root `grp-movie.jpg` 150KB, sfv named `grp-movie.sfv` | stored (true stem-prefix similarity; non-keyword name so the branch is exercised — codex r2b f13) |
+| nfo named `00-grp.nfo`, root image `grp-front.jpg` 150KB | stored (similarity via strip_zeros-normalized good name; the IMAGE is not 00-prefixed so prefix-accept cannot short-circuit) |
+| root `grp-movie.jpg` 150KB, only `grp-movie.m3u` present | stored (M3U-only similarity) |
 | root `big-cover.jpg` exactly 630x1200 px, similar-named, 150KB | skipped (fixed_resolution_cover) |
 | `rip.log` matching the excerpt's log blacklist | not stored; non-blacklisted `x.log` stored |
 | `no.nfo` sized per the excerpt's byte condition vs off-by-one | stored/skipped per exact excerpt predicate |
@@ -979,6 +1048,9 @@ Rules (all excerpt-cited; `generate_srr` consumption + `get_proof_files` chain):
 - Modify: `ReScene.App.Core/Services/ISRRCreationService.cs` + `SRRCreationService.cs`
   (add `CreateFromInputsAsync` pass-through with Task 2's exact signature)
 - Modify: `ReScene.App.Core/ViewModels/CreatorViewModel.cs`
+- Modify: `ReScene.App.Core/ViewModels/MainWindowViewModel.cs` (both CreatorViewModel sites get
+  the shared `new ReleaseScanner()` — the composition root for these VMs lives HERE, so DI is
+  complete in this task; codex r2b f14)
 - Test: `ReScene.App.Core.Tests/CreatorViewModelFolderModeTests.cs`
 
 **Interfaces:**
@@ -995,6 +1067,11 @@ Rules (all excerpt-cited; `generate_srr` consumption + `get_proof_files` chain):
   `StubReleaseScanner`). Task 10 then touches ONLY markup/bindings.
 
 Behavior (spec §3):
+- EVERY InputPath change — file path, blank, or nonexistent — bumps the generation and cancels
+  any in-flight folder scan (stale completions discard against the CURRENT generation regardless
+  of the new input kind); `CanCreate` = not scanning AND not music-only AND existing gates, with
+  `NotifyCanExecuteChanged` on every transition; ALL scan warnings kept ordered (status shows
+  the count; the full ordered list goes to the existing log/details surface) — codex r2b f15.
 - `OnInputPathChanged`: `Directory.Exists(path)` → folder mode: bump `_scanGeneration` (int,
   Inspector `_loadGeneration` house pattern), cancel `_scanCts`, new CTS, `IsScanning = true`,
   `Task.Run(() => _releaseScanner.Scan(path, token))`, apply on UI thread via `_dispatcher.Post`
@@ -1068,6 +1145,15 @@ Behavior (spec §3 rev 3/5):
   entry, no collision error).
 - Cancellation/failure → delete the working dir best-effort; destination untouched (writer's
   transaction covers the SRR itself).
+- ENABLE `FullPipelineGoldenTests` (added disabled in Task 3 — codex r2b f4): regenerate the
+  full-pipeline golden over a tree WITH `Sample/` and `Subs/` using
+  `python bin/pyrescene.py --vobsub-srr --output <tmp> <tree>` (NO `--no-srs`; `--no-isdb`
+  retained), PYTHONPATH shim as in Task 3; nested-SRR app-name fields normalized with the SAME
+  `NormalizeAppName` applied to each stored `.srr` payload; assert complete byte equality of the
+  folder-mode VM output.
+- Executable pass-10 reorder step (codex r2b f6): after assembling the stored list, move every
+  nested/proof `.srr` AND proof `.rar` whose stem matches an SFV to immediately before that SFV
+  (excerpt tail L1243); the mixed-tree test asserts the COMPLETE ordered logical-name list.
 - [ ] **Step 1: failing tests** — matrix: extension-swap naming; cross-dir same stem no collision;
   same-stem full-ext keeping; supersede replaces pre-existing srs entry; SRS-failure txt stored;
   multi-SRR subtitle appends all; cancellation removes working dir. (Stub the SRS/nested services
@@ -1080,9 +1166,6 @@ Behavior (spec §3 rev 3/5):
 **Files:**
 - Modify: `ReScene.Manager/Views/CreatorView.axaml` (+ `.axaml.cs` if focus-return needs code)
 - Modify: `ReScene.Manager/Views/Wizards/CreateSRRWizardBody.axaml`
-- Modify: `ReScene.Manager/Views/MainWindow.axaml.cs` or DI wiring for `IReleaseScanner`
-  registration (grep where services are constructed — `App.axaml.cs`/`Program.cs` composition
-  root; register `new ReleaseScanner()` and pass into both `CreatorViewModel` constructions)
 - Test: `ReScene.Manager.Tests/CreatorViewFolderBindingTests.cs` — RED-first headless binding
   test using the repo's existing Avalonia.Headless idiom (codex r1 f16): instantiate
   `CreatorView` with a VM whose `BrowseInputFolderCommand` is a recording stub; find the
@@ -1107,15 +1190,21 @@ Markup contract (both surfaces, spec §4/§4a exactly):
 - Tab order: input box → Browse file → Browse folder → detected list (set `TabIndex` explicitly
   where the default order differs). Focus return after pickers: Avalonia returns focus to the
   invoking button by default — verify via Task 11 bridge check; only add code-behind if it fails.
-- [ ] **Steps:** markup edits → forced-rebuild gate (`-p:BaseOutputPath=bin2/`, 0/0, delete bin2)
-  → commit `feat(ui): folder input chrome on Creator + wizard (a11y contract)`.
+- [ ] **Step 1 (RED):** write `CreatorViewFolderBindingTests` AND `CreateSRRWizardBodyBindingTests`
+  (same recording-stub pattern); run
+  `dotnet test ReScene.Manager.Tests/... --filter FolderBinding` → both FAIL (button absent).
+- [ ] **Step 2:** markup edits on BOTH surfaces per the contract above.
+- [ ] **Step 3 (GREEN):** re-run the filter → PASS; then the full Manager suite.
+- [ ] **Step 4:** forced-rebuild gate (`-p:BaseOutputPath=bin2/`, 0/0, delete bin2) → commit
+  `feat(ui): folder input chrome on Creator + wizard (a11y contract)`.
 
 ### Task 11: E2E verification + final review
 
 - [ ] **Step 1:** synthesize `%TEMP%\e2e-2disc\` release folder (reuse Task 3's generator tree
   layout: CD1/CD2 sets + nfo + Sample). Via agent bridge: launch worktree app → Advanced SRR
-  Creator tab → CLICK the 'Browse folder…' button via `ava_input` (asserts the live command
-  binding; dialog dismissed via Escape `ava_key`) THEN `ava_input text` the folder path → verify DetectedSets shows `CD1/a.sfv` and
+  Creator tab → CLICK 'Browse folder…' via `ava_input` (live command binding; dialog dismissed
+  via Escape `ava_key`) THEN `ava_input text` the folder path; the WIZARD pass in Step 3 clicks
+  its own 'Browse folder…' the same way before typing (both surfaces exercised — codex r2b f16) → verify DetectedSets shows `CD1/a.sfv` and
   `CD2/b.sfv` (`ava_search by text`), status summary Ok, automation names present (`ava_props`
   on both browse buttons + list) → dispatch CreateSRRCommand → assert output exists.
 - [ ] **Step 2:** load the created SRR in the Inspector (typed path + `ava_key Enter`): tree shows
@@ -1132,9 +1221,12 @@ Markup contract (both surfaces, spec §4/§4a exactly):
 Per the standing approval in the header: subagent-driven development
 (superpowers:subagent-driven-development), fresh implementer per task, task-reviewer per task,
 PLUS a codex diff review per task (runner-script pattern with fidelity-scoped prompts; the
-scanner tasks' prompts must point codex at the excerpt file). Ledger: `.superpowers/sdd-multiset/progress.md` (plan-specific — codex r1 f17). review-package
-script full path:
-`C:/Users/<user>/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/review-package`.
+scanner tasks' prompts must point codex at the excerpt file). Ledger: `.superpowers/sdd-multiset/progress.md` (plan-specific — codex r1 f17). review-package invocation (script verified to exist 2026-07-19):
+`bash "$HOME/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/review-package" BASE HEAD`
+(if the plugin version dir moved, locate with
+`ls "$HOME/.claude/plugins/cache/claude-plugins-official/superpowers"`; fallback = manual
+`git log --oneline BASE..HEAD && git diff --stat BASE HEAD && git diff -U10 BASE HEAD` to one
+file, per the sdd skill).
 Bridge provisioning: the worktree Debug build carries AvaDevBridge (dotnet run via ava_launch);
 no extra install. Model selection per the sdd skill's
 guidance; Task 5 and Task 7 implementers get the excerpt path in their dispatch as required
