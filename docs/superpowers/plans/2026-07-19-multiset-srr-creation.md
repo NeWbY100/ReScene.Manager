@@ -800,4 +800,109 @@ public ReleaseScanResult Scan(string releaseRoot, CancellationToken ct = default
 - [ ] **Step 4:** filter PASS + full App.Core suite green. **Step 5:** commit
   `feat(app): ReleaseScanner main-set decision tree (pyrescene 2a port)`.
 
+### Task 6: App.Core — scanner music/samples/first-RAR (spec §2b, §2c, §2e)
+
+**Files:**
+- Modify: `ReScene.App.Core/Services/ReleaseScanner.cs`
+- Test: `ReScene.App.Core.Tests/ReleaseScannerMediaTests.cs`
+
+**Interfaces:**
+- Consumes: Task 5's scanner internals (`ClassifySfv` result lists, injectable readers).
+- Produces: populated `MusicSfvs`, `SampleFiles`, and first-RAR `MainSets` entries in
+  `ReleaseScanResult` (shapes unchanged — Tasks 8-9 consume the record as declared in Task 5).
+
+Rules (each excerpt-cited in code):
+- §2b `has_music` ONLY inside the zero-survivor rescue (excerpt `remove_unwanted_sfvs` tail):
+  rescue re-admits SFVs with >1 entry as MAIN; SFVs whose entries `endswith(".mp3"/".flac"/".mp2")`
+  CASE-SENSITIVE → `MusicSfvs` + warning `[DIVERGENCE]` (spec routes them to Spec 2 instead of
+  sets). Empty/corrupt SFV during rescue → warning + stored-only `[DIVERGENCE: hardening]`.
+- §2c samples, phase 1: `FileType.VideoExtensions` =
+  `.mp4 .m4v .avi .mkv .wmv .vob .m2ts .ts .mpeg .mpg .m2v .m2p` (OrdinalIgnoreCase ext match);
+  path contains `sample` (case-insensitive) OR the literal sibling `video[..^4] + ".sfv"` exists
+  (pyrescene's `sample[:-4] + ".sfv"` slice — for `.m2ts` this checks `x.m.sfv`-style names; the
+  quirk is intentional and tested). Phase 2: remaining videos whose BASENAME appears
+  case-sensitively among any SFV's entry names anywhere in the release.
+- §2e: first-RAR main sets come only from selected SFVs (already Task 5's behavior); loose-RAR
+  discovery ONLY when `sfvs.Count == 0` for the entire root `[DIVERGENCE: extension]`: for each
+  `.rar` outside dirs excluded by rules 3-6 whose name is its chain's first volume
+  (`RARVolumeIdentifier` + `RARVolumeNameComparer` from the lib), add
+  `ReleaseSetInput(rarPath, relativeName)`.
+
+- [ ] **Step 1: failing tests** — `ReleaseScannerMediaTests.cs` matrix:
+
+| Tree | Expectation |
+|---|---|
+| `CD1/a.sfv` (rars) + `x.mp3.sfv` listing `t.mp3` | a.sfv MAIN; music sfv survives rules 1-7? it has no rar entries → stays candidate → NOT rescued (main survived) → classified per §2b only in rescue: NOT music-flagged here; it reaches 2d stored-only with warning |
+| ONLY `x.sfv` listing `t.mp3` | rescue: music → `MusicSfvs` + warning; zero MainSets |
+| ONLY `y.sfv` listing `a.rar b.rar` (2 entries) | rescue: re-admitted MAIN |
+| `Sample/clip.avi` | phase 1 (dir contains sample) → SampleFiles |
+| `movie.sample.mkv` in root | phase 1 (name) → SampleFiles |
+| `clip.avi` + sibling `clip.sfv` | phase 1 literal-slice sibling → SampleFiles |
+| `clip.m2ts` + sibling `clip.sfv` | NOT phase-1-by-sibling (slice checks `clip.m.sfv`) — quirk preserved; also not in any SFV → not a sample |
+| `video.mkv` listed by basename inside `CD1/a.sfv` | phase 2 → SampleFiles |
+| `VIDEO.mkv` listed as `video.mkv` in sfv | NOT phase 2 (case-sensitive membership) |
+| zero SFVs anywhere; `CD1/a.rar`+`a.r00`, `Subs/s.rar` | loose discovery: `CD1/a.rar` MAIN (r00 not first; Subs excluded) |
+| zero SFVs, empty tree | zero MainSets, no crash |
+
+- [ ] **Step 2:** filter `ReleaseScannerMedia` → FAIL. **Step 3:** implement (video extension set
+  as `private static readonly string[] VideoExtensions`, excerpt-cited; phase-2 via
+  `HashSet<string>(StringComparer.Ordinal)` of all SFV entry basenames). **Step 4:** filter +
+  full App.Core suite PASS. **Step 5:** commit
+  `feat(app): scanner samples, rescue-scoped music, gated loose-RAR discovery`.
+
+### Task 7: App.Core — scanner stored-file chain (spec §2d)
+
+**Files:**
+- Modify: `ReScene.App.Core/Services/ReleaseScanner.cs`
+- Create: `ReScene.App.Core/Services/ProofRarContent.cs` (if not created in Task 5)
+- Test: `ReScene.App.Core.Tests/ReleaseScannerStoredTests.cs`
+
+**Interfaces:**
+- Consumes: Tasks 4-6 internals.
+- Produces: populated `StoredFiles` (order = category passes: nfo → m3u → proof images/rars →
+  log → cue → srs → sfvs, traversal order within each; Task 8 consumes as-is; Task 9 applies the
+  generated-SRS supersede rule at VM level).
+
+Rules (all excerpt-cited; `generate_srr` consumption + `get_proof_files` chain):
+- nfo pass: every `*.nfo` EXCEPT basenames `imdb.nfo`, `tvmaze.nfo` (case-insensitive), and
+  `no.nfo` under the excerpt's condition (transcribe it verbatim from the excerpt's nfo block).
+- m3u pass: every `*.m3u`. log pass: `*.log` filtered per the excerpt's log condition (transcribe;
+  it excludes site/tool logs by name). cue pass: every `*.cue`. srs pass: every pre-existing
+  `*.srs` (supersede handling is Task 9's).
+- Proof images: for every `.jpg/.jpeg/.png/.bmp/.gif` in traversal order: keyword path
+  (`proof|sample|cover|screenshots|compare` substring, case-insensitive) → stored BEFORE
+  `always_skip` (a `Proof/Folder.jpg` IS stored); else `always_skip` (space in basename OR stem
+  ends `folder` OR basename contains `albumartsmall` OR basename starts `albumart_{`) → skip;
+  else `store_rls_root`: basename starts `00`/`01`/`001` → stored; else
+  `new FileInfo(f).Length > 100000` AND `SimilarToGoodName(f)` (strip_zeros-normalized prefix
+  match against nfo/sfv/rar/m3u basenames — transcribe `similar_to_good_name` + `strip_zeros`)
+  AND NOT `FixedResolutionCover(f)` (transcribe the resolution check; use the excerpt's exact
+  dimension list) → stored; else skip + warning (size logged like pyrescene).
+- Proof RARs (independent pass): every `*.rar` whose path contains `proof` (case-insensitive) and
+  whose packed blocks include an image ext (via the Task 5 injectable `proofRarReader`;
+  production impl uses lib `RARHeaderReader`, `ValueError`-equivalent → warning + not stored) →
+  stored. Conditional fix RAR: transcribe the excerpt's fix-RAR storage condition.
+
+- [ ] **Step 1: failing tests** — `ReleaseScannerStoredTests.cs` matrix:
+
+| Item | Expectation |
+|---|---|
+| `release.nfo`, `imdb.nfo`, `TVMAZE.NFO` | only `release.nfo` stored |
+| `playlist.m3u`, `rip.log`, `disc.cue`, `old.srs` | all stored in category order after nfo |
+| `Proof/Folder.jpg` | STORED (keyword bypass precedes always_skip) |
+| root `Folder.jpg`, `MyFolder.png`, `AlbumArtSmall.jpg`, `AlbumArt_{guid}_Large.jpg`, `has space.jpg` | all skipped (always_skip) |
+| root `AlbumArtLarge.jpg` 150KB similar-named | STORED (predicate is `albumartsmall` contains + `albumart_{` prefix only) |
+| root `00-cover.jpg` 5KB | stored (prefix accept, size irrelevant) |
+| root `grp-proof.jpg` 150KB, sfv named `grp-movie.sfv` | stored (similar name) |
+| root `random.jpg` 150KB unrelated name | skipped + warning |
+| root `small.jpg` 50KB similar-named | skipped (≤100000) with boundary test at exactly 100000 (skip) and 100001 (store) |
+| `Proof/p.rar` reader→Image | stored |
+| `Proof/p.rar` reader→NonImage | not stored |
+| `Proof/p.rar` reader→Unreadable | warning, not stored |
+| category order | full result list equals the documented category-pass concatenation for a mixed tree |
+
+- [ ] **Step 2:** filter `ReleaseScannerStored` → FAIL. **Step 3:** implement; every transcribed
+  helper carries `// excerpt: <function> L<from>-<to>`. **Step 4:** filter + full App.Core PASS.
+- [ ] **Step 5:** commit `feat(app): scanner stored-file chain (2d exact port)`.
+
 (Per-task steps with complete code follow; each task section replaces this line as it is written.)
