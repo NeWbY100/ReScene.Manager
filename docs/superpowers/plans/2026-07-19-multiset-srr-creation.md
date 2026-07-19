@@ -1,10 +1,8 @@
 # Multi-Set SRR Creation (Spec 1: Video Releases) Implementation Plan
 
-> **STATUS: r5 — codex r4 left 4 items (f12/f18 resolved); all fixed: junction helper and
-> ResolveAncestorChain as real compiled code with GetFinalPath structure repaired, production
-> proof-reader test placed in Task 5's lib companion, 10-character-slice similarity fixtures
-> with boundary negative, Task 11 computes merge-base. Pending codex r5 re-review; execution on
-> APPROVE per standing user approval.**
+> **STATUS: EXECUTABLE — codex plan review r5 verdict APPROVE-WITH-FIXES; the single fix
+> (no-skip Step 4 wording, codex r5 f1) is applied. Execution proceeds under the Execution
+> Regime per the standing user approval (2026-07-19). Review logs: r1/r2b beside this file.**
 >
 > **Standing execution approval (user, 2026-07-19):** once codex APPROVEs this plan, execution
 > proceeds WITHOUT a further user gate, using the execution approach recommended jointly by the
@@ -363,7 +361,8 @@ public static class SrrNameCanonicalizer
 }
 ```
 
-- [ ] **Step 4:** re-run the filter → PASS (junction test passes or self-skips).
+- [ ] **Step 4:** re-run the filter → PASS (every test, junction included, runs unconditionally
+  on Windows — no skip path exists; codex r5 f1).
 - [ ] **Step 5:** `git add ReScene.Lib/ReScene/SRR/SrrNameCanonicalizer.cs ReScene.Lib/ReScene/SRR/SrrNameException.cs ReScene.Lib/ReScene.Tests/SrrNameCanonicalizerTests.cs && git commit -m "feat(lib): SRR name canonicalizer with final-path containment"`
 
 ### Task 2: Lib — CreateFromInputsAsync (multi-input writer)
