@@ -66,6 +66,27 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         return bytes;
     }
 
+    /// <summary>
+    /// A minimal "marker-first" JPEG: bare SOI (FF D8) immediately followed by an SOF0 (FF C0)
+    /// segment — no JFIF/Exif/ICC_PROFILE/Adobe marker anywhere. Real pyrescene's imghdr would NOT
+    /// recognize this as a JPEG at all (see the TryGetImageSize divergence comment); this scanner's
+    /// simplified "any SOI-starting file is a JPEG" probe does.
+    /// </summary>
+    private static byte[] BuildMarkerFirstJpegSofHeader(int width, int height)
+    {
+        var bytes = new byte[11];
+        bytes[0] = 0xFF;
+        bytes[1] = 0xD8; // SOI
+        bytes[2] = 0xFF;
+        bytes[3] = 0xC0; // SOF0
+        bytes[4] = 0x00;
+        bytes[5] = 0x0B; // segment length (cosmetic; never re-read after the marker is found)
+        bytes[6] = 0x08; // precision (skipped)
+        BinaryPrimitives.WriteUInt16BigEndian(bytes.AsSpan(7, 2), (ushort)height);
+        BinaryPrimitives.WriteUInt16BigEndian(bytes.AsSpan(9, 2), (ushort)width);
+        return bytes;
+    }
+
     // --- nfo pass (excerpt: generate_srr L608-617) -----------------------------------------------
 
     [Fact]
@@ -94,6 +115,24 @@ public class ReleaseScannerStoredTests : TempDirTestBase
 
         Assert.DoesNotContain(skip, result.StoredFiles);
         Assert.Equal([store], result.StoredFiles);
+    }
+
+    [Fact]
+    public void NoNfo_SubstringVariants_EightBytes_Skipped_LongerStored()
+    {
+        // Fix F1: excerpt L611 `in ("no.nfo")` is a parenthesized STRING (no comma), so Python's
+        // `in` is SUBSTRING membership, not equality — basenames ".nfo" and "o.nfo" (both
+        // substrings of "no.nfo") also enter the size==8 skip, not just "no.nfo" itself.
+        string root = CreateRoot("SomeRelease");
+        string dotNfoSkip = WriteSized(Path.Combine(root, "A", ".nfo"), 8);
+        string oNfoSkip = WriteSized(Path.Combine(root, "B", "o.nfo"), 8);
+        string dotNfoStore = WriteSized(Path.Combine(root, "C", ".nfo"), 9);
+
+        ReleaseScanResult result = new ReleaseScanner().Scan(root);
+
+        Assert.DoesNotContain(dotNfoSkip, result.StoredFiles);
+        Assert.DoesNotContain(oNfoSkip, result.StoredFiles);
+        Assert.Contains(dotNfoStore, result.StoredFiles);
     }
 
     // --- m3u / log / cue / pre-existing srs category order -----------------------------------------
@@ -274,6 +313,25 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         Assert.DoesNotContain(img, result.StoredFiles);
     }
 
+    [Fact]
+    public void FixedResolutionCover_MarkerFirstJpeg_DivergesFromPyrescene_CurrentlySkipped()
+    {
+        // Fix F3 (pinning test): a bare-SOI JPEG with an SOF0 segment but no JFIF/Exif/ICC_PROFILE/
+        // Adobe marker anywhere — real pyrescene's imghdr would NOT recognize this as a JPEG at
+        // all, so fixed_resolution_cover would report False and pyrescene would STORE it. This
+        // scanner's simplified "any SOI-starting file is a JPEG" probe DOES recognize it and skips
+        // it as a fixed-resolution cover — a deliberate, documented [DIVERGENCE: simplified]
+        // (see TryGetImageSize's remarks). This test locks the current, intentional behavior.
+        string root = CreateRoot("SomeRelease");
+        WriteSfv(Path.Combine(root, "grp-movienight.sfv"), "grp-movienight.rar");
+        string img = WriteSized(
+            Path.Combine(root, "grp-movienight-cover.jpg"), 150_000, BuildMarkerFirstJpegSofHeader(630, 1200));
+
+        ReleaseScanResult result = new ReleaseScanner().Scan(root);
+
+        Assert.DoesNotContain(img, result.StoredFiles);
+    }
+
     // --- proof images: size boundary (excerpt L140, strictly greater than 100000) -------------------
 
     [Fact]
@@ -379,6 +437,14 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         // resolves to an image-ending RAR) must not be added a second time by the independent
         // filter_proof_rar_files pass, even though it independently also matches "proof"-in-path
         // plus AnyImage.
+        //
+        // NOTE (codex #5, deferred to Task 9): the `[sfv, rar]` order asserted below is Task 7's
+        // INTERMEDIATE state — rule 4 pre-seeds `stored` with the proof sfv+rar at the FRONT of
+        // the list before any §2d category pass runs. pyrescene's real generate_srr CLEARS every
+        // stored file (excerpt L601-603) and rebuilds via the pass-10 sequence, which places the
+        // proof RAR immediately BEFORE its SFV, not both at the front. That clear-and-rebuild is
+        // explicitly Task 9's scope (full pass-10 reorder); Task 7 only proves no duplicate entry
+        // exists, not the final ordering.
         string root = CreateRoot("SomeRelease");
         string sfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
         string rar = Touch(Path.Combine(root, "Proof", "p.rar"));
@@ -412,6 +478,37 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         string root = CreateRoot("Movie.NOTAFIX-GRP");
         WriteSfv(Path.Combine(root, "x.sfv"), "x.rar");
         string rar = Touch(Path.Combine(root, "x.rar"));
+
+        ReleaseScanResult result = new ReleaseScanner().Scan(root);
+
+        Assert.DoesNotContain(rar, result.StoredFiles);
+    }
+
+    [Fact]
+    public void FixRar_PartStyleFirstVolume_Part01_Stored()
+    {
+        // Fix F2: a new-style ".partNN.rar" entry with N == 1 IS a true first volume.
+        string root = CreateRoot("Movie.FIX-GRP");
+        WriteSfv(Path.Combine(root, "x.sfv"), "x.part01.rar");
+        string rar = Touch(Path.Combine(root, "x.part01.rar"));
+
+        ReleaseScanResult result = new ReleaseScanner().Scan(root);
+
+        Assert.Contains(rar, result.StoredFiles);
+    }
+
+    [Fact]
+    public void FixRar_PartStyleNonFirstVolume_Part02_NoPart01OnDisk_NotStored()
+    {
+        // Fix F2: ReleaseScanner.cs previously accepted this — Path.GetExtension("x.part02.rar")
+        // is ".rar" and RARVolumeIdentifier.IsRARVolume passes it, so a non-first ".partNN.rar"
+        // slipped through. pyrescene's first_rars identifies "first" from the SFV's LISTED ENTRY
+        // NAME alone (never by scanning the disk for a lower-numbered sibling), so "part02" must
+        // be rejected purely by its own name — this test deliberately does NOT create
+        // "x.part01.rar" on disk, proving the rejection isn't a disk chain-walk in disguise.
+        string root = CreateRoot("Movie.FIX-GRP");
+        WriteSfv(Path.Combine(root, "x.sfv"), "x.part02.rar");
+        string rar = Touch(Path.Combine(root, "x.part02.rar"));
 
         ReleaseScanResult result = new ReleaseScanner().Scan(root);
 

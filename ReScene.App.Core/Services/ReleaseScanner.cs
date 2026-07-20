@@ -569,10 +569,11 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
     /// <summary>
     /// excerpt: generate_srr L608-617 (nfo filter) — every <c>*.nfo</c> except (case-insensitive
-    /// basename) <c>imdb.nfo</c>/<c>tvmaze.nfo</c>, and except a <c>no.nfo</c> that is EXACTLY 8
-    /// bytes (the excerpt's own comment: "contains the text 'no.nfo'") or that can't be sized at
-    /// all — both silently skipped, matching pyrescene's own silent <c>except OSError: continue</c>
-    /// (not a "[DIVERGENCE: hardening]" case; the excerpt already handles this gracefully).
+    /// basename) <c>imdb.nfo</c>/<c>tvmaze.nfo</c>, and except a "no.nfo"-substring basename that
+    /// is EXACTLY 8 bytes (the excerpt's own comment: "contains the text 'no.nfo'") or that can't
+    /// be sized at all — both silently skipped, matching pyrescene's own silent
+    /// <c>except OSError: continue</c> (not a "[DIVERGENCE: hardening]" case; the excerpt already
+    /// handles this gracefully).
     /// </summary>
     private static List<string> NfoPass(IReadOnlyList<string> nfoFiles)
     {
@@ -585,7 +586,12 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                 continue;
             }
 
-            if (baseName == "no.nfo")
+            // excerpt L611 — `os.path.basename(nfo).lower() in ("no.nfo")`: `("no.nfo")` is a
+            // parenthesized STRING, not a 1-tuple (no trailing comma) — Python's `in` on a str is
+            // SUBSTRING membership, not equality. So basenames ".nfo" and "o.nfo" (both substrings
+            // of "no.nfo", not just "no.nfo" itself) also enter the size==8 skip check below.
+            // Replicated verbatim for parity, not "fixed" to an equality check.
+            if ("no.nfo".Contains(baseName, StringComparison.Ordinal))
             {
                 try
                 {
@@ -896,12 +902,20 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                 return (width, height);
             }
 
-            // [DIVERGENCE: simplified] excerpt L247-257's custom test_jpeg (appended to imghdr's
-            // own JFIF/Exif sniff) requires an ICC_PROFILE/Adobe marker, and its third fallback
-            // branch (`h[0:4] == "\xff\xd8\xff\xdb"`) compares bytes to a Python str literal — dead
-            // code under Python 3, never true. Rather than inherit that bug, any SOI-starting
-            // (FF D8) file is probed as a JPEG here, which is more permissive but preserves the
-            // intent (detect JPEG dimensions).
+            // [DIVERGENCE: simplified] pyrescene's imghdr only recognizes a JPEG when the header
+            // carries JFIF/Exif right after SOI (imghdr's built-in test_jpeg) OR an ICC_PROFILE/
+            // Adobe marker (excerpt L247-257's appended custom test_jpeg; its third fallback
+            // branch, `h[0:4] == "\xff\xd8\xff\xdb"`, compares bytes to a Python str literal — dead
+            // code under Python 3, never true). This port does not replicate that sniff — instead
+            // ANY file starting with the bare SOI marker (FF D8) is probed as a JPEG, regardless of
+            // what follows. Net effect: a "marker-first" JPEG (e.g. one opening with a COM/APP13
+            // segment before any JFIF/Exif/ICC/Adobe marker) that happens to be exactly 630x1200 is
+            // SKIPPED here as a fixed-resolution cover, whereas real pyrescene's imghdr would fail
+            // to recognize it as a JPEG at all (get_image_size falls to `else: return`), so
+            // fixed_resolution_cover would report False and the file would be STORED instead. This
+            // is intentional and pinned by a regression test (FixedResolutionCover_MarkerFirstJpeg
+            // in ReleaseScannerStoredTests.cs) — real-world proof/cover JPEGs are essentially always
+            // JFIF/Exif-first in practice, so this is not expected to matter for golden fixtures.
             if (head[0] == 0xFF && head[1] == 0xD8)
             {
                 return TryReadJpegSize(fs);
@@ -979,13 +993,16 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     /// excerpt: filter_proof_rar_files L204-211 (independent pass — unlike proof images, gated
     /// only by "proof" appearing anywhere in the lowered path, no keyword-vs-always_skip split).
     /// [Task-5 forward note] rule 4 (above, in <see cref="ClassifyProof"/>) may already have stored
-    /// this exact RAR as the success case of a proof-linked singleton SFV — deduped by resolved
-    /// path against <paramref name="stored"/> so it is never added twice.
+    /// this exact RAR as the success case of a proof-linked singleton SFV — deduped by OS-resolved
+    /// final path (design spec §1a) against <paramref name="stored"/> so it is never added twice,
+    /// including when the same physical file is reachable via two different spellings (an ancestor
+    /// symlink/junction, an 8.3 short name, etc. — a lexical <see cref="Path.GetFullPath(string)"/>
+    /// compare would miss those aliases).
     /// </summary>
     private List<string> GetProofRars(IReadOnlyList<string> rarFiles, List<string> stored, List<string> warnings, CancellationToken ct)
     {
         var result = new List<string>();
-        var alreadyStored = new HashSet<string>(stored.Select(Path.GetFullPath), StringComparer.OrdinalIgnoreCase);
+        var alreadyStored = new HashSet<string>(stored.Select(ResolveDedupKey), StringComparer.OrdinalIgnoreCase);
 
         foreach (string rar in rarFiles)
         {
@@ -1007,13 +1024,32 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                 continue;
             }
 
-            if (alreadyStored.Add(Path.GetFullPath(rar)))
+            if (alreadyStored.Add(ResolveDedupKey(rar)))
             {
                 result.Add(rar);
             }
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// <see cref="SrrNameCanonicalizer.GetFinalPath"/> requires its target to exist; every path
+    /// reaching this dedup already came from traversal or a rule-4 addition (both existence-
+    /// checked), so this should always succeed. [DIVERGENCE: hardening] a path that vanishes or
+    /// becomes unresolvable between discovery and this call falls back to the lexical
+    /// <see cref="Path.GetFullPath(string)"/> form rather than throwing and aborting the scan.
+    /// </summary>
+    private static string ResolveDedupKey(string path)
+    {
+        try
+        {
+            return SrrNameCanonicalizer.GetFinalPath(path);
+        }
+        catch (SrrNameException)
+        {
+            return Path.GetFullPath(path);
+        }
     }
 
     /// <summary>
@@ -1038,11 +1074,13 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
         string entryName = entries[0];
         if (!string.Equals(Path.GetExtension(entryName), ".rar", StringComparison.OrdinalIgnoreCase)
-            || !RARVolumeIdentifier.IsRARVolume(entryName))
+            || !RARVolumeIdentifier.IsRARVolume(entryName)
+            || !IsTrueFirstVolume(entryName))
         {
             // get_start_rar_files only ever yields a chain's TRUE FIRST volume — a single
-            // non-".rar" or continuation-volume (.r00/.part02.rar) entry can never be "the" main
-            // RAR here.
+            // non-".rar" or old-style continuation-volume (.r00) entry can never be "the" main RAR
+            // here, and neither can a new-style non-first volume (.part02.rar etc. — the extension
+            // is still ".rar", so that alone doesn't disqualify it; IsTrueFirstVolume does).
             return null;
         }
 
@@ -1059,6 +1097,24 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         bool alreadyStored = stored.Any(s => string.Equals(Path.GetFullPath(s), resolved, StringComparison.OrdinalIgnoreCase));
         return alreadyStored ? null : rarPath;
     }
+
+    /// <summary>
+    /// excerpt: get_start_rar_files L441-455 (<c>first_rars</c>, referenced but not itself
+    /// excerpted) — pyrescene identifies "the first volume" from the SFV's LISTED ENTRY NAME
+    /// alone (it never scans the disk for sibling volumes here), so this is a pure naming check,
+    /// not a disk chain-walk: a plain "X.rar" (no <c>.partNN</c> segment) is always first; an
+    /// "X.partNN.rar" is first only when N == 1 (any zero-padding: part1/part01/part001 all
+    /// count); anything else (a partNN with N != 1) is never first — even when no lower-numbered
+    /// sibling actually exists on disk, since the excerpt never checks that.
+    /// </summary>
+    private static bool IsTrueFirstVolume(string fileName)
+    {
+        Match match = PartVolumeSuffixRegex().Match(fileName);
+        return !match.Success || (int.TryParse(match.Groups[1].Value, out int partNumber) && partNumber == 1);
+    }
+
+    [GeneratedRegex(@"\.part(\d+)\.rar$", RegexOptions.IgnoreCase)]
+    private static partial Regex PartVolumeSuffixRegex();
 
     // excerpt: is_storable_fix L516-524 (L1060-1071 duplicate) — four alternatives OR'd together;
     // only the FIRST is case-insensitive (re.IGNORECASE passed in the excerpt); the remaining three
