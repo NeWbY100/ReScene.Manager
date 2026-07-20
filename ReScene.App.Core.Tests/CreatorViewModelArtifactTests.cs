@@ -665,4 +665,121 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         SRRCreationOptions nestedOptions = Assert.Single(srr.RarCallOptions);
         Assert.False(nestedOptions.ComputeOSOHashes);
     }
+
+    // ── 16. G2 (codex Task 9 fix-3): a subtitle SFV's nested SRR is emitted BEFORE the SFV's own
+    //        entry — pyrescene pass 9 (nested SRRs) precedes pass 10 (subtitle SFV tail). The
+    //        same-stem reorder cannot repair a DIFFERENTLY-named pair (subs.sfv listing eng.rar),
+    //        so the artifact-block ORDER itself must be right. ──
+
+    [Fact]
+    public async Task ManualSubtitleSfv_DifferentlyNamedChain_NestedSrrImmediatelyPrecedesSfv()
+    {
+        // A manually-added subtitle SFV (subs.sfv) whose RAR chain (eng.rar) has a DIFFERENT stem:
+        // the pass-10 same-stem reorder looks for eng.sfv to place eng.srr before, but the SFV is
+        // subs.sfv, so it can never repair the order. The old per-SFV interleaving emitted
+        // [subs.sfv, eng.srr]; pyrescene emits [eng.srr, subs.sfv].
+        string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string subSfv = WriteSfv(Path.Combine(root, "Subs", "subs.sfv"), "eng.rar");
+        Touch(Path.Combine(root, "Subs", "eng.rar"));
+        var scan = new ReleaseScanResult([], [], [], [], [], []);
+        (CreatorViewModel vm, _, RecordingSRRCreationService srr, _) = CreateVm(scan);
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+        vm.ExtraSubtitleSfvFiles.Add(subSfv); // manual "Add Subtitle", differently-named
+        vm.OutputPath = Path.Combine(TempDir, "out-" + Guid.NewGuid().ToString("N") + ".srr");
+        await vm.CreateSRRCommand.ExecuteAsync(null);
+        IReadOnlyList<StoredFileEntry> additionalFiles = srr.LastAdditionalFiles ?? [];
+
+        List<string> names = [.. additionalFiles.Select(e => e.StoredName)];
+        int srrIndex = names.IndexOf("Subs/eng.srr");
+        int sfvIndex = names.IndexOf("Subs/subs.sfv");
+        Assert.True(srrIndex >= 0, "nested eng.srr must be present");
+        Assert.True(sfvIndex >= 0, "subtitle subs.sfv must be present");
+        Assert.Equal(sfvIndex - 1, srrIndex); // eng.srr IMMEDIATELY before subs.sfv
+    }
+
+    [Fact]
+    public async Task TwoManualSubtitleSfvs_AllNestedSrrsPrecedeAllSfvEntries()
+    {
+        // G2 grouping for the >=2-subtitle-SFV case: pyrescene's vobsub loop creates EVERY nested
+        // SRR (pass 9), THEN the tail loop appends EVERY subtitle SFV (pass 10) — two passes, not
+        // per-SFV interleaving. So both nested SRRs must precede both SFV entries.
+        string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string subA = WriteSfv(Path.Combine(root, "Subs", "subsA.sfv"), "aaa.rar");
+        string subB = WriteSfv(Path.Combine(root, "Subs", "subsB.sfv"), "bbb.rar");
+        Touch(Path.Combine(root, "Subs", "aaa.rar"));
+        Touch(Path.Combine(root, "Subs", "bbb.rar"));
+        var scan = new ReleaseScanResult([], [], [], [], [], []);
+        (CreatorViewModel vm, _, RecordingSRRCreationService srr, _) = CreateVm(scan);
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+        vm.ExtraSubtitleSfvFiles.Add(subA);
+        vm.ExtraSubtitleSfvFiles.Add(subB);
+        vm.OutputPath = Path.Combine(TempDir, "out-" + Guid.NewGuid().ToString("N") + ".srr");
+        await vm.CreateSRRCommand.ExecuteAsync(null);
+        IReadOnlyList<StoredFileEntry> additionalFiles = srr.LastAdditionalFiles ?? [];
+
+        List<string> names = [.. additionalFiles.Select(e => e.StoredName)];
+        int aaaSrr = names.IndexOf("Subs/aaa.srr");
+        int bbbSrr = names.IndexOf("Subs/bbb.srr");
+        int subASfv = names.IndexOf("Subs/subsA.sfv");
+        int subBSfv = names.IndexOf("Subs/subsB.sfv");
+        Assert.True(aaaSrr >= 0 && bbbSrr >= 0 && subASfv >= 0 && subBSfv >= 0);
+        Assert.True(Math.Max(aaaSrr, bbbSrr) < Math.Min(subASfv, subBSfv),
+            "ALL nested SRRs must precede ALL subtitle-SFV entries (pyrescene pass 9 then pass 10)");
+    }
+
+    // ── 17. G3 (codex Task 9 fix-3): a spaced RAR name in a subtitle SFV must group as ONE chain,
+    //        not throw and drop the whole chain (the old SFVFile.ReadFile split every space). ──
+
+    [Fact]
+    public async Task SubtitleSfv_SpacedRarName_ParsedAsOneChain_NotDropped()
+    {
+        // "sub title.rar"/"sub title.r00" — the name itself contains a space. The old
+        // SFVFile.ReadFile(tolerant:false) split on every space, saw an 8-char-CRC check fail, and
+        // THREW InvalidDataException -> the catch returned [] -> NO nested SRR at all. The shared
+        // resolver's last-space parse keeps the space, yielding one chain / one "sub title.srr".
+        string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
+        string nfo = Touch(Path.Combine(root, "release.nfo"));
+        string subSfv = WriteSfv(Path.Combine(root, "Subs", "subs.sfv"), "sub title.rar", "sub title.r00");
+        Touch(Path.Combine(root, "Subs", "sub title.rar"));
+        Touch(Path.Combine(root, "Subs", "sub title.r00"));
+        var scan = new ReleaseScanResult([], [], [subSfv], [nfo, subSfv], [], []);
+        (CreatorViewModel vm, _, RecordingSRRCreationService srr, _) = CreateVm(scan);
+
+        IReadOnlyList<StoredFileEntry> additionalFiles = await RunCreateAsync(vm, root, srr);
+
+        List<string> names = [.. additionalFiles.Select(e => e.StoredName)];
+        Assert.Single(names, n => n == "Subs/sub title.srr");
+        Assert.Single(srr.RarCalls); // exactly one chain handed to the writer, not dropped
+    }
+
+    // ── 18. G4 (codex Task 9 fix-3): a `.\`-prefixed continuation must RESOLVE onto the same chain
+    //        as its head, not split into a second same-named SRR (the old raw Path.Combine kept the
+    //        `.\`, giving a distinct archive-set key and a duplicate "eng.srr"). ──
+
+    [Fact]
+    public async Task SubtitleSfv_DotSlashContinuation_GroupsWithHead_OneChainOneName()
+    {
+        // "eng.rar" + ".\eng.r00" is ONE chain. The old raw Path.Combine left ".\eng.r00" keyed as
+        // ".../Subs/./eng" vs "eng.rar"'s ".../Subs/eng" -> two chains -> two "eng.srr" (a duplicate
+        // logical name the writer later rejects). ResolveSfvEntry collapses the "." segment first.
+        string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
+        string nfo = Touch(Path.Combine(root, "release.nfo"));
+        string subSfv = WriteSfv(Path.Combine(root, "Subs", "subs.sfv"), "eng.rar", @".\eng.r00");
+        Touch(Path.Combine(root, "Subs", "eng.rar"));
+        Touch(Path.Combine(root, "Subs", "eng.r00"));
+        var scan = new ReleaseScanResult([], [], [subSfv], [nfo, subSfv], [], []);
+        (CreatorViewModel vm, _, RecordingSRRCreationService srr, _) = CreateVm(scan);
+
+        IReadOnlyList<StoredFileEntry> additionalFiles = await RunCreateAsync(vm, root, srr);
+
+        List<string> names = [.. additionalFiles.Select(e => e.StoredName)];
+        Assert.Single(names, n => n == "Subs/eng.srr"); // ONE, not a duplicate pair
+        Assert.Single(srr.RarCalls); // ONE chain: eng.rar + eng.r00 folded together
+    }
 }

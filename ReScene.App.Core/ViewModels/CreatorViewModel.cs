@@ -3,7 +3,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ReScene.App.Core.Services;
 using ReScene.App.Core.Models;
-using ReScene.Core.IO;
 using ReScene.SRR;
 using ReScene.SRS;
 
@@ -1559,9 +1558,17 @@ public partial class CreatorViewModel : OperationViewModelBase
     }
 
     /// <summary>
-    /// Creates a nested .srr per <see cref="ExtraSubtitleSfvFiles"/> entry, unless D8's check below
-    /// skips it. D4/E3 fix: the subtitle SFV's own bytes are stored EXACTLY ONCE, however it got
-    /// here — for a SCANNER-origin subtitle, the scanner's pass-10 (<c>foreach sfv in sfvs</c>,
+    /// Stages every subtitle SFV's generated artifacts in pyrescene's own two-pass order (G2 fix,
+    /// codex Task 9 fix-3): pyrescene creates ALL nested subtitle SRRs first, in its vobsub pass 9
+    /// (<c>create_srr_for_subs</c>, excerpt ~L803+), and appends the excluded/subtitle SFVs' own
+    /// bytes only in the final tail, pass 10 (excerpt L1189-1205) — so ALL nested SRRs precede ALL
+    /// subtitle-SFV entries. The first round emitted each SFV's own entry BEFORE its nested SRRs
+    /// (per-SFV interleaving), producing the reversed <c>[subs.sfv, eng.srr]</c>; the same-stem
+    /// pass-10 reorder cannot repair that when the SFV name differs from the chain (a <c>subs.sfv</c>
+    /// listing <c>eng.rar</c>), which is exactly every multi-language subtitle SFV.
+    ///
+    /// D4/E3 fix: the subtitle SFV's own bytes are stored EXACTLY ONCE, however it got here — for a
+    /// SCANNER-origin subtitle, the scanner's pass-10 (<c>foreach sfv in sfvs</c>,
     /// ReleaseScanner.cs) already stores EVERY sfv, including excluded/subtitle ones
     /// (<c>InputSfvs_Appended_AfterAllOtherCategories</c> proves it), so <paramref name="currentStored"/>
     /// already contains it and re-adding it here would be a duplicate (D4's original fix). But
@@ -1582,6 +1589,9 @@ public partial class CreatorViewModel : OperationViewModelBase
         }
 
         var result = new List<StoredFileEntry>();
+
+        // Pass 9 (excerpt ~L803+ create_srr_for_subs): create every subtitle SFV's nested SRRs
+        // first, so they all precede the subtitle-SFV entries emitted in pass 10 below.
         for (int i = 0; i < subtitleSfvs.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
@@ -1594,24 +1604,12 @@ public partial class CreatorViewModel : OperationViewModelBase
             // "../" the writer's CanonicalizeRelative rejects.
             string stem = FolderRelativeStem(_releaseRoot!, sfv, "Subs");
 
-            // E3 fix (codex #3): store this subtitle SFV's own bytes unless SOME entry already in
-            // the stored list (pass-10's scanner-origin storage, or an earlier iteration's own
-            // addition) resolves to the same OS-final-path — dedup against re-storing a
-            // scanner-origin subtitle, while still covering a manually-added one exactly once.
-            string sfvDedupKey = ReleaseScanner.ResolveDedupKey(sfv);
-            bool sfvAlreadyStored = currentStored.Concat(result)
-                .Any(e => string.Equals(ReleaseScanner.ResolveDedupKey(e.FullPath), sfvDedupKey, StringComparison.OrdinalIgnoreCase));
-            if (!sfvAlreadyStored)
-            {
-                result.Add(new StoredFileEntry(stem + ".sfv", sfv));
-            }
-
             // D8 fix (excerpt L805-811, peer F3): "not for Proof RARs that are already stored
             // inside the SRR" — skip nested-SRR creation for this subtitle SFV when some entry
             // ALREADY in the stored list ends with its basename-stem swapped to ".rar"
             // (`basename(esfv)[:-3] + "rar"`, the excerpt's own slice: for a 4-char ".sfv"
             // extension this simply swaps it to ".rar"). Skipping here does not affect the SFV's
-            // OWN storage (D4/E3: handled above, independent of this check) — only whether we ALSO
+            // OWN storage (D4/E3: pass 10 below, independent of this check) — only whether we ALSO
             // wrap its RAR in a redundant nested SRR when the RAR is already embedded directly
             // (e.g. a proof RAR sharing this excluded SFV's stem).
             if (sfvBasename.Length > 3)
@@ -1632,8 +1630,27 @@ public partial class CreatorViewModel : OperationViewModelBase
             // SFV's.
             int lastSlash = stem.LastIndexOf('/');
             string dirPrefix = lastSlash < 0 ? string.Empty : stem[..(lastSlash + 1)];
-            List<StoredFileEntry> nestedSrrs = await GenerateNestedSubtitleSrrsAsync(sfv, dirPrefix, workDir, i, options, ct);
-            result.AddRange(nestedSrrs);
+            result.AddRange(await GenerateNestedSubtitleSrrsAsync(sfv, dirPrefix, workDir, i, options, ct));
+        }
+
+        // Pass 10 (excerpt L1189-1205): append each subtitle SFV's own bytes AFTER all nested SRRs.
+        // E3 fix (codex #3): store this subtitle SFV's own bytes unless SOME entry already in the
+        // stored list (pass-10's scanner-origin storage, or an earlier iteration's own addition)
+        // resolves to the same OS-final-path — dedup against re-storing a scanner-origin subtitle,
+        // while still covering a manually-added one exactly once. (Nested SRRs already in `result`
+        // are `.srr` sources whose dedup keys never collide with an SFV's, so the pass-9 additions
+        // above do not interfere with this check.)
+        foreach (string sfv in subtitleSfvs)
+        {
+            ct.ThrowIfCancellationRequested();
+            string sfvDedupKey = ReleaseScanner.ResolveDedupKey(sfv);
+            bool sfvAlreadyStored = currentStored.Concat(result)
+                .Any(e => string.Equals(ReleaseScanner.ResolveDedupKey(e.FullPath), sfvDedupKey, StringComparison.OrdinalIgnoreCase));
+            if (!sfvAlreadyStored)
+            {
+                string stem = FolderRelativeStem(_releaseRoot!, sfv, "Subs");
+                result.Add(new StoredFileEntry(stem + ".sfv", sfv));
+            }
         }
 
         return result;
@@ -1644,13 +1661,21 @@ public partial class CreatorViewModel : OperationViewModelBase
     /// matching pyrescene's <c>create_srr_for_subs</c> (excerpt L1072-1204), which walks every
     /// "first RAR" it finds and makes a dedicated SRR named after THAT chain's own basename (e.g.
     /// a two-language subtitle SFV listing "eng.rar"+"eng.r00" and a separate "jpn.rar" yields
-    /// "eng.srr" AND "jpn.srr", not one merged SRR). Chain grouping mirrors
-    /// <c>SRRWriter.ResolveVolumesAsync</c>'s own SFV branch exactly — <see cref="RARVolumeIdentifier.IsRARVolume"/>
-    /// + <see cref="RARVolumeIdentifier.GetArchiveSetKey"/> for first-seen chain grouping, then
-    /// <see cref="RARVolumeNameComparer"/> within each chain — trusting the SFV's OWN listed
-    /// entries as each chain's full membership (no fresh on-disk chain-walk, same as the writer).
-    /// Each chain is written via <see cref="ISRRCreationService.CreateFromRARAsync"/> directly
-    /// (not <c>CreateFromSFVAsync</c>) since the chain's volumes are already resolved here.
+    /// "eng.srr" AND "jpn.srr", not one merged SRR).
+    ///
+    /// G3/G4 fix (codex Task 9 fix-3): chain grouping now goes through the shared
+    /// <see cref="SfvVolumeResolver.ResolveOrderedChains"/> — the SAME code
+    /// <c>SRRWriter.ResolveVolumesAsync</c>'s SFV branch runs, so the two can never disagree. The
+    /// first round's hand-rolled copy DIVERGED: <c>SFVFile.ReadFile</c> split every space (so it
+    /// THREW <see cref="InvalidDataException"/> on a spaced RAR name like <c>my movie.rar</c>,
+    /// dropping the whole chain), and a raw <see cref="Path.Combine(string, string)"/> left a
+    /// <c>.\eng.r00</c> continuation keyed apart from its <c>eng.rar</c> head (splitting one chain
+    /// into two same-named <c>eng.srr</c> SRRs — a duplicate logical name the writer then rejects).
+    /// The resolver's space-tolerant parse + <see cref="SrrNameCanonicalizer.ResolveSfvEntry"/>
+    /// fixes both, trusting the SFV's OWN listed entries as each chain's full membership (no fresh
+    /// on-disk chain-walk, same as the writer). Each chain is written via
+    /// <see cref="ISRRCreationService.CreateFromRARAsync"/> directly (not <c>CreateFromSFVAsync</c>)
+    /// since the chain's volumes are already resolved here.
     /// </summary>
     private async Task<List<StoredFileEntry>> GenerateNestedSubtitleSrrsAsync(
         string sfvPath, string dirPrefix, string workDir, int index, SRRCreationOptions options, CancellationToken ct)
@@ -1658,28 +1683,11 @@ public partial class CreatorViewModel : OperationViewModelBase
         string sfvName = Path.GetFileName(sfvPath);
         string sfvDir = Path.GetDirectoryName(sfvPath) ?? ".";
 
-        var chainOrder = new List<string>();
-        var chains = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        IReadOnlyList<IReadOnlyList<string>> chains;
         try
         {
-            foreach (SFVFileEntry entry in SFVFile.ReadFile(sfvPath).Entries)
-            {
-                string fullPath = Path.Combine(sfvDir, entry.FileName);
-                if (!RARVolumeIdentifier.IsRARVolume(entry.FileName) || !File.Exists(fullPath))
-                {
-                    continue;
-                }
-
-                string key = RARVolumeIdentifier.GetArchiveSetKey(fullPath);
-                if (!chains.TryGetValue(key, out List<string>? volumes))
-                {
-                    volumes = [];
-                    chains[key] = volumes;
-                    chainOrder.Add(key);
-                }
-
-                volumes.Add(fullPath);
-            }
+            string[] lines = await File.ReadAllLinesAsync(sfvPath, ct).ConfigureAwait(false);
+            chains = SfvVolumeResolver.ResolveOrderedChains(sfvDir, lines);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
@@ -1687,7 +1695,7 @@ public partial class CreatorViewModel : OperationViewModelBase
             return [];
         }
 
-        if (chainOrder.Count == 0)
+        if (chains.Count == 0)
         {
             Log($"  Nested SRR skipped for {sfvName}: no RAR volumes found in SFV.");
             return [];
@@ -1709,11 +1717,10 @@ public partial class CreatorViewModel : OperationViewModelBase
 
         var result = new List<StoredFileEntry>();
         int chainIndex = 0;
-        foreach (string key in chainOrder)
+        foreach (IReadOnlyList<string> volumes in chains)
         {
             ct.ThrowIfCancellationRequested();
-            List<string> volumes = chains[key];
-            volumes.Sort(RARVolumeNameComparer.Instance);
+            // volumes are already resolved and sorted (RARVolumeNameComparer) by the resolver.
             string firstVolumeName = Path.GetFileName(volumes[0]);
             string chainStem = firstVolumeName.Length >= 4 ? firstVolumeName[..^4] : firstVolumeName;
             string storedName = dirPrefix + chainStem + ".srr";
