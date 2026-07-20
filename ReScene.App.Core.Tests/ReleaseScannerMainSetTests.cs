@@ -38,8 +38,8 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     public void TwoCdSfvs_BothBecomeMainSets_InTraversalOrder()
     {
         string root = CreateRoot("Some.Release-GRP");
-        WriteSfv(Path.Combine(root, "CD1", "a.sfv"), "a.rar");
-        WriteSfv(Path.Combine(root, "CD2", "b.sfv"), "b.rar");
+        string aSfv = WriteSfv(Path.Combine(root, "CD1", "a.sfv"), "a.rar");
+        string bSfv = WriteSfv(Path.Combine(root, "CD2", "b.sfv"), "b.rar");
 
         ReleaseScanResult result = new ReleaseScanner().Scan(root);
 
@@ -47,7 +47,10 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
         Assert.Equal("CD1/a.sfv", result.MainSets[0].RelativeName);
         Assert.Equal("CD2/b.sfv", result.MainSets[1].RelativeName);
         Assert.Empty(result.SubtitleSfvs);
-        Assert.Empty(result.StoredFiles);
+        // Task 7 (§2d pass-10 skeleton): every input SFV is unconditionally appended to
+        // StoredFiles (excerpt: generate_srr L1190-1192, `for sfv in sfvs`) — StoredFiles was only
+        // empty here because Task 5 hadn't implemented §2d yet.
+        Assert.Equal([aSfv, bSfv], result.StoredFiles);
     }
 
     [Fact]
@@ -156,7 +159,7 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
         // packed block decides, not the first.
         string root = CreateRoot("Some.Release-GRP");
         string sfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
-        Touch(Path.Combine(root, "Proof", "p.rar"));
+        string rar = Touch(Path.Combine(root, "Proof", "p.rar"));
 
         var facts = new ProofRarFacts(Readable: true, HasPackedBlocks: true, AnyImage: true, LastPackedIsImage: false);
         var scanner = new ReleaseScanner(sfvEntryReader: null, proofRarReader: (_, _) => facts);
@@ -165,7 +168,11 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
 
         Assert.Single(result.MainSets);
         Assert.Equal(sfv, result.MainSets[0].SfvOrRarPath);
-        Assert.Empty(result.StoredFiles);
+        // Task 7: rule 4 didn't treat p.rar as proof (last block isn't an image), but the
+        // INDEPENDENT filter_proof_rar_files pass is unrelated to rule 4's classification — it
+        // only checks "proof" in the path and ANY packed block being an image (AnyImage: true
+        // here), so it stores p.rar on its own; pass-10 then appends the (unrelated) main sfv.
+        Assert.Equal([rar, sfv], result.StoredFiles);
     }
 
     [Fact]
@@ -233,7 +240,8 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
 
         Assert.Single(result.MainSets);
         Assert.Equal(sfv, result.MainSets[0].SfvOrRarPath);
-        Assert.Empty(result.StoredFiles);
+        // Task 7 pass-10: sfv is a main SFV, so it's appended to StoredFiles.
+        Assert.Equal([sfv], result.StoredFiles);
     }
 
     [Fact]
@@ -251,7 +259,8 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
 
         Assert.Single(result.MainSets);
         Assert.Equal(sfv, result.MainSets[0].SfvOrRarPath);
-        Assert.Empty(result.StoredFiles);
+        // Task 7 pass-10: sfv is a main SFV, so it's appended to StoredFiles.
+        Assert.Equal([sfv], result.StoredFiles);
     }
 
     [Fact]
@@ -322,7 +331,10 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
 
         Assert.Empty(result.MainSets);
         Assert.Empty(result.SubtitleSfvs);
-        Assert.Empty(result.StoredFiles);
+        // Task 7 pass-10: the dirfix skip only affects SubtitleSfvs/nested-SRR routing — the
+        // excerpt's unconditional "for sfv in sfvs" embed-raw-bytes step (L1190-1192) still stores
+        // this sfv regardless.
+        Assert.Equal([sfv], result.StoredFiles);
         Assert.Contains(result.Warnings, w => w.Contains(sfv, StringComparison.Ordinal));
     }
 
@@ -400,7 +412,10 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
         Assert.Single(result.MainSets);
         Assert.Equal(good, result.MainSets[0].SfvOrRarPath);
         Assert.Empty(result.SubtitleSfvs);
-        Assert.Empty(result.StoredFiles);
+        // Task 7 pass-10: both sfvs are appended (in traversal order, "CD1" < "Proof" ordinally)
+        // regardless of classification — pass 10 never re-reads an sfv's entries, it just embeds
+        // the file itself, so the unreadable-entries "bad" sfv is unaffected by its own I3 warning.
+        Assert.Equal([good, bad], result.StoredFiles);
         Assert.Contains(result.Warnings, w => w.Contains(bad, StringComparison.Ordinal));
     }
 
