@@ -161,8 +161,14 @@
                   IsChecked="{Binding AutoCreateSRS}" Margin="0,1" />
         <CheckBox Content="Vobsub SRR — Create nested SRR files for subtitle archives found in Subs/ directories."
                   IsChecked="{Binding CreateVobsubSRR}" Margin="0,1" />
+        <!-- B3 (pyrescene parity): folder mode always stores a fix release's RAR automatically (the
+             release scan provides it), so this toggle is inert there — disable it and tell a screen
+             reader WHY via HelpText (Avalonia announces the disabled state itself via UIA). -->
         <CheckBox Content="Store fix RAR — For fix/patch releases, store the main RAR file as proof."
-                  IsChecked="{Binding StoreFixRAR}" Margin="0,1" />
+                  IsChecked="{Binding StoreFixRAR}"
+                  IsEnabled="{Binding IsFolderMode, Converter={StaticResource InverseBoolConverter}}"
+                  AutomationProperties.HelpText="Automatic in folder mode — the release scan decides this"
+                  Margin="0,1" />
         <CheckBox Content="Allow compressed — Accept RAR volumes that use compression (method != Store)."
                   IsChecked="{Binding AllowCompressed}" Margin="0,1" />
         <CheckBox Content="OSO hashes — Compute and store OpenSubtitles OSO hashes for archived files."

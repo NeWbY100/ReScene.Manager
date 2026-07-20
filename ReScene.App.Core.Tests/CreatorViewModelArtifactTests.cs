@@ -197,8 +197,12 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
             new NoOpAppSettingsService(), new TestUiDispatcher(), new StubReleaseScanner(scan), () => workDir)
         {
             AutoIncludeFiles = false,
-            AutoCreateSRS = false,
-            CreateVobsubSRR = false,
+            // Follow-up B1/B2: folder mode now GATES sample-SRS staging on AutoCreateSRS and
+            // nested-subtitle-SRR generation on CreateVobsubSRR. These staging tests exercise those
+            // artifacts, so both must be ON (the production default) — a gating test flips the one
+            // it targets to false explicitly. StoreFixRAR has no folder-mode staging effect (B3).
+            AutoCreateSRS = true,
+            CreateVobsubSRR = true,
             StoreFixRAR = false,
         };
         return (vm, srs, srr, workDir);
@@ -578,8 +582,10 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
             new NoOpAppSettingsService(), new TestUiDispatcher(), realScanner, () => workDir)
         {
             AutoIncludeFiles = false,
-            AutoCreateSRS = false,
-            CreateVobsubSRR = false,
+            // Follow-up B1/B2: this test asserts the nested subtitle SRR is staged, so folder mode's
+            // AutoCreateSRS/CreateVobsubSRR gates must be ON (the production default).
+            AutoCreateSRS = true,
+            CreateVobsubSRR = true,
             StoreFixRAR = false,
         };
 
@@ -974,5 +980,115 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         // Sanity: the OUTER main SRR still carries the user's setting (proves the two are distinct).
         int mainIdx = srr.SfvCalls.IndexOf(mainSfv);
         Assert.True(srr.SfvCallOptions[mainIdx].ComputeOSOHashes);
+    }
+
+    // ── 22. Follow-up B1 (pyrescene --no-srs parity): folder mode honors AutoCreateSRS, just as
+    //        file mode already does (CreatorViewModel.cs L826). OFF → no sample .srs is staged. ──
+
+    [Fact]
+    public async Task Sample_AutoCreateSrsOff_NoSrsStaged_MediaNotStoredEither()
+    {
+        // B1: with AutoCreateSRS off, folder mode generates no sample SRS artifacts (a sample's
+        // ONLY stored output is its .srs — the sample MEDIA itself is never stored), matching
+        // pyrescene --no-srs. GenerateSampleArtifactsAsync must not even run.
+        string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
+        string sample = Touch(Path.Combine(root, "Sample", "clip.mkv"));
+        var scan = new ReleaseScanResult([], [sample], [], [], [], []);
+        (CreatorViewModel vm, RecordingSRSCreationService srs, RecordingSRRCreationService srr, _) = CreateVm(scan);
+        vm.AutoCreateSRS = false;
+
+        IReadOnlyList<StoredFileEntry> additionalFiles = await RunCreateAsync(vm, root, srr);
+
+        Assert.DoesNotContain(additionalFiles, e => e.StoredName == "Sample/clip.srs");
+        Assert.DoesNotContain(additionalFiles, e => e.StoredName.EndsWith(".srs", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(srs.CallsInOrder); // GenerateSampleArtifactsAsync never invoked the SRS service
+    }
+
+    [Fact]
+    public async Task Sample_AutoCreateSrsOn_SrsStaged_RegressionGuard()
+    {
+        // B1 regression guard: the default (AutoCreateSRS = true) still stages the sample .srs.
+        string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
+        string sample = Touch(Path.Combine(root, "Sample", "clip.mkv"));
+        var scan = new ReleaseScanResult([], [sample], [], [], [], []);
+        (CreatorViewModel vm, _, RecordingSRRCreationService srr, _) = CreateVm(scan); // AutoCreateSRS = true (default)
+
+        IReadOnlyList<StoredFileEntry> additionalFiles = await RunCreateAsync(vm, root, srr);
+
+        Assert.Contains(additionalFiles, e => e.StoredName == "Sample/clip.srs");
+    }
+
+    // ── 23. Follow-up B2 (pyrescene --vobsub-srr parity): folder mode gates ONLY the nested-SRR
+    //        generation (pass 9) on CreateVobsubSRR; the subtitle-SFV storage (pass 10) always runs,
+    //        so scanner-origin AND manually-added subs stay stored even with vobsub off. ──
+
+    [Fact]
+    public async Task SubtitleSfv_VobsubSrrOff_NoNestedSrr_ButScannerSfvStillStored()
+    {
+        // B2 case 1: with CreateVobsubSRR off, no nested .srr is produced, but pass 10 still runs
+        // so the subtitle SFV itself stays stored — here via the scanner's own pass-10 baseline
+        // (the scan already lists it in StoredFiles). Matches pyrescene without --vobsub-srr: it
+        // still stores extra_sfvs, only skipping create_srr_for_subs.
+        string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
+        string nfo = Touch(Path.Combine(root, "release.nfo"));
+        string subSfv = WriteSfv(Path.Combine(root, "Subs", "subs.sfv"), "subs.rar");
+        Touch(Path.Combine(root, "Subs", "subs.rar"));
+        var scan = new ReleaseScanResult([], [], [subSfv], [nfo, subSfv], [], []);
+        (CreatorViewModel vm, _, RecordingSRRCreationService srr, _) = CreateVm(scan);
+        vm.CreateVobsubSRR = false;
+
+        IReadOnlyList<StoredFileEntry> additionalFiles = await RunCreateAsync(vm, root, srr);
+
+        List<string> names = [.. additionalFiles.Select(e => e.StoredName)];
+        Assert.DoesNotContain(names, n => n.EndsWith(".srr", StringComparison.OrdinalIgnoreCase));
+        Assert.Single(names, n => n == "Subs/subs.sfv"); // pass-10 baseline storage intact, exactly once
+        Assert.Empty(srr.RarCalls);                      // pass-9 nested-SRR creation never attempted
+    }
+
+    [Fact]
+    public async Task SubtitleSfv_VobsubSrrOn_NestedSrrPresent_RegressionGuard()
+    {
+        // B2 regression guard: the default (CreateVobsubSRR = true) still generates the nested
+        // subtitle SRR before the SFV's own entry.
+        string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
+        string nfo = Touch(Path.Combine(root, "release.nfo"));
+        string subSfv = WriteSfv(Path.Combine(root, "Subs", "subs.sfv"), "subs.rar");
+        Touch(Path.Combine(root, "Subs", "subs.rar"));
+        var scan = new ReleaseScanResult([], [], [subSfv], [nfo, subSfv], [], []);
+        (CreatorViewModel vm, _, RecordingSRRCreationService srr, _) = CreateVm(scan); // CreateVobsubSRR = true (default)
+
+        IReadOnlyList<StoredFileEntry> additionalFiles = await RunCreateAsync(vm, root, srr);
+
+        List<string> names = [.. additionalFiles.Select(e => e.StoredName)];
+        Assert.Single(names, n => n == "Subs/subs.srr");
+        Assert.Single(names, n => n == "Subs/subs.sfv");
+    }
+
+    [Fact]
+    public async Task ManualSubtitleSfv_VobsubSrrOff_SfvStillStoredExactlyOnce_NoNestedSrr()
+    {
+        // B2 case 3: a MANUALLY-added subtitle SFV never reaches the scanner's pass-10, so its
+        // storage happens in GenerateSubtitleArtifactsAsync's own pass 10 — which must stay
+        // independent of the CreateVobsubSRR gate. With vobsub off, the SFV is still stored exactly
+        // once and no nested .srr is produced.
+        string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string manualSfv = WriteSfv(Path.Combine(TempDir, "external-subs.sfv"), "external-subs.rar");
+        Touch(Path.Combine(TempDir, "external-subs.rar"));
+        var scan = new ReleaseScanResult([], [], [], [], [], []);
+        (CreatorViewModel vm, _, RecordingSRRCreationService srr, _) = CreateVm(scan);
+        vm.CreateVobsubSRR = false;
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+        vm.ExtraSubtitleSfvFiles.Add(manualSfv); // "Add Subtitle" — never seen by the scanner
+        vm.OutputPath = Path.Combine(TempDir, "out-" + Guid.NewGuid().ToString("N") + ".srr");
+        await vm.CreateSRRCommand.ExecuteAsync(null);
+        IReadOnlyList<StoredFileEntry> additionalFiles = srr.LastAdditionalFiles ?? [];
+
+        List<string> names = [.. additionalFiles.Select(e => e.StoredName)];
+        Assert.Single(names, n => n == "Subs/external-subs.sfv");
+        Assert.DoesNotContain(names, n => n.EndsWith(".srr", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(srr.RarCalls);
     }
 }

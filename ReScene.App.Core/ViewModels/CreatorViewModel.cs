@@ -127,6 +127,16 @@ public partial class CreatorViewModel : OperationViewModelBase
     public ObservableCollection<ReleaseSetInput> DetectedSets { get; } = [];
 
     /// <summary>
+    /// Whether the Advanced tab is currently in folder mode (a directory <see cref="InputPath"/>
+    /// drove a release scan). Bound by the view to DISABLE the "Store fix RAR" checkbox: in folder
+    /// mode a fix release's RAR is always stored automatically (the scanner provides it in its
+    /// <see cref="ReleaseScanResult.StoredFiles"/>), matching pyrescene, which has no fix-RAR flag —
+    /// so the toggle is inert here (B3). Change-notified manually at every <see cref="_isFolderMode"/>
+    /// assignment (Reset / ExitFolderMode / StartFolderScan).
+    /// </summary>
+    public bool IsFolderMode => _isFolderMode;
+
+    /// <summary>
     /// Whether the most recent folder scan found any main RAR sets — the detected-sets list binds its
     /// <c>IsVisible</c> to this. A bool (not <c>DetectedSets.Count</c>): Avalonia has no implicit
     /// int→bool conversion, so binding visibility straight to <c>Count</c> would never resolve
@@ -239,6 +249,7 @@ public partial class CreatorViewModel : OperationViewModelBase
         _scanGeneration++;
         CancelInFlightScan();
         _isFolderMode = false;
+        OnPropertyChanged(nameof(IsFolderMode));
         _isMusicOnlyFolder = false;
         _folderScanInvalid = false;
         _releaseRoot = null;
@@ -1015,6 +1026,7 @@ public partial class CreatorViewModel : OperationViewModelBase
     private void ExitFolderMode()
     {
         _isFolderMode = false;
+        OnPropertyChanged(nameof(IsFolderMode));
         _isMusicOnlyFolder = false;
         _folderScanInvalid = false;
         _releaseRoot = null;
@@ -1075,6 +1087,7 @@ public partial class CreatorViewModel : OperationViewModelBase
     private void StartFolderScan(string releaseRoot)
     {
         _isFolderMode = true;
+        OnPropertyChanged(nameof(IsFolderMode));
         _releaseRoot = releaseRoot;
 
         if (IsFilesystemRoot(releaseRoot))
@@ -1370,7 +1383,13 @@ public partial class CreatorViewModel : OperationViewModelBase
     private async Task<List<StoredFileEntry>> StageFolderArtifactsAsync(
         List<StoredFileEntry> baseline, string workDir, SRRCreationOptions options, CancellationToken ct)
     {
-        List<StoredFileEntry> samples = await GenerateSampleArtifactsAsync(workDir, options, ct);
+        // B1 (pyrescene --no-srs parity): folder mode honors AutoCreateSRS just as file mode does
+        // (see the file-mode phase, this file's AutoCreateSRS gate). When off, generate no sample
+        // SRS artifacts — a sample's ONLY stored output is its .srs (the sample MEDIA itself is
+        // never stored), so an empty list simply stores nothing.
+        List<StoredFileEntry> samples = AutoCreateSRS
+            ? await GenerateSampleArtifactsAsync(workDir, options, ct)
+            : [];
 
         // Generated `.srs` SUPERSEDES a same-relative-path pre-existing `.srs` in the stored list
         // (spec §3): drop the baseline entry at any logical name a freshly-generated SRS also
@@ -1387,7 +1406,11 @@ public partial class CreatorViewModel : OperationViewModelBase
         // exactly (see their own remarks for how).
         kept.InsertRange(FindSampleArtifactSpliceIndex(kept), samples);
 
-        List<StoredFileEntry> subtitles = await GenerateSubtitleArtifactsAsync(kept, workDir, options, ct);
+        // B2 (pyrescene --vobsub-srr parity): CreateVobsubSRR gates ONLY the nested-SRR generation
+        // (pass 9) inside GenerateSubtitleArtifactsAsync — the subtitle-SFV storage (pass 10) always
+        // runs, matching pyrescene, which without --vobsub-srr still stores extra_sfvs and only
+        // skips create_srr_for_subs.
+        List<StoredFileEntry> subtitles = await GenerateSubtitleArtifactsAsync(kept, workDir, options, CreateVobsubSRR, ct);
         kept.InsertRange(FindSubtitleArtifactSpliceIndex(kept), subtitles);
 
         return ReleaseScanner.ApplyProofBeforeSfvReorder(kept, static e => e.StoredName);
@@ -1670,7 +1693,7 @@ public partial class CreatorViewModel : OperationViewModelBase
     /// separate code paths for "scanner-origin" vs. "manual".
     /// </summary>
     private async Task<List<StoredFileEntry>> GenerateSubtitleArtifactsAsync(
-        List<StoredFileEntry> currentStored, string workDir, SRRCreationOptions options, CancellationToken ct)
+        List<StoredFileEntry> currentStored, string workDir, SRRCreationOptions options, bool generateNestedSrrs, CancellationToken ct)
     {
         List<string> subtitleSfvs = [.. ExtraSubtitleSfvFiles];
         if (subtitleSfvs.Count == 0)
@@ -1682,7 +1705,11 @@ public partial class CreatorViewModel : OperationViewModelBase
 
         // Pass 9 (excerpt ~L803+ create_srr_for_subs): create every subtitle SFV's nested SRRs
         // first, so they all precede the subtitle-SFV entries emitted in pass 10 below.
-        for (int i = 0; i < subtitleSfvs.Count; i++)
+        // B2 (pyrescene --vobsub-srr parity): gated on CreateVobsubSRR (threaded in as
+        // generateNestedSrrs). pyrescene without --vobsub-srr skips create_srr_for_subs entirely but
+        // STILL stores the extra_sfvs — so pass 10 below runs regardless, keeping scanner-origin and
+        // manually-added subtitle SFVs stored.
+        for (int i = 0; generateNestedSrrs && i < subtitleSfvs.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
             string sfv = subtitleSfvs[i];

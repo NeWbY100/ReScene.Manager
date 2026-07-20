@@ -450,6 +450,40 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
         Assert.Equal(0, srr.InputsCalls);
     }
 
+    // ── 9b. IsFolderMode (follow-up B3): reflects the folder/file state with change notification,
+    //        so the view can disable the "Store fix RAR" checkbox in folder mode. ──
+
+    [Fact]
+    public async Task IsFolderMode_TracksFolderVsFileInput_WithChangeNotification()
+    {
+        string root = CreateFolder();
+        string aSfv = Path.Combine(root, "a.sfv");
+        var scan = new ReleaseScanResult([new ReleaseSetInput(aSfv, "a.sfv")], [], [], [], [], []);
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(scan), out _);
+
+        var changes = new List<bool>();
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CreatorViewModel.IsFolderMode))
+            {
+                changes.Add(vm.IsFolderMode);
+            }
+        };
+
+        Assert.False(vm.IsFolderMode); // fresh VM: file mode
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+        Assert.True(vm.IsFolderMode);
+        Assert.Contains(true, changes); // entering folder mode raised the notification
+
+        // Switching to a plain file leaves folder mode; the checkbox re-enables.
+        string sfv = Touch(Path.Combine(TempDir, "single.sfv"));
+        vm.InputPath = sfv;
+        Assert.False(vm.IsFolderMode);
+        Assert.Contains(false, changes); // leaving folder mode raised the notification too
+    }
+
     // ── 10. Every input-change kind discards a stale folder scan ──
 
     [Theory]
