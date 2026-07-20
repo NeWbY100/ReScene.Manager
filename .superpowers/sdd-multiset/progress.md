@@ -649,3 +649,32 @@ to E6 siblings; C3 populated on only reaching path).
      options (AutoCreateSRS/CreateVobsubSRR/StoreFixRAR) inert in folder mode (hide/disable or honor). Both non-blocking.
      NEXT: finishing-a-development-branch → present merge/PR/keep/discard to USER.
 =========================================================================================================================
+
+USER: "Do the follow-ups first" → asked my recommendation for #2. FOLLOW-UP #1 DONE: lib aa0fdd9 (test rename
+BothVolumesSorted→BothVolumesGrouped) + outer gitlink bump 2a7f6e5. FOLLOW-UP #2: RECOMMENDED + proceeding with option B
+(honor AutoCreateSRS↔--no-srs + CreateVobsubSRR↔--vobsub-srr in folder mode; StoreFixRAR stays auto=pyReScene, checkbox
+disabled in folder mode). Rationale: parity (maps to pyReScene flags) + consistency (file mode already honors them, :826/832/838)
++ defaults all true so no default-behavior change + golden (lib test) unaffected. Brief: followup-folder-options-brief.md.
+impl-followup-opts dispatched (opus): B1 gate sample-SRS on AutoCreateSRS, B2 gate nested-sub pass-9 on CreateVobsubSRR (keep
+pass-10 SFV storage), B3 public IsFolderMode + disable StoreFixRAR checkbox in folder mode (a11y HelpText reason). Then review gate → finish.
+
+USER: "if codex agrees with your recommendation, go with that." codex assessment: Recommendation: B (AGREES, substantive) —
+reasoning matches: AutoCreateSRS↔--no-srs + CreateVobsubSRR↔--vobsub-srr honored for parity+file-mode consistency; StoreFixRAR
+no pyReScene flag → stays auto + DISABLED (not hidden); defaults true → no default-behavior change; codex adds "narrowly gate
+only the two staging ops, leave fix-RAR untouched" = exactly the B1/B2/B3 brief. → PROCEEDING with B (impl-followup-opts running).
+Then dual-gate review → finishing-a-development-branch.
+
+Follow-up #2 (option B) DELIVERED (outer 0d4d7fa; lib unchanged aa0fdd9): App.Core 665 (+6 B tests), lib 1398 (golden 5/5),
+Manager 189/192, gate 0/0. Lead-verified: diff matches codex-agreed design (B1 AutoCreateSRS gate on GenerateSampleArtifactsAsync;
+B2 generateNestedSrrs threaded, gates ONLY pass-9 loop, pass-10/E3/D8 intact; B3 public IsFolderMode notified at all 3 sites +
+CreatorView disables only StoreFixRAR checkbox w/ HelpText). Independent re-run: golden 1/1 byte-identity + FolderMode/Artifact
+63/63 GREEN. Dual gate: codex (bukhvegql) + peer review-followup-opts (B2 staging-integrity trace + B3 a11y). On clean →
+finishing-a-development-branch (present merge/PR/keep/discard to USER).
+
+Follow-up #2 (option B) review: codex APPROVE + peer review-followup-opts APPROVED (exhaustive: B2 pass-9 short-circuits clean,
+pass-10/E3/D8 intact, CreateVobsubSRR=true byte-identical to before; B1 no orphaned media; B3 IsFolderMode notified at all 3
+sites, fix-RAR auto, only StoreFixRAR checkbox disabled, InverseBoolConverter resolves, a11y correct; both-off edge safe; no
+stale sigs). Defaults true → default behavior + golden unchanged.
+===> BOTH FOLLOW-UPS COMPLETE: #1 lib rename (aa0fdd9/gitlink 2a7f6e5), #2 option B folder-mode options (0d4d7fa, codex-agreed
+     + dual-gate approved). HEAD outer 0d4d7fa. Suites: lib 1398 (golden 5/5), App.Core 665, Manager 189/192 (3 pre-existing),
+     gate 0/0. NEXT: finishing-a-development-branch (re-present merge/PR/keep to USER).
