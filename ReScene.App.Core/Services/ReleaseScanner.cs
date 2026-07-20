@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using ReScene.Core.IO;
 using ReScene.RAR;
+using ReScene.SRR;
 
 namespace ReScene.App.Core.Services;
 
@@ -23,6 +24,13 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     // excerpt: has_music L419-423 (case-SENSITIVE endswith, preserved verbatim — [DIVERGENCE] noted
     // on the rescue fallback that consumes it)
     private static readonly string[] _musicExtensions = [".mp3", ".flac", ".mp2"];
+
+    // excerpt: get_sample_files L42-43 (FileType.VideoExtensions, referenced not itself excerpted
+    // verbatim — the list mirrors pyrescene's rescene/utility.py)
+    private static readonly string[] _videoExtensions =
+    [
+        ".mp4", ".m4v", ".avi", ".mkv", ".wmv", ".vob", ".m2ts", ".ts", ".mpeg", ".mpg", ".m2v", ".m2p",
+    ];
 
     private readonly Func<string, IReadOnlyList<string>> _sfvEntryReader;
     private readonly Func<string, CancellationToken, ProofRarFacts> _proofRarReader;
@@ -165,12 +173,24 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             }
         }
 
+        List<string> sampleFiles = FindSamples(all, sfvs, warnings, ct);
+
+        var sets = main.Select(sfv => new ReleaseSetInput(sfv, RelativeName(releaseRoot, sfv))).ToList();
+
+        // excerpt: get_start_rar_files L441-455 (design spec §2e). [DIVERGENCE: extension] the
+        // excerpt derives main_rars ONLY from selected SFVs' entries and never discovers loose RAR
+        // sets on its own — this port adds that discovery, gated to when zero SFVs exist anywhere
+        // under the root (an SFV of any kind, even one rules 1-7 exclude, disables it entirely).
+        if (sfvs.Count == 0)
+        {
+            sets.AddRange(DiscoverLooseRarSets(releaseRoot, all, lcRelease, ct));
+        }
+
         // I4 fix: re-check cancellation immediately before returning — a long final SFV/RAR read
         // that got cancelled mid-call must not silently produce a successful result.
         ct.ThrowIfCancellationRequested();
 
-        var sets = main.Select(sfv => new ReleaseSetInput(sfv, RelativeName(releaseRoot, sfv))).ToList();
-        return new ReleaseScanResult(sets, [], subs, stored, musicSfvs, warnings);
+        return new ReleaseScanResult(sets, sampleFiles, subs, stored, musicSfvs, warnings);
     }
 
     /// <summary>
@@ -367,6 +387,179 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
     private static bool HasMusicExtension(string fileName) =>
         Array.Exists(_musicExtensions, ext => fileName.EndsWith(ext, StringComparison.Ordinal));
+
+    /// <summary>
+    /// §2c samples (excerpt: <c>get_sample_files</c> L42-68). Phase 1 flags every video-extension
+    /// file (in traversal order) whose path contains "sample" or whose literal sibling
+    /// <c>sample[:-4] + ".sfv"</c> exists; whatever's left falls through to phase 2, which
+    /// cross-references every SFV's entries — read once, regardless of each SFV's rules-1-7
+    /// classification (the excerpt reads ALL sfvs here, not just <c>main_sfvs</c>) — by exact
+    /// basename.
+    /// </summary>
+    private List<string> FindSamples(IReadOnlyList<string> all, IReadOnlyList<string> sfvs, List<string> warnings, CancellationToken ct)
+    {
+        var result = new List<string>();
+        var notSamples = new List<string>();
+
+        foreach (string file in all)
+        {
+            if (!IsVideoExtension(Path.GetExtension(file)))
+            {
+                continue;
+            }
+
+            ct.ThrowIfCancellationRequested();
+
+            // excerpt: get_sample_files L48-52 — "sample" anywhere in the path (case-insensitive)
+            // OR a sibling literally named `sample[:-4] + ".sfv"`. The Python slice always drops
+            // exactly 4 characters regardless of the real extension's length — for a 3-char ext
+            // (".avi") that strips the extension cleanly ("clip.avi" -> "clip.sfv"); for a 4-char
+            // ext (".m2ts") it strips one character short of the extension, producing a
+            // double-dot name ("clip.m2ts" -> "clip." + ".sfv" = "clip..sfv"). Preserved verbatim
+            // — this quirk is intentional pyrescene behavior, not a bug to "fix".
+            string siblingSfv = (file.Length > 4 ? file[..^4] : string.Empty) + ".sfv";
+            if (file.Contains("sample", StringComparison.OrdinalIgnoreCase) || File.Exists(siblingSfv))
+            {
+                result.Add(file);
+            }
+            else
+            {
+                notSamples.Add(file);
+            }
+        }
+
+        // excerpt: get_sample_files L56-66 (phase 2 — musicvideo/multi-part MKV cross-reference).
+        // Entries are read once, only when a candidate remains, matching the excerpt's "this way
+        // so we don't always have to read in the SFV files unnecessarily".
+        if (notSamples.Count > 0)
+        {
+            var sfvEntryBasenames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string sfv in sfvs)
+            {
+                ct.ThrowIfCancellationRequested();
+                IReadOnlyList<string>? entries = TryReadSfvEntries(sfv, warnings);
+                if (entries is null)
+                {
+                    continue;
+                }
+
+                foreach (string entry in entries)
+                {
+                    sfvEntryBasenames.Add(entry);
+                }
+            }
+
+            foreach (string candidate in notSamples)
+            {
+                if (sfvEntryBasenames.Contains(Path.GetFileName(candidate)))
+                {
+                    result.Add(candidate);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static bool IsVideoExtension(string extension) =>
+        Array.Exists(_videoExtensions, ext => ext.Equals(extension, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// §2e loose-RAR discovery (excerpt: <c>get_start_rar_files</c> L441-455 derives its RAR sets
+    /// ONLY from SFV entries and never discovers loose RARs itself).
+    /// [DIVERGENCE: extension] the caller invokes this only when zero SFVs exist anywhere under
+    /// the root. Every RAR-volume file found is grouped into its archive-set chain (lib
+    /// <see cref="RARVolumeIdentifier.GetArchiveSetKey"/>), sorted within the chain (lib
+    /// <see cref="RARVolumeNameComparer"/>), and the chain contributes a set only when its true
+    /// first volume is literally named ".rar" — a lone .r00/.001 continuation can never open a
+    /// set, matching <c>SRRWriter.ResolveVolumesAsync</c>'s equivalent rule for explicit RAR
+    /// inputs.
+    /// </summary>
+    private static List<ReleaseSetInput> DiscoverLooseRarSets(string releaseRoot, IReadOnlyList<string> all, string lcRelease, CancellationToken ct)
+    {
+        var chainOrder = new List<string>();
+        var chains = new Dictionary<string, List<string>>();
+
+        foreach (string file in all)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!RARVolumeIdentifier.IsRARVolume(Path.GetFileName(file)))
+            {
+                continue;
+            }
+
+            string dir = Path.GetDirectoryName(file) ?? string.Empty;
+            if (IsLooseRarDirExcluded(dir, lcRelease))
+            {
+                continue;
+            }
+
+            string key = RARVolumeIdentifier.GetArchiveSetKey(file);
+            if (!chains.TryGetValue(key, out List<string>? volumes))
+            {
+                volumes = [];
+                chains[key] = volumes;
+                chainOrder.Add(key);
+            }
+
+            volumes.Add(file);
+        }
+
+        var sets = new List<ReleaseSetInput>();
+        foreach (string key in chainOrder)
+        {
+            List<string> volumes = chains[key];
+            volumes.Sort(RARVolumeNameComparer.Instance);
+            string first = volumes[0];
+            if (string.Equals(Path.GetExtension(first), ".rar", StringComparison.OrdinalIgnoreCase))
+            {
+                sets.Add(new ReleaseSetInput(first, RelativeName(releaseRoot, first)));
+            }
+        }
+
+        return sets;
+    }
+
+    /// <summary>
+    /// Directory-only mirror of <see cref="ClassifySfv"/>'s rules 3, 5, and 6 (excerpt L342-355,
+    /// L387-394, L396-405) for loose-RAR discovery — a bare RAR file has no SFV name to test rules
+    /// 1, 2, or 4 against, so only the parent-directory exclusions apply.
+    /// </summary>
+    private static bool IsLooseRarDirExcluded(string dir, string lcRelease)
+    {
+        string pardir = Path.GetFileName(dir).ToLowerInvariant();
+
+        // excerpt: remove_unwanted_sfvs L342-355 (rule 3)
+        if (_exactExcludedDirs.Contains(pardir))
+        {
+            return true;
+        }
+
+        // excerpt: remove_unwanted_sfvs L387-394 (rule 5)
+        if (SubsCdDirRegex().IsMatch(dir))
+        {
+            return true;
+        }
+
+        // excerpt: remove_unwanted_sfvs L396-400 (rule 6a/6b)
+        if (pardir.Contains("subpack", StringComparison.Ordinal) && !lcRelease.Contains("subpack", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (pardir.Contains("subfix", StringComparison.Ordinal) && !lcRelease.Contains("subfix", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        // excerpt: remove_unwanted_sfvs L402-405 (rule 6c)
+        if (pardir.Contains("fix", StringComparison.Ordinal) && !lcRelease.Contains("fix", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return false;
+    }
 
     private static string RelativeName(string releaseRoot, string fullPath) =>
         Path.GetRelativePath(releaseRoot, fullPath).Replace('\\', '/');
