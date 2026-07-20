@@ -895,6 +895,14 @@ public partial class CreatorViewModel : OperationViewModelBase
                 Log($"WARNING: {warning}");
             }
         }
+        catch (OperationCanceledException)
+        {
+            // D6 fix (codex #4): distinguish a clean cancellation from a real error — the blanket
+            // `catch (Exception)` below used to swallow this too, showing "Error." for what the
+            // user explicitly requested via CancelCreation().
+            ProgressMessage = "Cancelled.";
+            Log("Cancelled.");
+        }
         catch (Exception ex)
         {
             ProgressMessage = "Error.";
@@ -1266,30 +1274,20 @@ public partial class CreatorViewModel : OperationViewModelBase
     // ── Generated artifacts (folder mode, spec §3 "Generated artifacts", Task 9) ──
 
     /// <summary>
-    /// Test seam: when set, REPLACES <see cref="GenerateNestedSubtitleSrrsAsync"/> entirely. Our
-    /// own writer already folds every RAR chain a subtitle SFV lists into ONE nested SRR (Task 2's
-    /// multi-chain support), so production only ever needs zero (failure) or one (success) result
-    /// here — but the merge/append logic in <see cref="GenerateSubtitleArtifactsAsync"/> is written
-    /// generically against the spec's "ORDERED collection, one SFV may yield several" contract.
-    /// This seam lets a test prove that generic handling actually appends N &gt; 1 results in
-    /// order, without building real recursive multi-chain vobsub extraction this app doesn't have.
-    /// </summary>
-    internal Func<string, string, int, SRRCreationOptions, CancellationToken, Task<IReadOnlyList<string>>>? NestedSubtitleSrrGeneratorOverride { get; set; }
-
-    /// <summary>
     /// Generates folder mode's samples/subtitles artifacts (an .srs, its failure .txt, and a
-    /// RAR-backed .vob's nested .srr; a subtitle SFV's nested .srr(s) and its own stored bytes) and
-    /// splices them into <paramref name="baseline"/> (the current <see cref="StoredFiles"/>
-    /// snapshot) at the excerpt's category positions, then re-applies the pass-10
-    /// proof-before-sfv reorder over the complete, merged list (spec §3; excerpt L601-603/
-    /// L646-839/L1240-1251). No-op (returns <paramref name="baseline"/> unchanged) when there is
-    /// nothing to generate.
+    /// RAR-backed .vob's nested .srr; a subtitle SFV's nested .srr) and splices them into
+    /// <paramref name="baseline"/> (the current <see cref="StoredFiles"/> snapshot) at the
+    /// excerpt's category positions, then re-applies the pass-10 proof-before-sfv reorder over the
+    /// complete, merged list (spec §3; excerpt L601-603/L646-839/L1240-1251). No-op (returns
+    /// <paramref name="baseline"/> unchanged) when there is nothing to generate. Samples are
+    /// generated and spliced in BEFORE subtitles (matching the excerpt's own pass order — samples
+    /// are pass 6, subtitles pass 9) so <see cref="GenerateSubtitleArtifactsAsync"/>'s D8 check
+    /// sees the fully-current stored list, not just the pre-sample baseline.
     /// </summary>
     private async Task<List<StoredFileEntry>> StageFolderArtifactsAsync(
         List<StoredFileEntry> baseline, string workDir, SRRCreationOptions options, CancellationToken ct)
     {
         List<StoredFileEntry> samples = await GenerateSampleArtifactsAsync(workDir, options, ct);
-        List<StoredFileEntry> subtitles = await GenerateSubtitleArtifactsAsync(workDir, options, ct);
 
         // Generated `.srs` SUPERSEDES a same-relative-path pre-existing `.srs` in the stored list
         // (spec §3): drop the baseline entry at any logical name a freshly-generated SRS also
@@ -1305,6 +1303,8 @@ public partial class CreatorViewModel : OperationViewModelBase
         // (spec §6) only covers an unedited scan's output, which is what these two finders locate
         // exactly (see their own remarks for how).
         kept.InsertRange(FindSampleArtifactSpliceIndex(kept), samples);
+
+        List<StoredFileEntry> subtitles = await GenerateSubtitleArtifactsAsync(kept, workDir, options, ct);
         kept.InsertRange(FindSubtitleArtifactSpliceIndex(kept), subtitles);
 
         return ReleaseScanner.ApplyProofBeforeSfvReorder(kept, static e => e.StoredName);
@@ -1329,7 +1329,7 @@ public partial class CreatorViewModel : OperationViewModelBase
             }
 
             if ((ext.Equals(".rar", StringComparison.OrdinalIgnoreCase) || ext.Equals(".sfv", StringComparison.OrdinalIgnoreCase))
-                && !name.Contains("proof", StringComparison.OrdinalIgnoreCase))
+                && !IsUnderProofDirectory(name))
             {
                 return i;
             }
@@ -1350,7 +1350,7 @@ public partial class CreatorViewModel : OperationViewModelBase
         {
             string name = entries[i].StoredName;
             if (Path.GetExtension(name).Equals(".sfv", StringComparison.OrdinalIgnoreCase)
-                && !name.Contains("proof", StringComparison.OrdinalIgnoreCase))
+                && !IsUnderProofDirectory(name))
             {
                 return i;
             }
@@ -1360,8 +1360,30 @@ public partial class CreatorViewModel : OperationViewModelBase
     }
 
     /// <summary>
+    /// D2 fix (codex #2): whether a stored logical name (forward-slash-separated) sits under a
+    /// <c>proof</c>/<c>proofs</c> DIRECTORY — matching the scanner's rule-4/loose-RAR pardir
+    /// classification (exact segment match). Replaces an earlier <c>Contains("proof")</c> SUBSTRING
+    /// check the two splice finders above used, which misclassified a main <c>proofread.sfv</c> or
+    /// a conditional fix RAR named e.g. <c>movie.proof.fix.rar</c> (both contain "proof" as PART of
+    /// a filename, not as a directory) as proof entries, splicing generated artifacts at the wrong
+    /// index.
+    /// </summary>
+    private static bool IsUnderProofDirectory(string storedName)
+    {
+        foreach (string segment in storedName.Split('/'))
+        {
+            if (segment.Equals("proof", StringComparison.OrdinalIgnoreCase) || segment.Equals("proofs", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Creates one .srs per <see cref="ExtraSampleFiles"/> entry (+its failure .txt when creation
-    /// fails and the failure text is non-empty; +a nested .srr when the sample is a RAR-backed
+    /// fails and the SAMPLE FILE is non-empty; +a nested .srr when the sample is a RAR-backed
     /// .vob). Collision keying matches the excerpt exactly (L646-651's <c>same_srs_name</c>): by
     /// FULL RELATIVE STEM (directory included) — only a stem shared by more than one sample keeps
     /// the full source extension in its SRS name.
@@ -1374,7 +1396,12 @@ public partial class CreatorViewModel : OperationViewModelBase
             return [];
         }
 
-        List<string> stems = [.. samples.Select(s => RelativeStem(_releaseRoot!, s))];
+        // D7 fix (codex #5): FolderRelativeStem/FolderRelativeName fall back to "Sample/<basename>"
+        // for a source OUTSIDE the release root — ExtraSampleFiles is shared with the file-mode
+        // Advanced tab's "Add Sample" command, so a folder-mode run can still see a manually-added,
+        // out-of-root sample; the raw root-relative path would keep an invalid "../" the writer's
+        // CanonicalizeRelative rejects.
+        List<string> stems = [.. samples.Select(s => FolderRelativeStem(_releaseRoot!, s, "Sample"))];
         var collisionStems = stems
             .GroupBy(s => s, StringComparer.Ordinal)
             .Where(g => g.Count() > 1)
@@ -1391,7 +1418,7 @@ public partial class CreatorViewModel : OperationViewModelBase
         {
             ct.ThrowIfCancellationRequested();
             string sample = samples[i];
-            string relPath = RootRelativeName(_releaseRoot!, sample);
+            string relPath = FolderRelativeName(_releaseRoot!, sample, "Sample");
             string srsLogicalName = (collisionStems.Contains(stems[i]) ? relPath : stems[i]) + ".srs";
             string physicalSrsPath = Path.Combine(workDir, $"{i}_{Path.GetFileName(sample)}.srs");
 
@@ -1400,12 +1427,25 @@ public partial class CreatorViewModel : OperationViewModelBase
             {
                 Log($"SRS failed for {Path.GetFileName(sample)}: {srsResult.ErrorMessage}");
 
-                // excerpt L710-724 — the SRS-failure .txt is stored ONLY when non-empty.
-                string failureText = srsResult.ErrorMessage ?? string.Empty;
-                if (failureText.Length > 0)
+                // D3 fix (peer F2): the excerpt (L714-722) gates the failure .txt on the SAMPLE
+                // FILE's own size — `sample_size = os.path.getsize(sample); if sample_size > 0:
+                // keep_txt = True` — unconditionally on the error, NOT on the error text's length
+                // (the old gate here). A genuinely 0-byte sample is the only case that differs:
+                // pyrescene suppresses the .txt for it regardless of what stderr captured.
+                long sampleSize;
+                try
+                {
+                    sampleSize = new FileInfo(sample).Length;
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    sampleSize = 0;
+                }
+
+                if (sampleSize > 0)
                 {
                     string physicalTxtPath = Path.Combine(workDir, $"{i}_{Path.GetFileName(sample)}.txt");
-                    await File.WriteAllTextAsync(physicalTxtPath, failureText, ct);
+                    await File.WriteAllTextAsync(physicalTxtPath, srsResult.ErrorMessage ?? string.Empty, ct);
                     result.Add(new StoredFileEntry(relPath + ".txt", physicalTxtPath));
                 }
 
@@ -1480,13 +1520,16 @@ public partial class CreatorViewModel : OperationViewModelBase
     }
 
     /// <summary>
-    /// Creates a nested .srr per <see cref="ExtraSubtitleSfvFiles"/> entry (an ORDERED collection
-    /// of produced SRR paths — spec §3, excerpt <c>create_srr_for_subs</c> L1373-1382 returns a
-    /// list; see <see cref="NestedSubtitleSrrGeneratorOverride"/> for why production only ever
-    /// yields 0 or 1), plus the excluded subtitle SFV's own stored bytes alongside it (excerpt
-    /// L1190-1206, "merge pass 9").
+    /// Creates a nested .srr per <see cref="ExtraSubtitleSfvFiles"/> entry, unless D8's check below
+    /// skips it. D4 fix: the subtitle SFV's own bytes are NOT re-added here — the scanner's
+    /// pass-10 (<c>foreach sfv in sfvs</c>, ReleaseScanner.cs) already stores EVERY sfv, including
+    /// excluded/subtitle ones (<c>InputSfvs_Appended_AfterAllOtherCategories</c> proves it), so
+    /// <paramref name="currentStored"/> already contains it — re-adding it here was a duplicate,
+    /// previously masked only by the writer's own dedup + splice-before-baseline (an untraced
+    /// emergent property, not a designed guarantee).
     /// </summary>
-    private async Task<List<StoredFileEntry>> GenerateSubtitleArtifactsAsync(string workDir, SRRCreationOptions options, CancellationToken ct)
+    private async Task<List<StoredFileEntry>> GenerateSubtitleArtifactsAsync(
+        List<StoredFileEntry> currentStored, string workDir, SRRCreationOptions options, CancellationToken ct)
     {
         List<string> subtitleSfvs = [.. ExtraSubtitleSfvFiles];
         if (subtitleSfvs.Count == 0)
@@ -1499,27 +1542,49 @@ public partial class CreatorViewModel : OperationViewModelBase
         {
             ct.ThrowIfCancellationRequested();
             string sfv = subtitleSfvs[i];
-            string stem = RelativeStem(_releaseRoot!, sfv);
+            string sfvBasename = Path.GetFileName(sfv);
 
-            IReadOnlyList<string> nestedSrrPaths = await GenerateNestedSubtitleSrrsAsync(sfv, workDir, i, options, ct);
-            for (int j = 0; j < nestedSrrPaths.Count; j++)
+            // D8 fix (excerpt L805-811, peer F3): "not for Proof RARs that are already stored
+            // inside the SRR" — skip nested-SRR creation for this subtitle SFV when some entry
+            // ALREADY in the stored list ends with its basename-stem swapped to ".rar"
+            // (`basename(esfv)[:-3] + "rar"`, the excerpt's own slice: for a 4-char ".sfv"
+            // extension this simply swaps it to ".rar"). Skipping here does not affect the SFV's
+            // OWN storage (D4: unconditional, via pass-10) — only whether we ALSO wrap its RAR in
+            // a redundant nested SRR when the RAR is already embedded directly (e.g. a proof RAR
+            // sharing this excluded SFV's stem).
+            if (sfvBasename.Length > 3)
             {
-                string logicalName = nestedSrrPaths.Count == 1 ? stem + ".srr" : $"{stem}.{j}.srr";
-                result.Add(new StoredFileEntry(logicalName, nestedSrrPaths[j]));
+                string candidateRarSuffix = sfvBasename[..^3] + "rar";
+                if (currentStored.Any(e => e.StoredName.EndsWith(candidateRarSuffix, StringComparison.OrdinalIgnoreCase)))
+                {
+                    Log($"Subtitle SFV skipped (its RAR is already stored): {sfvBasename}");
+                    continue;
+                }
             }
 
-            result.Add(new StoredFileEntry(RootRelativeName(_releaseRoot!, sfv), sfv));
+            // D7 fix (codex #5): FolderRelativeStem falls back to "Subs/<basename>" for a source
+            // OUTSIDE the release root (ExtraSubtitleSfvFiles is shared with the file-mode Advanced
+            // tab's "Add Subtitle" command) — the raw root-relative path would keep an invalid
+            // "../" the writer's CanonicalizeRelative rejects.
+            string stem = FolderRelativeStem(_releaseRoot!, sfv, "Subs");
+
+            IReadOnlyList<string> nestedSrrPaths = await GenerateNestedSubtitleSrrsAsync(sfv, workDir, i, options, ct);
+            foreach (string path in nestedSrrPaths)
+            {
+                // [DIVERGENCE] our writer (Task 2) already folds every RAR chain a subtitle SFV
+                // lists into ONE nested SRR, unlike pyrescene's create_srr_for_subs (one nested SRR
+                // PER CHAIN, named by that chain's own first-RAR basename, e.g. eng.srr/jpn.srr) —
+                // multi-chain subtitle SFVs are unsupported (out of Spec 1's scope); this always
+                // yields exactly one nested SRR per subtitle SFV (D5 fix: removed a test-only N>1
+                // naming branch that was dead in production and diverged from the excerpt anyway).
+                result.Add(new StoredFileEntry(stem + ".srr", path));
+            }
         }
 
         return result;
     }
 
-    private Task<IReadOnlyList<string>> GenerateNestedSubtitleSrrsAsync(string sfvPath, string workDir, int index, SRRCreationOptions options, CancellationToken ct) =>
-        NestedSubtitleSrrGeneratorOverride is { } fn
-            ? fn(sfvPath, workDir, index, options, ct)
-            : GenerateNestedSubtitleSrrsCoreAsync(sfvPath, workDir, index, options, ct);
-
-    private async Task<IReadOnlyList<string>> GenerateNestedSubtitleSrrsCoreAsync(string sfvPath, string workDir, int index, SRRCreationOptions options, CancellationToken ct)
+    private async Task<IReadOnlyList<string>> GenerateNestedSubtitleSrrsAsync(string sfvPath, string workDir, int index, SRRCreationOptions options, CancellationToken ct)
     {
         string sfvName = Path.GetFileName(sfvPath);
         string srrPath = Path.Combine(workDir, $"{index}_{Path.ChangeExtension(sfvName, ".srr")}");
@@ -1550,28 +1615,43 @@ public partial class CreatorViewModel : OperationViewModelBase
     }
 
     /// <summary>
-    /// Nested SRRs have no UI to curate stored files: every .nfo beside the subtitle SFV, followed
-    /// by the SFV itself, in that order (shared by both the folder-mode staging path above and the
-    /// pre-existing wizard/Advanced <see cref="GenerateNestedSRRFileAsync"/>).
+    /// D0 (golden-verified, user-approved fix): a nested subtitle SRR is RAR-blocks-ONLY — no
+    /// embedded SFV, no sibling .nfo files. Confirmed against a real pyrescene <c>--vobsub-srr</c>
+    /// golden: its nested SRR contains only the extracted RAR volume block(s); embedding the SFV
+    /// (and sibling .nfo files) was this app's own PRE-EXISTING (Task 8-era) choice, shared by both
+    /// the folder-mode staging path above and the wizard/Advanced
+    /// <see cref="GenerateNestedSRRFileAsync"/> — and is also redundant regardless of the golden:
+    /// the subtitle SFV's own bytes are already stored in the OUTER SRR (scanner pass-10 stores
+    /// every SFV; see <see cref="GenerateSubtitleArtifactsAsync"/>'s remarks). Fixed globally (both
+    /// callers), matching the RECOVERY_BLOCKS_REMOVED precedent (Task 3): a shipped-behavior change
+    /// applied everywhere the shared code path runs, not just the new folder-mode surface.
     /// </summary>
-    private static List<StoredFileEntry> BuildNestedSubtitleStoredFiles(string sfvPath, string sfvName)
-    {
-        var nestedStoredFiles = new List<StoredFileEntry>();
-        string sfvDir = Path.GetDirectoryName(sfvPath) ?? ".";
-        foreach (string nfoFile in Directory.GetFiles(sfvDir, "*.nfo"))
-        {
-            nestedStoredFiles.Add(new StoredFileEntry(Path.GetFileName(nfoFile), nfoFile));
-        }
+    private static List<StoredFileEntry>? BuildNestedSubtitleStoredFiles(string sfvPath, string sfvName) => null;
 
-        nestedStoredFiles.Add(new StoredFileEntry(sfvName, sfvPath));
-        return nestedStoredFiles;
+    /// <summary>
+    /// D7 fix (codex #5): root-relative logical name for a folder-mode generated artifact's
+    /// SOURCE, falling back to <paramref name="conventionalDir"/>/&lt;basename&gt; when the source
+    /// lives OUTSIDE the release root — ExtraSampleFiles/ExtraSubtitleSfvFiles are shared with the
+    /// file-mode Advanced tab's "Add Sample"/"Add Subtitle" commands, so a folder-mode run can
+    /// still see a manually-added, out-of-root source (the supported "artifact from an unextracted
+    /// release" case). Mirrors the pre-existing <see cref="GeneratedStoredName"/>'s fallback (used
+    /// by the wizard/Advanced-tab paths) but keeps the source's own extension — callers needing a
+    /// different one use <see cref="FolderRelativeStem"/> instead.
+    /// </summary>
+    private static string FolderRelativeName(string releaseRoot, string sourcePath, string conventionalDir)
+    {
+        string relative = Path.GetRelativePath(releaseRoot, sourcePath);
+        return Path.IsPathRooted(relative) || relative.StartsWith("..", StringComparison.Ordinal)
+            ? $"{conventionalDir}/{Path.GetFileName(sourcePath)}"
+            : relative.Replace('\\', '/');
     }
 
-    private static string RelativeStem(string releaseRoot, string fullPath)
+    /// <summary>Like <see cref="FolderRelativeName"/>, with the extension stripped.</summary>
+    private static string FolderRelativeStem(string releaseRoot, string sourcePath, string conventionalDir)
     {
-        string relative = RootRelativeName(releaseRoot, fullPath);
-        int lastDot = relative.LastIndexOf('.');
-        return lastDot < 0 ? relative : relative[..lastDot];
+        string name = FolderRelativeName(releaseRoot, sourcePath, conventionalDir);
+        int lastDot = name.LastIndexOf('.');
+        return lastDot < 0 ? name : name[..lastDot];
     }
 
     // ── SRS auto-creation (Advanced tab: scan + generate at create time) ──

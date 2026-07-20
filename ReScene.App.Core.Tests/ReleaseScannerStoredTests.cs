@@ -438,10 +438,12 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         // filter_proof_rar_files pass, even though it independently also matches "proof"-in-path
         // plus AnyImage.
         //
-        // FINAL order (Task 9's pass-10 reorder, excerpt tail L1240-1251): rule 4 pre-seeds
-        // `stored` with the proof sfv+rar at the FRONT of the list, but the pass-10 reorder then
-        // moves the `.rar` (whose stem matches the sfv) to sit immediately BEFORE that sfv —
-        // `[rar, sfv]`, matching pyrescene's real generate_srr output.
+        // FINAL order (D1 fix, excerpt L601-603 clear-and-rebuild + tail L1240-1251 reorder): rule
+        // 4's proof RAR joins the proof-RAR CATEGORY position (not the front of the list); the
+        // proof SFV is picked up by pass-10's final-SFV pass (also not the front — simply never
+        // added to `main`). With only these two entries in this tiny tree, the category-ordered
+        // result is `[rar, sfv]` before any reorder is even needed; the pass-10 reorder confirms it
+        // stays that way (the rar's stem matches the sfv, so it would be relocated here regardless).
         string root = CreateRoot("SomeRelease");
         string sfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
         string rar = Touch(Path.Combine(root, "Proof", "p.rar"));
@@ -452,6 +454,28 @@ public class ReleaseScannerStoredTests : TempDirTestBase
 
         Assert.Equal([rar, sfv], result.StoredFiles);
         Assert.Single(result.StoredFiles, f => f == rar);
+    }
+
+    [Fact]
+    public void ProofRarAndSfv_WithNfo_LandInCorrectCategoryPositions_NotPreSeededAtFront()
+    {
+        // D1 (codex #1): before the fix, rule-4 pre-seeded the proof sfv+rar at the FRONT of
+        // `stored` (during SFV classification, which runs before any category pass) — for a tree
+        // with an nfo too, that produced [rar, sfv, nfo], contradicting the excerpt's category
+        // order (nfo is category 1; proof rar is category 3; the sfv, being "not main", is only
+        // ever picked up by the FINAL sfv pass, category 10). The pass-10 reorder alone can't fix
+        // this: it only relocates a mover relative to its sfv, it can't relocate the sfv (or the
+        // whole pair) relative to nfo.
+        string root = CreateRoot("SomeRelease");
+        string nfo = Touch(Path.Combine(root, "release.nfo"));
+        string sfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
+        string rar = Touch(Path.Combine(root, "Proof", "p.rar"));
+        var facts = new ProofRarFacts(Readable: true, HasPackedBlocks: true, AnyImage: true, LastPackedIsImage: true);
+        var scanner = new ReleaseScanner(sfvEntryReader: null, proofRarReader: (_, _) => facts);
+
+        ReleaseScanResult result = scanner.Scan(root);
+
+        Assert.Equal([nfo, rar, sfv], result.StoredFiles);
     }
 
     // --- fix RAR (excerpt: is_storable_fix L516-524, generate_srr L784-798) -------------------------
