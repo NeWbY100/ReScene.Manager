@@ -1,4 +1,5 @@
 using ReScene.App.Core.Services;
+using ReScene.Core.IO;
 using ReScene.RAR;
 
 namespace ReScene.App.Core.Tests;
@@ -139,7 +140,7 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
         string rar = Touch(Path.Combine(root, "Proof", "p.rar"));
 
         var facts = new ProofRarFacts(Readable: true, HasPackedBlocks: true, AnyImage: true, LastPackedIsImage: true);
-        var scanner = new ReleaseScanner(sfvEntryReader: null, proofRarReader: _ => facts);
+        var scanner = new ReleaseScanner(sfvEntryReader: null, proofRarReader: (_, _) => facts);
 
         ReleaseScanResult result = scanner.Scan(root);
 
@@ -158,7 +159,7 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
         Touch(Path.Combine(root, "Proof", "p.rar"));
 
         var facts = new ProofRarFacts(Readable: true, HasPackedBlocks: true, AnyImage: true, LastPackedIsImage: false);
-        var scanner = new ReleaseScanner(sfvEntryReader: null, proofRarReader: _ => facts);
+        var scanner = new ReleaseScanner(sfvEntryReader: null, proofRarReader: (_, _) => facts);
 
         ReleaseScanResult result = scanner.Scan(root);
 
@@ -176,7 +177,7 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
         string rar = Touch(Path.Combine(root, "Proof", "p.rar"));
 
         var facts = new ProofRarFacts(Readable: false, HasPackedBlocks: false, AnyImage: false, LastPackedIsImage: false);
-        var scanner = new ReleaseScanner(sfvEntryReader: null, proofRarReader: _ => facts);
+        var scanner = new ReleaseScanner(sfvEntryReader: null, proofRarReader: (_, _) => facts);
 
         ReleaseScanResult result = scanner.Scan(root);
 
@@ -195,7 +196,7 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
 
         var scanner = new ReleaseScanner(
             sfvEntryReader: null,
-            proofRarReader: _ => throw new InvalidOperationException("must not be called"));
+            proofRarReader: (_, _) => throw new InvalidOperationException("must not be called"));
 
         ReleaseScanResult result = scanner.Scan(root);
 
@@ -226,7 +227,7 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
         Touch(Path.Combine(root, "Proof", "p.rar"));
 
         var facts = new ProofRarFacts(Readable: true, HasPackedBlocks: false, AnyImage: false, LastPackedIsImage: false);
-        var scanner = new ReleaseScanner(sfvEntryReader: null, proofRarReader: _ => facts);
+        var scanner = new ReleaseScanner(sfvEntryReader: null, proofRarReader: (_, _) => facts);
 
         ReleaseScanResult result = scanner.Scan(root);
 
@@ -244,7 +245,7 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
 
         var scanner = new ReleaseScanner(
             sfvEntryReader: null,
-            proofRarReader: _ => throw new InvalidOperationException("must not be called"));
+            proofRarReader: (_, _) => throw new InvalidOperationException("must not be called"));
 
         ReleaseScanResult result = scanner.Scan(root);
 
@@ -359,6 +360,138 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
         cts.Cancel();
 
         Assert.Throws<OperationCanceledException>(() => new ReleaseScanner().Scan(root, cts.Token));
+    }
+
+    // --- Task 5 consolidated fix round -------------------------------------------------------
+
+    [Fact]
+    public void C1_RescuedMusicSfv_NotAlsoListedAsSubtitleSfv()
+    {
+        // C1 (Critical): a rescue-promoted MUSIC sfv must not double-list in both MusicSfvs and
+        // SubtitleSfvs. Repro from the finding: single SFV in Subs/, one music entry -> rule-3
+        // excludes it -> zero main -> rescue admits it to MusicSfvs. Before the fix, the
+        // post-rescue exclusion filter checked only `main`, so it also leaked into SubtitleSfvs.
+        string root = CreateRoot("Some.Release-GRP");
+        string sfv = WriteSfv(Path.Combine(root, "Subs", "track.sfv"), "track.mp3");
+
+        ReleaseScanResult result = new ReleaseScanner().Scan(root);
+
+        Assert.Empty(result.MainSets);
+        Assert.Equal([sfv], result.MusicSfvs);
+        Assert.Empty(result.SubtitleSfvs);
+    }
+
+    [Fact]
+    public void I3_UnreadableSfv_InProofDir_WarnsAndSkips_OtherSfvsClassifyNormally()
+    {
+        // I3 (Important): an SFV whose entries can't be read must not abort the whole scan. This
+        // covers the ClassifyProof call site — a proof-dir SFV that throws must not be admitted
+        // as a main set (or crash Scan); the other SFV must still classify normally.
+        string root = CreateRoot("Some.Release-GRP");
+        string good = WriteSfv(Path.Combine(root, "CD1", "a.sfv"), "a.rar");
+        string bad = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
+
+        var scanner = new ReleaseScanner(
+            sfvEntryReader: _ => throw new IOException("simulated read failure"),
+            proofRarReader: null);
+
+        ReleaseScanResult result = scanner.Scan(root);
+
+        Assert.Single(result.MainSets);
+        Assert.Equal(good, result.MainSets[0].SfvOrRarPath);
+        Assert.Empty(result.SubtitleSfvs);
+        Assert.Empty(result.StoredFiles);
+        Assert.Contains(result.Warnings, w => w.Contains(bad, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void I3_UnreadableSfv_DuringRescue_WarnsAndSkips_OtherSfvsStillRescued()
+    {
+        // I3 (Important): the rescue pass's own _sfvEntryReader call site must be guarded too —
+        // one throwing SFV must not abort rescue for the rest.
+        string root = CreateRoot("Some.Release-GRP");
+        string good = WriteSfv(Path.Combine(root, "a-subs.sfv"), "a.rar", "a.r00"); // 2 entries -> rescuable
+        string bad = WriteSfv(Path.Combine(root, "b-subs.sfv"), "b.rar");
+
+        var scanner = new ReleaseScanner(
+            sfvEntryReader: path => path == bad
+                ? throw new IOException("simulated read failure")
+                : [.. SFVFile.ReadFile(path).Entries.Select(e => e.FileName)],
+            proofRarReader: null);
+
+        ReleaseScanResult result = scanner.Scan(root);
+
+        Assert.Single(result.MainSets);
+        Assert.Equal(good, result.MainSets[0].SfvOrRarPath);
+        Assert.Contains(result.Warnings, w => w.Contains(bad, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void I4_CancelledDuringFinalProofRead_ThrowsBeforeReturningResult()
+    {
+        // I4 (Important): cancellation observed mid-call (inside the injected proofRarReader) must
+        // still surface as OperationCanceledException, not a successful result — the per-iteration
+        // checks alone miss cancellation that happens during the LAST piece of work before return.
+        string root = CreateRoot("Some.Release-GRP");
+        WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
+        Touch(Path.Combine(root, "Proof", "p.rar"));
+
+        using var cts = new CancellationTokenSource();
+        var scanner = new ReleaseScanner(
+            sfvEntryReader: null,
+            proofRarReader: (_, _) =>
+            {
+                cts.Cancel();
+                return new ProofRarFacts(Readable: true, HasPackedBlocks: true, AnyImage: false, LastPackedIsImage: false);
+            });
+
+        Assert.Throws<OperationCanceledException>(() => scanner.Scan(root, cts.Token));
+    }
+
+    [Fact]
+    public void I5_SubpackRelease_SubtitleSfvs_PreservesTraversalOrder_NotExcludedThenMain()
+    {
+        // I5 (Important): for a subpack/subfix release, SubtitleSfvs must stay in canonical
+        // traversal order across the merged excluded+main-queued set, not [excluded...][main...].
+        // A root-level (traversal-early) main sfv must precede a subdirectory (traversal-later)
+        // excluded sfv.
+        string root = CreateRoot("Some.SUBPACK-GRP");
+        string main = WriteSfv(Path.Combine(root, "main.sfv"), "main.rar");
+        string excluded = WriteSfv(Path.Combine(root, "Subs", "excluded.sfv"), "excluded.rar");
+
+        ReleaseScanResult result = new ReleaseScanner().Scan(root);
+
+        Assert.Single(result.MainSets);
+        Assert.Equal(main, result.MainSets[0].SfvOrRarPath);
+        Assert.Equal([main, excluded], result.SubtitleSfvs);
+    }
+
+    [Fact]
+    public void SubfixSubstringDir_ReleaseLacksSubfix_Excluded()
+    {
+        // Minor test gap: rule 6b (`subfix` substring pardir) had no dedicated test (6a subpack
+        // and 6c fix were covered).
+        string root = CreateRoot("Movie-GRP");
+        string sfv = WriteSfv(Path.Combine(root, "SubfixStuff", "x.sfv"), "x.rar");
+
+        ReleaseScanResult result = new ReleaseScanner().Scan(root);
+
+        Assert.Empty(result.MainSets);
+        Assert.Equal([sfv], result.SubtitleSfvs);
+    }
+
+    [Fact]
+    public void AllSfvsExcludedAndUnrescuable_WarnsMightBeMissingSfvFile()
+    {
+        // Minor test gap: the "zero after rescue" warning (excerpt L432-434) had no dedicated test.
+        string root = CreateRoot("Some.Release-GRP");
+        WriteSfv(Path.Combine(root, "a-subs.sfv"), "a.rar"); // 1 entry, no music -> not rescuable
+
+        ReleaseScanResult result = new ReleaseScanner().Scan(root);
+
+        Assert.Empty(result.MainSets);
+        Assert.Empty(result.MusicSfvs);
+        Assert.Contains(result.Warnings, w => w.Contains("might be missing an SFV file", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

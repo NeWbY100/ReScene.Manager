@@ -25,7 +25,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     private static readonly string[] _musicExtensions = [".mp3", ".flac", ".mp2"];
 
     private readonly Func<string, IReadOnlyList<string>> _sfvEntryReader;
-    private readonly Func<string, ProofRarFacts> _proofRarReader;
+    private readonly Func<string, CancellationToken, ProofRarFacts> _proofRarReader;
 
     /// <summary>Production scanner: reads real SFV files and real proof RARs from disk.</summary>
     public ReleaseScanner() : this(null, null)
@@ -41,7 +41,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     /// consumes <see cref="ProofRarFacts.AnyImage"/> — one seam serves both.
     /// </summary>
     internal ReleaseScanner(
-        Func<string, IReadOnlyList<string>>? sfvEntryReader, Func<string, ProofRarFacts>? proofRarReader)
+        Func<string, IReadOnlyList<string>>? sfvEntryReader, Func<string, CancellationToken, ProofRarFacts>? proofRarReader)
     {
         _sfvEntryReader = sfvEntryReader ?? DefaultReadSfvEntries;
         _proofRarReader = proofRarReader ?? RarProofInspector.Inspect;
@@ -72,7 +72,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         foreach (string sfv in sfvs)
         {
             ct.ThrowIfCancellationRequested();
-            SfvClass cls = ClassifySfv(sfv, lcRelease, warnings, stored);
+            SfvClass cls = ClassifySfv(sfv, lcRelease, warnings, stored, ct);
             switch (cls)
             {
                 case SfvClass.Main:
@@ -84,6 +84,12 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                 case SfvClass.Proof:
                     // The SFV (and, where applicable, its RAR) was already added to `stored`
                     // inside ClassifySfv/ClassifyProof — the two destinations differ per branch.
+                    break;
+                case SfvClass.Skipped:
+                    // I3 hardening: the SFV itself was unreadable — a warning was already added
+                    // inside TryReadSfvEntries; it gets no destination at all (spec §2 error
+                    // contract's "otherwise skipped" branch, distinct from an actively-excluded
+                    // SFV, which still reaches SubtitleSfvs).
                     break;
             }
         }
@@ -97,7 +103,13 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             foreach (string sfv in sfvs)
             {
                 ct.ThrowIfCancellationRequested();
-                IReadOnlyList<string> entries = _sfvEntryReader(sfv);
+                IReadOnlyList<string>? entries = TryReadSfvEntries(sfv, warnings);
+                if (entries is null)
+                {
+                    // I3 hardening: warning already added — don't let one bad SFV crash rescue.
+                    continue;
+                }
+
                 if (entries.Count > 1)
                 {
                     main.Add(sfv);
@@ -118,28 +130,44 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             }
         }
 
-        // design spec §2a "Excluded-SFV destinations": pyrescene computes `extra_sfvs` against the
-        // FINAL (post-rescue) wanted_sfvs set (`get_unwanted_sfvs(allsfvs, wantedsfvs)`, called
-        // after remove_unwanted_sfvs — including its own rescue tail — has already returned) — an
-        // SFV the rescue promoted into `main` is no longer excluded, even though the first pass
-        // flagged it.
+        // C1 fix: the FINAL wanted set (post-rescue) is main UNION musicSfvs — pyrescene's rescue
+        // tail appends BOTH kinds into the SAME wanted_sfvs list (excerpt L425-429), so
+        // get_unwanted_sfvs (L438) excludes both from the excluded/extra_sfvs computation.
+        // Checking only `main` let a rescue-promoted MUSIC sfv double-list in both MusicSfvs and
+        // SubtitleSfvs.
+        var wanted = new HashSet<string>(main);
+        wanted.UnionWith(musicSfvs);
+
+        // I5 fix: build `subs` in a SINGLE traversal-ordered pass over `sfvs` (rather than
+        // concatenating excludedCandidates then main) so a subpack/subfix release's merged
+        // excluded + main-queued SubtitleSfvs stays in canonical traversal order instead of two
+        // concatenated runs. design spec §2a "Excluded-SFV destinations": pyrescene computes
+        // `extra_sfvs` against the FINAL (post-rescue) wanted_sfvs set
+        // (`get_unwanted_sfvs(allsfvs, wantedsfvs)`, called after remove_unwanted_sfvs —
+        // including its own rescue tail — has already returned) — an SFV the rescue promoted
+        // into `main`/`musicSfvs` is no longer excluded, even though the first pass flagged it.
+        bool subpackOrSubfixRelease = lcRelease.Contains("subpack", StringComparison.Ordinal)
+            || lcRelease.Contains("subfix", StringComparison.Ordinal);
+        var excludedSet = new HashSet<string>(excludedCandidates);
+        var mainSet = new HashSet<string>(main);
         var subs = new List<string>();
-        foreach (string sfv in excludedCandidates)
+        foreach (string sfv in sfvs)
         {
-            if (main.Contains(sfv))
+            if (excludedSet.Contains(sfv) && !wanted.Contains(sfv))
             {
-                continue;
+                RouteExcluded(sfv, subs, warnings);
             }
-
-            RouteExcluded(sfv, subs, warnings);
+            else if (subpackOrSubfixRelease && mainSet.Contains(sfv))
+            {
+                // A subpack/subfix release queues every MAIN sfv for nested-SRR processing too,
+                // in addition to being a main set (excerpt's final `generate_srr` block).
+                subs.Add(sfv);
+            }
         }
 
-        // A subpack/subfix release queues every MAIN sfv for nested-SRR processing too, in
-        // addition to being a main set (excerpt's final `generate_srr` block).
-        if (lcRelease.Contains("subpack", StringComparison.Ordinal) || lcRelease.Contains("subfix", StringComparison.Ordinal))
-        {
-            subs.AddRange(main);
-        }
+        // I4 fix: re-check cancellation immediately before returning — a long final SFV/RAR read
+        // that got cancelled mid-call must not silently produce a successful result.
+        ct.ThrowIfCancellationRequested();
 
         var sets = main.Select(sfv => new ReleaseSetInput(sfv, RelativeName(releaseRoot, sfv))).ToList();
         return new ReleaseScanResult(sets, [], subs, stored, musicSfvs, warnings);
@@ -151,7 +179,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     /// — it is the only rule whose "excluded" outcome carries a second file (the proof RAR)
     /// alongside the SFV.
     /// </summary>
-    private SfvClass ClassifySfv(string sfv, string lcRelease, List<string> warnings, List<string> stored)
+    private SfvClass ClassifySfv(string sfv, string lcRelease, List<string> warnings, List<string> stored, CancellationToken ct)
     {
         string sfvName = Path.GetFileName(sfv);
         string lcSfvName = sfvName.ToLowerInvariant();
@@ -194,7 +222,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         // excerpt: remove_unwanted_sfvs L357-385 (rule 4: proof state machine)
         if (pardir == "proof" || pardir == "proofs")
         {
-            SfvClass? proofResult = ClassifyProof(sfv, dir, warnings, stored);
+            SfvClass? proofResult = ClassifyProof(sfv, dir, warnings, stored, ct);
             if (proofResult is { } result)
             {
                 return result;
@@ -237,9 +265,17 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     /// proof — fall through to rules 5-7" (a multi-entry SFV, or a readable RAR whose last packed
     /// block is not an image).
     /// </summary>
-    private SfvClass? ClassifyProof(string sfv, string dir, List<string> warnings, List<string> stored)
+    private SfvClass? ClassifyProof(string sfv, string dir, List<string> warnings, List<string> stored, CancellationToken ct)
     {
-        IReadOnlyList<string> entries = _sfvEntryReader(sfv);
+        IReadOnlyList<string>? entries = TryReadSfvEntries(sfv, warnings);
+        if (entries is null)
+        {
+            // I3 hardening: an unreadable SFV can't be verified as either the proof singleton or
+            // anything else — warn (already done inside TryReadSfvEntries) and skip it entirely
+            // (spec §2 error contract's "otherwise skipped" branch) rather than guessing it into
+            // MainSets or SubtitleSfvs.
+            return SfvClass.Skipped;
+        }
 
         // excerpt: remove_unwanted_sfvs L360 (exactly one entry required)
         if (entries.Count != 1)
@@ -262,7 +298,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         // excerpt: remove_unwanted_sfvs L364-379 (readable RAR: last packed block's image-ness wins)
         if (File.Exists(rarPath))
         {
-            ProofRarFacts facts = _proofRarReader(rarPath);
+            ProofRarFacts facts = _proofRarReader(rarPath, ct);
             if (!facts.Readable)
             {
                 // excerpt: remove_unwanted_sfvs L374-377 ("No RAR5 support yet" / caught
@@ -309,6 +345,26 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         subs.Add(sfv);
     }
 
+    /// <summary>
+    /// Reads an SFV's entries, converting any I/O or parse failure into a per-item warning instead
+    /// of letting it crash the whole scan (design spec §2 "Error contract": scanner failures
+    /// degrade to warnings, never a hard stop — item classified stored-only when readable metadata
+    /// suffices, otherwise skipped). [DIVERGENCE: hardening] pyrescene's <c>parse_sfv_file</c>
+    /// would crash or propagate on a malformed/inaccessible SFV.
+    /// </summary>
+    private IReadOnlyList<string>? TryReadSfvEntries(string sfv, List<string> warnings)
+    {
+        try
+        {
+            return _sfvEntryReader(sfv);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            warnings.Add($"Unreadable SFV: {sfv} ({e.Message})");
+            return null;
+        }
+    }
+
     private static bool HasMusicExtension(string fileName) =>
         Array.Exists(_musicExtensions, ext => fileName.EndsWith(ext, StringComparison.Ordinal));
 
@@ -334,5 +390,6 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         Main,
         Excluded,
         Proof,
+        Skipped,
     }
 }
