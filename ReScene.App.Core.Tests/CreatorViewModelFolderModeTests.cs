@@ -1,0 +1,590 @@
+using ReScene.App.Core.Models;
+using ReScene.App.Core.Services;
+using ReScene.App.Core.ViewModels;
+using ReScene.SRR;
+using ReScene.SRS;
+
+namespace ReScene.App.Core.Tests;
+
+/// <summary>
+/// Task 8's test matrix (design plan 2026-07-19-multiset-srr-creation.md L1122-1138): folder-mode
+/// input handling on <see cref="CreatorViewModel"/> — the generation-guarded background release
+/// scan (spec §3, mirroring <c>InspectorViewModel</c>'s <c>_loadGeneration</c> house pattern), the
+/// collections/status it populates, the OutputPath auto-vs-user tracking, music-only gating, and
+/// the folder <c>Create</c> branch that calls <see cref="ISRRCreationService.CreateFromInputsAsync"/>.
+/// File-mode behavior is covered by <see cref="CreatorViewModelTests"/>; this file only regression-
+/// checks that file mode still takes the old single-SFV path.
+/// </summary>
+public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
+{
+    // ── Fakes ───────────────────────────────────────────────
+
+    private sealed class FakeSRRCreationService : ISRRCreationService
+    {
+        public event EventHandler<SRRCreationProgressEventArgs>? Progress { add { } remove { } }
+
+        public bool Succeed { get; set; } = true;
+
+        public string? LastMethod { get; private set; }
+        public int InputsCalls { get; private set; }
+        public string? LastOutputPath { get; private set; }
+        public IReadOnlyList<string>? LastInputFiles { get; private set; }
+        public string? LastRootFolder { get; private set; }
+        public bool? LastStoreRelativePaths { get; private set; }
+        public IReadOnlyList<StoredFileEntry>? LastAdditionalFiles { get; private set; }
+
+        public Task<SRRCreationResult> CreateFromRARAsync(string outputPath, IReadOnlyList<string> rarVolumePaths,
+            IReadOnlyList<StoredFileEntry>? storedFiles, SRRCreationOptions options, CancellationToken ct)
+        {
+            LastMethod = "RAR";
+            LastOutputPath = outputPath;
+            LastAdditionalFiles = storedFiles;
+            return Build();
+        }
+
+        public Task<SRRCreationResult> CreateFromSFVAsync(string outputPath, string sfvFilePath,
+            IReadOnlyList<StoredFileEntry>? additionalFiles, SRRCreationOptions options, CancellationToken ct)
+        {
+            LastMethod = "SFV";
+            LastOutputPath = outputPath;
+            LastAdditionalFiles = additionalFiles;
+            return Build();
+        }
+
+        public Task<SRRCreationResult> CreateFromInputsAsync(string outputPath, IReadOnlyList<string> inputFiles,
+            string? rootFolder, bool storeRelativePaths, IReadOnlyList<StoredFileEntry>? additionalFiles,
+            SRRCreationOptions options, CancellationToken ct)
+        {
+            LastMethod = "Inputs";
+            InputsCalls++;
+            LastOutputPath = outputPath;
+            LastInputFiles = inputFiles;
+            LastRootFolder = rootFolder;
+            LastStoreRelativePaths = storeRelativePaths;
+            LastAdditionalFiles = additionalFiles;
+            return Build();
+        }
+
+        private Task<SRRCreationResult> Build() => Task.FromResult(new SRRCreationResult
+        {
+            Success = Succeed,
+            ErrorMessage = Succeed ? null : "boom",
+        });
+    }
+
+    private sealed class FakeSRSCreationService : ISRSCreationService
+    {
+        public event EventHandler<SRSCreationProgressEventArgs>? Progress { add { } remove { } }
+        public event EventHandler<SRSScanProgressEventArgs>? ScanProgress { add { } remove { } }
+
+        public Task<SRSCreationResult> CreateAsync(string outputPath, string sampleFilePath, SRSCreationOptions options, CancellationToken ct)
+            => Task.FromResult(new SRSCreationResult { Success = true, SRSFileSize = 1 });
+    }
+
+    /// <summary>Returns the same canned result for every root — good enough for tests that don't
+    /// care about concurrency, only about how the VM applies a completed scan.</summary>
+    private sealed class StubReleaseScanner(ReleaseScanResult result) : IReleaseScanner
+    {
+        public int Calls { get; private set; }
+
+        public ReleaseScanResult Scan(string releaseRoot, CancellationToken ct = default)
+        {
+            Calls++;
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// Blocks (via a manual-reset event) when scanning <see cref="GatedRoot"/>, so a test can
+    /// observe the VM mid-scan before releasing it; scanning any OTHER root returns
+    /// <see cref="OtherResult"/> immediately — lets a single scanner instance stand in for both
+    /// "the gated scan" and "a later scan that outruns it" (mirrors GatedCompareService in
+    /// FileCompareViewModelMKVTests).
+    /// </summary>
+    private sealed class GatedReleaseScanner : IReleaseScanner
+    {
+        private readonly ManualResetEventSlim _release = new(false);
+        public ManualResetEventSlim Entered { get; } = new(false);
+
+        public required string GatedRoot { get; init; }
+        public ReleaseScanResult GatedResult { get; init; } = EmptyResult;
+        public ReleaseScanResult OtherResult { get; init; } = EmptyResult;
+
+        public void Release() => _release.Set();
+
+        public ReleaseScanResult Scan(string releaseRoot, CancellationToken ct = default)
+        {
+            if (!string.Equals(releaseRoot, GatedRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                return OtherResult;
+            }
+
+            Entered.Set();
+            _release.Wait();
+            return GatedResult;
+        }
+    }
+
+    private static readonly ReleaseScanResult EmptyResult = new([], [], [], [], [], []);
+
+    // ── Helpers ─────────────────────────────────────────────
+
+    private static CreatorViewModel CreateVm(IReleaseScanner scanner, out FakeSRRCreationService srr)
+    {
+        srr = new FakeSRRCreationService();
+        return new CreatorViewModel(srr, new FakeSRSCreationService(), new NoOpFileDialogService(),
+            new NoOpTempDirectoryService(), new NoOpAppSettingsService(), new TestUiDispatcher(), scanner)
+        {
+            // File-mode's own disk scan/materialization phases are irrelevant here and would
+            // otherwise touch real disk when a test transitions InputPath to a file; keep it off.
+            AutoIncludeFiles = false,
+            AutoCreateSRS = false,
+            CreateVobsubSRR = false,
+            StoreFixRAR = false,
+        };
+    }
+
+    private string CreateFolder(string? name = null)
+    {
+        string root = Path.Combine(TempDir, name ?? $"release-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        return root;
+    }
+
+    private static string Touch(string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "x");
+        return path;
+    }
+
+    // ── 1. Scan populates collections + status ───────────────
+
+    [Fact]
+    public async Task FolderInput_PopulatesDetectedSetsStoredFilesSamplesSubs_AndOkStatus()
+    {
+        string root = CreateFolder();
+        string aSfv = Path.Combine(root, "a.sfv");
+        string bSfv = Path.Combine(root, "CD2", "b.sfv");
+        string nfo = Path.Combine(root, "release.nfo");
+        string sample = Path.Combine(root, "Sample", "movie.sample.mkv");
+        string subSfv = Path.Combine(root, "Subs", "subs.sfv");
+
+        var scan = new ReleaseScanResult(
+            MainSets: [new ReleaseSetInput(aSfv, "a.sfv"), new ReleaseSetInput(bSfv, "CD2/b.sfv")],
+            SampleFiles: [sample],
+            SubtitleSfvs: [subSfv],
+            StoredFiles: [nfo],
+            MusicSfvs: [],
+            Warnings: []);
+
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(scan), out _);
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+
+        Assert.Equal(2, vm.DetectedSets.Count);
+        Assert.Equal(aSfv, vm.DetectedSets[0].SfvOrRarPath);
+        Assert.Equal(bSfv, vm.DetectedSets[1].SfvOrRarPath);
+
+        Assert.Single(vm.StoredFiles);
+        Assert.Equal(nfo, vm.StoredFiles[0].FullPath);
+        Assert.Equal("release.nfo", vm.StoredFiles[0].StoredName);
+
+        Assert.Equal([sample], vm.ExtraSampleFiles);
+        Assert.Equal([subSfv], vm.ExtraSubtitleSfvFiles);
+
+        Assert.Equal(FieldState.Ok, vm.InputStatus.State);
+        Assert.Contains("2 RAR set(s)", vm.InputStatus.Message, StringComparison.Ordinal);
+        Assert.Contains("1 sample(s)", vm.InputStatus.Message, StringComparison.Ordinal);
+        Assert.Contains("1 stored file(s)", vm.InputStatus.Message, StringComparison.Ordinal);
+    }
+
+    // ── 2. Stale-scan-discard ─────────────────────────────────
+
+    [Fact]
+    public async Task StaleScan_Discarded_WhenNewerInputSupersedes()
+    {
+        string rootA = CreateFolder("A");
+        string rootB = CreateFolder("B");
+        string aSet = Path.Combine(rootA, "a.sfv");
+        string bSet = Path.Combine(rootB, "b.sfv");
+
+        var gated = new GatedReleaseScanner
+        {
+            GatedRoot = rootA,
+            GatedResult = new ReleaseScanResult([new ReleaseSetInput(aSet, "a.sfv")], [], [], [], [], []),
+            OtherResult = new ReleaseScanResult([new ReleaseSetInput(bSet, "b.sfv")], [], [], [], [], []),
+        };
+        CreatorViewModel vm = CreateVm(gated, out _);
+
+        vm.InputPath = rootA;
+        Task scanA = vm.LastFolderScan!;
+        Assert.True(gated.Entered.Wait(TimeSpan.FromSeconds(5)));
+
+        vm.InputPath = rootB;
+        Task scanB = vm.LastFolderScan!;
+        await scanB;
+
+        Assert.Single(vm.DetectedSets);
+        Assert.Equal(bSet, vm.DetectedSets[0].SfvOrRarPath);
+
+        // Unblock A's stuck call and let its (now-stale) completion run its course; it must not
+        // resurrect A's state over B's.
+        gated.Release();
+        await scanA;
+
+        Assert.Single(vm.DetectedSets);
+        Assert.Equal(bSet, vm.DetectedSets[0].SfvOrRarPath);
+    }
+
+    // ── 3. IsScanning lifecycle + Create gating while scanning ──
+
+    [Fact]
+    public async Task IsScanning_TrueWhileGated_FalseAfter_AndCreateDisabledWhileScanning()
+    {
+        string root = CreateFolder();
+        var gated = new GatedReleaseScanner { GatedRoot = root };
+        CreatorViewModel vm = CreateVm(gated, out _);
+        vm.OutputPath = Path.Combine(TempDir, "out.srr");
+
+        vm.InputPath = root;
+        Assert.True(gated.Entered.Wait(TimeSpan.FromSeconds(5)));
+
+        Assert.True(vm.IsScanning);
+        Assert.False(vm.CreateSRRCommand.CanExecute(null));
+
+        gated.Release();
+        await vm.LastFolderScan!; // deterministically wait for the dispatcher-posted apply
+
+        Assert.False(vm.IsScanning);
+        Assert.True(vm.CreateSRRCommand.CanExecute(null));
+    }
+
+    // ── 4. Music-only folder ──────────────────────────────────
+
+    [Fact]
+    public async Task MusicOnlyFolder_SetsErrorStatus_AndCreateCannotExecute()
+    {
+        string root = CreateFolder();
+        string musicSfv = Path.Combine(root, "album.sfv");
+        var scan = new ReleaseScanResult([], [], [], [], [musicSfv], ["Rescued as a music set (unsupported until Spec 2): " + musicSfv]);
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(scan), out _);
+        vm.OutputPath = Path.Combine(TempDir, "out.srr");
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+
+        Assert.Equal(FieldState.Error, vm.InputStatus.State);
+        Assert.False(vm.CreateSRRCommand.CanExecute(null));
+    }
+
+    // ── 5-7. OutputPath auto-vs-user tracking ─────────────────
+
+    [Fact]
+    public async Task OutputPath_AutoFilledOnScan_WhenBlank()
+    {
+        string root = CreateFolder("My.Release-GRP");
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(EmptyResult), out _);
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+
+        Assert.Equal(Path.Combine(TempDir, "My.Release-GRP.srr"), vm.OutputPath);
+    }
+
+    [Fact]
+    public async Task OutputPath_ReplacedOnRescan_WhileStillAuto()
+    {
+        string rootA = CreateFolder("Release.A-GRP");
+        string rootB = CreateFolder("Release.B-GRP");
+        var scanner = new StubReleaseScanner(EmptyResult);
+        CreatorViewModel vm = CreateVm(scanner, out _);
+
+        vm.InputPath = rootA;
+        await vm.LastFolderScan!;
+        Assert.Equal(Path.Combine(TempDir, "Release.A-GRP.srr"), vm.OutputPath);
+
+        vm.InputPath = rootB;
+        await vm.LastFolderScan!;
+        Assert.Equal(Path.Combine(TempDir, "Release.B-GRP.srr"), vm.OutputPath);
+    }
+
+    [Fact]
+    public async Task OutputPath_PreservedAfterUserEdit_NotReplacedOnRescan()
+    {
+        string rootA = CreateFolder("Release.A-GRP");
+        string rootB = CreateFolder("Release.B-GRP");
+        var scanner = new StubReleaseScanner(EmptyResult);
+        CreatorViewModel vm = CreateVm(scanner, out _);
+
+        vm.InputPath = rootA;
+        await vm.LastFolderScan!;
+
+        string userChosen = Path.Combine(TempDir, "my-own-name.srr");
+        vm.OutputPath = userChosen;
+
+        vm.InputPath = rootB;
+        await vm.LastFolderScan!;
+
+        Assert.Equal(userChosen, vm.OutputPath);
+    }
+
+    // ── 8, 15, 17. Folder Create branch service args ──────────
+
+    [Fact]
+    public async Task FolderCreate_CallsCreateFromInputsAsync_WithOrderedPathsRootStoreRelativeAndStoredFiles()
+    {
+        string root = CreateFolder("Some.Release-GRP");
+        string aSfv = Path.Combine(root, "a.sfv");
+        string bSfv = Path.Combine(root, "CD2", "b.sfv");
+        string nfo = Path.Combine(root, "release.nfo");
+
+        var scan = new ReleaseScanResult(
+            [new ReleaseSetInput(aSfv, "a.sfv"), new ReleaseSetInput(bSfv, "CD2/b.sfv")],
+            [], [], [nfo], [], []);
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(scan), out FakeSRRCreationService srr);
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+        string outputPath = Path.Combine(TempDir, "out.srr");
+        vm.OutputPath = outputPath;
+
+        await vm.CreateSRRCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, srr.InputsCalls);
+        Assert.Equal("Inputs", srr.LastMethod);
+        Assert.Equal(outputPath, srr.LastOutputPath);
+        Assert.Equal([aSfv, bSfv], srr.LastInputFiles);
+        Assert.Equal(root, srr.LastRootFolder);
+        Assert.True(srr.LastStoreRelativePaths);
+        Assert.NotNull(srr.LastAdditionalFiles);
+        Assert.Single(srr.LastAdditionalFiles!);
+        Assert.Equal("release.nfo", srr.LastAdditionalFiles![0].StoredName);
+        Assert.Equal(nfo, srr.LastAdditionalFiles![0].FullPath);
+        Assert.True(vm.BuildSucceeded);
+    }
+
+    [Fact]
+    public async Task StorageOnlyTree_CreateEnabled_HeaderOnlyWriterCallCaptured()
+    {
+        // No RAR sets and no music — Create should still be enabled and build a header-only SRR
+        // from the stored files alone.
+        string root = CreateFolder();
+        string nfo = Path.Combine(root, "release.nfo");
+        var scan = new ReleaseScanResult([], [], [], [nfo], [], []);
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(scan), out FakeSRRCreationService srr);
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+        vm.OutputPath = Path.Combine(TempDir, "out.srr");
+
+        Assert.True(vm.CreateSRRCommand.CanExecute(null));
+
+        await vm.CreateSRRCommand.ExecuteAsync(null);
+
+        Assert.Equal("Inputs", srr.LastMethod);
+        Assert.Empty(srr.LastInputFiles!);
+        Assert.Single(srr.LastAdditionalFiles!);
+    }
+
+    [Fact]
+    public async Task MixedMainAndMusicTree_MusicExcludedFromCreateInputs()
+    {
+        string root = CreateFolder();
+        string mainSfv = Path.Combine(root, "movie.sfv");
+        string musicSfv = Path.Combine(root, "OST", "album.sfv");
+
+        // Not music-only (a main set exists), so the music SFV is simply absent from MainSets —
+        // DetectedSets/the Create call must never include it.
+        var scan = new ReleaseScanResult([new ReleaseSetInput(mainSfv, "movie.sfv")], [], [], [], [musicSfv], []);
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(scan), out FakeSRRCreationService srr);
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+        vm.OutputPath = Path.Combine(TempDir, "out.srr");
+
+        Assert.Single(vm.DetectedSets);
+        Assert.DoesNotContain(vm.DetectedSets, s => s.SfvOrRarPath == musicSfv);
+
+        await vm.CreateSRRCommand.ExecuteAsync(null);
+
+        Assert.Equal([mainSfv], srr.LastInputFiles);
+    }
+
+    // ── 9. File-mode regression ────────────────────────────────
+
+    [Fact]
+    public async Task FileModeCreate_StillCallsCreateFromSFVAsync_Regression()
+    {
+        string root = CreateFolder();
+        string sfv = Touch(Path.Combine(root, "movie.sfv"));
+        File.WriteAllText(sfv, "movie.rar 00000000\n");
+        Touch(Path.Combine(root, "movie.rar"));
+
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(EmptyResult), out FakeSRRCreationService srr);
+
+        vm.InputPath = sfv;
+        vm.OutputPath = Path.Combine(TempDir, "out.srr");
+
+        await vm.CreateSRRCommand.ExecuteAsync(null);
+
+        Assert.Equal("SFV", srr.LastMethod);
+        Assert.Equal(0, srr.InputsCalls);
+    }
+
+    // ── 10. Every input-change kind discards a stale folder scan ──
+
+    [Theory]
+    [InlineData("file")]
+    [InlineData("blank")]
+    [InlineData("nonexistent")]
+    public async Task InputChange_ToNonFolder_DiscardsStaleFolderScan(string kind)
+    {
+        string root = CreateFolder();
+        string set = Path.Combine(root, "a.sfv");
+        var gated = new GatedReleaseScanner
+        {
+            GatedRoot = root,
+            GatedResult = new ReleaseScanResult([new ReleaseSetInput(set, "a.sfv")], [], [], [], [], []),
+        };
+        CreatorViewModel vm = CreateVm(gated, out _);
+
+        vm.InputPath = root;
+        Task scanA = vm.LastFolderScan!;
+        Assert.True(gated.Entered.Wait(TimeSpan.FromSeconds(5)));
+
+        string newInput = kind switch
+        {
+            "file" => Touch(Path.Combine(TempDir, "single.sfv")),
+            "blank" => string.Empty,
+            _ => Path.Combine(TempDir, "does-not-exist"),
+        };
+        vm.InputPath = newInput;
+
+        gated.Release();
+        await scanA;
+
+        Assert.Empty(vm.DetectedSets);
+        Assert.False(vm.IsScanning);
+    }
+
+    // ── 11. CanCreate false while scanning / for music-only, with notification ──
+
+    [Fact]
+    public async Task CanCreate_False_WhileScanning_WithCommandNotification()
+    {
+        string root = CreateFolder();
+        var gated = new GatedReleaseScanner { GatedRoot = root };
+        CreatorViewModel vm = CreateVm(gated, out _);
+        vm.OutputPath = Path.Combine(TempDir, "out.srr");
+
+        int notifications = 0;
+        vm.CreateSRRCommand.CanExecuteChanged += (_, _) => notifications++;
+
+        vm.InputPath = root;
+        Assert.True(gated.Entered.Wait(TimeSpan.FromSeconds(5)));
+        Assert.False(vm.CreateSRRCommand.CanExecute(null));
+        Assert.True(notifications > 0);
+
+        int afterScanStart = notifications;
+        gated.Release();
+        await vm.LastFolderScan!; // deterministically wait for the dispatcher-posted apply
+
+        Assert.True(notifications > afterScanStart);
+        Assert.True(vm.CreateSRRCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task CanCreate_False_ForMusicOnly_WithCommandNotification()
+    {
+        string root = CreateFolder();
+        string musicSfv = Path.Combine(root, "album.sfv");
+        var scan = new ReleaseScanResult([], [], [], [], [musicSfv], []);
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(scan), out _);
+        vm.OutputPath = Path.Combine(TempDir, "out.srr");
+
+        int notifications = 0;
+        vm.CreateSRRCommand.CanExecuteChanged += (_, _) => notifications++;
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+
+        Assert.False(vm.CreateSRRCommand.CanExecute(null));
+        Assert.True(notifications > 0);
+    }
+
+    // ── 12-13. Result paths absolute; StoredNames root-relative ──
+
+    [Fact]
+    public async Task DetectedSets_And_StoredFiles_ResultPaths_AreAbsolute()
+    {
+        string root = CreateFolder();
+        string set = Path.Combine(root, "CD1", "a.sfv");
+        string stored = Path.Combine(root, "release.nfo");
+        var scan = new ReleaseScanResult([new ReleaseSetInput(set, "CD1/a.sfv")], [], [], [stored], [], []);
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(scan), out _);
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+
+        Assert.True(Path.IsPathRooted(vm.DetectedSets[0].SfvOrRarPath));
+        Assert.True(Path.IsPathRooted(vm.StoredFiles[0].FullPath));
+    }
+
+    [Fact]
+    public async Task StoredFiles_StoredName_IsRootRelative_WithForwardSlashes()
+    {
+        string root = CreateFolder();
+        string nested = Path.Combine(root, "Proof", "shot.jpg");
+        var scan = new ReleaseScanResult([], [], [], [nested], [], []);
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(scan), out _);
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+
+        Assert.Equal("Proof/shot.jpg", vm.StoredFiles[0].StoredName);
+    }
+
+    // ── 14. Warnings: status shows a count, log carries every one, in order ──
+
+    [Fact]
+    public async Task AllWarnings_LoggedInOrder_StatusShowsCount()
+    {
+        string root = CreateFolder();
+        List<string> warnings = ["first warning", "second warning", "third warning"];
+        var scan = new ReleaseScanResult([], [], [], [], [], warnings);
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(scan), out _);
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+
+        Assert.Contains("3 warning(s)", vm.InputStatus.Message, StringComparison.Ordinal);
+
+        List<string> loggedWarnings = [.. vm.LogEntries.Where(e => e.Contains("WARNING:", StringComparison.Ordinal))];
+        Assert.Equal(warnings.Count, loggedWarnings.Count);
+        for (int i = 0; i < warnings.Count; i++)
+        {
+            Assert.Contains(warnings[i], loggedWarnings[i], StringComparison.Ordinal);
+        }
+    }
+
+    // ── 16. Filesystem root ────────────────────────────────────
+
+    [Fact]
+    public void FilesystemRoot_TrailingSeparator_ErrorStatus_NoAutoOutputPath()
+    {
+        string driveRoot = Path.GetPathRoot(TempDir)!; // e.g. "C:\" — has a trailing separator
+        var scanner = new StubReleaseScanner(EmptyResult);
+        CreatorViewModel vm = CreateVm(scanner, out _);
+        string previousOutput = Path.Combine(TempDir, "pre-existing.srr");
+        vm.OutputPath = previousOutput;
+
+        vm.InputPath = driveRoot;
+
+        Assert.Equal(FieldState.Error, vm.OutputStatus.State);
+        Assert.Equal(previousOutput, vm.OutputPath); // never overwritten with an auto name
+        Assert.Equal(0, scanner.Calls); // never actually scans a filesystem root
+        Assert.False(vm.IsScanning);
+    }
+}

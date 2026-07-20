@@ -41,6 +41,21 @@ public sealed class CreatorViewModelTests : IDisposable
             return Build(outputPath);
         }
 
+        public IReadOnlyList<string>? LastInputFiles { get; private set; }
+        public string? LastRootFolder { get; private set; }
+        public bool? LastStoreRelativePaths { get; private set; }
+
+        public Task<SRRCreationResult> CreateFromInputsAsync(string outputPath, IReadOnlyList<string> inputFiles,
+            string? rootFolder, bool storeRelativePaths, IReadOnlyList<StoredFileEntry>? additionalFiles,
+            SRRCreationOptions options, CancellationToken ct)
+        {
+            LastInputFiles = inputFiles;
+            LastRootFolder = rootFolder;
+            LastStoreRelativePaths = storeRelativePaths;
+            LastStoredFiles = additionalFiles;
+            return Build(outputPath);
+        }
+
         private Task<SRRCreationResult> Build(string outputPath)
         {
             Calls++;
@@ -61,6 +76,14 @@ public sealed class CreatorViewModelTests : IDisposable
         // Succeeds without touching disk; the SRS phase only runs when a test opts in via AutoCreateSRS.
         public Task<SRSCreationResult> CreateAsync(string outputPath, string sampleFilePath, SRSCreationOptions options, CancellationToken ct)
             => Task.FromResult(new SRSCreationResult { Success = true, SRSFileSize = 1 });
+    }
+
+    // None of this file's tests exercise folder mode (InputPath is always a file) — an empty-result
+    // stub is enough to satisfy the constructor. Folder-mode scan behavior is covered in
+    // CreatorViewModelFolderModeTests.cs.
+    private sealed class StubReleaseScanner : IReleaseScanner
+    {
+        public ReleaseScanResult Scan(string releaseRoot, CancellationToken ct = default) => new([], [], [], [], [], []);
     }
 
     private sealed class FakeTempDirectoryService(List<string> createdSink) : NoOpTempDirectoryService
@@ -103,7 +126,7 @@ public sealed class CreatorViewModelTests : IDisposable
         srr = new FakeSRRCreationService();
         _dialog = new FakeFileDialogService();
         var vm = new CreatorViewModel(srr, new FakeSRSCreationService(), _dialog,
-            new FakeTempDirectoryService(_tempPaths), new NoOpAppSettingsService(), new TestUiDispatcher())
+            new FakeTempDirectoryService(_tempPaths), new NoOpAppSettingsService(), new TestUiDispatcher(), new StubReleaseScanner())
         {
             // Keep the build trivial and deterministic: no sample/vobsub/fix phases.
             AutoCreateSRS = false,

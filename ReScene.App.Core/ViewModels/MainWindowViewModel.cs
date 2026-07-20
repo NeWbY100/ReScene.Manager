@@ -187,13 +187,18 @@ public partial class MainWindowViewModel : ViewModelBase
         // entirely in App.Core, mirroring ReScene.Lib's RarExecutable platform-detection style).
         var launcher = new SystemLauncherService();
 
+        // Stateless — unlike ISRRCreationService/ISRSCreationService (see below) there's no
+        // per-instance progress stream to keep separate, so both CreatorViewModel instances share
+        // this one scanner.
+        var releaseScanner = new ReleaseScanner();
+
         Inspector = new InspectorViewModel(fileDialog, srrEditingService, srrVerifyService, propertyExportService, imagePreviewService, appSettingsService);
         // Each creation VM gets its OWN creation-service instance. These services are stateless
         // wrappers that expose a dedicated SRRWriter/SRSWriter's progress events; sharing one
         // instance across VMs makes every subscriber receive that writer's progress, so a creation
         // in one VM would stream into the others' progress/log. The injected instances seed the
         // advanced Creator tab; the SRS Creator and the wizard below get their own.
-        Creator = new CreatorViewModel(srrService, srsService, fileDialog, tempDir, appSettingsService, dispatcher);
+        Creator = new CreatorViewModel(srrService, srsService, fileDialog, tempDir, appSettingsService, dispatcher, releaseScanner);
         SRSCreator = new SRSCreatorViewModel(new SRSCreationService(), fileDialog, tempDir, appSettingsService, dispatcher);
         Reconstructor = new ReconstructorViewModel(bruteForceService, fileDialog, dispatcher, uiTimerFactory, appSettingsService, tempDir, launcher);
         SRSReconstructor = new SRSReconstructorViewModel(srsReconService, fileDialog, tempDir, dispatcher);
@@ -210,7 +215,7 @@ public partial class MainWindowViewModel : ViewModelBase
             // A dedicated CreatorViewModel (not the Advanced tab's shared one) so the wizard's
             // state and build never collide with the Advanced SRR Creator tab. It also gets its
             // own creation-service instances so progress never crosses over to another VM.
-            CreateSRRWizard = new CreatorViewModel(new SRRCreationService(), new SRSCreationService(), fileDialog, tempDir, appSettingsService, dispatcher),
+            CreateSRRWizard = new CreatorViewModel(new SRRCreationService(), new SRSCreationService(), fileDialog, tempDir, appSettingsService, dispatcher, releaseScanner),
             SRSCreator = SRSCreator,
             Reconstructor = Reconstructor,
             Restore = beginnerRestore,

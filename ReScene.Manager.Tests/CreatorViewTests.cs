@@ -35,6 +35,16 @@ public class CreatorViewTests
         public Task<SRRCreationResult> CreateFromSFVAsync(string outputPath, string sfvFilePath,
             IReadOnlyList<StoredFileEntry>? additionalFiles, SRRCreationOptions options, CancellationToken ct)
             => Task.FromResult(new SRRCreationResult { Success = true });
+
+        public Task<SRRCreationResult> CreateFromInputsAsync(string outputPath, IReadOnlyList<string> inputFiles,
+            string? rootFolder, bool storeRelativePaths, IReadOnlyList<StoredFileEntry>? additionalFiles,
+            SRRCreationOptions options, CancellationToken ct)
+            => Task.FromResult(new SRRCreationResult { Success = true });
+    }
+
+    private sealed class InertReleaseScanner : IReleaseScanner
+    {
+        public ReleaseScanResult Scan(string releaseRoot, CancellationToken ct = default) => new([], [], [], [], [], []);
     }
 
     private sealed class InertSrsCreationService : ISRSCreationService
@@ -74,7 +84,8 @@ public class CreatorViewTests
             new AvaloniaFileDialogService(static () => null), // headless: dialogs no-op, never block
             new InertTempDirectoryService(),
             new DefaultAppSettingsService(),
-            new InlineUiDispatcher());
+            new InlineUiDispatcher(),
+            new InertReleaseScanner());
 
     private static CreatorViewModel.StoredFileItem Item(string fullPath, string storedName) =>
         new() { FullPath = fullPath, StoredName = storedName };

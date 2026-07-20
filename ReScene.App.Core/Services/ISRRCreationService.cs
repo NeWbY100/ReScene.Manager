@@ -67,4 +67,44 @@ public interface ISRRCreationService
         IReadOnlyList<StoredFileEntry>? additionalFiles,
         SRRCreationOptions options,
         CancellationToken ct);
+
+    /// <summary>
+    /// Creates an SRR file from an explicit list of RAR-set inputs (SFVs and/or first-volume
+    /// RARs) — the folder-mode counterpart to <see cref="CreateFromRARAsync"/>/<see cref="CreateFromSFVAsync"/>
+    /// (design spec §3), used when a <see cref="ReScene.App.Core.ViewModels.CreatorViewModel"/>
+    /// input resolves to a release folder rather than a single file.
+    /// </summary>
+    /// <param name="outputPath">
+    /// Destination path for the SRR file.
+    /// </param>
+    /// <param name="inputFiles">
+    /// Ordered list of SFV or first-volume RAR paths, one per detected RAR set.
+    /// </param>
+    /// <param name="rootFolder">
+    /// The release root every input and stored file is relative to; required when
+    /// <paramref name="storeRelativePaths"/> is <see langword="true"/>.
+    /// </param>
+    /// <param name="storeRelativePaths">
+    /// Whether stored/input names are recorded root-relative rather than flat basenames.
+    /// </param>
+    /// <param name="additionalFiles">
+    /// Optional ordered list of additional files to embed; blocks are written in this order.
+    /// </param>
+    /// <param name="options">
+    /// Creation options.
+    /// </param>
+    /// <param name="ct">
+    /// Cancellation token.
+    /// </param>
+    /// <returns>
+    /// The creation result including success status and statistics.
+    /// </returns>
+    public Task<SRRCreationResult> CreateFromInputsAsync(
+        string outputPath,
+        IReadOnlyList<string> inputFiles,
+        string? rootFolder,
+        bool storeRelativePaths,
+        IReadOnlyList<StoredFileEntry>? additionalFiles,
+        SRRCreationOptions options,
+        CancellationToken ct);
 }
