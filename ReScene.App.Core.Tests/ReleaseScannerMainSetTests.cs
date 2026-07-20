@@ -148,7 +148,10 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
         ReleaseScanResult result = scanner.Scan(root);
 
         Assert.Empty(result.MainSets);
-        Assert.Equal([sfv, rar], result.StoredFiles);
+        // FINAL order (Task 9 pass-10 reorder, excerpt tail L1240-1251): the proof `.rar` moves to
+        // sit immediately BEFORE its matching `.sfv` (see ReleaseScannerStoredTests's equivalent
+        // test for the full rationale).
+        Assert.Equal([rar, sfv], result.StoredFiles);
         Assert.Empty(result.SubtitleSfvs);
     }
 

@@ -252,17 +252,26 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             stored.Add(fixRar);
         }
 
-        // pass-10 skeleton: every input SFV, unconditionally (matching generate_srr L1190-1192's
-        // `for sfv in sfvs`), deduped by resolved path against what an earlier pass already stored
-        // (a proof-linked SFV from rule 4, most commonly).
-        var alreadyStored = new HashSet<string>(stored.Select(Path.GetFullPath), StringComparer.OrdinalIgnoreCase);
+        // pass-10: every input SFV, unconditionally (matching generate_srr L1190-1192's `for sfv
+        // in sfvs`), deduped by OS-resolved final path (design spec §1a — uniform with F4's
+        // GetProofRars dedup) against what an earlier pass already stored (a proof-linked SFV from
+        // rule 4, most commonly).
+        var alreadyStored = new HashSet<string>(stored.Select(ResolveDedupKey), StringComparer.OrdinalIgnoreCase);
         foreach (string sfv in sfvs)
         {
-            if (alreadyStored.Add(Path.GetFullPath(sfv)))
+            if (alreadyStored.Add(ResolveDedupKey(sfv)))
             {
                 stored.Add(sfv);
             }
         }
+
+        // pass-10 tail (excerpt tail L1240-1251 — codex r2b f6/Task 7 #5, implemented here in
+        // Task 9): move every nested/proof `.srr`/`.rar` whose stem matches an SFV to immediately
+        // BEFORE that SFV. At this scanner level the only movers that can ever exist are proof
+        // RARs/SFVs rule 4 pre-seeded at the FRONT of `stored` (this scanner never sees generated
+        // nested SRRs — those are VM-level artifacts spliced in by CreatorViewModel, which
+        // re-applies this same reorder over its larger merged list).
+        stored = ApplyProofBeforeSfvReorder(stored, static s => s);
 
         var sets = main.Select(sfv => new ReleaseSetInput(sfv, RelativeName(releaseRoot, sfv))).ToList();
 
@@ -1053,6 +1062,87 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     }
 
     /// <summary>
+    /// excerpt tail L1240-1251 ("put vobsub SRRs and proof RARs above their SFV file in the
+    /// list") — the pass-10 reorder. For every item whose last 4 characters (case-insensitive)
+    /// are <c>.srr</c> or <c>.rar</c>, if dropping those 4 characters and appending <c>.sfv</c>
+    /// (case-insensitive) matches some OTHER item in the list, that item is moved to sit
+    /// immediately before the matching one. Movers are identified against the ORIGINAL list (a
+    /// fixed set, exactly like the excerpt's <c>to_move</c> built before any mutation); each is
+    /// then reinserted in original relative order, one at a time, immediately before its target's
+    /// CURRENT position — reproducing the excerpt's per-item <c>remove</c>+<c>index</c>+<c>insert</c>
+    /// sequence without relying on value-equality removal (safe even if two items happen to
+    /// project to equal keys). Generic over <paramref name="keySelector"/> so both this scanner
+    /// (over raw disk paths) and <see cref="ViewModels.CreatorViewModel"/>'s larger merged list
+    /// (over stored logical names, once generated artifacts are spliced in — Task 9) share one
+    /// implementation. The excerpt's own slicing (<c>cfile[-4:]</c>/<c>cfile[:-4]</c>) assumes
+    /// every one of <c>.srr</c>/<c>.rar</c>/<c>.sfv</c> is exactly 4 characters — true for all
+    /// three, so a literal 4-character slice reproduces it exactly.
+    /// </summary>
+    internal static List<T> ApplyProofBeforeSfvReorder<T>(IReadOnlyList<T> items, Func<T, string> keySelector)
+    {
+        var moverIndices = new List<int>();
+        for (int i = 0; i < items.Count; i++)
+        {
+            string key = keySelector(items[i]);
+            if (key.Length < 4)
+            {
+                continue;
+            }
+
+            string ext = key[^4..];
+            if (!ext.Equals(".srr", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".rar", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string candidateSfv = key[..^4] + ".sfv";
+            if (Exists(items, keySelector, candidateSfv))
+            {
+                moverIndices.Add(i);
+            }
+        }
+
+        if (moverIndices.Count == 0)
+        {
+            return [.. items];
+        }
+
+        var moverSet = new HashSet<int>(moverIndices);
+        var remaining = new List<T>(items.Count - moverIndices.Count);
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (!moverSet.Contains(i))
+            {
+                remaining.Add(items[i]);
+            }
+        }
+
+        foreach (int i in moverIndices)
+        {
+            T mover = items[i];
+            string moveKey = keySelector(mover);
+            string candidateSfv = moveKey[..^4] + ".sfv";
+            int index = remaining.FindIndex(x => string.Equals(keySelector(x), candidateSfv, StringComparison.OrdinalIgnoreCase));
+            remaining.Insert(index < 0 ? remaining.Count : index, mover);
+        }
+
+        return remaining;
+    }
+
+    private static bool Exists<T>(IReadOnlyList<T> items, Func<T, string> keySelector, string candidate)
+    {
+        foreach (T item in items)
+        {
+            if (string.Equals(keySelector(item), candidate, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// excerpt: generate_srr L784-798 (conditional fix RAR) + is_storable_fix L516-524 — stores the
     /// single main RAR only when: the release name matches <see cref="IsStorableFix"/>; there is
     /// exactly one main SFV, listing exactly one entry that is itself a first-volume <c>.rar</c>;
@@ -1092,9 +1182,11 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             return null;
         }
 
-        // excerpt L793-794 — "prevent duplicate file add".
-        string resolved = Path.GetFullPath(rarPath);
-        bool alreadyStored = stored.Any(s => string.Equals(Path.GetFullPath(s), resolved, StringComparison.OrdinalIgnoreCase));
+        // excerpt L793-794 — "prevent duplicate file add". Uniform OS-final-path dedup (design
+        // spec §1a) rather than a lexical Path.GetFullPath compare, matching GetProofRars/the
+        // pass-10 SFV-append dedup above.
+        string resolved = ResolveDedupKey(rarPath);
+        bool alreadyStored = stored.Any(s => string.Equals(ResolveDedupKey(s), resolved, StringComparison.OrdinalIgnoreCase));
         return alreadyStored ? null : rarPath;
     }
 

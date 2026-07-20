@@ -438,13 +438,10 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         // filter_proof_rar_files pass, even though it independently also matches "proof"-in-path
         // plus AnyImage.
         //
-        // NOTE (codex #5, deferred to Task 9): the `[sfv, rar]` order asserted below is Task 7's
-        // INTERMEDIATE state — rule 4 pre-seeds `stored` with the proof sfv+rar at the FRONT of
-        // the list before any §2d category pass runs. pyrescene's real generate_srr CLEARS every
-        // stored file (excerpt L601-603) and rebuilds via the pass-10 sequence, which places the
-        // proof RAR immediately BEFORE its SFV, not both at the front. That clear-and-rebuild is
-        // explicitly Task 9's scope (full pass-10 reorder); Task 7 only proves no duplicate entry
-        // exists, not the final ordering.
+        // FINAL order (Task 9's pass-10 reorder, excerpt tail L1240-1251): rule 4 pre-seeds
+        // `stored` with the proof sfv+rar at the FRONT of the list, but the pass-10 reorder then
+        // moves the `.rar` (whose stem matches the sfv) to sit immediately BEFORE that sfv —
+        // `[rar, sfv]`, matching pyrescene's real generate_srr output.
         string root = CreateRoot("SomeRelease");
         string sfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
         string rar = Touch(Path.Combine(root, "Proof", "p.rar"));
@@ -453,7 +450,7 @@ public class ReleaseScannerStoredTests : TempDirTestBase
 
         ReleaseScanResult result = scanner.Scan(root);
 
-        Assert.Equal([sfv, rar], result.StoredFiles);
+        Assert.Equal([rar, sfv], result.StoredFiles);
         Assert.Single(result.StoredFiles, f => f == rar);
     }
 
