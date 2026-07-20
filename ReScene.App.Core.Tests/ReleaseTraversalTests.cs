@@ -51,6 +51,45 @@ public class ReleaseTraversalTests : TempDirTestBase
     }
 
     [Fact]
+    public void EnumerateFiles_AbsoluteRoot_ResultsAreAllRooted()
+    {
+        Make("a.txt");
+        Make("CD1", "b.sfv");
+
+        TraversalResult result = ReleaseTraversal.EnumerateFiles(TempDir);
+
+        Assert.All(result.Files, f => Assert.True(Path.IsPathRooted(f)));
+    }
+
+    [Fact]
+    public void EnumerateFiles_RelativeRoot_ResolvesToFullPaths_MatchingAbsoluteRootResult()
+    {
+        // The candidate directory is created directly under the process's CURRENT working
+        // directory (not under TempDir, which typically lives on a different drive from the test
+        // binary's output folder) so a genuine relative root can be passed WITHOUT mutating the
+        // process-wide CurrentDirectory — Directory.SetCurrentDirectory would be unsafe here since
+        // xUnit runs test classes in separate collections concurrently by default.
+        string cwd = Directory.GetCurrentDirectory();
+        string relativeName = $"relroot_test_{Guid.NewGuid():N}";
+        string localDir = Path.Combine(cwd, relativeName);
+        Directory.CreateDirectory(localDir);
+        string filePath = Path.Combine(localDir, "a.txt");
+        File.WriteAllText(filePath, "x");
+
+        try
+        {
+            TraversalResult result = ReleaseTraversal.EnumerateFiles(relativeName);
+
+            Assert.All(result.Files, f => Assert.True(Path.IsPathRooted(f)));
+            Assert.Equal([Path.GetFullPath(filePath)], result.Files);
+        }
+        finally
+        {
+            Directory.Delete(localDir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void EnumerateFiles_RootAccessDenied_SetsRootFailedAndReturnsNoFiles()
     {
         AclDenyHelper.DenyAccess(TempDir);

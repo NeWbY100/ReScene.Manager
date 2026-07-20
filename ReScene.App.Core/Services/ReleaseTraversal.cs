@@ -14,28 +14,32 @@ public static class ReleaseTraversal
 {
     /// <summary>
     /// Enumerates every file under <paramref name="root"/> in the deterministic order documented
-    /// on this class. A directory that fails to enumerate (permission denied, I/O error) is
-    /// recorded as a <see cref="TraversalIssue"/> and its subtree is skipped; the traversal
-    /// continues with the remaining directories. If <paramref name="root"/> itself fails to
-    /// enumerate, the result carries <see cref="TraversalResult.RootFailed"/> = <see langword="true"/>
-    /// with no files. <paramref name="ct"/> is checked before any I/O and again per directory.
+    /// on this class. Results are always full paths — a relative <paramref name="root"/> is
+    /// resolved against the current directory once, up front, so callers never get
+    /// CWD-dependent output. A directory (or a child's metadata) that fails to read (permission
+    /// denied, I/O error, disappears mid-walk) is recorded as a <see cref="TraversalIssue"/> and
+    /// skipped; the traversal continues with the remaining directories. If <paramref name="root"/>
+    /// itself fails to enumerate, the result carries <see cref="TraversalResult.RootFailed"/> =
+    /// <see langword="true"/> with no files. <paramref name="ct"/> is checked before any I/O and
+    /// again per directory.
     /// </summary>
     public static TraversalResult EnumerateFiles(string root, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
 
-        var files = new List<string>();
-        var issues = new List<TraversalIssue>();
-        try
+        // Full-path contract (Interfaces block): Directory.GetFiles/GetDirectories append results
+        // to whatever path they're given, so a relative root would otherwise leak into every
+        // result path and become dependent on the process's current directory.
+        root = Path.GetFullPath(root);
+
+        if (!TryReadDirectory(root, out string[] dirFiles, out string[] subdirs, out string? message))
         {
-            _ = Directory.GetFiles(root); // probe: root failure is fatal, not a per-item issue
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            return new TraversalResult([], [new TraversalIssue(root, e.Message)], RootFailed: true);
+            return new TraversalResult([], [new TraversalIssue(root, message!)], RootFailed: true);
         }
 
-        Walk(root, files, issues, ct);
+        var files = new List<string>();
+        var issues = new List<TraversalIssue>();
+        EmitFilesAndDescend(dirFiles, subdirs, files, issues, ct);
         return new TraversalResult(files, issues, RootFailed: false);
     }
 
@@ -50,32 +54,74 @@ public static class ReleaseTraversal
     {
         ct.ThrowIfCancellationRequested();
 
-        string[] dirFiles;
-        string[] subdirs;
-        try
+        if (!TryReadDirectory(dir, out string[] dirFiles, out string[] subdirs, out string? message))
         {
-            dirFiles = Directory.GetFiles(dir);
-            subdirs = Directory.GetDirectories(dir);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            issues.Add(new TraversalIssue(dir, e.Message)); // scanner maps this to a Warning
+            issues.Add(new TraversalIssue(dir, message!)); // scanner maps this to a Warning
             return;
         }
 
+        EmitFilesAndDescend(dirFiles, subdirs, files, issues, ct);
+    }
+
+    /// <summary>
+    /// Shared tail of a successfully-read directory: sort this level's names ordinally, emit its
+    /// files, then descend into its subdirectories (skipping reparse points). Called once for the
+    /// root (from <see cref="EnumerateFiles"/>) and once per descendant (from <see cref="Walk"/>)
+    /// so the ordering logic isn't duplicated between the two call sites.
+    /// </summary>
+    private static void EmitFilesAndDescend(
+        string[] dirFiles, string[] subdirs, List<string> files, List<TraversalIssue> issues, CancellationToken ct)
+    {
         Array.Sort(dirFiles, StringComparer.Ordinal);
         Array.Sort(subdirs, StringComparer.Ordinal);
         files.AddRange(dirFiles);
 
         foreach (string sub in subdirs)
         {
+            FileAttributes attrs;
+            try
+            {
+                attrs = File.GetAttributes(sub);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // A child that disappears or becomes unreadable between GetDirectories and this
+                // call must degrade to an Issue, not crash the whole traversal (class contract).
+                issues.Add(new TraversalIssue(sub, e.Message));
+                continue;
+            }
+
             // pyrescene's os.walk does not follow directory reparse points by default.
-            if ((File.GetAttributes(sub) & FileAttributes.ReparsePoint) != 0)
+            if ((attrs & FileAttributes.ReparsePoint) != 0)
             {
                 continue;
             }
 
             Walk(sub, files, issues, ct);
+        }
+    }
+
+    /// <summary>
+    /// Reads one directory's immediate files and subdirectories. Returns <see langword="false"/>
+    /// with <paramref name="message"/> set on any read failure, leaving the classification of that
+    /// failure (root vs. descendant) to the caller.
+    /// </summary>
+    private static bool TryReadDirectory(
+        string dir, out string[] dirFiles, out string[] subdirs, out string? message)
+    {
+        try
+        {
+            dirFiles = Directory.GetFiles(dir);
+            subdirs = Directory.GetDirectories(dir);
+            message = null;
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            dirFiles = [];
+            subdirs = [];
+            message = e.Message;
+            return false;
         }
     }
 }
