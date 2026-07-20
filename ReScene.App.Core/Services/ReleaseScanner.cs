@@ -125,20 +125,22 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         var excludedCandidates = new List<string>();
         var stored = new List<string>();
 
-        // D1 fix (excerpt L601-603 "remove_stored_files... rebuild"): rule-4's discovered proof
-        // RAR (when the singleton proof-SFV entry resolves to an image-ending RAR) is collected
-        // here rather than added to `stored` immediately — added immediately would pre-seed it at
-        // the FRONT of the list (this loop runs before any category pass below), landing it in the
-        // WRONG category position. It is merged into the proof-RAR category position instead (see
-        // below). The proof SFV itself needs NO separate collection at all: it is simply never
-        // added to `main`, so the pass-10 final-SFV pass (`foreach sfv in sfvs`) naturally stores
-        // it at ITS correct (late) category position, exactly like any other non-main SFV.
-        var ruleFourProofRars = new List<string>();
-
+        // E1(b) fix (codex #1, second round): rule 4 (remove_unwanted_sfvs) ONLY decides whether an
+        // SFV counts as a main set — in pyrescene it never itself drives RAR storage or ordering.
+        // The proof-linked RAR's actual storage+ordering is entirely owned by GetProofRars below,
+        // an independent pass over the RAW RAR-file traversal (mirroring get_proof_files'
+        // filter_proof_rar_files, excerpt L84) — `LastPackedIsImage` (rule 4's own predicate)
+        // always implies `AnyImage` (GetProofRars' predicate: both are computed from the SAME
+        // packed-block list, RarProofInspector.cs), and the RAR's path always contains "proof"
+        // (its SFV's own parent dir is "proof"/"proofs"), so GetProofRars ALWAYS independently
+        // re-discovers it — in traversal order, matching pyrescene exactly, unlike a rule-4-owned
+        // collection ordered by SFV traversal instead (the bug this replaces). The proof SFV
+        // itself needs no collection either: it is simply never added to `main`, so pass-10's
+        // final-SFV pass (below) stores it at its correct (late) category position.
         foreach (string sfv in sfvs)
         {
             ct.ThrowIfCancellationRequested();
-            SfvClass cls = ClassifySfv(sfv, lcRelease, warnings, ruleFourProofRars, ct);
+            SfvClass cls = ClassifySfv(sfv, lcRelease, warnings, ct);
             switch (cls)
             {
                 case SfvClass.Main:
@@ -148,8 +150,8 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                     excludedCandidates.Add(sfv);
                     break;
                 case SfvClass.Proof:
-                    // Not main, not excluded-for-subtitle-processing — see the ruleFourProofRars
-                    // remark above for where its stored-file contribution actually lands.
+                    // Not main, not excluded-for-subtitle-processing — see the remark above for
+                    // where its stored-file contribution (if any) actually comes from.
                     break;
                 case SfvClass.Skipped:
                     // I3 hardening: the SFV itself was unreadable — a warning was already added
@@ -235,11 +237,10 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
         // ---- Task 7/9: stored-file chain (design spec §2d, category order nfo -> m3u -> proof
         // images -> proof RARs -> log -> cue -> pre-existing srs -> fix RAR -> input SFVs). Rule
-        // 4's own proof RAR (ruleFourProofRars, collected above) joins the proof-RAR category
-        // below at ITS position (D1 fix) — every pass appends in category order, deduping against
-        // whatever an earlier pass already added where the same extension could otherwise collide.
-        // The generated-artifact categories (6/9, VM-level) and the full pass-10 reorder are
-        // spliced in by CreatorViewModel over this scanner's own already-ordered output.
+        // 4's own proof RAR needs no special handling here at all (E1(b) fix, second round) — it
+        // is always independently rediscovered by GetProofRars below, in traversal order. The
+        // generated-artifact categories (6/9, VM-level) and the full pass-10 reorder are spliced in
+        // by CreatorViewModel over this scanner's own already-ordered output.
         ct.ThrowIfCancellationRequested();
         IReadOnlyList<string> nfoFiles = ReleaseTraversal.FilterByExtension(all, ".nfo");
         IReadOnlyList<string> m3uFiles = ReleaseTraversal.FilterByExtension(all, ".m3u");
@@ -252,10 +253,8 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         stored.AddRange(NfoPass(nfoFiles));
         stored.AddRange(m3uFiles);
         stored.AddRange(GetProofImages(all, releaseName, knownGoodStems, warnings));
-        // D1 fix: rule-4's own proof RAR joins the proof-RAR category HERE (its correct position),
-        // not pre-seeded at the front. GetProofRars's dedup (below) sees it already in `stored` and
-        // correctly skips re-adding the same RAR via its independent path-contains-"proof" pass.
-        stored.AddRange(ruleFourProofRars);
+        // excerpt: filter_proof_rar_files (get_proof_files, L84) — the ONLY proof-RAR pass; a
+        // rule-4-linked proof RAR is always independently rediscovered here (see the remark above).
         stored.AddRange(GetProofRars(rarFiles, stored, warnings, ct));
         stored.AddRange(LogPass(logFiles));
         stored.AddRange(cueFiles);
@@ -267,14 +266,27 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             stored.Add(fixRar);
         }
 
-        // pass-10: every input SFV, unconditionally (matching generate_srr L1190-1192's `for sfv
-        // in sfvs`), deduped by OS-resolved final path (design spec §1a — uniform with F4's
-        // GetProofRars dedup) against what an earlier pass already stored (a proof-linked SFV from
-        // rule 4, most commonly).
+        // pass-10 (excerpt L1190-1206, "copied_sfvs"/"rarsfv"): every SFV is stored, but NOT in
+        // plain traversal order — non-main (excluded/subtitle/proof/music) SFVs are appended FIRST,
+        // in traversal order, and MAIN (rar-set) SFVs are DEFERRED to the bottom, appended last (the
+        // excerpt's own `rarsfv` list: "add RAR sfv files at the bottom"). E1(a) fix (second
+        // round): the previous single pass stored every SFV in plain traversal order with no
+        // main-vs-non-main partition, so a tree with both a main SFV and a non-main one (e.g. a
+        // proof or subtitle SFV) came out with the main SFV in the wrong (traversal, not
+        // deferred-to-bottom) position. Deduped by OS-resolved final path (design spec §1a —
+        // uniform with F4's GetProofRars dedup) against whatever an earlier pass already stored.
         var alreadyStored = new HashSet<string>(stored.Select(ResolveDedupKey), StringComparer.OrdinalIgnoreCase);
         foreach (string sfv in sfvs)
         {
-            if (alreadyStored.Add(ResolveDedupKey(sfv)))
+            if (!mainSet.Contains(sfv) && alreadyStored.Add(ResolveDedupKey(sfv)))
+            {
+                stored.Add(sfv);
+            }
+        }
+
+        foreach (string sfv in sfvs)
+        {
+            if (mainSet.Contains(sfv) && alreadyStored.Add(ResolveDedupKey(sfv)))
             {
                 stored.Add(sfv);
             }
@@ -282,10 +294,10 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
         // pass-10 tail (excerpt tail L1240-1251 — codex r2b f6/Task 7 #5, implemented here in
         // Task 9): move every nested/proof `.srr`/`.rar` whose stem matches an SFV to immediately
-        // BEFORE that SFV. At this scanner level the only movers that can ever exist are proof
-        // RARs/SFVs rule 4 pre-seeded at the FRONT of `stored` (this scanner never sees generated
-        // nested SRRs — those are VM-level artifacts spliced in by CreatorViewModel, which
-        // re-applies this same reorder over its larger merged list).
+        // BEFORE that SFV. At this scanner level the only movers that can ever exist are a proof
+        // RAR (GetProofRars, above) whose stem matches its linked proof SFV (this scanner never
+        // sees generated nested SRRs — those are VM-level artifacts spliced in by
+        // CreatorViewModel, which re-applies this same reorder over its larger merged list).
         stored = ApplyProofBeforeSfvReorder(stored, static s => s);
 
         var sets = main.Select(sfv => new ReleaseSetInput(sfv, RelativeName(releaseRoot, sfv))).ToList();
@@ -308,12 +320,13 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
     /// <summary>
     /// The per-SFV branch of <c>remove_unwanted_sfvs</c> (excerpt L294-407), rules 1-7 in
-    /// sequential first-match order. Rule 4 (proof) may append to
-    /// <paramref name="ruleFourProofRars"/> — the proof SFV itself needs no collection at all (it
-    /// is simply excluded from <c>main</c>, letting pass-10 store it at its natural position; see
-    /// the D1 remark at this method's call site in <see cref="Scan"/>).
+    /// sequential first-match order. Rule 4 (proof) decides classification only — the proof SFV
+    /// needs no collection at all (it is simply excluded from <c>main</c>, letting pass-10 store
+    /// it at its natural position) and its linked RAR's storage is entirely owned by
+    /// <see cref="GetProofRars"/>'s independent pass (see the E1(b) remark at this method's call
+    /// site in <see cref="Scan"/>).
     /// </summary>
-    private SfvClass ClassifySfv(string sfv, string lcRelease, List<string> warnings, List<string> ruleFourProofRars, CancellationToken ct)
+    private SfvClass ClassifySfv(string sfv, string lcRelease, List<string> warnings, CancellationToken ct)
     {
         string sfvName = Path.GetFileName(sfv);
         string lcSfvName = sfvName.ToLowerInvariant();
@@ -356,7 +369,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         // excerpt: remove_unwanted_sfvs L357-385 (rule 4: proof state machine)
         if (pardir == "proof" || pardir == "proofs")
         {
-            SfvClass? proofResult = ClassifyProof(sfv, dir, warnings, ruleFourProofRars, ct);
+            SfvClass? proofResult = ClassifyProof(sfv, dir, warnings, ct);
             if (proofResult is { } result)
             {
                 return result;
@@ -395,14 +408,16 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     /// <summary>
     /// Rule 4's proof state machine (excerpt L357-385). Returns <see cref="SfvClass.Proof"/> when
     /// the SFV is excluded as proof material; the proof SFV itself needs no explicit storage here
-    /// at all (D1 fix — it lands via pass-10's final-SFV pass, at its correct category position,
-    /// simply by never being added to <c>main</c>). Only its LINKED RAR (when found and its last
-    /// packed block is an image) is collected, into <paramref name="ruleFourProofRars"/>, so the
-    /// caller can splice it into the proof-RAR category position rather than the front of the
-    /// list. Returns <see langword="null"/> to signal "not proof — fall through to rules 5-7" (a
+    /// at all (it lands via pass-10's final-SFV pass, at its correct category position, simply by
+    /// never being added to <c>main</c>). Its LINKED RAR's storage is likewise NOT this method's
+    /// concern (E1(b) fix, second round): <see cref="GetProofRars"/>'s independent pass always
+    /// rediscovers it (same reasoning as the class-level remark at this method's call site), so no
+    /// RAR path is collected or returned here — including its "unreadable" warning, which
+    /// <see cref="GetProofRars"/> also produces independently; duplicating it here would double it.
+    /// Returns <see langword="null"/> to signal "not proof — fall through to rules 5-7" (a
     /// multi-entry SFV, or a readable RAR whose last packed block is not an image).
     /// </summary>
-    private SfvClass? ClassifyProof(string sfv, string dir, List<string> warnings, List<string> ruleFourProofRars, CancellationToken ct)
+    private SfvClass? ClassifyProof(string sfv, string dir, List<string> warnings, CancellationToken ct)
     {
         IReadOnlyList<string>? entries = TryReadSfvEntries(sfv, warnings);
         if (entries is null)
@@ -439,10 +454,9 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             if (!facts.Readable)
             {
                 // excerpt: remove_unwanted_sfvs L374-377 ("No RAR5 support yet" / caught
-                // ValueError). The RAR could not be verified as proof content, so this port does
-                // not embed its raw bytes on its behalf (only a warning; the SFV is still picked
-                // up by pass-10).
-                warnings.Add($"Cannot read proof RAR (unsupported or corrupt): {rarPath}");
+                // ValueError). No warning here — GetProofRars's own independent pass over this
+                // exact RAR (it is on disk and its path contains "proof") produces the "cannot
+                // read" warning; adding a second one here would just duplicate it.
                 return SfvClass.Proof;
             }
 
@@ -451,7 +465,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                 return null;
             }
 
-            ruleFourProofRars.Add(rarPath);
+            // No RAR to collect — GetProofRars independently rediscovers and stores it (E1(b)).
             return SfvClass.Proof;
         }
 
@@ -1065,8 +1079,12 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     /// checked), so this should always succeed. [DIVERGENCE: hardening] a path that vanishes or
     /// becomes unresolvable between discovery and this call falls back to the lexical
     /// <see cref="Path.GetFullPath(string)"/> form rather than throwing and aborting the scan.
+    /// <c>internal</c> (not <c>private</c>) so <see cref="ViewModels.CreatorViewModel"/> can reuse
+    /// the exact same OS-final-path dedup key when reconciling manually-added artifacts against
+    /// this scanner's already-stored files (E3, Task 9 second fix round) — mirrors
+    /// <see cref="ApplyProofBeforeSfvReorder{T}"/>'s own cross-class reuse.
     /// </summary>
-    private static string ResolveDedupKey(string path)
+    internal static string ResolveDedupKey(string path)
     {
         try
         {

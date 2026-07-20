@@ -550,6 +550,28 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         Assert.Equal([nfo, sfv], result.StoredFiles);
     }
 
+    [Fact]
+    public void MainSfv_DeferredToBottom_BehindANonMainProofSfv()
+    {
+        // E1(a) (codex #1, second round; excerpt L1195-1204 "add RAR sfv files at the bottom"):
+        // pass-10 must NOT store every sfv in plain traversal order — non-main sfvs (here, the
+        // Proof/p.sfv, excluded as proof material by rule 4) are appended FIRST, and MAIN sfvs are
+        // DEFERRED to the very bottom. "CD1" sorts before "Proof" ordinally, so a plain-traversal
+        // bug would put main.sfv first; the correct, deferred order puts it last.
+        string root = CreateRoot("SomeRelease");
+        string mainSfv = WriteSfv(Path.Combine(root, "CD1", "main.sfv"), "main.rar");
+        string proofSfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
+        string proofRar = Touch(Path.Combine(root, "Proof", "p.rar"));
+        var facts = new ProofRarFacts(Readable: true, HasPackedBlocks: true, AnyImage: true, LastPackedIsImage: true);
+        var scanner = new ReleaseScanner(sfvEntryReader: null, proofRarReader: (_, _) => facts);
+
+        ReleaseScanResult result = scanner.Scan(root);
+
+        Assert.Equal([proofRar, proofSfv, mainSfv], result.StoredFiles);
+        Assert.Single(result.MainSets);
+        Assert.Equal(mainSfv, result.MainSets[0].SfvOrRarPath);
+    }
+
     // --- full category-order mixed tree --------------------------------------------------------------
 
     [Fact]

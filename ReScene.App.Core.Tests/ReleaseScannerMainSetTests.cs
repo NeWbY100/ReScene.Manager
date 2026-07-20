@@ -415,10 +415,13 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
         Assert.Single(result.MainSets);
         Assert.Equal(good, result.MainSets[0].SfvOrRarPath);
         Assert.Empty(result.SubtitleSfvs);
-        // Task 7 pass-10: both sfvs are appended (in traversal order, "CD1" < "Proof" ordinally)
-        // regardless of classification — pass 10 never re-reads an sfv's entries, it just embeds
-        // the file itself, so the unreadable-entries "bad" sfv is unaffected by its own I3 warning.
-        Assert.Equal([good, bad], result.StoredFiles);
+        // Task 7/9 pass-10 (E1(a) fix, second round): both sfvs are appended regardless of
+        // classification — pass 10 never re-reads an sfv's entries, it just embeds the file itself
+        // — but NON-MAIN sfvs come first and MAIN sfvs are DEFERRED to the bottom (excerpt
+        // L1195-1204's "add RAR sfv files at the bottom"), not plain traversal order. "bad" (Proof/
+        // p.sfv, Skipped — not main) precedes "good" (CD1/a.sfv, the one main set) even though "CD1"
+        // sorts before "Proof" ordinally.
+        Assert.Equal([bad, good], result.StoredFiles);
         Assert.Contains(result.Warnings, w => w.Contains(bad, StringComparison.Ordinal));
     }
 
