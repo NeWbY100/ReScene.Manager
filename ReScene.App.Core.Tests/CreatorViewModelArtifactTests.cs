@@ -79,6 +79,14 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         public List<SRRCreationOptions> RarCallOptions { get; } = [];
 
         /// <summary>
+        /// The <see cref="SRRCreationOptions"/> passed to each <see cref="CreateFromSFVAsync"/> call,
+        /// parallel to <see cref="SfvCalls"/> — lets the wizard-placeholder E6 test verify the nested
+        /// subtitle SRR call forced ComputeOSOHashes off even when the outer run enabled it (Task 9
+        /// fix-4).
+        /// </summary>
+        public List<SRRCreationOptions> SfvCallOptions { get; } = [];
+
+        /// <summary>
         /// Every additional file's bytes, captured AT CALL TIME (mirroring what the real writer
         /// does — reads each source before returning) so a test can assert on generated-artifact
         /// content even though CreatorViewModel's own `finally` deletes the working dir right after
@@ -103,6 +111,7 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
             IReadOnlyList<StoredFileEntry>? additionalFiles, SRRCreationOptions options, CancellationToken ct)
         {
             SfvCalls.Add(sfvFilePath);
+            SfvCallOptions.Add(options);
             if (SfvShouldSucceed)
             {
                 File.WriteAllBytes(outputPath, [9]);
@@ -134,6 +143,25 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
     private sealed class StubReleaseScanner(ReleaseScanResult result) : IReleaseScanner
     {
         public ReleaseScanResult Scan(string releaseRoot, CancellationToken ct = default) => result;
+    }
+
+    /// <summary>
+    /// Real temp-directory service (the default <c>NoOpTempDirectoryService</c> throws) for the
+    /// file-mode Advanced-tab / wizard-placeholder paths, which call
+    /// <c>ITempDirectoryService.CreateTempDirectory()</c>. Roots temp dirs UNDER the fixture's
+    /// <see cref="TempDirTestBase.TempDir"/> so the base fixture removes them; <see cref="Cleanup"/>
+    /// is a no-op (the assertions read captured call state, never the on-disk temp files).
+    /// </summary>
+    private sealed class RealTempDirectoryService(string baseDir) : ITempDirectoryService
+    {
+        public string CreateTempDirectory()
+        {
+            string dir = Path.Combine(baseDir, "tmp-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            return dir;
+        }
+
+        public void Cleanup(string? tempDir) { }
     }
 
     // ── Helpers ─────────────────────────────────────────────
@@ -183,6 +211,28 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         vm.OutputPath = Path.Combine(TempDir, "out-" + Guid.NewGuid().ToString("N") + ".srr");
         await vm.CreateSRRCommand.ExecuteAsync(null);
         return srr.LastAdditionalFiles ?? [];
+    }
+
+    /// <summary>
+    /// Builds a FILE-mode VM (input is a .sfv/.rar FILE, not a folder) with a real temp-dir service,
+    /// for the Advanced-tab (<c>CreateVobsubSRR</c>) and wizard-placeholder paths (both live in the
+    /// non-folder-mode branch of <c>CreateSRRAsync</c> and use <c>ITempDirectoryService</c>).
+    /// </summary>
+    private (CreatorViewModel Vm, RecordingSRRCreationService Srr) CreateFileModeVm(bool createVobsubSrr)
+    {
+        var srs = new RecordingSRSCreationService();
+        var srr = new RecordingSRRCreationService();
+        var vm = new CreatorViewModel(srr, srs, new NoOpFileDialogService(), new RealTempDirectoryService(TempDir),
+            new NoOpAppSettingsService(), new TestUiDispatcher(),
+            new StubReleaseScanner(new ReleaseScanResult([], [], [], [], [], [])),
+            () => Path.Combine(TempDir, "work-" + Guid.NewGuid().ToString("N")))
+        {
+            AutoIncludeFiles = false,
+            AutoCreateSRS = false,
+            CreateVobsubSRR = createVobsubSrr,
+            StoreFixRAR = false,
+        };
+        return (vm, srr);
     }
 
     // ── 1. Extension-swap naming ──────────────────────────────
@@ -781,5 +831,124 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         List<string> names = [.. additionalFiles.Select(e => e.StoredName)];
         Assert.Single(names, n => n == "Subs/eng.srr"); // ONE, not a duplicate pair
         Assert.Single(srr.RarCalls); // ONE chain: eng.rar + eng.r00 folded together
+    }
+
+    // ── 19. Part C / F3 (codex Task 9 fix-4): a folder with BOTH a scanner-discovered subtitle SFV
+    //        AND a manually-added one stores EACH subtitle SFV exactly once. The relative ORDER of a
+    //        manually-added SFV vs a scanner-origin one is an accepted [DIVERGENCE: determinism]
+    //        (pyrescene has no manual-add feature — no parity target); the invariant that matters is
+    //        exactly-once storage (no dup, none dropped). ──
+
+    [Fact]
+    public async Task MixedScannerAndManualSubtitleSfvs_EachStoredExactlyOnce()
+    {
+        string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        // Scanner-discovered subtitle SFV: appears in BOTH the scan's SubtitleSfvs (→
+        // ExtraSubtitleSfvFiles) and its StoredFiles baseline (the scanner's own pass-10 storage).
+        string scannerSfv = WriteSfv(Path.Combine(root, "Subs", "scan.sfv"), "scan.rar");
+        Touch(Path.Combine(root, "Subs", "scan.rar"));
+        // Manually-added subtitle SFV: reaches only ExtraSubtitleSfvFiles (the "Add Subtitle"
+        // command), never the scan's StoredFiles.
+        string manualSfv = WriteSfv(Path.Combine(root, "Subs", "manual.sfv"), "manual.rar");
+        Touch(Path.Combine(root, "Subs", "manual.rar"));
+
+        var scan = new ReleaseScanResult([], [], [scannerSfv], [scannerSfv], [], []);
+        (CreatorViewModel vm, _, RecordingSRRCreationService srr, _) = CreateVm(scan);
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+        // Simulate "Add Subtitle" appending the manual SFV after the scan populated the scanner one.
+        vm.ExtraSubtitleSfvFiles.Add(manualSfv);
+        vm.OutputPath = Path.Combine(TempDir, "out-" + Guid.NewGuid().ToString("N") + ".srr");
+        await vm.CreateSRRCommand.ExecuteAsync(null);
+        IReadOnlyList<StoredFileEntry> additionalFiles = srr.LastAdditionalFiles ?? [];
+
+        List<string> names = [.. additionalFiles.Select(e => e.StoredName)];
+        // The invariant: each subtitle SFV stored EXACTLY ONCE (relative order is a [DIVERGENCE]).
+        Assert.Single(names, n => n == "Subs/scan.sfv");
+        Assert.Single(names, n => n == "Subs/manual.sfv");
+    }
+
+    // ── 20. Part D (Task 9 fix-4, user-approved): the Advanced-tab create-time vobsub scan
+    //        (CreateVobsubSRRsAsync) now produces one nested SRR PER RAR CHAIN via
+    //        GenerateNestedSubtitleSrrsAsync (E4), with oso forced off (E6) — like folder mode, not
+    //        the old single-merged GenerateNestedSRRFileAsync. ──
+
+    [Fact]
+    public async Task AdvancedTab_VobsubScan_MultiChainSubtitleSfv_YieldsOneNestedSrrPerChain()
+    {
+        string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        // Main SFV = the file-mode input (Advanced tab). The subtitle SFV lives in a Subs/ subdir so
+        // ReleaseFileScanner.FindSubtitleSFVFiles auto-detects it at create time; it lists TWO chains.
+        string mainSfv = WriteSfv(Path.Combine(root, "main.sfv"), "main.rar");
+        WriteSfv(Path.Combine(root, "Subs", "subs.sfv"), "eng.rar", "jpn.rar");
+        Touch(Path.Combine(root, "Subs", "eng.rar"));
+        Touch(Path.Combine(root, "Subs", "jpn.rar"));
+
+        (CreatorViewModel vm, RecordingSRRCreationService srr) = CreateFileModeVm(createVobsubSrr: true);
+        vm.InputPath = mainSfv;
+        vm.OutputPath = Path.Combine(TempDir, "out-" + Guid.NewGuid().ToString("N") + ".srr");
+        await vm.CreateSRRCommand.ExecuteAsync(null);
+
+        List<string> stored = [.. vm.StoredFiles.Select(f => f.StoredName)];
+        Assert.Single(stored, n => n == "Subs/eng.srr");
+        Assert.Single(stored, n => n == "Subs/jpn.srr");
+        Assert.DoesNotContain("Subs/subs.srr", stored); // never one merged SRR
+        Assert.Equal(2, srr.RarCalls.Count);            // two chains → two CreateFromRARAsync calls
+    }
+
+    [Fact]
+    public async Task AdvancedTab_VobsubScan_OuterOsoTrue_NestedSubtitleSrrHasNoOso()
+    {
+        string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string mainSfv = WriteSfv(Path.Combine(root, "main.sfv"), "main.rar");
+        WriteSfv(Path.Combine(root, "Subs", "subs.sfv"), "subs.rar");
+        Touch(Path.Combine(root, "Subs", "subs.rar"));
+
+        (CreatorViewModel vm, RecordingSRRCreationService srr) = CreateFileModeVm(createVobsubSrr: true);
+        vm.ComputeOSOHashes = true; // outer run enables OSO — must NOT reach the nested subtitle SRR
+        vm.InputPath = mainSfv;
+        vm.OutputPath = Path.Combine(TempDir, "out-" + Guid.NewGuid().ToString("N") + ".srr");
+        await vm.CreateSRRCommand.ExecuteAsync(null);
+
+        SRRCreationOptions nested = Assert.Single(srr.RarCallOptions);
+        Assert.False(nested.ComputeOSOHashes); // E6: nested subtitle SRR forces oso off
+    }
+
+    // ── 21. Part D — wizard-placeholder path (GenerateNestedSRRFileAsync): E4 (multi-chain) stays
+    //        deferred to Task 10 (placeholder model is 1:1), but E6 (oso-off) IS applied now. ──
+
+    [Fact]
+    public async Task WizardPlaceholder_NestedSubtitleSrr_OuterOsoTrue_HasNoOso()
+    {
+        string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string mainSfv = WriteSfv(Path.Combine(root, "main.sfv"), "main.rar");
+        string subSfv = WriteSfv(Path.Combine(root, "Subs", "subs.sfv"), "subs.rar");
+
+        (CreatorViewModel vm, RecordingSRRCreationService srr) = CreateFileModeVm(createVobsubSrr: false);
+        vm.ComputeOSOHashes = true; // outer run enables OSO
+        vm.InputPath = mainSfv;
+        vm.OutputPath = Path.Combine(TempDir, "out-" + Guid.NewGuid().ToString("N") + ".srr");
+        // A wizard GeneratedNestedSRR placeholder, materialized via GenerateNestedSRRFileAsync.
+        vm.StoredFiles.Add(new CreatorViewModel.StoredFileItem
+        {
+            StoredName = "Subs/subs.srr",
+            GenerateFromPath = subSfv,
+            Kind = CreatorViewModel.StoredFileKind.GeneratedNestedSRR,
+        });
+
+        await vm.CreateSRRCommand.ExecuteAsync(null);
+
+        // Two CreateFromSFVAsync calls: the nested placeholder (subs.sfv) and the outer main SRR.
+        int nestedIdx = srr.SfvCalls.IndexOf(subSfv);
+        Assert.True(nestedIdx >= 0, "the nested subtitle SRR was materialized via CreateFromSFVAsync");
+        Assert.False(srr.SfvCallOptions[nestedIdx].ComputeOSOHashes); // E6: nested forces oso off
+        // Sanity: the OUTER main SRR still carries the user's setting (proves the two are distinct).
+        int mainIdx = srr.SfvCalls.IndexOf(mainSfv);
+        Assert.True(srr.SfvCallOptions[mainIdx].ComputeOSOHashes);
     }
 }

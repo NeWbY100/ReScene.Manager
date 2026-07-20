@@ -152,6 +152,22 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                 case SfvClass.Proof:
                     // Not main, not excluded-for-subtitle-processing — see the remark above for
                     // where its stored-file contribution (if any) actually comes from.
+                    //
+                    // [DIVERGENCE: scope] A proof-classified SFV is routed OUT of nested-SRR
+                    // (subtitle) processing entirely (design §2a): it is never added to `main` and
+                    // is not a subtitle candidate. pyrescene instead routes it to extra_sfvs and
+                    // relies on D8 (excerpt L805-811 — "not for Proof RARs that are already stored
+                    // inside the SRR") to skip the NORMAL case, where the proof RAR sits beside the
+                    // SFV under a "proof" dir and is already stored by filter_proof_rar_files
+                    // (excerpt L204-211: only RARs whose resolved path contains "proof" are stored).
+                    // In that normal case both agree (no nested SRR). They diverge only for a
+                    // PATHOLOGICAL proof SFV that lists a RAR OUTSIDE its own directory (e.g.
+                    // `Proof/p.sfv` -> `..\Extras\p.rar`): that external RAR's path has no "proof"
+                    // segment, so filter_proof_rar_files never stores it and D8 does not fire, so
+                    // pyrescene (rule 4, excerpt L357-385) would create a nested SRR for it —
+                    // whereas this port creates neither the raw RAR nor the nested SRR. Deemed out
+                    // of scope: a proof SFV pointing outside its own dir is not a real scene-release
+                    // artifact.
                     break;
                 case SfvClass.Skipped:
                     // I3 hardening: the SFV itself was unreadable — a warning was already added
