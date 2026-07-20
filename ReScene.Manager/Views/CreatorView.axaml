@@ -29,14 +29,45 @@
         <Run Text="— The release's .sfv file or first .rar volume. The folder it sits in is treated as the release directory."
              Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
       </TextBlock>
+      <!-- Docked right in declaration order (rightmost first): folder Browse sits to the right of the
+           file Browse. Explicit TabIndex keeps keyboard order = visual order = TextBox → Browse file
+           → Browse folder (§4a accessibility review P3#8). -->
       <DockPanel Margin="0,0,0,2">
+        <Button DockPanel.Dock="Right" Content="Browse folder…"
+                Command="{Binding BrowseInputFolderCommand}"
+                Classes="ghost"
+                TabIndex="2"
+                AutomationProperties.Name="Browse folder for release input"
+                Margin="4,0,0,0" MinWidth="75" />
         <Button DockPanel.Dock="Right" Content="Browse"
                 Command="{Binding BrowseInputCommand}"
                 Classes="ghost"
+                TabIndex="1"
+                AutomationProperties.Name="Browse input file"
                 Margin="4,0,0,0" MinWidth="75" />
         <TextBox x:Name="InputTextBox" Text="{Binding InputPath}"
+                 TabIndex="0"
+                 AutomationProperties.Name="Input path"
+                 AutomationProperties.HelpText="Accepts a release .sfv/.rar file path or a release folder path"
                  behaviors:TextBoxDropBehavior.DropMode="File" />
       </DockPanel>
+      <!-- Busy reinforcement while the release scan runs; the announced signal is the FieldStatusLine
+           live region below (this bar is not focusable). -->
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsScanning}" Height="4"
+                   Margin="0,0,0,2"
+                   AutomationProperties.Name="Scanning release folder" />
+      <!-- Informational (non-focusable) list of the detected RAR sets; collapses when there are none.
+           Its automation Name is the grammatically-correct summary; each item surfaces its RelativeName. -->
+      <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="96" IsVisible="{Binding HasDetectedSets}">
+        <ItemsControl ItemsSource="{Binding DetectedSets}"
+                      AutomationProperties.Name="{Binding DetectedSetsSummary}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding RelativeName}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
       <controls:FieldStatusLine Status="{Binding InputStatus}" />
     </StackPanel>
 

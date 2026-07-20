@@ -30,8 +30,13 @@
                Foreground="{Binding Status.State, ElementName=Root, Converter={StaticResource FieldStateToBrush}}" />
 
     <!-- Message -->
+    <!-- LiveSetting="Polite" makes InputStatus transitions (e.g. "Scanning release folder…" → the
+         Ok/Error result) announced by the screen reader without stealing focus. Additive for all five
+         task forms — it only adds validation announcements (§4a accessibility review). Not on the
+         glyph (Grid.Column="0"): that TextBlock is colour-only decoration. -->
     <TextBlock Grid.Column="1"
                Text="{Binding Status.Message, ElementName=Root}"
+               AutomationProperties.LiveSetting="Polite"
                FontSize="{DynamicResource FontSizeCaption}"
                TextWrapping="Wrap"
                VerticalAlignment="Center"

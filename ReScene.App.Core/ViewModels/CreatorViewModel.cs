@@ -41,6 +41,15 @@ public partial class CreatorViewModel : OperationViewModelBase
 
         _sRRService.Progress += OnProgress;
 
+        // HasDetectedSets/DetectedSetsSummary are derived from DetectedSets.Count; raise their change
+        // notifications from a single CollectionChanged hook so every mutation site (the scan-apply
+        // population loop, Reset, ExitFolderMode's clear) notifies without hand-editing each one.
+        DetectedSets.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasDetectedSets));
+            OnPropertyChanged(nameof(DetectedSetsSummary));
+        };
+
         AppSettings settings = _settingsService.Load();
 
         if (string.IsNullOrEmpty(AppName))
@@ -116,6 +125,28 @@ public partial class CreatorViewModel : OperationViewModelBase
 
     /// <summary>The release's main RAR sets found by the most recent folder scan, in traversal order.</summary>
     public ObservableCollection<ReleaseSetInput> DetectedSets { get; } = [];
+
+    /// <summary>
+    /// Whether the most recent folder scan found any main RAR sets — the detected-sets list binds its
+    /// <c>IsVisible</c> to this. A bool (not <c>DetectedSets.Count</c>): Avalonia has no implicit
+    /// int→bool conversion, so binding visibility straight to <c>Count</c> would never resolve
+    /// (§4a accessibility review). Change-notified via the constructor's <c>DetectedSets</c>
+    /// <see cref="System.Collections.Specialized.INotifyCollectionChanged.CollectionChanged"/> hook.
+    /// </summary>
+    public bool HasDetectedSets => DetectedSets.Count > 0;
+
+    /// <summary>
+    /// Grammatically-correct count of the detected RAR sets ("No RAR sets" / "1 RAR set" /
+    /// "{n} RAR sets"), surfaced as the detected-sets list's automation Name so a screen reader
+    /// reads a sensible label instead of "N items" (§4a accessibility review). Change-notified with
+    /// <see cref="HasDetectedSets"/>.
+    /// </summary>
+    public string DetectedSetsSummary => DetectedSets.Count switch
+    {
+        0 => "No RAR sets",
+        1 => "1 RAR set",
+        int n => $"{n} RAR sets",
+    };
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CreateSRRCommand))]
@@ -1063,6 +1094,12 @@ public partial class CreatorViewModel : OperationViewModelBase
         }
 
         IsScanning = true;
+
+        // Busy announcement (§4a accessibility review): reuse the existing InputStatus + its
+        // FieldStatusLine live region for a single announced busy→result transition. ApplyFolderScanResult
+        // (or the root-error paths above) overwrites this with the Ok(summary)/Error(...) result on
+        // completion — no second status line, so a screen reader isn't double-announced.
+        InputStatus = FieldStatus.Info("Scanning release folder…");
 
         // Captured now (after OnInputPathChanged already bumped it for this input change) so the
         // posted continuation below can tell whether it's still the current input.
