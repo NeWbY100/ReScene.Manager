@@ -156,18 +156,23 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                     // [DIVERGENCE: scope] A proof-classified SFV is routed OUT of nested-SRR
                     // (subtitle) processing entirely (design §2a): it is never added to `main` and
                     // is not a subtitle candidate. pyrescene instead routes it to extra_sfvs and
-                    // relies on D8 (excerpt L805-811 — "not for Proof RARs that are already stored
-                    // inside the SRR") to skip the NORMAL case, where the proof RAR sits beside the
-                    // SFV under a "proof" dir and is already stored by filter_proof_rar_files
-                    // (excerpt L204-211: only RARs whose resolved path contains "proof" are stored).
-                    // In that normal case both agree (no nested SRR). They diverge only for a
-                    // PATHOLOGICAL proof SFV that lists a RAR OUTSIDE its own directory (e.g.
-                    // `Proof/p.sfv` -> `..\Extras\p.rar`): that external RAR's path has no "proof"
-                    // segment, so filter_proof_rar_files never stores it and D8 does not fire, so
-                    // pyrescene (rule 4, excerpt L357-385) would create a nested SRR for it —
-                    // whereas this port creates neither the raw RAR nor the nested SRR. Deemed out
-                    // of scope: a proof SFV pointing outside its own dir is not a real scene-release
-                    // artifact.
+                    // relies on D8 to skip nested-SRR creation. But D8 (excerpt L805-811 — "not for
+                    // Proof RARs that are already stored inside the SRR") tests each already-stored
+                    // file against `basename(esfv)[:-3] + "rar"` — the SFV's OWN STEM + ".rar", NOT
+                    // the RAR the SFV lists. So pyrescene skips only when some stored file is named
+                    // `<sfv-stem>.rar`. In the NORMAL case (`Proof/p.sfv` listing `p.rar`, that RAR
+                    // stored by filter_proof_rar_files — excerpt L204-211, only RARs whose resolved
+                    // path contains "proof") D8 looks for `p.rar`, finds it, and skips — both agree
+                    // (no nested SRR). pyrescene WOULD create a nested SRR (rule 4, excerpt L357-385
+                    // → create_srr_for_subs, L819-823), and this port does NOT, whenever no stored
+                    // file matches `<sfv-stem>.rar`, i.e.:
+                    //   (a) the proof SFV lists a RAR OUTSIDE its own dir (e.g. `..\Extras\p.rar`) —
+                    //       that external path has no "proof" segment, so it is never stored; or
+                    //   (b) the proof SFV's STEM differs from its listed RAR's basename even in the
+                    //       same dir (e.g. `Proof/meta.sfv` listing `proofpack.rar`: proofpack.rar
+                    //       IS stored, but D8 looks for `meta.rar` and misses).
+                    // Both are edge cases — a proof SFV whose stem ≠ its proof RAR's name is not the
+                    // scene norm — and are accepted as a documented divergence (behavior unchanged).
                     break;
                 case SfvClass.Skipped:
                     // I3 hardening: the SFV itself was unreadable — a warning was already added
