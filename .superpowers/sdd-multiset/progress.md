@@ -596,3 +596,56 @@ CARRY-FORWARD to Task 11 / whole-branch triage:
   N1 (nit): announced summary "{n} RAR set(s)" (CreatorViewModel:1234) vs grammatical DetectedSetsSummary "{n} RAR sets" — align.
   N2 (nit): DetectedSets binding test asserts IsVisible transitively, not a direct Assert.True. Optional.
   (Also still open: fix4 nit1 = .vob SAMPLE nested SRR create_srr_single_volume oso-forward; fix4 nit2 = stale test name.)
+
+=== TASK 11 STARTED (E2E via ava-desktop bridge + full gates + whole-branch review) ===
+Steps: (1) bridge E2E Advanced surface 2-disc folder → DetectedSets CD1/a.sfv+CD2/b.sfv, automation names (ava_props), create;
+(2) Inspector+Reconstructor show both discs; (3) wizard surface pre-populated; (4) full lib+App.Core+Manager + gate 0/0;
+(5) whole-branch review (BASE=merge-base main HEAD) codex+peer → ONE fix subagent for ALL findings incl carry-forwards
+(M1 stuck-status, N1/N2, fix4 nit1 .vob oso, fix4 nit2 test name) → re-verify → finishing-a-development-branch.
+
+Task 11 progress:
+  Full gates: lib 1398, App.Core 657, Manager 189/192 (3 pre-existing FileCompare/Inspector render), gate 0/0.
+  E2E (ava-desktop bridge, wizard surface, live 2-disc folder C:\...\e2e-2disc\tree-2disc):
+    ✓ automation names surface correctly: folder btn Name="Browse folder for release input", file btn="Browse input file"
+    ✓ folder input triggered a LIVE scan → DetectedSets populated CD1/a.sfv + CD2/b.sfv (RelativeName display)
+    ✓ DetectedSets container automation Name="2 RAR sets" (grammatical DetectedSetsSummary)
+    ✓ FieldStatusLine status="2 RAR set(s) · 0 sample(s) · 4 stored file(s)" (live-region conveys count; stored list = nfo+2sfv+subs.sfv)
+    (N1 visible: status "set(s)" vs list Name "2 RAR sets"). Create path itself golden-byte-identity + App.Core VM proven.
+  Whole-branch review: codex APPROVE — 0 Critical/Important cross-task findings; full pipeline coherent (6 result collections,
+    ordering composition, dedup, gating, both UI surfaces). Triage: M1=post-merge hardening OK, N1=cosmetic, fix4-nit1=NOT
+    establishable as a violation from the excerpt (create_srr_single_volume oso default not in excerpt) → leave. Awaiting peer whole-branch.
+
+Whole-branch review: peer review-wholebranch APPROVED-WITH-NITS (merge-ready). All 5 integration focus areas PASS (result
+produced/consumed incl. IsRootError sentinel safety; whole-pipeline ordering composition; dedup incl. subtitle single-store;
+CTS lifecycle F1 holds; both UI surfaces + shared stateless scanner safe). Peer RECOMMENDS fix4-nit1 before merge — it checked
+pyReScene SOURCE (main.py:588 create_srr_single_volume). LEAD-VERIFIED directly: create_srr_single_volume (main.py:588-640)
+writes ONLY header+SrrRarFileBlock+raw RAR blocks, NO oso logic → the .vob-sample nested SRR forwarding outer options
+(CreatorViewModel:1547) IS a real byte divergence (oso-on). Peer caught what codex couldn't (excerpt lacked the fn body).
+NEW peer Minor (DEFER→follow-up): Advanced-tab Options (AutoCreateSRS/CreateVobsubSRR/StoreFixRAR) dead in folder mode (visible
+but no effect; design-by-omission, spec §3). Final cleanup round dispatched (impl-task11-cleanup): C1=fix4-nit1 vob oso-off
+(parity), C2=M1 scan non-OCE hardening, C3=N1 summary grammar, C4=stale test renames. fix4-nit1 = the last parity item.
+
+Cleanup round: impl flagged C4's stale test name is INSIDE the lib submodule (SfvVolumeResolverTests.cs:50) — contradicts the
+outer-only scope I set. DECISION: defer C4 → trivial lib-side follow-up (rename ResolveOrderedChains_SpacedRarName_OneChain_
+BothVolumesSorted, drop "BothVolumesSorted"). Other *Sorted* hits confirmed non-stale. Cleanup round = C1(parity)/C2(hardening)/
+C3(grammar), outer-only. FOLLOW-UPS after merge: [lib] C4 test rename; [app] Advanced-tab options dead in folder mode (hide/
+disable or honor); [open] fix4-nit1-adjacent none. fix4-nit1 itself is being FIXED (C1).
+
+Cleanup delivered (outer 33a5f32; lib unchanged 9388c8e): C1 vob-oso-off (parity, nestedOptions cites main.py:588-640),
+C2 non-OCE scan hardening (generation/_scanCts-gated Post, fails closed like IsRootError, F1 invariants preserved),
+C3 summary reuses DetectedSetsSummary. App.Core 659, lib 1398 (golden 5/5), Manager 189/192, gate 0/0. Lead-verified:
+golden 1/1 byte-identity + Vob/FolderMode 36/36 GREEN (independent), diff correct. Review gate: codex (bvfh01yww) + peer
+review-cleanup (C2 CTS-lifecycle trace). On clean → close feature → finishing-a-development-branch (present merge/PR/keep/discard to USER).
+
+Cleanup review: codex APPROVE + peer review-cleanup APPROVED (exhaustive C2 CTS-lifecycle trace: F1 holds, same-gate, mutual
+exclusion of success/OCE/non-OCE, cts disposed once across all interleavings, fails closed like IsRootError/F3; C1 byte-identical
+to E6 siblings; C3 populated on only reaching path).
+=========================================================================================================================
+===> FEATURE COMPLETE: multi-set SRR creation (Tasks 1-11). All tasks dual-gate approved; both whole-branch reviews APPROVED;
+     final cleanup dual-gate approved; E2E runtime-verified (ava-desktop bridge, live 2-disc scan); golden BYTE-IDENTITY vs
+     real pyReScene --vobsub-srr preserved throughout. HEAD outer 33a5f32 / lib 9388c8e. Suites: lib 1398 (golden 5/5),
+     App.Core 659, Manager 189/192 (3 PRE-EXISTING FileCompare/Inspector render fails, unrelated), gate 0/0.
+     POST-MERGE FOLLOW-UPS: [lib] C4 test rename (SfvVolumeResolverTests:50 drop "BothVolumesSorted"); [app] Advanced-tab
+     options (AutoCreateSRS/CreateVobsubSRR/StoreFixRAR) inert in folder mode (hide/disable or honor). Both non-blocking.
+     NEXT: finishing-a-development-branch → present merge/PR/keep/discard to USER.
+=========================================================================================================================
