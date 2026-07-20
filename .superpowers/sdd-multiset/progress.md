@@ -546,3 +546,53 @@ Task 9 fix4b codex re-confirm: APPROVE. ===> TASK 9 COMPLETE (dual-gate: peer AP
   outer options → possible OSO pass-through; whether pyReScene forces oso-off there is NOT in the excerpt — investigate. nit2 =
   stale test name ...BothVolumesSorted (cosmetic).
   NEXT: Task 10 (Manager UI both surfaces + §4a a11y contract), then Task 11 (E2E via ava-desktop bridge + whole-branch review).
+
+=== TASK 10 STARTED (Manager UI both surfaces + §4a a11y contract) ===
+Verified VM API matches plan: BrowseInputFolderCommand (BrowseInputFolderAsync :130, OpenFolderAsync), DetectedSets
+(ObservableCollection<ReleaseSetInput> :118), ReleaseSetInput = record(SfvOrRarPath, RelativeName) — {Binding RelativeName} valid,
+IsScanning (:122). Both surfaces (CreatorView.axaml input row :25-41; CreateSRRWizardBody.axaml step-0 :11-25) currently have ZERO
+AutomationProperties → this feature = app's FIRST a11y annotations. Task 10 = pure markup (both surfaces) + RED-first headless
+binding tests. Accessibility: Avalonia is DESKTOP (AutomationProperties/UI Automation, NOT web/ARIA) → dispatched
+accessibility-lead (a11y-task10) review-FIRST per hook, Avalonia-briefed; runtime a11y verified via ava-desktop bridge in Task 11
+(web accessibility-lead is not the authoritative Avalonia checker). Awaiting a11y requirements → then dispatch impl.
+
+Task 10 a11y review (a11y-task10, Avalonia-briefed) — EXCELLENT, found real gaps beyond the plan §4a + a FUNCTIONAL BUG:
+  P1#1 input TextBox needs accessible NAME (HelpText is secondary only) — LabeledBy/Name. P1#2 no non-visual busy/results signal
+  (ProgressBar not announced) — live region. P2#3 ItemsControl not keyboard-reachable (informational OK + live-region summary).
+  P2#4 folder button Name violates Label-in-Name (WCAG 2.5.3) — must contain "Browse folder". P2#5 FieldStatusLine silent — add
+  LiveSetting=Polite (benefits all 5 forms). P2#6 FUNCTIONAL BUG: IsVisible="{Binding DetectedSets.Count}" int→bool won't bind →
+  add HasDetectedSets bool. P3#7 count grammar, P3#8 tab order/TabIndex. Runtime items (LiveRegionChanged fires? focus return?
+  wizard-step focus?) → Task 11 bridge.
+  Reconciliation (task-10-brief.md): keep plan's ItemsControl + live-region summary; SINGLE live region via FieldStatusLine +
+  InputStatus "Scanning…"→result transition (no double-announce); HasDetectedSets bool; accessible names (Name/LabeledBy);
+  folder button Name="Browse folder for release input"; ProgressBar Name; explicit TabIndex; never-disable TextBox. Small VM adds
+  (HasDetectedSets, DetectedSetsSummary, scan-start InputStatus). RED-first binding tests both surfaces + VM tests.
+  → impl-task10 dispatched (opus). Task 10 slightly larger than plan's minimal markup because mandated a11y review found the
+  baseline insufficient + a real binding bug.
+
+Task 10 DELIVERED (outer 84fc47a, UI-only, no lib): App.Core 657 (+4 VM), Manager 189/192 (3 pre-existing FileCompare/Inspector
+render fails, verified unrelated), gate 0/0. Lead-verified: both surfaces mirror the a11y contract (folder btn Label-in-Name Name,
+file btn Name, TextBox Name[CreatorView]/LabeledBy[wizard]+HelpText, ProgressBar Name, DetectedSets ScrollViewer+ItemsControl
+IsVisible=HasDetectedSets [int→bool bug FIXED], Name=DetectedSetsSummary, TabIndex 0/1/2); FieldStatusLine msg LiveSetting=Polite
+(shared, additive); VM HasDetectedSets+DetectedSetsSummary via CollectionChanged hook (cleaner than per-site), scan-start
+InputStatus=Info("Scanning…")→result. Independent re-run: 8 binding + 6 VM tests GREEN. Dual+ gate dispatched: codex (b3j5ja0q9,
+focus=binding paths + VM logic + stuck-"Scanning…" on cancel/supersede), peer review-task10 (spec+quality+stuck-status trace),
+a11y-task10 final confirm (findings addressed). Runtime a11y (LiveRegionChanged, focus) → Task 11 bridge.
+
+Task 10 review: codex APPROVE (binding paths + VM logic + stuck-status all clear). a11y-task10 final confirm: all 8 findings
+addressed, NO blockers. 2 soft notes both resolve to no-action: (1) completion announcement conveys the count — VERIFIED the
+scan summary (CreatorViewModel:1234) leads "{N} RAR set(s) · …" so InputStatus.Ok(summary) via the live region is meaningful;
+(2) MaxHeight=96 ScrollViewer not keyboard-scrollable — a11y-lead deems acceptable for read-only informational content. Awaiting
+peer review-task10 (last verdict) to close Task 10.
+
+Task 10 review: peer review-task10 APPROVED-WITH-NITS (no Critical/Important). Full contract confirmed on BOTH surfaces;
+stuck-status trace CLEAN on all 3 named paths (Info set only in StartFolderScan; every supersede/cancel/reset overwrites it
+synchronously; stale continuations generation-gated); tests real; CollectionChanged self-cycle no leak.
+===> TASK 10 COMPLETE (3-gate: codex APPROVE + a11y-lead all-addressed + peer APPROVED-WITH-NITS). Commit 84fc47a. <===
+CARRY-FORWARD to Task 11 / whole-branch triage:
+  M1 (MINOR, pre-existing, Task 10 EXTENDS to InputStatus): RunFolderScanAsync catches only OCE; an unexpected non-OCE from
+     ReleaseScanner.Scan would strand IsScanning + the announced InputStatus on "Scanning…" (a11y: stuck live-region). Low-
+     likelihood (defensive scanner: FS→warnings/RootError, cancel→OCE). Optional catch-all: clear IsScanning + InputStatus=Error.
+  N1 (nit): announced summary "{n} RAR set(s)" (CreatorViewModel:1234) vs grammatical DetectedSetsSummary "{n} RAR sets" — align.
+  N2 (nit): DetectedSets binding test asserts IsVisible transitively, not a direct Assert.True. Optional.
+  (Also still open: fix4 nit1 = .vob SAMPLE nested SRR create_srr_single_volume oso-forward; fix4 nit2 = stale test name.)
