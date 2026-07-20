@@ -125,6 +125,13 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
         }
     }
 
+    /// <summary>Returns a different canned result per root — for tests exercising two distinct
+    /// folders (e.g. an errored root followed by a good one) without needing gating.</summary>
+    private sealed class MultiRootReleaseScanner(Dictionary<string, ReleaseScanResult> resultsByRoot) : IReleaseScanner
+    {
+        public ReleaseScanResult Scan(string releaseRoot, CancellationToken ct = default) => resultsByRoot[releaseRoot];
+    }
+
     private static readonly ReleaseScanResult EmptyResult = new([], [], [], [], [], []);
 
     // ── Helpers ─────────────────────────────────────────────
@@ -583,8 +590,185 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
         vm.InputPath = driveRoot;
 
         Assert.Equal(FieldState.Error, vm.OutputStatus.State);
+        Assert.Equal(FieldState.Error, vm.InputStatus.State);
         Assert.Equal(previousOutput, vm.OutputPath); // never overwritten with an auto name
         Assert.Equal(0, scanner.Calls); // never actually scans a filesystem root
         Assert.False(vm.IsScanning);
+        Assert.False(vm.CreateSRRCommand.CanExecute(null)); // F3a: no empty creation from a rejected input
+    }
+
+    // ── F1 fix round: _scanCts lifecycle race ──────────────────
+
+    [Fact]
+    public async Task RapidInputSwitching_WithoutAwaiting_NeverThrows()
+    {
+        // Regression for F1: RunFolderScanAsync's cleanup used to run on a background thread
+        // (ConfigureAwait(false) + a bare `finally` that disposed/null'd _scanCts directly), racing
+        // OnInputPathChanged's cancellation of the SAME field on the UI thread.
+        // CancellationTokenSource forbids concurrent Cancel()/Dispose() on one instance
+        // (ObjectDisposedException — a crash), and a background finally could null out a newer
+        // scan's live CTS (TOCTOU). A fast (non-gated) scanner plus many unawaited switches
+        // maximizes the odds of overlapping a background completion with the next switch's
+        // synchronous cancel — the exact window the bug needed.
+        var scanner = new StubReleaseScanner(EmptyResult);
+        CreatorViewModel vm = CreateVm(scanner, out _);
+
+        var pending = new List<Task>();
+        for (int i = 0; i < 200; i++)
+        {
+            vm.InputPath = CreateFolder();
+            if (vm.LastFolderScan is { } scan)
+            {
+                pending.Add(scan);
+            }
+        }
+
+        // Drains every scan's Task (including already-superseded ones) so an exception that escaped
+        // a background thread — the original crash — surfaces here instead of being silently lost
+        // on a thread-pool thread nobody observed.
+        await Task.WhenAll(pending);
+    }
+
+    // ── F2 fix round: cross-mode OutputPath auto-vs-user provenance ──
+
+    [Fact]
+    public async Task FileAutoFill_SwitchToFolder_OutputPathReplacedWithFolderAutoValue()
+    {
+        string root = CreateFolder("Release.Folder-GRP");
+        string file = Touch(Path.Combine(TempDir, "movie.sfv"));
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(EmptyResult), out _);
+
+        vm.InputPath = file; // file-mode auto-fill now records provenance too (F2)
+        string fileAutoValue = vm.OutputPath;
+        Assert.Equal(Path.Combine(TempDir, "movie.srr"), fileAutoValue);
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+
+        Assert.Equal(Path.Combine(TempDir, "Release.Folder-GRP.srr"), vm.OutputPath);
+        Assert.NotEqual(fileAutoValue, vm.OutputPath);
+    }
+
+    [Fact]
+    public async Task FileAutoFill_UserEdits_SwitchToFolder_OutputPathPreserved()
+    {
+        string root = CreateFolder("Release.Folder-GRP");
+        string file = Touch(Path.Combine(TempDir, "movie.sfv"));
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(EmptyResult), out _);
+
+        vm.InputPath = file;
+        string userChosen = Path.Combine(TempDir, "my-own-name.srr");
+        vm.OutputPath = userChosen;
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+
+        Assert.Equal(userChosen, vm.OutputPath);
+    }
+
+    [Fact]
+    public async Task FolderAutoFill_SwitchToFile_OutputPathReplacedNotStaleFolder()
+    {
+        string root = CreateFolder("Release.Folder-GRP");
+        string file = Touch(Path.Combine(TempDir, "movie.sfv"));
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(EmptyResult), out _);
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+        string folderAutoValue = vm.OutputPath;
+        Assert.Equal(Path.Combine(TempDir, "Release.Folder-GRP.srr"), folderAutoValue);
+
+        vm.InputPath = file; // typed directly (not via BrowseInputCommand) — still re-derives (F2)
+
+        Assert.Equal(Path.Combine(TempDir, "movie.srr"), vm.OutputPath);
+        Assert.NotEqual(folderAutoValue, vm.OutputPath);
+    }
+
+    [Fact]
+    public async Task FolderAutoFill_UserEdits_SwitchToFile_OutputPathPreserved()
+    {
+        string root = CreateFolder("Release.Folder-GRP");
+        string file = Touch(Path.Combine(TempDir, "movie.sfv"));
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(EmptyResult), out _);
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+
+        string userChosen = Path.Combine(TempDir, "my-own-name.srr");
+        vm.OutputPath = userChosen;
+
+        vm.InputPath = file;
+
+        Assert.Equal(userChosen, vm.OutputPath);
+    }
+
+    // ── F3 fix round: folder error paths must gate Create, not fail open ──
+
+    [Fact]
+    public async Task PriorSuccessfulScan_ThenFilesystemRoot_InputStatusNotStale_CanCreateFalse_CollectionsEmpty()
+    {
+        string root = CreateFolder();
+        string aSfv = Path.Combine(root, "a.sfv");
+        string bSfv = Path.Combine(root, "b.sfv");
+        var scan = new ReleaseScanResult(
+            [new ReleaseSetInput(aSfv, "a.sfv"), new ReleaseSetInput(bSfv, "b.sfv")], [], [], [], [], []);
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(scan), out _);
+        vm.OutputPath = Path.Combine(TempDir, "out.srr");
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+        Assert.Equal(2, vm.DetectedSets.Count);
+        Assert.Equal(FieldState.Ok, vm.InputStatus.State);
+
+        string driveRoot = Path.GetPathRoot(TempDir)!;
+        vm.InputPath = driveRoot;
+
+        // Peer Finding 2: InputStatus must not keep showing the prior scan's success summary once
+        // the collections behind it have been wiped.
+        Assert.Equal(FieldState.Error, vm.InputStatus.State);
+        Assert.False(vm.CreateSRRCommand.CanExecute(null));
+        Assert.Empty(vm.DetectedSets);
+    }
+
+    [Fact]
+    public async Task ScannerRootError_SetsErrorStatus_CanCreateFalse_NoEmptyCreation()
+    {
+        string root = CreateFolder();
+        ReleaseScanResult rootError = ReleaseScanResult.RootError(root, "Access to the path is denied.");
+        CreatorViewModel vm = CreateVm(new StubReleaseScanner(rootError), out FakeSRRCreationService srr);
+        vm.OutputPath = Path.Combine(TempDir, "out.srr");
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+
+        Assert.Equal(FieldState.Error, vm.InputStatus.State);
+        Assert.False(vm.CreateSRRCommand.CanExecute(null));
+        Assert.Equal(0, srr.InputsCalls); // no empty/header-only creation from an unreadable root
+    }
+
+    [Fact]
+    public async Task AfterRootError_SubsequentSuccessfulScan_ClearsErrorAndEnablesCreate()
+    {
+        string rootA = CreateFolder("A");
+        string rootB = CreateFolder("B");
+        string bSet = Path.Combine(rootB, "b.sfv");
+        var resultsByRoot = new Dictionary<string, ReleaseScanResult>
+        {
+            [rootA] = ReleaseScanResult.RootError(rootA, "Access to the path is denied."),
+            [rootB] = new ReleaseScanResult([new ReleaseSetInput(bSet, "b.sfv")], [], [], [], [], []),
+        };
+        CreatorViewModel vm = CreateVm(new MultiRootReleaseScanner(resultsByRoot), out _);
+        vm.OutputPath = Path.Combine(TempDir, "out.srr");
+
+        vm.InputPath = rootA;
+        await vm.LastFolderScan!;
+        Assert.Equal(FieldState.Error, vm.InputStatus.State);
+        Assert.False(vm.CreateSRRCommand.CanExecute(null));
+
+        vm.InputPath = rootB;
+        await vm.LastFolderScan!;
+
+        Assert.Equal(FieldState.Ok, vm.InputStatus.State);
+        Assert.True(vm.CreateSRRCommand.CanExecute(null));
     }
 }
