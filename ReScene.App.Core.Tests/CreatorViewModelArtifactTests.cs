@@ -366,6 +366,30 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         Assert.Empty(srr.RarCalls);
     }
 
+    [Fact]
+    public async Task RarBackedVobSample_NestedSrr_ForcesComputeOSOHashesFalse_RegardlessOfOuterSetting()
+    {
+        // C1 (fix4-nit1, PARITY): pyrescene's create_srr_single_volume (main.py:588-640) writes
+        // ONLY SrrHeaderBlock + SrrRarFileBlock + raw RAR block bytes — it has NO oso_hash
+        // parameter or logic AT ALL, so a .vob/single-volume nested SRR NEVER contains OSO blocks.
+        // Forwarding the OUTER `options` (ComputeOSOHashes on) into the .vob nested CreateFromRARAsync
+        // would emit OSO blocks pyrescene omits — a byte divergence the golden can't catch (it runs
+        // oso-off + a .ts sample, not a .vob). Mirrors the E6 sibling tests: the nested call must
+        // force oso off regardless of the outer run's setting.
+        string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
+        string vobSample = WriteBytes(Path.Combine(root, "Sample", "clip.vob"), [(byte)'R', (byte)'a', (byte)'r', (byte)'!', 0x1A, 0x07, 0x00]);
+        var scan = new ReleaseScanResult([], [vobSample], [], [], [], []);
+        (CreatorViewModel vm, _, RecordingSRRCreationService srr, _) = CreateVm(scan);
+        vm.ComputeOSOHashes = true; // the OUTER setting — must NOT reach the .vob nested SRR call
+
+        await RunCreateAsync(vm, root, srr);
+
+        // The .vob nested SRR is the only CreateFromRARAsync in this scenario (no subtitle SFVs).
+        Assert.Contains(vobSample, srr.RarCalls);
+        SRRCreationOptions nestedOptions = Assert.Single(srr.RarCallOptions);
+        Assert.False(nestedOptions.ComputeOSOHashes);
+    }
+
     // ── 8. Cancellation removes the working dir; OCE not swallowed by the staging code ──
 
     [Fact]

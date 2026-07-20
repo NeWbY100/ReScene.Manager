@@ -1157,6 +1157,39 @@ public partial class CreatorViewModel : OperationViewModelBase
             // Superseded — the newer input change already cancelled, disposed, and null'd out `cts`
             // itself (see CancelInFlightScan); there's nothing left for us to do here.
         }
+        catch (Exception ex)
+        {
+            // C2 fix (M1 hardening): the scan faulted with an UNEXPECTED (non-OCE) exception — the
+            // scan and RarProofInspector.Inspect both catch only IOException/UnauthorizedAccessException,
+            // so an ArgumentException/NotSupportedException/SecurityException from a FileStream or a
+            // RAR-parser fault escapes here. Without this catch the background Task faults, the success
+            // Post never runs, and IsScanning + InputStatus stay stranded on the busy "Scanning release
+            // folder…" state (Create disabled, the Task 10 live region stuck announcing busy) until the
+            // user re-inputs. Post the SAME generation/_scanCts-gated UI-thread continuation the success
+            // completion uses — every _scanCts read/write stays on the UI thread, preserving Task 8's F1
+            // CTS-lifecycle invariants — then fail closed EXACTLY like ApplyFolderScanResult's
+            // root-enumeration (IsRootError) branch: clear IsScanning, gate Create, and surface the
+            // failure, so a faulted scan can never leave an empty/header-only SRR buildable (F3).
+            // Cancellation stays silent (handled above).
+            _uiDispatcher.Post(() =>
+            {
+                if (generation != _scanGeneration || !ReferenceEquals(_scanCts, cts))
+                {
+                    return;
+                }
+
+                _scanCts = null;
+                cts.Dispose();
+
+                IsScanning = false;
+                _isMusicOnlyFolder = false;
+                _folderScanInvalid = true;
+                ClearFolderScanResults();
+                InputStatus = FieldStatus.Error($"Could not scan the folder: {ex.Message}");
+                CreateSRRCommand.NotifyCanExecuteChanged();
+                UpdateActionHint();
+            });
+        }
     }
 
     /// <summary>
@@ -1231,7 +1264,11 @@ public partial class CreatorViewModel : OperationViewModelBase
         }
         else
         {
-            string summary = $"{result.MainSets.Count} RAR set(s) · {result.SampleFiles.Count} sample(s) · {result.StoredFiles.Count} stored file(s)";
+            // C3 fix (N1): reuse DetectedSetsSummary for the set-count segment so the status line's
+            // grammar ("No RAR sets"/"1 RAR set"/"{n} RAR sets") matches the detected-sets list's own
+            // automation Name — DetectedSets was populated from result.MainSets just above, so the two
+            // counts are identical here. (The sample/stored-file "(s)" segments are left as-is.)
+            string summary = $"{DetectedSetsSummary} · {result.SampleFiles.Count} sample(s) · {result.StoredFiles.Count} stored file(s)";
             if (result.Warnings.Count > 0)
             {
                 summary += $" · {result.Warnings.Count} warning(s): {result.Warnings[0]}";
@@ -1541,10 +1578,26 @@ public partial class CreatorViewModel : OperationViewModelBase
 
             string vobSrrLogicalName = srsLogicalName[..^".srs".Length] + ".srr";
             string physicalVobSrrPath = Path.Combine(workDir, $"{i}_{Path.GetFileName(sample)}.vob.srr");
+
+            // C1 fix (fix4-nit1, PARITY): pyrescene's create_srr_single_volume (main.py:588-640) —
+            // the routine that writes this .vob/single-volume nested SRR — emits ONLY a header block,
+            // a RarFile block, and the raw RAR block bytes; it has NO oso_hash parameter or logic at
+            // all, so its output NEVER contains OSO blocks. Force our own dedicated nestedOptions
+            // (oso off, compressed allowed) IDENTICAL to the two sibling nested-SRR paths' E6 fix
+            // (GenerateNestedSubtitleSrrsAsync / GenerateNestedSRRFileAsync) instead of forwarding the
+            // OUTER `options`, so a user enabling ComputeOSOHashes for the outer SRR cannot leak OSO
+            // blocks pyrescene omits into this nested one (a byte divergence the oso-off golden can't
+            // catch). This also corrects the secondary AllowCompressed forwarding.
+            var nestedOptions = new SRRCreationOptions
+            {
+                AppName = options.AppName,
+                AllowCompressed = true,
+                ComputeOSOHashes = false,
+            };
             try
             {
                 SRRCreationResult vobResult = await _sRRService.CreateFromRARAsync(
-                    physicalVobSrrPath, [sample], null, options, ct);
+                    physicalVobSrrPath, [sample], null, nestedOptions, ct);
                 if (vobResult.Success)
                 {
                     Log($"Created nested SRR for RAR-backed vob sample: {vobSrrLogicalName}");

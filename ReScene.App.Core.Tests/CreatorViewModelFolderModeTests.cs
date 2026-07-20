@@ -132,6 +132,14 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
         public ReleaseScanResult Scan(string releaseRoot, CancellationToken ct = default) => resultsByRoot[releaseRoot];
     }
 
+    /// <summary>Throws an UNEXPECTED (non-OCE) exception from <c>Scan</c> — the very fault
+    /// <c>RarProofInspector.Inspect</c>'s narrow IOException/UnauthorizedAccessException catch (or a
+    /// RAR-parser fault) would let escape, to prove C2's catch-all doesn't strand the busy state.</summary>
+    private sealed class ThrowingReleaseScanner(Exception toThrow) : IReleaseScanner
+    {
+        public ReleaseScanResult Scan(string releaseRoot, CancellationToken ct = default) => throw toThrow;
+    }
+
     private static readonly ReleaseScanResult EmptyResult = new([], [], [], [], [], []);
 
     // ── Helpers ─────────────────────────────────────────────
@@ -202,7 +210,9 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
         Assert.Equal([subSfv], vm.ExtraSubtitleSfvFiles);
 
         Assert.Equal(FieldState.Ok, vm.InputStatus.State);
-        Assert.Contains("2 RAR set(s)", vm.InputStatus.Message, StringComparison.Ordinal);
+        // C3: the set-count segment now reuses DetectedSetsSummary's grammar ("2 RAR sets"),
+        // consistent with the detected-sets list's automation Name — no "(s)" pluralization noise.
+        Assert.Contains("2 RAR sets", vm.InputStatus.Message, StringComparison.Ordinal);
         Assert.Contains("1 sample(s)", vm.InputStatus.Message, StringComparison.Ordinal);
         Assert.Contains("1 stored file(s)", vm.InputStatus.Message, StringComparison.Ordinal);
     }
@@ -770,5 +780,28 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
 
         Assert.Equal(FieldState.Ok, vm.InputStatus.State);
         Assert.True(vm.CreateSRRCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task ScannerThrowsUnexpectedException_NotStrandedScanning_ErrorStatus_CanCreateFalse()
+    {
+        // C2 (M1 hardening): RunFolderScanAsync used to catch ONLY OperationCanceledException, and
+        // RarProofInspector.Inspect catches only IOException/UnauthorizedAccessException — so an
+        // unexpected throw (ArgumentException/NotSupportedException/SecurityException from a
+        // FileStream, or a RAR-parser fault) would fault the background Task, the UI completion Post
+        // would never run, and IsScanning + InputStatus would stay stranded on "Scanning…" (Create
+        // disabled, a11y live region stuck) until the user re-inputs. The catch-all must fail closed:
+        // clear IsScanning and gate Create with an Error status, like the root-enumeration error (F3).
+        string root = CreateFolder();
+        CreatorViewModel vm = CreateVm(new ThrowingReleaseScanner(new InvalidOperationException("kaboom")), out FakeSRRCreationService srr);
+        vm.OutputPath = Path.Combine(TempDir, "out.srr");
+
+        vm.InputPath = root;
+        await vm.LastFolderScan!;
+
+        Assert.False(vm.IsScanning);                          // not stuck busy
+        Assert.Equal(FieldState.Error, vm.InputStatus.State); // not stranded on Info "Scanning…"
+        Assert.False(vm.CreateSRRCommand.CanExecute(null));   // fail closed — no empty/header-only SRR
+        Assert.Equal(0, srr.InputsCalls);
     }
 }
