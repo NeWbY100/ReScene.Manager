@@ -416,7 +416,12 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             // (".avi") that strips the extension cleanly ("clip.avi" -> "clip.sfv"); for a 4-char
             // ext (".m2ts") it strips one character short of the extension, producing a
             // double-dot name ("clip.m2ts" -> "clip." + ".sfv" = "clip..sfv"). Preserved verbatim
-            // — this quirk is intentional pyrescene behavior, not a bug to "fix".
+            // — this quirk is intentional pyrescene behavior, not a bug to "fix". [DIVERGENCE:
+            // hardening] the length guard below has no Python equivalent — `sample[:-4]` degrades
+            // gracefully on a too-short string, while C#'s range operator would throw; every real
+            // candidate path is far longer than 4 chars (it always carries the release root), so
+            // this is unreachable in practice but kept for defensive consistency with the rest of
+            // this file's hardening posture.
             string siblingSfv = (file.Length > 4 ? file[..^4] : string.Empty) + ".sfv";
             if (file.Contains("sample", StringComparison.OrdinalIgnoreCase) || File.Exists(siblingSfv))
             {
@@ -433,7 +438,12 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         // so we don't always have to read in the SFV files unnecessarily".
         if (notSamples.Count > 0)
         {
-            var sfvEntryBasenames = new HashSet<string>(StringComparer.Ordinal);
+            // excerpt: get_sample_files L59-65 — `sfv_stored_files` holds the RAW entry names (not
+            // basenames); the membership test then compares the candidate's BASENAME against those
+            // raw entries (`os.path.basename(nsample) in sfv_stored_files`). Storing basenames here
+            // instead would be MORE permissive than pyrescene (matching subpath-qualified entries
+            // too) and diverge from the golden — basename-vs-raw is intentional parity, not a bug.
+            var sfvStoredFiles = new HashSet<string>(StringComparer.Ordinal);
             foreach (string sfv in sfvs)
             {
                 ct.ThrowIfCancellationRequested();
@@ -445,13 +455,13 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
                 foreach (string entry in entries)
                 {
-                    sfvEntryBasenames.Add(entry);
+                    sfvStoredFiles.Add(entry);
                 }
             }
 
             foreach (string candidate in notSamples)
             {
-                if (sfvEntryBasenames.Contains(Path.GetFileName(candidate)))
+                if (sfvStoredFiles.Contains(Path.GetFileName(candidate)))
                 {
                     result.Add(candidate);
                 }
@@ -477,12 +487,18 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     /// </summary>
     private static List<ReleaseSetInput> DiscoverLooseRarSets(string releaseRoot, IReadOnlyList<string> all, string lcRelease, CancellationToken ct)
     {
-        var chainOrder = new List<string>();
-        var chains = new Dictionary<string, List<string>>();
+        // Case-insensitive chain grouping matches SRRWriter.ResolveVolumesAsync's equivalent
+        // dictionary (ReScene.Lib/ReScene/SRR/SRRWriter.cs ~L511) — the default Ordinal comparer
+        // would otherwise split e.g. "a.part01.rar" and "A.part02.rar" into two singleton chains,
+        // each independently passing the first-volume ".rar" check below and wrongly emitting the
+        // continuation volume as its own set.
+        var chains = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var volumeIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (string file in all)
+        for (int i = 0; i < all.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
+            string file = all[i];
             if (!RARVolumeIdentifier.IsRARVolume(Path.GetFileName(file)))
             {
                 continue;
@@ -499,31 +515,38 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             {
                 volumes = [];
                 chains[key] = volumes;
-                chainOrder.Add(key);
             }
 
             volumes.Add(file);
+            volumeIndex[file] = i;
         }
 
-        var sets = new List<ReleaseSetInput>();
-        foreach (string key in chainOrder)
+        // Order the emitted sets by their chain's TRUE FIRST VOLUME's traversal position, not by
+        // whichever volume of the chain happened to be encountered first above — a continuation
+        // volume can sort earlier in traversal than its own chain's first volume (e.g. "a.r00"
+        // ordinally precedes "a.rar"). Loose-RAR discovery is a [DIVERGENCE: extension] with no
+        // pyrescene ordering target, so this is purely our own canonical-order correctness.
+        var candidates = new List<(string First, int Index)>();
+        foreach (List<string> volumes in chains.Values)
         {
-            List<string> volumes = chains[key];
             volumes.Sort(RARVolumeNameComparer.Instance);
             string first = volumes[0];
             if (string.Equals(Path.GetExtension(first), ".rar", StringComparison.OrdinalIgnoreCase))
             {
-                sets.Add(new ReleaseSetInput(first, RelativeName(releaseRoot, first)));
+                candidates.Add((first, volumeIndex[first]));
             }
         }
 
-        return sets;
+        return [.. candidates
+            .OrderBy(c => c.Index)
+            .Select(c => new ReleaseSetInput(c.First, RelativeName(releaseRoot, c.First)))];
     }
 
     /// <summary>
-    /// Directory-only mirror of <see cref="ClassifySfv"/>'s rules 3, 5, and 6 (excerpt L342-355,
-    /// L387-394, L396-405) for loose-RAR discovery — a bare RAR file has no SFV name to test rules
-    /// 1, 2, or 4 against, so only the parent-directory exclusions apply.
+    /// Directory-only mirror of <see cref="ClassifySfv"/>'s rules 3, 4 (pardir check only), 5, and
+    /// 6 (excerpt L342-355, L357, L387-394, L396-405) for loose-RAR discovery — a bare RAR file has
+    /// no SFV name or entries to run rule 4's full proof state machine, rule 1, or rule 2 against,
+    /// so only the parent-directory exclusions apply.
     /// </summary>
     private static bool IsLooseRarDirExcluded(string dir, string lcRelease)
     {
@@ -531,6 +554,14 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
         // excerpt: remove_unwanted_sfvs L342-355 (rule 3)
         if (_exactExcludedDirs.Contains(pardir))
+        {
+            return true;
+        }
+
+        // design spec §2e L186-188 ("rules 3-6" includes rule 4) + excerpt L357 (proof pardir
+        // check). Loose-RAR discovery has no SFV to run rule 4's full state machine against, but
+        // the directory-name exclusion still applies: a proof RAR is never a release set.
+        if (pardir == "proof" || pardir == "proofs")
         {
             return true;
         }

@@ -229,6 +229,58 @@ public class ReleaseScannerMediaTests : TempDirTestBase
     }
 
     [Fact]
+    public void LooseRarDiscovery_ExcludesProofDir()
+    {
+        // codex #3 / F1: design spec §2e L186-188 ("rules 3-6") includes rule 4 (proof pardir,
+        // excerpt L357) — a first-volume .rar living in a Proof/ directory must not be discovered
+        // as a loose-RAR set (a proof RAR is never a release set).
+        string root = CreateRoot("Some.Release-GRP");
+        Touch(Path.Combine(root, "Proof", "p.rar"));
+
+        ReleaseScanResult result = new ReleaseScanner().Scan(root);
+
+        Assert.Empty(result.MainSets);
+    }
+
+    [Fact]
+    public void LooseRarDiscovery_ChainGrouping_IsCaseInsensitive()
+    {
+        // codex #4 / F2: the archive-set key ("a" from "a.part01.rar", "A" from "A.part02.rar")
+        // must group case-insensitively, matching SRRWriter.ResolveVolumesAsync's equivalent
+        // dictionary — a case-sensitive comparer would split these into two singleton chains, both
+        // independently passing the first-volume ".rar" check and wrongly emitting the non-first
+        // "A.part02.rar" as its own set.
+        string root = CreateRoot("Some.Release-GRP");
+        string part1 = Touch(Path.Combine(root, "a.part01.rar"));
+        Touch(Path.Combine(root, "A.part02.rar"));
+
+        ReleaseScanResult result = new ReleaseScanner().Scan(root);
+
+        Assert.Single(result.MainSets);
+        Assert.Equal(part1, result.MainSets[0].SfvOrRarPath);
+    }
+
+    [Fact]
+    public void LooseRarDiscovery_OrdersByFirstVolumeTraversalPosition_NotFirstEncounteredVolume()
+    {
+        // codex #5 / F3: chain "a" ({a.r00, a.rar}) is first ENCOUNTERED at a.r00's early
+        // traversal position, but chain "a.r00x" ({a.r00x.rar}, a distinct base name) has its own
+        // (only) volume sort between a.r00 and a.rar. The emitted order must follow each chain's
+        // TRUE FIRST VOLUME's traversal position (a.r00x.rar, then a.rar) — not the position at
+        // which each chain was first seen (which would wrongly emit a.rar first).
+        string root = CreateRoot("Some.Release-GRP");
+        Touch(Path.Combine(root, "a.r00"));
+        string aR00x = Touch(Path.Combine(root, "a.r00x.rar"));
+        string aRar = Touch(Path.Combine(root, "a.rar"));
+
+        ReleaseScanResult result = new ReleaseScanner().Scan(root);
+
+        Assert.Equal(2, result.MainSets.Count);
+        Assert.Equal(aR00x, result.MainSets[0].SfvOrRarPath);
+        Assert.Equal(aRar, result.MainSets[1].SfvOrRarPath);
+    }
+
+    [Fact]
     public void EmptyTree_NoSfvsNoRars_ZeroMainSets_NoCrash()
     {
         string root = CreateRoot("Some.Release-GRP");
