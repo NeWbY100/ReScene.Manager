@@ -114,15 +114,16 @@ public class FileCompareViewTests
         // Two embedded HexView composites (one per side).
         Assert.Equal(2, window.GetVisualDescendants().OfType<HexView>().Count());
 
-        // Two NumericUpDown bytes/row selectors, both bound to the shared HexBytesPerLine (default 16).
-        NumericUpDown[] selectors = [.. window.GetVisualDescendants().OfType<NumericUpDown>()];
+        // Two ComboBox bytes/row selectors (fixed-choice preset dropdowns), both bound to the shared
+        // HexBytesPerLine (default 16).
+        ComboBox[] selectors = [.. window.GetVisualDescendants().OfType<ComboBox>()];
         Assert.Equal(2, selectors.Length);
-        Assert.All(selectors, nud => Assert.Equal(16m, nud.Value));
+        Assert.All(selectors, cb => Assert.Equal(16, cb.SelectedItem));
 
         // VM → both selectors reflect a changed value.
         vm.HexBytesPerLine = 32;
         Dispatcher.UIThread.RunJobs();
-        Assert.All(selectors, nud => Assert.Equal(32m, nud.Value));
+        Assert.All(selectors, cb => Assert.Equal(32, cb.SelectedItem));
 
         Assert.Empty(sink.Messages);
     }
@@ -177,19 +178,22 @@ public class FileCompareViewTests
     }
 
     [AvaloniaFact]
-    public void ClearingBytesPerRowSelector_ToNull_DoesNotErrorAndVmStaysInRange()
+    public void BytesPerRowComboBox_ExposesFixedPresets_AndSelectionRoundTripsToVm()
     {
         FileCompareViewModel vm = CreateViewModel();
 
         using var sink = new BindingErrorSink();
         (Window window, _) = Show(vm);
 
-        // Simulate the user clearing the field: NumericUpDown.Value is decimal? and goes null on empty,
-        // which the two-way binding must push into the non-nullable int HexBytesPerLine without erroring.
-        NumericUpDown selector = window.GetVisualDescendants().OfType<NumericUpDown>().First();
-        selector.Value = null;
+        // The ComboBox is non-editable (Avalonia has no free-text entry, unlike WPF's NumericUpDown), so
+        // the only way to change HexBytesPerLine is picking one of the fixed presets.
+        ComboBox selector = window.GetVisualDescendants().OfType<ComboBox>().First();
+        Assert.Equal([8, 16, 24, 32, 48, 64], selector.Items.OfType<int>());
+
+        selector.SelectedItem = 32;
         Dispatcher.UIThread.RunJobs();
 
+        Assert.Equal(32, vm.HexBytesPerLine);
         Assert.InRange(vm.HexBytesPerLine, 1, 128);
         Assert.Empty(sink.Messages);
     }

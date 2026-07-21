@@ -125,12 +125,15 @@ public class InspectorViewTests
         string[] tabHeaders = [.. tabs.Items.OfType<TabItem>().Select(t => (string)t.Header!)];
         Assert.Equal(["Hex", "Text"], tabHeaders);
 
-        // The Bytes/Row NumericUpDown is bound to HexBytesPerLine (default 16).
-        NumericUpDown selector = window.GetVisualDescendants().OfType<NumericUpDown>().Single();
-        Assert.Equal(16m, selector.Value);
+        // The Bytes/Row ComboBox (fixed-choice preset dropdown) is bound to HexBytesPerLine (default 16).
+        // (The Text tab's Encoding ComboBox is also present in the visual tree — IsVisible collapses its
+        // StackPanel but does not remove it from GetVisualDescendants — so disambiguate by the
+        // int-typed SelectedItem, since Encoding's SelectedItem is a TextEncodingOption.)
+        ComboBox selector = window.GetVisualDescendants().OfType<ComboBox>().Single(cb => cb.SelectedItem is int);
+        Assert.Equal(16, selector.SelectedItem);
         vm.HexBytesPerLine = 32;
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal(32m, selector.Value);
+        Assert.Equal(32, selector.SelectedItem);
 
         // The tree ContextMenu carries the expected command items in order.
         ContextMenu menu = Assert.IsType<ContextMenu>(tree.ContextMenu);
