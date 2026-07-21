@@ -113,45 +113,6 @@ jobs:
           generate_release_notes: true
           files: artifacts/ReSceneManager-*.*
 
-      - name: Check whether ReScene.Lib should be released
-        id: libcheck
-        shell: bash
-        run: |
-          LIB_VERSION=$(sed -n 's@.*<Version>\(.*\)</Version>.*@\1@p' ReScene.Lib/ReScene/ReScene.csproj | head -1)
-          TAG_VERSION="${{ steps.version.outputs.version }}"
-          echo "ReScene.Lib csproj version: $LIB_VERSION | tag version: $TAG_VERSION"
-          if [ "$LIB_VERSION" = "$TAG_VERSION" ]; then
-            echo "release=true" >> "$GITHUB_OUTPUT"
-            echo "ReScene.Lib will be released (csproj matches the tag)."
-          else
-            echo "release=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping ReScene.Lib release (csproj $LIB_VERSION does not match tag $TAG_VERSION)."
-          fi
-
-      - name: Tag ReScene.Lib submodule
-        if: env.LIB_PAT != '' && steps.libcheck.outputs.release == 'true'
-        shell: bash
-        env:
-          LIB_PAT: ${{ secrets.LIB_PAT }}
-        run: |
-          cd ReScene.Lib
-          SUBMODULE_SHA=$(git rev-parse HEAD)
-          TAG="v${{ steps.version.outputs.version }}"
-          echo "Tagging ReScene.Lib commit $SUBMODULE_SHA as $TAG"
-          git config --unset-all http.https://github.com/.extraheader || true
-          git tag "$TAG" "$SUBMODULE_SHA"
-          git remote set-url origin "https://x-access-token:${LIB_PAT}@github.com/NeWbY100/ReScene.Lib.git"
-          git push origin "$TAG"
-
-      - name: Create ReScene.Lib GitHub Release
-        if: env.LIB_PAT != '' && steps.libcheck.outputs.release == 'true'
-        shell: bash
-        env:
-          LIB_PAT: ${{ secrets.LIB_PAT }}
-          GH_TOKEN: ${{ secrets.LIB_PAT }}
-        run: |
-          TAG="v${{ steps.version.outputs.version }}"
-          gh release create "$TAG" \
-            --repo NeWbY100/ReScene.Lib \
-            --title "$TAG" \
-            --generate-notes
+      # ReScene.Lib is released independently, on its OWN changes — NOT auto-tagged/released whenever the
+      # app is tagged. Releasing the lib with no changes just because the app shipped is pointless, so the
+      # former csproj-version-equals-tag gate + submodule tag/release steps were removed (2026-07-21).
