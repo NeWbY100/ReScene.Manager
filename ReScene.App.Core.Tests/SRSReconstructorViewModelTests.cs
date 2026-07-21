@@ -28,10 +28,14 @@ public sealed class SRSReconstructorViewModelTests : TempDirTestBase
         public Exception? ThrowOnRebuild { get; set; }
         public int RebuildCalls { get; private set; }
 
+        /// <summary>Runs inside RebuildAsync before the result is returned — lets a test cancel mid-run.</summary>
+        public Action? OnRebuildEntered { get; set; }
+
         public Task<SRSReconstructionResult> RebuildAsync(
             string srsFilePath, string mediaFilePath, string outputPath, CancellationToken ct)
         {
             RebuildCalls++;
+            OnRebuildEntered?.Invoke();
             if (ThrowOnRebuild is not null)
             {
                 throw ThrowOnRebuild;
@@ -251,6 +255,37 @@ public sealed class SRSReconstructorViewModelTests : TempDirTestBase
         Assert.True(vm.ShowResult);
         Assert.False(vm.IsRebuilding);
         Assert.Contains("rebuild blew up", vm.ResultSummary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    // A deliberate cancel must land in a neutral "Cancelled" state, NOT the red failure banner.
+    // The rebuilder reports cancellation as Success=false + ErrorMessage "Operation was cancelled.",
+    // which previously fell into the generic failure branch (ProgressMessage "Failed.",
+    // ShowResult=true) — mirror SRSCreatorViewModel's neutral cancel handling instead.
+    public async Task RebuildAsync_Cancelled_ShowsNeutralState_NotRedFailureBanner()
+    {
+        var service = new FakeReconstructionService
+        {
+            Result = new SRSReconstructionResult(
+                Success: false, CRCMatch: false,
+                ExpectedCRC: 0u, ActualCRC: 0u,
+                ExpectedSize: 0L, ActualSize: 0L, ErrorMessage: "Operation was cancelled."),
+        };
+        SRSReconstructorViewModel vm = CreateVm(service, new NoOpTempDirectoryService());
+        vm.SRSFilePath = Path.Combine(TempDir, "sample.srs");
+        vm.MediaFilePath = Path.Combine(TempDir, "media.mkv");
+        vm.OutputPath = Path.Combine(TempDir, "out.mkv");
+
+        // Cancel while the rebuild is running (as the Cancel button would), so the token is cancelled
+        // by the time the cancelled result is processed.
+        service.OnRebuildEntered = () => vm.CancelRebuildCommand.Execute(null);
+
+        await vm.RebuildCommand.ExecuteAsync(null);
+
+        Assert.Equal("Cancelled.", vm.ProgressMessage);
+        Assert.False(vm.ShowResult); // no red failure banner
+        Assert.False(vm.IsRebuilding);
+        Assert.DoesNotContain(vm.LogEntries, e => e.Contains("Reconstruction failed", StringComparison.Ordinal));
     }
 
     [Fact]

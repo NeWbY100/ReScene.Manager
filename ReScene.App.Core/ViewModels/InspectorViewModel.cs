@@ -121,6 +121,9 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
         MoveStoredFileDownCommand.NotifyCanExecuteChanged();
         ExportSelectedPropertiesCommand.NotifyCanExecuteChanged();
         ExportTreeCommand.NotifyCanExecuteChanged();
+        // Clear the 'Export…' item's enabled state on close (it gates on HasFile too); the
+        // HexBlockLength reset above only re-notifies when the length was non-zero.
+        ExportBlockCommand.NotifyCanExecuteChanged();
     }
 
     public ObservableCollection<TreeNodeViewModel> TreeRoots { get; } = [];
@@ -160,7 +163,11 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
     [ObservableProperty]
     public partial long HexBlockOffset { get; set; }
 
+    // ExportBlockCommand's CanExecute gates on HexBlockLength > 0. OnSelectedTreeNodeChanged notifies
+    // the command BEFORE SetHexBlock sets the new length, so without this the 'Export…' item was
+    // disabled for one selection after opening a file. Re-notify whenever the length changes.
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ExportBlockCommand))]
     public partial long HexBlockLength { get; set; }
 
     [ObservableProperty]
@@ -702,6 +709,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
             return;
         }
 
+        string? error = null;
         try
         {
             ReleaseFileHandles();
@@ -710,11 +718,21 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
                 [(storedName, filePath)]);
 
             StatusMessage = $"Added stored file: {storedName}";
-            await LoadFileAsync(_loadedFilePathInternal!);
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Error adding stored file: {ex.Message}";
+            error = $"Error adding stored file: {ex.Message}";
+        }
+        finally
+        {
+            // Always re-open: ReleaseFileHandles disposed the data source, so a failed edit would
+            // otherwise leave the Hex/Text panes blank until close+reopen (Rename/Move already reload
+            // here). Restore the error AFTER the reload so its status summary doesn't bury it.
+            await LoadFileAsync(_loadedFilePathInternal!);
+            if (error is not null)
+            {
+                StatusMessage = error;
+            }
         }
     }
 
@@ -816,6 +834,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
             return;
         }
 
+        string? error = null;
         try
         {
             ReleaseFileHandles();
@@ -823,11 +842,21 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
                 [stored.FileName]);
 
             StatusMessage = $"Removed stored file: {stored.FileName}";
-            await LoadFileAsync(_loadedFilePathInternal!);
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Error removing stored file: {ex.Message}";
+            error = $"Error removing stored file: {ex.Message}";
+        }
+        finally
+        {
+            // Always re-open: ReleaseFileHandles disposed the data source, so a failed edit would
+            // otherwise leave the Hex/Text panes blank until close+reopen (Rename/Move already reload
+            // here). Restore the error AFTER the reload so its status summary doesn't bury it.
+            await LoadFileAsync(_loadedFilePathInternal!);
+            if (error is not null)
+            {
+                StatusMessage = error;
+            }
         }
     }
 

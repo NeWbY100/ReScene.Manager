@@ -162,9 +162,14 @@ public partial class SRSCreatorViewModel : OperationViewModelBase
             SampleStatus = FieldGuidance.DescribeSample(Path.GetExtension(value), size);
         }
 
-        if (string.IsNullOrWhiteSpace(OutputPath))
+        // Give OutputPath a real file name. Handles both the blank case AND a bare directory (e.g. the
+        // settings' DefaultOutputDirectory the constructor seeds) — otherwise the directory sticks and
+        // CreateAsync receives it as the output FILE path, writing no .srs. SuggestSaveFileName returns
+        // a user-typed file path unchanged, so a real choice is never clobbered.
+        string? suggested = FieldGuidance.SuggestSaveFileName(OutputPath, value, ".srs");
+        if (suggested is not null && !string.Equals(suggested, OutputPath, StringComparison.Ordinal))
         {
-            OutputPath = FieldGuidance.SuggestSiblingPath(value, ".srs");
+            OutputPath = suggested;
             OutputStatus = FieldStatus.Info("Auto-filled from the sample name. Change it if needed.");
         }
     }

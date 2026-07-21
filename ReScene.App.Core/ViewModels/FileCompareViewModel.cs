@@ -494,7 +494,7 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
         {
             ShowProperties(nodeData, LeftProperties, true);
             HighlightBlock(nodeData, true);
-            SyncTreeSelection(RightTreeRoots, nodeData, ref _selectedRightTreeNode);
+            SyncTreeSelection(RightTreeRoots, nodeData, value.Text, ref _selectedRightTreeNode);
         }
     }
 
@@ -504,7 +504,7 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
         {
             ShowProperties(nodeData, RightProperties, false);
             HighlightBlock(nodeData, false);
-            SyncTreeSelection(LeftTreeRoots, nodeData, ref _selectedLeftTreeNode);
+            SyncTreeSelection(LeftTreeRoots, nodeData, value.Text, ref _selectedLeftTreeNode);
         }
     }
 
@@ -777,9 +777,9 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
     #region Tree Sync
 
     private void SyncTreeSelection(ObservableCollection<TreeNodeViewModel> targetRoots,
-        CompareNodeData sourceData, ref TreeNodeViewModel? targetSelectedField)
+        CompareNodeData sourceData, string? sourceText, ref TreeNodeViewModel? targetSelectedField)
     {
-        TreeNodeViewModel? match = FindMatchingNode(targetRoots, sourceData);
+        TreeNodeViewModel? match = FindMatchingNode(targetRoots, sourceData, sourceText);
         if (match is not null && targetSelectedField != match)
         {
             bool isLeftTarget = targetSelectedField == SelectedLeftTreeNode;
@@ -808,11 +808,11 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
         }
     }
 
-    private static TreeNodeViewModel? FindMatchingNode(ObservableCollection<TreeNodeViewModel> roots, CompareNodeData sourceData)
+    private static TreeNodeViewModel? FindMatchingNode(ObservableCollection<TreeNodeViewModel> roots, CompareNodeData sourceData, string? sourceText)
     {
         foreach (TreeNodeViewModel node in roots)
         {
-            TreeNodeViewModel? result = FindMatchingNodeRecursive(node, sourceData);
+            TreeNodeViewModel? result = FindMatchingNodeRecursive(node, sourceData, sourceText);
             if (result is not null)
             {
                 return result;
@@ -822,7 +822,7 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
         return null;
     }
 
-    private static TreeNodeViewModel? FindMatchingNodeRecursive(TreeNodeViewModel node, CompareNodeData sourceData)
+    private static TreeNodeViewModel? FindMatchingNodeRecursive(TreeNodeViewModel node, CompareNodeData sourceData, string? sourceText)
     {
         if (node.Tag is CompareNodeData nodeData)
         {
@@ -859,13 +859,35 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
             }
             else if (nodeData.NodeType == sourceData.NodeType && nodeData.FileName == sourceData.FileName)
             {
-                return node;
+                // FileName is the identity for real entries (stored/archived/OSO/track/MKV nodes).
+                // The null-FileName structural nodes share NodeType==Root: the true root and the
+                // data-carrying containers hold a non-null Data, while the RAR/SRS placeholder blocks
+                // (Signature, Service Block, End Archive, the SRS Tracks group) have Data==null. Match
+                // the has-data status too — and, for placeholders, the exact label — so a clicked
+                // placeholder can't collapse onto the opposite root (found first), which would clear
+                // its property grid.
+                if (sourceData.FileName is not null)
+                {
+                    return node;
+                }
+
+                bool sourceHasData = sourceData.Data is not null;
+                bool nodeHasData = nodeData.Data is not null;
+                if (sourceHasData && nodeHasData)
+                {
+                    return node; // root ↔ root / container ↔ container (labels may embed differing counts)
+                }
+
+                if (!sourceHasData && !nodeHasData && node.Text == sourceText)
+                {
+                    return node; // placeholder ↔ same-label placeholder (or nothing)
+                }
             }
         }
 
         foreach (TreeNodeViewModel child in node.Children)
         {
-            TreeNodeViewModel? result = FindMatchingNodeRecursive(child, sourceData);
+            TreeNodeViewModel? result = FindMatchingNodeRecursive(child, sourceData, sourceText);
             if (result is not null)
             {
                 return result;

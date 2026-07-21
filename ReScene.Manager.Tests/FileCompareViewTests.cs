@@ -2,6 +2,8 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input.Platform;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -196,6 +198,68 @@ public class FileCompareViewTests
         Assert.Equal(32, vm.HexBytesPerLine);
         Assert.InRange(vm.HexBytesPerLine, 1, 128);
         Assert.Empty(sink.Messages);
+    }
+
+    [AvaloniaFact]
+    public void PropertyGridCopyValue_LeftPane_CopiesSelectedValueToClipboard()
+    {
+        FileCompareViewModel vm = CreateViewModel();
+        var item = new PropertyItem { Name = "CRC", Value = "DEADBEEF" };
+        vm.LeftProperties.Add(item);
+        vm.SelectedLeftProperty = item;
+
+        var view = new FileCompareView { DataContext = vm };
+        var window = new Window { Width = 1200, Height = 900, Content = view };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        DataGrid leftGrid = window.GetVisualDescendants().OfType<DataGrid>().Single(g => g.Name == "LeftPropertiesGrid");
+        var menu = Assert.IsType<ContextMenu>(leftGrid.ContextMenu);
+
+        // Open the menu the way the framework auto-opens a DataGrid.ContextMenu: Avalonia sets the
+        // POPUP's PlacementTarget but never the ContextMenu's own PlacementTarget property. The old
+        // resolver read ContextMenu.PlacementTarget, which stays null → Copy did nothing.
+        menu.Open(leftGrid);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Null(menu.PlacementTarget); // documents the dead-menu root cause
+
+        MenuItem copyValue = menu.Items.OfType<MenuItem>().Single(m => (string?)m.Header == "Copy Value");
+        copyValue.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+
+        IClipboard clipboard = TopLevel.GetTopLevel(view)!.Clipboard!;
+        string? copied = clipboard.TryGetTextAsync().GetAwaiter().GetResult();
+        Assert.Equal("DEADBEEF", copied);
+    }
+
+    [AvaloniaFact]
+    public void PropertyGridCopyValue_RightPane_CopiesThatPanesSelection()
+    {
+        // Two panes share one handler set, so the resolver must read the RIGHT pane's selection when
+        // the right grid's menu is used — not the left's.
+        FileCompareViewModel vm = CreateViewModel();
+        vm.LeftProperties.Add(new PropertyItem { Name = "CRC", Value = "LEFTVALUE" });
+        vm.SelectedLeftProperty = vm.LeftProperties[0];
+        var rightItem = new PropertyItem { Name = "CRC", Value = "RIGHTVALUE" };
+        vm.RightProperties.Add(rightItem);
+        vm.SelectedRightProperty = rightItem;
+
+        var view = new FileCompareView { DataContext = vm };
+        var window = new Window { Width = 1200, Height = 900, Content = view };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        DataGrid rightGrid = window.GetVisualDescendants().OfType<DataGrid>().Single(g => g.Name == "RightPropertiesGrid");
+        var menu = Assert.IsType<ContextMenu>(rightGrid.ContextMenu);
+        menu.Open(rightGrid);
+        Dispatcher.UIThread.RunJobs();
+
+        MenuItem copyValue = menu.Items.OfType<MenuItem>().Single(m => (string?)m.Header == "Copy Value");
+        copyValue.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+
+        IClipboard clipboard = TopLevel.GetTopLevel(view)!.Clipboard!;
+        Assert.Equal("RIGHTVALUE", clipboard.TryGetTextAsync().GetAwaiter().GetResult());
     }
 
     [AvaloniaFact]

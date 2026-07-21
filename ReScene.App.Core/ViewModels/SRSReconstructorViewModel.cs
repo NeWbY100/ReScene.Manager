@@ -314,7 +314,16 @@ public partial class SRSReconstructorViewModel : OperationViewModelBase
 
             sw.Stop();
 
-            if (result.Success)
+            if (_cts?.IsCancellationRequested == true)
+            {
+                // A deliberate cancel: the rebuilder reports it as Success=false with a "cancelled"
+                // ErrorMessage, which would otherwise fall into the failure branch and show the red
+                // "Failed" banner. Show the neutral "Cancelled" state instead (mirrors
+                // SRSCreatorViewModel) — no result banner, not logged as a failure.
+                Log("Cancelled.");
+                ProgressMessage = "Cancelled.";
+            }
+            else if (result.Success)
             {
                 Log($"Reconstruction complete in {sw.Elapsed.TotalSeconds:F1}s");
                 Log($"  Expected CRC: {result.ExpectedCRC:X8}");
@@ -327,6 +336,7 @@ public partial class SRSReconstructorViewModel : OperationViewModelBase
                 ProgressMessage = "Complete!";
                 ResultSuccess = true;
                 ResultSummary = $"CRC32 match: {result.ActualCRC:X8} ({result.ActualSize:N0} bytes)";
+                ShowResult = true;
             }
             else
             {
@@ -336,9 +346,15 @@ public partial class SRSReconstructorViewModel : OperationViewModelBase
                 ProgressMessage = "Failed.";
                 ResultSuccess = false;
                 ResultSummary = result.ErrorMessage ?? "Unknown error";
+                ShowResult = true;
             }
-
-            ShowResult = true;
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancellation may also surface as a thrown OperationCanceledException; keep it neutral
+            // (no red banner), consistent with the cancelled-result branch above.
+            Log("Cancelled.");
+            ProgressMessage = "Cancelled.";
         }
         catch (Exception ex)
         {

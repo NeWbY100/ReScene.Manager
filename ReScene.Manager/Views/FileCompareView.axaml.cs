@@ -29,6 +29,8 @@ public partial class FileCompareView : UserControl
 
     private readonly Border _leftDropOverlay;
     private readonly Border _rightDropOverlay;
+    private readonly DataGrid _leftPropertiesGrid;
+    private readonly DataGrid _rightPropertiesGrid;
 
     public FileCompareView()
     {
@@ -36,6 +38,8 @@ public partial class FileCompareView : UserControl
 
         _leftDropOverlay = this.FindControl<Border>("LeftDropOverlay")!;
         _rightDropOverlay = this.FindControl<Border>("RightDropOverlay")!;
+        _leftPropertiesGrid = this.FindControl<DataGrid>("LeftPropertiesGrid")!;
+        _rightPropertiesGrid = this.FindControl<DataGrid>("RightPropertiesGrid")!;
 
         // Avalonia has no WPF PreviewDragOver/PreviewDrop tunnel and no XAML AllowDrop property, so the
         // whole view opts into drops and the handlers are wired here (mirroring the other ported views).
@@ -163,15 +167,27 @@ public partial class FileCompareView : UserControl
         }
     }
 
-    // Resolve the property row the menu acted on via the owning grid's SelectedItem (bound to the
-    // side's SelectedLeftProperty/SelectedRightProperty), reached from the clicked MenuItem through its
-    // ContextMenu's PlacementTarget — so one handler set serves both grids, as in the WPF original.
-    private static PropertyItem? GetSelectedProperty(object? sender)
+    // Resolve the property row the menu acted on. Avalonia auto-opens a DataGrid.ContextMenu without
+    // ever setting ContextMenu.PlacementTarget (it sets the popup's target instead), so the old
+    // PlacementTarget probe was always null and Copy did nothing. Instead map the clicked MenuItem's
+    // owning ContextMenu (by identity) to its grid, then read that side's bound VM selection
+    // (SelectedLeftProperty/SelectedRightProperty) — one handler set serving both grids.
+    private PropertyItem? GetSelectedProperty(object? sender)
     {
-        if (sender is MenuItem item
-            && item.FindLogicalAncestorOfType<ContextMenu>() is { PlacementTarget: DataGrid grid })
+        if (DataContext is not FileCompareViewModel vm || sender is not MenuItem item)
         {
-            return grid.SelectedItem as PropertyItem;
+            return null;
+        }
+
+        ContextMenu? menu = item.FindLogicalAncestorOfType<ContextMenu>();
+        if (ReferenceEquals(menu, _leftPropertiesGrid.ContextMenu))
+        {
+            return vm.SelectedLeftProperty;
+        }
+
+        if (ReferenceEquals(menu, _rightPropertiesGrid.ContextMenu))
+        {
+            return vm.SelectedRightProperty;
         }
 
         return null;

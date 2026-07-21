@@ -22,11 +22,13 @@ public sealed class SRSCreatorViewModelTests : IDisposable
 
         public int Calls { get; private set; }
         public string? LastMainFile { get; private set; }
+        public string? LastOutputPath { get; private set; }
 
         public Task<SRSCreationResult> CreateAsync(string outputPath, string sampleFilePath, SRSCreationOptions options, CancellationToken ct)
         {
             Calls++;
             LastMainFile = options.MainFilePath;
+            LastOutputPath = outputPath;
             return Task.FromResult(new SRSCreationResult { Success = true });
         }
     }
@@ -203,6 +205,52 @@ public sealed class SRSCreatorViewModelTests : IDisposable
         vm.SelectedISOMediaFile = "VIDEO_TS/VTS_01_1.VOB";
 
         Assert.True(vm.CreateSRSCommand.CanExecute(null));
+    }
+
+    // ── Default output directory → a file path (blocker) ───
+
+    [Fact]
+    public async Task InputPath_WithDefaultOutputDirectory_AppendsFileName_SoCreateGetsAFilePath()
+    {
+        // Regression (release blocker): the constructor seeds OutputPath with the settings'
+        // DefaultOutputDirectory (a bare DIRECTORY). OnInputPathChanged only auto-filled a name when
+        // OutputPath was blank, so the directory stuck and CreateAsync received a directory as the
+        // output FILE path — writing no .srs and swallowing the error. A directory must gain a name.
+        var settings = new FakeAppSettingsService();
+        settings.Settings.DefaultOutputDirectory = Path.GetTempPath(); // an existing directory
+        var srs = new FakeSRSCreationService();
+        var dialog = new FakeFileDialogService();
+        var vm = new SRSCreatorViewModel(srs, dialog, new NoOpTempDirectoryService(), settings, new TestUiDispatcher());
+
+        // Constructor seeded the bare directory as the output path.
+        Assert.True(Directory.Exists(vm.OutputPath));
+
+        string sample = CreateTempFile(".mkv");
+        vm.InputPath = sample;
+
+        // The directory must have gained a file name (…/<sample>.srs).
+        Assert.EndsWith(".srs", vm.OutputPath, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(vm.OutputPath));
+
+        await vm.CreateSRSCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, srs.Calls);
+        Assert.NotNull(srs.LastOutputPath);
+        Assert.EndsWith(".srs", srs.LastOutputPath!, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(srs.LastOutputPath)); // a file path, not the bare directory
+    }
+
+    [Fact]
+    public void InputPath_DoesNotClobberAUserTypedOutputFilePath()
+    {
+        // The SuggestSaveFileName logic must preserve a real user-typed file path (only a blank or a
+        // directory gets a derived name). Guards against the fix over-reaching.
+        SRSCreatorViewModel vm = CreateVm(out _, out _);
+        vm.OutputPath = @"C:\chosen\my-output.srs";
+
+        vm.InputPath = CreateTempFile(".mkv");
+
+        Assert.Equal(@"C:\chosen\my-output.srs", vm.OutputPath);
     }
 
     [Fact]
