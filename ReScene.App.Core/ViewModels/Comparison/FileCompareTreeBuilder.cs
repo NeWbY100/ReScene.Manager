@@ -26,7 +26,14 @@ internal static class FileCompareTreeBuilder
         var rootNode = new TreeNodeViewModel
         {
             Text = rootName,
-            Tag = new CompareNodeData { NodeType = CompareNodeType.Root, IsLeft = isLeft },
+            // Data = blocks so the tree-sync matcher sees this root as data-carrying like every other
+            // builder's root (BuildSRR/BuildSRS/BuildMKV/BuildRAR all set Data). Without it, the null-Data
+            // matcher branch (FileCompareViewModel.FindMatchingNodeRecursive) would treat this — the
+            // PRIMARY detailed-RAR root — as a placeholder and only sync on identical labels, so two RARs
+            // with different block counts (the label embeds the count) would stop syncing at the root.
+            // Root nodes render no properties (CompareNodePropertyBuilder.Build has no Root case), so the
+            // list Data is matcher-identity only, never displayed.
+            Tag = new CompareNodeData { NodeType = CompareNodeType.Root, Data = blocks, IsLeft = isLeft },
             IsExpanded = true
         };
 

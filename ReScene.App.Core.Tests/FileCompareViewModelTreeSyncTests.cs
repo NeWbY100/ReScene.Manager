@@ -2,6 +2,7 @@ using ReScene.Core.Comparison;
 using ReScene.Hex;
 using ReScene.App.Core.Services;
 using ReScene.App.Core.ViewModels;
+using ReScene.App.Core.ViewModels.Comparison;
 using ReScene.RAR;
 
 namespace ReScene.App.Core.Tests;
@@ -107,6 +108,38 @@ public sealed class FileCompareViewModelTreeSyncTests
         using FileCompareViewModel vm = CreateVm();
         (TreeNodeViewModel leftRoot, _, _) = BuildRarFallbackTree(isLeft: true, blockCount: 3);
         (TreeNodeViewModel rightRoot, _, _) = BuildRarFallbackTree(isLeft: false, blockCount: 4);
+        vm.LeftTreeRoots.Add(leftRoot);
+        vm.RightTreeRoots.Add(rightRoot);
+
+        vm.SelectedLeftTreeNode = leftRoot;
+
+        Assert.Same(rightRoot, vm.SelectedRightTreeNode);
+    }
+
+    // Produces trivially-shaped detailed blocks so BuildDetailed's root label embeds a differing count.
+    private static IReadOnlyList<RARDetailedBlock> MakeDetailedBlocks(int count)
+    {
+        var blocks = new List<RARDetailedBlock>();
+        for (int i = 0; i < count; i++)
+        {
+            blocks.Add(new RARDetailedBlock { BlockType = "File", BlockTypeValue = 0x74, ItemName = $"file{i}.rar", HasData = true });
+        }
+
+        return blocks;
+    }
+
+    [Fact]
+    public void SelectingDetailedRarRoot_StillSyncsRoot_EvenWhenBlockCountsDiffer()
+    {
+        // Regression guard for the PRIMARY detailed-RAR path (FileCompareTreeBuilder.BuildDetailed),
+        // exercised through the REAL builder — not the fallback shape. Its root Text embeds the block
+        // count ("RAR 4.x Archive (N blocks)"); the root must carry Data (= the block list) so the
+        // tree-sync matcher treats it as data-carrying (root↔root), NOT as a null-Data placeholder that
+        // only matches on identical labels. Removing that Data would make two differently-sized RARs
+        // stop syncing at the root — the regression both reviews caught.
+        using FileCompareViewModel vm = CreateVm();
+        TreeNodeViewModel leftRoot = FileCompareTreeBuilder.BuildDetailed(MakeDetailedBlocks(3), isLeft: true);
+        TreeNodeViewModel rightRoot = FileCompareTreeBuilder.BuildDetailed(MakeDetailedBlocks(4), isLeft: false);
         vm.LeftTreeRoots.Add(leftRoot);
         vm.RightTreeRoots.Add(rightRoot);
 
