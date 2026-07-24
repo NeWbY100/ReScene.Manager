@@ -24,10 +24,18 @@
 
     <!-- ── Input ─────────────────────────────────────────────── -->
     <StackPanel Grid.Row="1">
+      <!-- Explains the two Browse buttons: a single-set FILE vs a release FOLDER (searched, with its
+           subfolders, for RAR sets — not an exhaustive guarantee; see the scanner's SFV gating and
+           skip-unreadable rules). Bold Runs match the button labels exactly (incl. "…"); the same
+           guidance rides on each button's HelpText below for screen-reader users, since this caption
+           isn't in the tab path. -->
       <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
         <Run Text="Input " FontWeight="SemiBold" />
-        <Run Text="— The release's .sfv file or first .rar volume. The folder it sits in is treated as the release directory."
-             Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+        <Run Text="— use " Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+        <Run Text="Browse" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+        <Run Text=" for a single set's .sfv or first .rar, or " Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+        <Run Text="Browse folder…" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+        <Run Text=" to search a release folder and its subfolders for RAR sets (e.g. multi-disc releases)." Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
       </TextBlock>
       <!-- Docked right in declaration order (rightmost first): folder Browse sits to the right of the
            file Browse. Explicit TabIndex keeps keyboard order = visual order = TextBox → Browse file
@@ -38,12 +46,14 @@
                 Classes="ghost"
                 TabIndex="2"
                 AutomationProperties.Name="Browse folder for release input"
+                AutomationProperties.HelpText="Pick a release folder to search it and its subfolders for RAR sets."
                 Margin="4,0,0,0" MinWidth="75" />
         <Button DockPanel.Dock="Right" Content="Browse"
                 Command="{Binding BrowseInputCommand}"
                 Classes="ghost"
                 TabIndex="1"
                 AutomationProperties.Name="Browse input file"
+                AutomationProperties.HelpText="Pick a single set's .sfv or first .rar file."
                 Margin="4,0,0,0" MinWidth="75" />
         <TextBox x:Name="InputTextBox" Text="{Binding InputPath}"
                  TabIndex="0"
