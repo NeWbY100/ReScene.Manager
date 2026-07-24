@@ -139,6 +139,24 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     }
 
     /// <summary>
+    /// Marks the active row "Error" with the given result and releases the active-row pointer — used
+    /// when the engine could not run RAR for that combination (e.g. the console binary is not
+    /// executable). Releasing the pointer means the next combination's progress event never
+    /// re-finalizes this row as a clean "No Match" (see <see cref="FinalizeActiveRowAsNoMatch"/>).
+    /// </summary>
+    private void ErrorActiveVersion(string result)
+    {
+        if (HasActiveVersion)
+        {
+            _setStatus(_versionEntries[_activeVersionIndex], "Error");
+            _setResult(_versionEntries[_activeVersionIndex], result);
+        }
+
+        _activeVersionIndex = -1;
+        _activeVersionKey = "";
+    }
+
+    /// <summary>
     /// Applies a brute-force progress event: updates timing/version bookkeeping (mutating the
     /// version collection) and returns the display text the view-model assigns to its bound props.
     /// </summary>
@@ -170,6 +188,20 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
                 SpeedText = $"{e.OperationSpeed:N0} tests/s",
                 EtaText = e.EstimatedFinishDateTime.ToString("HH:mm:ss"),
             };
+        }
+
+        // The engine could not run RAR for the active combination (most often the console binary is
+        // not executable). Mark its row Error and release the pointer here — the timing/ETA above still
+        // advance (the combination counted), but we skip the normal row-creation/finalize logic so the
+        // NEXT combination's event does not re-finalize this row as a clean "No Match".
+        if (e.CombinationFailed)
+        {
+            // "Run failed" (not "Could not run RAR"): honest for both a launch failure and the rarer
+            // mid-run exception the generic catch also covers, and it fits the narrow Result column —
+            // the specific reason (e.g. "Permission denied") is in the Phase 2 log.
+            ErrorActiveVersion("Run failed");
+            _setBoundaryPending = false;
+            return update;
         }
 
         // Version list tracking. A phase change resets which row is "active". WITHIN a single

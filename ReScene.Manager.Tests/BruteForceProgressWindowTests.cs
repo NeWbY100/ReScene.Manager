@@ -1,3 +1,4 @@
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
@@ -86,6 +87,25 @@ public class BruteForceProgressWindowTests
         vm.RemainingText = "00:28";
         vm.SpeedText = "2.5/s";
         vm.EtaText = "00:28";
+    }
+
+    [AvaloniaFact]
+    public void PhaseHeading_IsPoliteLiveRegion_SoCompletionAndErrorAggregateAnnounceOnce()
+    {
+        // §4a / WCAG 4.1.3: the Row-0 phase/completion heading is a Polite live region so the run's
+        // completion status — including the "N could not run" error aggregate baked into
+        // PhaseDescription — is announced without focus, and without the per-cell grid chatter a
+        // per-row live region would cause (grid Status/Result stay plain 4.1.2 content).
+        ReconstructorViewModel vm = CreateVm();
+        SeedProgress(vm);
+
+        var window = new BruteForceProgressWindow { DataContext = vm };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        TextBlock heading = window.GetVisualDescendants().OfType<TextBlock>()
+            .First(t => t.Text == vm.PhaseDescription);
+        Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(heading));
     }
 
     [AvaloniaFact]

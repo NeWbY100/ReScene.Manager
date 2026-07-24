@@ -2142,8 +2142,16 @@ public partial class ReconstructorViewModel : ViewModelBase
         bool attemptedAll = outcomes.Count == totalSets;
         bool allOk = attemptedAll && outcomes.All(o => o is { Success: true, Skipped: false });
 
+        // Surface the count of combinations the engine could not run (e.g. a rar binary without the
+        // execute bit) in the completion heading — a run-wide "existence of errors" aggregate (WCAG
+        // 4.1.3) that a blind user would otherwise have to hunt cell-by-cell, and that gives sighted
+        // users an at-a-glance signal too. The heading is a Polite live region, so this announces once
+        // at completion.
+        int errorCount = VersionEntries.Count(v => v.Status == "Error");
+        string errorSuffix = errorCount > 0 ? $" ({errorCount} could not run)" : string.Empty;
+
         ProgressMessage = allOk ? "Match found!" : "No match found.";
-        PhaseDescription = allOk ? "Complete — Match Found!" : "Complete — No Match";
+        PhaseDescription = (allOk ? "Complete — Match Found!" : "Complete — No Match") + errorSuffix;
         LastRunSucceeded = allOk;
         Log(LogTarget.System, allOk
             ? "Brute-force completed: all sets matched!"

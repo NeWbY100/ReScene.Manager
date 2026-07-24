@@ -146,6 +146,15 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
             PhaseDescription = "Phase 2: Full RAR Creation",
         };
 
+    // Same combo key as MakeProgress, flagged CombinationFailed — mirrors the event the engine fires
+    // when it could not run rar (e.g. binary not executable), which marks that row "Error".
+    private static BruteForceProgressEventArgs MakeFailedProgress(long progressed) =>
+        new("release", "winrar-500", "a c -m0", operationSize: 100, operationProgressed: progressed, startDateTime: DateTime.Now)
+        {
+            PhaseDescription = "Phase 2: Full RAR Creation",
+            CombinationFailed = true,
+        };
+
     // ── #19 — timestamp summary once, from the run's finally, thread-safe ──
 
     [Fact]
@@ -197,6 +206,33 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
         (string Title, string Message) warning = Assert.Single(dialog.Warnings);
         Assert.Equal("Timestamp Preservation Failed", warning.Title);
         Assert.Equal("Cancelled", vm.PhaseDescription);
+    }
+
+    // ── Completion heading carries the run-wide "N could not run" error aggregate (§4a / WCAG 4.1.3) ──
+
+    [Fact]
+    public async Task Completion_WithErroredCombo_HeadingIncludesCouldNotRunCount()
+    {
+        var brute = new RaisingBruteForceService();
+        ReconstructorViewModel vm = CreateVm(brute, new InlineUiDispatcher());
+        ConfigureRunnablePaths(vm);
+        vm.SetImportStateForTest(ImportWith(MakeSet("a", "a.rar")));
+
+        brute.OnRun = _ =>
+        {
+            // A combination begins testing, then the engine reports it could not run rar → its row is
+            // marked "Error"; the set produces no match.
+            brute.RaiseProgress(MakeProgress(1));
+            brute.RaiseProgress(MakeFailedProgress(1));
+            return new BruteForceRunResult(false, null);
+        };
+
+        await vm.ExecuteReconstructionForTestAsync(CancellationToken.None);
+
+        Assert.Equal(1, vm.VersionEntries.Count(v => v.Status == "Error"));
+        // The completion status (a Polite live region) names the aggregate, not just per-cell "Run failed".
+        Assert.StartsWith("Complete — No Match", vm.PhaseDescription, StringComparison.Ordinal);
+        Assert.Contains("(1 could not run)", vm.PhaseDescription, StringComparison.Ordinal);
     }
 
     [Fact]

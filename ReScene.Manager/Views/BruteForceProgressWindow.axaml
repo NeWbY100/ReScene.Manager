@@ -23,9 +23,13 @@
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
-    <!-- Phase label -->
+    <!-- Phase label. Polite live region (§4a): PhaseDescription changes only at phase boundaries and at
+         completion (per-test churn lives in TestCountText/CurrentDetailText), so this announces phase
+         transitions and, at the end, the completion status incl. the "N could not run" error aggregate —
+         WCAG 4.1.3 status message without per-cell grid chatter. -->
     <TextBlock Grid.Row="0"
                Text="{Binding PhaseDescription}"
+               AutomationProperties.LiveSetting="Polite"
                Foreground="{DynamicResource HeaderForeground}"
                FontWeight="Bold" FontSize="{DynamicResource FontSizeH2}"
                Margin="0,0,0,10" TextTrimming="CharacterEllipsis" />

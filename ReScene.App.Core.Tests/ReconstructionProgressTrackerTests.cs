@@ -48,6 +48,49 @@ public class ReconstructionProgressTrackerTests
             PhaseDescription = phase,
         };
 
+    // Mirrors the event the engine fires from its catch block when it could not run RAR for a combo.
+    private static BruteForceProgressEventArgs MakeFailedEvent(string versionDir, string args, long progressed, long size) =>
+        new(
+            releaseDirectoryPath: "release",
+            rarVersionDirectoryPath: versionDir,
+            rarCommandLineArguments: args,
+            operationSize: size,
+            operationProgressed: progressed,
+            startDateTime: DateTime.Now - TimeSpan.FromSeconds(1))
+        {
+            PhaseDescription = "Phase 2: Full RAR Creation",
+            CombinationFailed = true,
+        };
+
+    // ── Launch-failure rows read "Error", not "No Match" ──
+
+    [Fact]
+    public void ApplyProgress_CombinationFailed_MarksActiveRowError_AndNextComboDoesNotOverwriteIt()
+    {
+        var entries = new ObservableCollection<TestRow>();
+        ReconstructionProgressTracker<TestRow> tracker = CreateTracker(entries);
+        tracker.StartRun();
+        tracker.SetActiveSet("");
+
+        // Combo 1 begins testing, then the engine reports it could not run rar (e.g. binary not +x).
+        tracker.ApplyProgress(MakeEvent("rarlinux-x64-611", "-m0", "Phase 2: Full RAR Creation", 1, 3, TimeSpan.FromSeconds(1)));
+        tracker.ApplyProgress(MakeFailedEvent("rarlinux-x64-611", "-m0", 1, 3));
+
+        Assert.Single(entries);
+        Assert.Equal("Error", entries[0].Status);
+        Assert.Equal("Run failed", entries[0].Result);
+
+        // The NEXT combination's normal progress event must NOT re-finalize the errored row as a clean
+        // "No Match" — the pointer was released, so a fresh row is created and the errored one survives.
+        tracker.ApplyProgress(MakeEvent("rarlinux-x64-611", "-m1", "Phase 2: Full RAR Creation", 2, 3, TimeSpan.FromSeconds(1)));
+
+        Assert.Equal(2, entries.Count);
+        Assert.Equal("Error", entries[0].Status);       // unchanged
+        Assert.Equal("Run failed", entries[0].Result);  // unchanged
+        Assert.Equal("-m1", entries[1].Arguments);      // fresh in-progress row for combo 2
+        Assert.NotEqual("No Match", entries[0].Result);
+    }
+
     // ── #23: per-set outcome rows ──
 
     [Fact]
