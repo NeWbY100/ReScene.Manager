@@ -799,3 +799,15 @@ the now-accepted folder input). Updated WizInputHeader → "Release .sfv, first 
 is also the field's a11y name via LabeledBy, so visible label + accessible name update in lockstep).
 HelpText kept as-is. DUAL-GATE: a11y-lead APPROVE/SHIP (clean LabeledBy update, "or folder", keep HelpText);
 codex APPROVE (no findings). Added non-brittle guard (header mentions folder + .rar). Manager 196, gate 0/0.
+
+LINUX/macOS WINRAR-VERSION PARSER FIX (user-reported on Ubuntu: RAR Reconstructor said "No WinRAR versions
+found" when pointed at extracted Linux WinRAR folders). Root cause: RARVersionSelector regex only grokked
+Windows naming (winrar-560); Linux/macOS tarball folders (rarlinux-x64-5.5.0, rarosx-3.1.0, rarlinux-x64-611,
+betas) have a platform token + dotted versions → all rejected. FIX (lib): regex gains (linux|osx|macos|bsd)?
++ -arm + dotted-version capture, dots stripped so 5.5.0→550/3.9.3→393; Windows names byte-identical (verified
+empirically + existing tests). App: OS-aware "no versions" message (RarExecutable.FileName, not hardcoded
+rar.exe) + portable scanner test + *nix-naming scanner regression test. DUAL-GATE: a11y-lead APPROVE/SHIP
+(message = net a11y win); codex APPROVE (no findings, 13-case regex verified). Lib 1410, App.Core 677, gate 0/0.
+Deferred a11y follow-ups (a11y-lead, app-wide, NOT blockers): MessageDialog body not auto-announced on open;
+severity glyph (info/warn/error) not marked AutomationProperties.AccessibilityView=Raw. Heads-up to user: rar
+binaries need chmod +x on Linux (Windows copy loses exec bit).
