@@ -1,4 +1,5 @@
 using ReScene.App.Core.ViewModels.Reconstruction;
+using ReScene.Core;
 
 namespace ReScene.App.Core.Tests;
 
@@ -20,7 +21,9 @@ public sealed class WinRARVersionScannerTests : IDisposable
         Directory.CreateDirectory(dir);
         if (withRARExe)
         {
-            File.WriteAllText(Path.Combine(dir, "rar.exe"), "stub");
+            // The scanner looks for the platform's console binary (rar.exe on Windows, rar elsewhere),
+            // so create whichever name this OS resolves to — keeps the test valid on every platform.
+            File.WriteAllText(Path.Combine(dir, RarExecutable.FileName), "stub");
         }
     }
 
@@ -55,6 +58,20 @@ public sealed class WinRARVersionScannerTests : IDisposable
 
         Assert.Single(result);
         Assert.Equal(560, result[0].Version);
+    }
+
+    [Fact]
+    public void Scan_AcceptsLinuxAndMacOSTarballFolderNames()
+    {
+        // Regression guard for the reported Linux bug: the standard *nix tarball folder names must be
+        // recognised — rarlinux-…/rarosx-…, both concatenated ("611") and dotted ("5.5.0") versions.
+        MakeVersion("rarlinux-x64-611", withRARExe: true);
+        MakeVersion("rarlinux-x64-5.5.0", withRARExe: true);
+        MakeVersion("rarosx-3.1.0", withRARExe: true);
+
+        IReadOnlyList<InstalledRARVersion> result = WinRARVersionScanner.Scan(_root);
+
+        Assert.Equal(new[] { 310, 550, 611 }, result.Select(r => r.Version).ToArray());
     }
 
     [Fact]

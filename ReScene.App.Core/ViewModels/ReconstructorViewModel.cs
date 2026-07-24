@@ -1354,7 +1354,7 @@ public partial class ReconstructorViewModel : ViewModelBase
         {
             Log(LogTarget.System, "No WinRAR versions found in the selected folder.");
             _fileDialog.ShowError("Validation Error",
-                "No WinRAR versions were found in the WinRAR versions folder. Add a version subfolder containing rar.exe, then click Rescan.");
+                $"No WinRAR versions were found in the WinRAR versions folder. Add a version subfolder containing {RarExecutable.FileName}, then click Rescan.");
             return;
         }
 
