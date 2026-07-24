@@ -678,3 +678,110 @@ stale sigs). Defaults true → default behavior + golden unchanged.
 ===> BOTH FOLLOW-UPS COMPLETE: #1 lib rename (aa0fdd9/gitlink 2a7f6e5), #2 option B folder-mode options (0d4d7fa, codex-agreed
      + dual-gate approved). HEAD outer 0d4d7fa. Suites: lib 1398 (golden 5/5), App.Core 665, Manager 189/192 (3 pre-existing),
      gate 0/0. NEXT: finishing-a-development-branch (re-present merge/PR/keep to USER).
+
+===== RELEASE PREP (user: merge+release the whole port; codex review at each step) =====
+Merge is a clean FAST-FORWARD (main at branch-point 5648cec, 0 commits since; 176 commits to land = WHOLE port). avalonia-feature
+NOT pushed to origin. 3 WORKSTREAMS:
+  WS1 (fix 3 red tests — release blocker): ROOT-CAUSED = stale tests. Views use fixed-choice ComboBox (SelectedItem→HexBytesPerLine,
+     InspectorView:377 / FileCompareView:238/380) for Bytes/Row; the 3 tests still assert the REMOVED NumericUpDown → 0 found.
+     Fix = test-only (NumericUpDown→ComboBox; repurpose obsolete ClearingBytesPerRowSelector_ToNull). Brief release-ws1-testfix-brief.md.
+     impl-ws1-testfix dispatched. VIEWS ARE CORRECT — no .axaml change.
+  WS2 (release mechanics): USER wants the lib-version==tag condition REMOVED (app-only releases shouldn't force a pointless lib
+     release). + push, version bump, tag. Release process is tag-driven ([[release-process]]).
+  WS3 (port release-readiness review): review the 176-commit port beyond the multi-set feature. Will run as a multi-agent Workflow
+     (ultracode on) fanning out over subsystems. codex review per step.
+
+WS2 DONE (config): removed lib-release coupling from .github/workflows/release.yml (libcheck + Tag/Release ReScene.Lib steps).
+Rationale = USER intent ("releasing a lib with no changes because the app is released is pointless") over the literal "remove
+the condition" (which would've made it release unconditionally = worse). App tags now release ONLY the app; lib released on its
+own. Commit e314c54. The actual release (version + tag + push) is the LAST step, after WS1(tests green)+WS3(readiness)+merge.
+Codex review of WS2 will bundle with WS1's (both release-prep steps). WS3 port-readiness Workflow running (wleo5yox7). WS1 impl running.
+
+WS1 DONE (9852c54): 3 stale view tests updated NumericUpDown→ComboBox; Manager 192/192, gate 0/0. Impl caught my brief error:
+Avalonia IsVisible=false does NOT remove from the VISUAL tree (GetVisualDescendants) — Inspector has 2 ComboBoxes (bytes/row +
+Encoding) so it filters `.Single(cb => cb.SelectedItem is int)`; FileCompare has only 2 bytes/row (no Encoding). Obsolete null-clear
+test REPURPOSED → BytesPerRowComboBox_ExposesFixedPresets_AndSelectionRoundTripsToVm. (Visual tree ≠ automation tree — Task-10
+a11y reasoning unaffected.) Lead-verified: 3 target tests green independently.
+Combined codex review WS1+WS2 launched (bc9tihs17). WS3 Workflow (wleo5yox7) still auditing. Chain: a13d0d6→9852c54(WS1)→e314c54(WS2).
+
+WS1+WS2 codex review: APPROVE (no Critical/Important). 3 non-blocking nits: (1) FileCompare test assumes all ComboBoxes are
+bytes/row (fragile if Encoding selector added), (2) Inspector test keys on SelectedItem-is-int not item-type/name, (3) release.yml
+release-job checkout/version-step orphaned. Did nit3-partial: removed dead release-job version-extract step (commit 773a5af);
+left the checkout (harmless). Nits 1+2 left (tests correct+pass; future-robustness only). ===> WS1 + WS2 COMPLETE + codex-approved. <===
+Awaiting WS3 port-readiness Workflow (wleo5yox7) → triage blockers → fixes → THEN release (ff-merge + version + tag + push; version confirmed with user first).
+
+WS3 port-readiness Workflow (wleo5yox7, 9 agents/1.18M tok/16.6min) DONE — verdict READY-AFTER-FIXES. 6/8 areas release-ready
+(shell/Home, SRR editor, RAR reconstructor, sample restorer, services-infra all clean incl live bridge smoke-tests). Found 2
+BLOCKERS + 4 IMPORTANT. Lead-VERIFIED both blockers + important 3/6 against code. USER: "fix ALL 6".
+  B1 SRSCreatorViewModel:40/165 — DefaultOutputDirectory seeds OutputPath=bare dir; auto-suggest only fills when blank → CreateSRS
+     passes dir as output file → silent no-op. Fix: OnInputPathChanged use FieldGuidance.SuggestSaveFileName (like BrowseOutputAsync).
+  B2 FileCompareView.axaml.cs:169 — Copy menu resolves grid via ContextMenu.PlacementTarget (WPF-ism); Avalonia may not set it →
+     dead. Fix: resolve via sender/VM SelectedProperty; red-green VERIFY.
+  I3 InspectorViewModel:705 — Add/Remove stored-file: ReleaseFileHandles then LoadFile only on success (no finally) → edit error
+     blanks Hex/Text till reopen. Fix: finally-reload (mirror Rename/Move).
+  I4 InspectorViewModel:424 — Export CanExecute off-by-one + stale after close. Fix: NotifyCanExecuteChangedFor + CloseFile renotify.
+  I5 FileCompareViewModel:825 — FindMatchingNodeRecursive fallback (Root && FileName==null) collapses RAR placeholder nodes onto root.
+  I6 SRSReconstructorViewModel:331 — cancel returns Success=false → red "Failed" banner. Fix: detect cancel → neutral state (like SRSCreator).
+  → impl-ws3-fixes dispatched (opus, TDD, report false-positives). Brief: release-ws3-fixes-brief.md. Then codex+peer review → release.
+
+WS3 fixes DELIVERED (30f5152): all 6 reproduced RED-first (no false positives). Impl decompiled Avalonia 11.3.18 to PROVE
+Blocker 2 (auto-open sets the popup's PlacementTarget, not ContextMenu.PlacementTarget → old resolver read null). App.Core 675,
+Manager 194 (+2 copy-menu tests), golden byte-identity intact, gate 0/0. Lead-verified: blocker diffs clean (B1 SuggestSaveFileName
++no-clobber guard; B2 grid-by-ContextMenu-identity + VM SelectedLeft/RightProperty), independent suites 675/194/golden-1 GREEN.
+Dual gate: codex (bgnoerc1r) + peer review-ws3-fixes (esp. B2 left-vs-right pane trace). On clean → whole feature+port RELEASE-READY
+→ present release plan (ff-merge main + version + v-tag + push) to USER, confirm version, execute.
+
+WS3-fixes codex review: REVISE — 1 Important (Fix 5 regression), other 5 CONFIRMED correct. LEAD-VERIFIED: FindMatchingNodeRecursive's
+has-Data disambiguation (FileCompareViewModel:874-884) treats BuildDetailed's root as a PLACEHOLDER because that root alone has
+Data==null (FileCompareTreeBuilder:29) — unlike every other root (BuildSRR:59/SRS:190/MKV:249/fallback-RAR:310 all set Data). So
+two detailed-RAR roots with DIFFERENT block counts (labels embed the count) no longer sync (root↔root regressed). The guard test's
+root used Data=new object() (non-null, test:50) → masked it. Fallback placeholders (Signature/CMT/End Archive :319/356/363) are the
+real NodeType.Root+Data==null nodes. FIX options: give BuildDetailed root a non-null identity (CAVEAT: check root property-display
+doesn't break) OR structurally detect the true root in the matcher; + a BuildDetailed unequal-block-count regression test.
+Waiting for peer review-ws3-fixes to bundle any more findings, then ONE fix round.
+
+Fix-5 SAFE FIX designed: give BuildDetailed root Data=blocks (FileCompareTreeBuilder:29), matching all other roots → matcher's
+sourceHasData&&nodeHasData treats it as root↔root (any label/count); placeholders (Data==null) still label-match (Item 5 preserved).
+SAFE for property display: CompareNodePropertyBuilder switch (:46) has NO Root case → Data on a Root node is matcher-identity only,
+never displayed. + add BuildDetailed unequal-block-count root-sync test (codex's ask); fix guard test's synthetic-Data root.
+Holding for peer review-ws3-fixes to bundle.
+
+WS3-fixes peer review-ws3-fixes: NEEDS-FIXES — items 1,2,3,4,6 APPROVED (explicit B2 left-vs-right trace confirmed), item 5 SAME
+regression codex found (INDEPENDENT convergence): BuildDetailed root null-Data → matcher treats as placeholder → detailed-RAR
+(PRIMARY path, VM:753) root sync breaks when block counts differ. Both recommend Data=blocks on FileCompareTreeBuilder:29.
+LEAD APPLIED the fix (Data=blocks) + added real-BuildDetailed unequal-count regression test (SelectingDetailedRarRoot). RED-GREEN
+PROVEN: with fix 4/4 green; reverted → new test RED. Safe (property builder has no Root case → Data on root is matcher-only).
+Full-suite verify running (bh6265u2u). Then commit → codex re-review → release.
+
+Fix-5 correction committed 4566b3c: FileCompareTreeBuilder root Data=blocks + real-BuildDetailed regression test. Full verify GREEN:
+App.Core 676, Manager 194, golden 1 (byte-identity), gate 0/0. codex Fix-5 re-review launched (bo9x3nw3s).
+RELEASE PRECONDITIONS gathered:
+  - App: last tag v1.9.0; version is TAG-injected (no csproj <Version>). main ff-able (181 ahead, 0 behind).
+  - LIB submodule: HEAD aa0fdd9 on its own avalonia-feature branch; lib origin/main=5a892d2 (prepare v1.9.0). Lib avalonia-feature
+    shows NO upstream → lib commits likely NOT PUSHED to ReScene.Lib remote. RELEASE NEEDS the gitlink's lib commit on the lib
+    remote (CI checkout --recursive) → must reconcile+push lib before app release. (= memory's "reconcile lib at merge".)
+  RELEASE SEQUENCE (present to USER, get version + authorize pushes — all OUTWARD-FACING):
+    1. Lib: reconcile lib avalonia-feature → lib main (or push the branch), push to ReScene.Lib remote so gitlink resolves.
+    2. App: ff-merge avalonia-feature → main.
+    3. App: version (v1.9.0 → v2.0.0? major port — USER decides) + tag + push main+tag → triggers release.yml (app-only release now).
+
+codex Fix-5 re-review: APPROVE. ===> ALL WS3 FIXES COMPLETE + dual-gate approved (5 approved + Fix-5 corrected). <===
+====> WHOLE PORT RELEASE-READY: WS1 (tests, codex✓) + WS2 (release mechanics, codex✓) + WS3 (audit + 6 fixes, dual-gate✓). <====
+Suites: App.Core 676, Manager 194, lib 1398 (golden byte-identity), gate 0/0. HEAD outer 4566b3c / lib aa0fdd9.
+NEXT (all OUTWARD-FACING, needs USER version + push authorization): lib reconcile+push → app ff-merge main → version+tag+push.
+
+LINUX SMOKE TEST (pre-release, user-requested): published linux-x64 self-contained single-file (Release, -p:Version=2.0.0),
+ran on WSL Ubuntu 26.04 via WSLg. RESULT: SUCCESS — Beginner hub renders fully (Fluent dark, Inter fonts, all cards+menu),
+status bar shows "ReScene Manager v2.0.0 (4566b3c…)", process stable + no startup errors, all native libs (libX11/ICE/SM/
+fontconfig/icu) already present on Ubuntu (no apt needed). Validates the linux-x64 release artifact. App left running (PID 618).
+RELEASE STILL PAUSED at safe local checkpoint (lib pushed origin/main=aa0fdd9; app main ff-merged locally to 4566b3c; NOT pushed).
+
+INPUT-DESCRIPTION UX FIX (user-reported: wizard had Browse + Browse folder buttons with no text saying
+which to use when). Added a multi-Run caption + per-button HelpText on BOTH surfaces (wizard
+CreateSRRWizardBody + Advanced CreatorView). DUAL-GATE: a11y-lead APPROVE (mechanism: Label-in-Name,
+field-vs-action HelpText split, contrast 6.2:1). codex FIRST pass REVISE — folder copy overpromised
+("every subfolder"/"all its RAR sets"); scanner only discovers loose-RAR sets when zero SFVs exist
+(ReleaseScanner:330) + skips unreadable/reparse-point subfolders (ReleaseTraversal:57). REVISED copy to
+"search a release folder and its subfolders for RAR sets" (no exhaustive guarantee). codex RE-REVIEW
+APPROVE (copy accuracy verified vs scanner, U+2026 parity, unchanged Names, valid XAML) + a11y-lead
+re-confirm APPROVE. Manager binding tests 16/16; CreatorView caption runtime-verified via ava bridge.
