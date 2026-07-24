@@ -811,3 +811,14 @@ rar.exe) + portable scanner test + *nix-naming scanner regression test. DUAL-GAT
 Deferred a11y follow-ups (a11y-lead, app-wide, NOT blockers): MessageDialog body not auto-announced on open;
 severity glyph (info/warn/error) not marked AutomationProperties.AccessibilityView=Raw. Heads-up to user: rar
 binaries need chmod +x on Linux (Windows copy loses exec bit).
+
+RAR LAUNCH-FAILURE = "ERROR" ROWS (user-reported on Linux: un-chmod+x'd rar binaries showed every combo as
+"Complete/No Match" instead of an error). FIX (lib): BruteForceProgressEventArgs.CombinationFailed flag; the
+brute-force catch fires it; the CompleteAllVolumes path (beginner default) now observes the faulted process
+task (Task.WhenAny didn't surface it); double-count guard for late verify/rename exceptions; OperationProgress-
+EventArgs CLAMPS out-of-range progressed instead of throwing (denominator is a Phase-1-scaled approximation).
+App: tracker.ErrorActiveVersion marks the row Status="Error"/Result="Run failed" + releases pointer; VM completion
+heading gains "(N could not run)" aggregate; heading is a Polite live region. TRIPLE-ROUND dual-gate: a11y-lead
+SHIP (adjudicated codex's 4.1.3 per-cell finding -> text-only grid cells UPHELD + Polite aggregate completion
+heading is the correct locus); codex APPROVE round 3 (r1: double-count + 4.1.3; r2: CompleteAllVolumes fault +
+progress overshoot throw; all fixed). Lib 1414, App.Core 679, Manager 197, gate 0/0.
