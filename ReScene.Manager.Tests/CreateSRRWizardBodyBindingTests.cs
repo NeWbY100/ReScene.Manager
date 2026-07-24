@@ -196,6 +196,21 @@ public class CreateSRRWizardBodyBindingTests
     }
 
     [AvaloniaFact]
+    public void InputHeader_MentionsFolder_SinceFolderInputIsAccepted()
+    {
+        // Step 0 accepts a release .sfv/first .rar OR a folder (the "Browse folder…" path). WizInputHeader
+        // doubles as the input field's accessible name (AutomationProperties.LabeledBy), so it must reflect
+        // the folder option — regression guard for the old ".sfv or first .rar"-only label. Asserts intent
+        // (mentions a folder, still names the .rar), not exact wording.
+        CreatorViewModel vm = CreateViewModel(new RecordingFileDialogService());
+        Window window = Show(vm);
+
+        TextBlock header = window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "WizInputHeader");
+        Assert.Contains("folder", header.Text!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(".rar", header.Text!, StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
     public void SaveLogButton_OnCreateStep_BindsAndInvokesSaveLog()
     {
         // The user needs to save the creation output "in case of problems". Step 4's log header carries a

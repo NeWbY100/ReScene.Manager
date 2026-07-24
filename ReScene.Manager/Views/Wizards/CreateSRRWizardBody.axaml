@@ -25,7 +25,7 @@
         <Run Text="Browse folder…" FontWeight="SemiBold" />
         <Run Text=" to search a release folder and its subfolders for RAR sets (e.g. multi-disc releases)." />
       </TextBlock>
-      <TextBlock x:Name="WizInputHeader" Text="Release .sfv or first .rar" FontWeight="SemiBold" Margin="0,0,0,2" />
+      <TextBlock x:Name="WizInputHeader" Text="Release .sfv, first .rar, or folder" FontWeight="SemiBold" Margin="0,0,0,2" />
       <!-- Docked right in declaration order (rightmost first): folder Browse sits to the right of the
            file Browse. Explicit TabIndex keeps keyboard order = visual order = TextBox → Browse file
            → Browse folder (§4a accessibility review P3#8). -->
