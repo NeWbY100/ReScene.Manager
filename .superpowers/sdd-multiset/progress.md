@@ -785,3 +785,11 @@ field-vs-action HelpText split, contrast 6.2:1). codex FIRST pass REVISE — fol
 "search a release folder and its subfolders for RAR sets" (no exhaustive guarantee). codex RE-REVIEW
 APPROVE (copy accuracy verified vs scanner, U+2026 parity, unchanged Names, valid XAML) + a11y-lead
 re-confirm APPROVE. Manager binding tests 16/16; CreatorView caption runtime-verified via ava bridge.
+
+SAVE-LOG BUTTON (user-reported: wizard step 5 / Create step had no way to save the creation output "in
+case of problems"). Added a "Save log..." button to CreateSRRWizardBody step 4's log header, bound to the
+existing CreatorViewModel.SaveLogCommand (no VM change) — a faithful clone of the sibling operation views'
+Save-log affordance (WCAG 3.2.4). DUAL-GATE: a11y-lead APPROVE/SHIP (Content-as-name, always-enabled,
+natural tab order, ASCII "Save log..."); codex APPROVE (no findings — wiring, step-4 placement, pattern
+fidelity, non-vacuous test). Added headless binding guard (button present + routes to SaveLogCommand →
+SaveFileCalls==1). Manager 195, App.Core 676, gate 0/0.
