@@ -191,7 +191,17 @@
                 Classes="cancel" Padding="14,4" Margin="0,8,0,0"
                 HorizontalAlignment="Left"
                 IsVisible="{Binding IsCreating}" />
-        <TextBlock Text="Details" FontWeight="SemiBold" Margin="0,12,0,2" />
+        <!-- Log header with a Save-log action so the creation output can be saved (e.g. to attach when
+             something goes wrong). Mirrors the sibling operation views (CreatorView, SRSCreatorView,
+             SRSReconstructorView, ReconstructorView, SampleRestorerView) so the affordance is identical
+             app-wide (WCAG 3.2.4 Consistent Identification): Content is the accessible name
+             (Label-in-Name, no explicit Name); always-enabled — SaveLogAsync no-ops on an empty log. -->
+        <DockPanel Margin="0,12,0,2">
+          <Button DockPanel.Dock="Right" Content="Save log..."
+                  Command="{Binding SaveLogCommand}"
+                  Classes="ghost" Padding="8,2" />
+          <TextBlock Text="Details" FontWeight="SemiBold" VerticalAlignment="Center" />
+        </DockPanel>
       </StackPanel>
       <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1"
               Background="{DynamicResource SystemControlBackgroundAltHighBrush}" MinHeight="120">

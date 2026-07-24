@@ -81,10 +81,11 @@ public class CreateSRRWizardBodyBindingTests
     private sealed class RecordingFileDialogService : IFileDialogService
     {
         public int OpenFolderCalls { get; private set; }
+        public int SaveFileCalls { get; private set; }
 
         public Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters) => Task.FromResult<string?>(null);
         public Task<IReadOnlyList<string>> OpenFilesAsync(string title, IReadOnlyList<string> filters) => Task.FromResult<IReadOnlyList<string>>([]);
-        public Task<string?> SaveFileAsync(string title, string defaultExtension, IReadOnlyList<string> filters, string? defaultFileName = null) => Task.FromResult<string?>(null);
+        public Task<string?> SaveFileAsync(string title, string defaultExtension, IReadOnlyList<string> filters, string? defaultFileName = null) { SaveFileCalls++; return Task.FromResult<string?>(null); }
         public Task<string?> OpenFolderAsync(string title) { OpenFolderCalls++; return Task.FromResult<string?>(null); }
         public Task<bool> ShowConfirmAsync(string title, string message) => Task.FromResult(false);
         public Task<string?> PromptForTextAsync(string title, string message, string initialValue) => Task.FromResult<string?>(null);
@@ -190,6 +191,32 @@ public class CreateSRRWizardBodyBindingTests
         TextBlock item = window.GetVisualDescendants().OfType<TextBlock>()
             .Single(t => t.Text == "CD2/b.sfv");
         Assert.NotNull(item);
+
+        Assert.Empty(sink.Messages);
+    }
+
+    [AvaloniaFact]
+    public void SaveLogButton_OnCreateStep_BindsAndInvokesSaveLog()
+    {
+        // The user needs to save the creation output "in case of problems". Step 4's log header carries a
+        // "Save log..." button (mirroring the sibling operation views) wired to SaveLogCommand. It lives in
+        // the visual tree even while step 0 is the visible step — Avalonia keeps IsVisible=false subtrees —
+        // so we assert it from the default render without switching steps.
+        var dialog = new RecordingFileDialogService();
+        CreatorViewModel vm = CreateViewModel(dialog);
+
+        using var sink = new BindingErrorSink();
+        Window window = Show(vm);
+
+        Button saveLog = window.GetVisualDescendants().OfType<Button>()
+            .Single(b => b.Content is string s && s.StartsWith("Save log", StringComparison.Ordinal));
+        Assert.Same(vm.SaveLogCommand, saveLog.Command);
+
+        // With a non-empty log, executing routes to the save dialog (SaveLogToFileAsync no-ops on empty).
+        vm.LogEntries.Add("Created SRR.");
+        saveLog.Command!.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(1, dialog.SaveFileCalls);
 
         Assert.Empty(sink.Messages);
     }
