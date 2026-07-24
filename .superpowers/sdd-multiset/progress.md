@@ -793,3 +793,9 @@ Save-log affordance (WCAG 3.2.4). DUAL-GATE: a11y-lead APPROVE/SHIP (Content-as-
 natural tab order, ASCII "Save log..."); codex APPROVE (no findings — wiring, step-4 placement, pattern
 fidelity, non-vacuous test). Added headless binding guard (button present + routes to SaveLogCommand →
 SaveFileCalls==1). Manager 195, App.Core 676, gate 0/0.
+
+STALE INPUT-LABEL FIX (user-reported: wizard step 0 field label "Release .sfv or first .rar" didn't mention
+the now-accepted folder input). Updated WizInputHeader → "Release .sfv, first .rar, or folder" (that header
+is also the field's a11y name via LabeledBy, so visible label + accessible name update in lockstep).
+HelpText kept as-is. DUAL-GATE: a11y-lead APPROVE/SHIP (clean LabeledBy update, "or folder", keep HelpText);
+codex APPROVE (no findings). Added non-brittle guard (header mentions folder + .rar). Manager 196, gate 0/0.
