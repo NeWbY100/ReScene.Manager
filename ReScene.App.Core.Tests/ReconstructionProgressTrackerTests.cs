@@ -18,6 +18,9 @@ public class ReconstructionProgressTrackerTests
         public string VersionName = "";
         public string Arguments = "";
         public string VersionDirectory = "";
+        public string InputDirectory = "";
+        public string OutputFilePath = "";
+        public string ExecutedArguments = "";
         public string Status = "";
         public string Result = "";
         public string SetText = "";
@@ -27,7 +30,15 @@ public class ReconstructionProgressTrackerTests
         ObservableCollection<TestRow> entries, TimeProvider? timeProvider = null) =>
         new(
             entries,
-            createRow: (label, args, dir) => new TestRow { VersionName = label, Arguments = args, VersionDirectory = dir },
+            createRow: (label, args, dir, inputDir, outputPath, executedArgs) => new TestRow
+            {
+                VersionName = label,
+                Arguments = args,
+                VersionDirectory = dir,
+                InputDirectory = inputDir,
+                OutputFilePath = outputPath,
+                ExecutedArguments = executedArgs,
+            },
             setStatus: (row, status) => row.Status = status,
             setResult: (row, result) => row.Result = result,
             setSetText: (row, setText) => row.SetText = setText,
@@ -36,7 +47,8 @@ public class ReconstructionProgressTrackerTests
             timeProvider: timeProvider);
 
     private static BruteForceProgressEventArgs MakeEvent(
-        string versionDir, string args, string phase, long progressed, long size, TimeSpan startedAgo) =>
+        string versionDir, string args, string phase, long progressed, long size, TimeSpan startedAgo,
+        string inputDir = "", string outputPath = "", string executedArgs = "") =>
         new(
             releaseDirectoryPath: "release",
             rarVersionDirectoryPath: versionDir,
@@ -46,6 +58,9 @@ public class ReconstructionProgressTrackerTests
             startDateTime: DateTime.Now - startedAgo)
         {
             PhaseDescription = phase,
+            InputDirectoryPath = inputDir,
+            OutputFilePath = outputPath,
+            ExecutedArguments = executedArgs,
         };
 
     // Mirrors the event the engine fires from its catch block when it could not run RAR for a combo.
@@ -89,6 +104,25 @@ public class ReconstructionProgressTrackerTests
         Assert.Equal("Run failed", entries[0].Result);  // unchanged
         Assert.Equal("-m1", entries[1].Arguments);      // fresh in-progress row for combo 2
         Assert.NotEqual("No Match", entries[0].Result);
+    }
+
+    [Fact]
+    public void ApplyProgress_CarriesInvocationDetailsOntoTheRow()
+    {
+        // The row's copied command line is the full runnable invocation, so the event's working dir and
+        // output archive must reach the created row (empty for Phase-1 rows, which fall back).
+        var entries = new ObservableCollection<TestRow>();
+        ReconstructionProgressTracker<TestRow> tracker = CreateTracker(entries);
+        tracker.StartRun();
+        tracker.SetActiveSet("");
+
+        tracker.ApplyProgress(MakeEvent("winrar-500", "-m0", "Phase 2: Full RAR Creation", 1, 2, TimeSpan.FromSeconds(1),
+            inputDir: "/tmp/work/input", outputPath: "/tmp/work/rar/winrar-500-m0.rar", executedArgs: "-ma4 a -m0"));
+
+        TestRow row = Assert.Single(entries);
+        Assert.Equal("/tmp/work/input", row.InputDirectory);
+        Assert.Equal("/tmp/work/rar/winrar-500-m0.rar", row.OutputFilePath);
+        Assert.Equal("-ma4 a -m0", row.ExecutedArguments);  // the ACTUAL args, distinct from display "-m0"
     }
 
     // ── #23: per-set outcome rows ──

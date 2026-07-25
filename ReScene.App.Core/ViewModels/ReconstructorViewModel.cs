@@ -98,11 +98,23 @@ public partial class ReconstructorViewModel : ViewModelBase
 
         _progress = new ReconstructionProgressTracker<VersionEntry>(
             VersionEntries,
-            createRow: (label, args, dir) => new VersionEntry { VersionName = label, Arguments = args, VersionDirectory = dir },
+            createRow: (label, args, dir, inputDir, outputPath, executedArgs) => new VersionEntry
+            {
+                VersionName = label,
+                Arguments = args,
+                VersionDirectory = dir,
+                InputDirectory = inputDir,
+                OutputFilePath = outputPath,
+                ExecutedArguments = executedArgs,
+            },
             setStatus: (row, status) => row.Status = status,
             setResult: (row, result) => row.Result = result,
             setSetText: (row, setText) => row.SetText = setText,
-            getFullCommandLine: row => row.FullCommandLine,
+            // The per-combination "Testing …" log line deliberately uses the SHORT exe+switches form —
+            // the merged log's lines stay terse (the cd-prefix and temp paths would repeat on every
+            // line); the full runnable invocation is the row's FullCommandLine, reached via
+            // Copy Full Command Line.
+            getFullCommandLine: row => row.ExeAndArguments,
             appendLog: AppendLog);
 
         _elapsedTimer = timerFactory.Create(TimeSpan.FromSeconds(1), OnElapsedTimerTick);
@@ -386,12 +398,69 @@ public partial class ReconstructorViewModel : ViewModelBase
         public string VersionDirectory { get; set; } = "";
 
         /// <summary>
-        /// The complete command line as executed: the quoted RAR console binary path followed by
-        /// the arguments.
+        /// Working directory of this attempt's rar invocation — the run's prepared input-files copy.
+        /// Empty when unknown (e.g. Phase-1 comment-filter rows). Note it is a temp directory the run
+        /// may clean up afterwards.
         /// </summary>
-        public string FullCommandLine => string.IsNullOrEmpty(VersionDirectory)
+        public string InputDirectory { get; set; } = "";
+
+        /// <summary>Output archive path of this attempt's rar invocation; empty when unknown.</summary>
+        public string OutputFilePath { get; set; } = "";
+
+        /// <summary>
+        /// The argument string rar was ACTUALLY invoked with — the display form plus engine-added
+        /// switches (-ma4 for 5.50–6.x, -vn, -z&lt;commentfile&gt;). Empty when unknown. The runnable
+        /// copied command must use this; the grid column and "Testing …" log lines keep the display
+        /// form (<see cref="Arguments"/>).
+        /// </summary>
+        public string ExecutedArguments { get; set; } = "";
+
+        /// <summary>
+        /// The quoted RAR console binary followed by the switches — the terse per-attempt form used by
+        /// the "Testing …" log lines (the merged log keeps its lines short; the temp paths would
+        /// repeat on every line).
+        /// </summary>
+        public string ExeAndArguments => string.IsNullOrEmpty(VersionDirectory)
             ? Arguments
             : $"\"{RarExecutable.ResolveIn(VersionDirectory)}\" {Arguments}";
+
+        /// <summary>
+        /// The complete command line as executed, runnable as pasted (no trailing newline — pasting
+        /// must never auto-execute): a shell prefix entering the invocation's working directory
+        /// (pushd on Windows so cross-drive cd works in cmd — the Windows form is cmd dialect by
+        /// choice; cd on Unix, valid in every POSIX shell), the quoted RAR console binary, the
+        /// switches, the quoted output archive, and the platform input mask — mirroring
+        /// <see cref="ReScene.Core.Diagnostics.RARProcess"/>'s composition. The prefix matters: rar
+        /// stores entry names relative to its working directory, so running the same switches against
+        /// an absolute path would archive different names. Falls back to
+        /// <see cref="ExeAndArguments"/> when the invocation details are unknown (Phase-1 rows). The
+        /// input directory is the run's temp working copy and may be cleaned up after the run.
+        /// </summary>
+        public string FullCommandLine
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(VersionDirectory))
+                {
+                    return Arguments;
+                }
+
+                if (InputDirectory.Length == 0 || OutputFilePath.Length == 0)
+                {
+                    return ExeAndArguments;
+                }
+
+                // Compose with the EXECUTED argument string (engine-added -ma4/-vn/-z included): the
+                // display form omits switches that change the produced bytes — e.g. rar 5.50-6.x
+                // defaults to RAR5 format without -ma4 — so pasting it would silently build a
+                // different archive than the run this line claims to reproduce.
+                string effectiveArguments = ExecutedArguments.Length > 0 ? ExecutedArguments : Arguments;
+                string invocation = $"\"{RarExecutable.ResolveIn(VersionDirectory)}\" {effectiveArguments}";
+                return OperatingSystem.IsWindows()
+                    ? $"pushd \"{InputDirectory}\" && {invocation} \"{OutputFilePath}\" .\\*"
+                    : $"cd \"{InputDirectory}\" && {invocation} \"{OutputFilePath}\" './*'";
+            }
+        }
 
         // ── Timing ──
         // StartedAt is stamped when the row is created (the tracker constructs a row exactly when

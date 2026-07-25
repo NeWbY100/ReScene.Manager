@@ -18,7 +18,7 @@ namespace ReScene.App.Core.ViewModels.Reconstruction;
 /// </typeparam>
 internal sealed class ReconstructionProgressTracker<TVersionRow>(
     ObservableCollection<TVersionRow> versionEntries,
-    Func<string, string, string, TVersionRow> createRow,
+    Func<string, string, string, string, string, string, TVersionRow> createRow,
     Action<TVersionRow, string> setStatus,
     Action<TVersionRow, string> setResult,
     Action<TVersionRow, string> setSetText,
@@ -27,7 +27,11 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
     TimeProvider? timeProvider = null)
 {
     private readonly ObservableCollection<TVersionRow> _versionEntries = versionEntries;
-    private readonly Func<string, string, string, TVersionRow> _createRow = createRow;
+    // (label, displayArguments, versionDirectory, inputDirectory, outputFilePath, executedArguments)
+    // → bound row. The last three are the invocation's working dir, output archive, and ACTUAL argument
+    // string (engine-added switches included) — empty for Phase-1 rows — carried so the row's copied
+    // command line can be the full runnable invocation while the grid/log keep the display form.
+    private readonly Func<string, string, string, string, string, string, TVersionRow> _createRow = createRow;
     private readonly Action<TVersionRow, string> _setStatus = setStatus;
     private readonly Action<TVersionRow, string> _setResult = setResult;
     private readonly Action<TVersionRow, string> _setSetText = setSetText;
@@ -244,7 +248,7 @@ internal sealed class ReconstructionProgressTracker<TVersionRow>(
         {
             FinalizeActiveRowAsNoMatch();
 
-            TVersionRow entry = _createRow(versionLabel, e.RARCommandLineArguments, e.RARVersionDirectoryPath);
+            TVersionRow entry = _createRow(versionLabel, e.RARCommandLineArguments, e.RARVersionDirectoryPath, e.InputDirectoryPath, e.OutputFilePath, e.ExecutedArguments);
             _setSetText(entry, _activeSetLabel);
             _versionEntries.Add(entry);
             _activeVersionIndex = _versionEntries.Count - 1;
