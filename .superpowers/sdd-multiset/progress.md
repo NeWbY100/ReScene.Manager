@@ -904,3 +904,23 @@ hand-built events, fire-site population rests on review). r2 MODERATE - -z<comme
 splits under output path with spaces; FIXED JoinExecutedArguments whole-token quoting (quoting never leaks
 into the real invocation). r3 APPROVE (re-verified from scratch). Lib 1428, App.Core 686, Manager 198, gate
 0/0 (one CA1307 fixed). CODEX CATCH-UP QUEUE now: exitcode change + this change.
+
+KEEP WORK FILES SETTING (user-specified semantics: ON=clear on finish, OFF=keep, OFF BY DEFAULT — flips
+the app default to keeping scratch for diagnostics after the user lost per-attempt rar logs to cleanup).
+AppSettings.CleanupReconstructionWorkFiles (default false) + SettingsViewModel round-trip + SettingsWindow
+"Work files" block (header+CheckBox+caption per the Mode-row anatomy; a11y REVISE condition adopted:
+AutomationProperties.HelpText on the CheckBox); ReconstructorViewModel: run-scoped capture at
+RunArchiveSetsAsync start, setting-gated CleanupWorkRoot (ALL deletion funnels through it — peer verified
+no bypass incl. lib sites; InputDirectoryPreparer's delete is a pre-clean), "Work files kept: <path>"
+per kept set EXISTENCE-GATED (peer r1 F1: a set failing pre-scratch — BuildOptionsForSet throw — logged a
+never-created path; PROVEN by probe, fixed + regression test the peer RED-VERIFIED by temporarily
+reverting the fix, md5-checked restore). Also: 3 stale comments fixed (F2); pre-run confirm text now says
+"— including any kept work files —" (F3b); RollBack message names the preserved workRoot (F4).
+RECORDED CONSEQUENCES (F3a): repeat runs into the same output folder now ALWAYS confirm-prompt, and
+confirming wipes the previous run's kept files (pre-run ClearReservedSubtrees unchanged, confirm-gated);
+kept scratch in abandoned output folders has no GC. GATES: a11y-scratch APPROVE (verified in markup);
+peer-scratch-review 2 rounds APPROVE (also verified: fail-safe direction — corrupt settings -> keep;
+composition root passes real settings service; TempDirTestBase reclaims CI scratch). HONEST GAPS (peer):
+SettingsViewModel.Save untested app-wide (pre-existing); no real-run disk-retention test; multi-set
+kept-line cardinality untested. App.Core 689, Manager 199, gate 0/0. SWEEP ADDITION: SettingsWindow
+TextBox/NumericUpDown fields lack programmatic labels (a11y-scratch, pre-existing, own follow-up).
