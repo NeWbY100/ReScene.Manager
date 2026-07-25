@@ -139,7 +139,7 @@
             <Run Text="— Pre-filled into the Reconstructor. Anything inside is deleted when a reconstruction starts."
                  Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
           </TextBlock>
-          <DockPanel>
+          <DockPanel Margin="0,0,0,10">
             <Button DockPanel.Dock="Right"
                     Content="Browse..."
                     Command="{Binding BrowseReconstructOutputCommand}"
@@ -148,6 +148,21 @@
                     Margin="4,0,0,0" />
             <TextBox Text="{Binding ReconstructOutputPath}" />
           </DockPanel>
+
+          <!-- Header + self-labeled CheckBox + indented caption — the window's Mode-row anatomy (§4a).
+               The HelpText carries the kept-for-diagnostics and disk-space context to a Tab-focused
+               screen reader user, since the caption TextBlocks are only visually associated. -->
+          <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+            <Run Text="Work files " FontWeight="SemiBold" />
+            <Run Text="— Each run's work files (input copies, attempted archives, per-attempt rar logs) under the output folder's .rescene-work."
+                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+          </TextBlock>
+          <CheckBox Content="Clear work files when finished"
+                    IsChecked="{Binding CleanupReconstructionWorkFiles}"
+                    AutomationProperties.HelpText="When unchecked, each run's work files (input copies, attempted archives, rar logs) are kept under .rescene-work for diagnostics and can use significant disk space." />
+          <TextBlock Text="When unchecked, work files are kept for diagnostics — they can use significant disk space."
+                     Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                     TextWrapping="Wrap" Margin="20,0,0,0" />
         </StackPanel>
       </Border>
 

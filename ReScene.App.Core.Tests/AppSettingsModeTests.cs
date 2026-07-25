@@ -18,4 +18,8 @@ public class AppSettingsModeTests
     [InlineData(UserMode.Advanced)]
     public void ResolveStartupMode_PersistedValue_IsHonored(UserMode persisted)
         => Assert.Equal(persisted, AppSettingsService.ResolveStartupMode(settingsFileExisted: true, persistedMode: persisted));
+
+    [Fact]
+    public void CleanupReconstructionWorkFiles_DefaultsToOff_SoWorkFilesAreKept()
+        => Assert.False(new AppSettings().CleanupReconstructionWorkFiles);
 }

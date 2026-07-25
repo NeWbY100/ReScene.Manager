@@ -1,3 +1,4 @@
+using ReScene.App.Core.Models;
 using ReScene.App.Core.Services;
 using ReScene.App.Core.ViewModels;
 using ReScene.App.Core.ViewModels.Reconstruction;
@@ -9,9 +10,11 @@ namespace ReScene.App.Core.Tests;
 /// <summary>
 /// Drives the reconstruction run loop with a fake brute-force service that writes committed files into
 /// the guarded scratch work-root exactly as the library would, proving the headline fix (#3): a verified
-/// keyed set's output is relocated into <c>OutputPath\output</c> and its scratch removed; the legacy
-/// empty-key set stays byte-identical; and a cancelled in-flight set's scratch is cleaned while a
-/// committed set is left intact (cases g, byte-identical, headline).
+/// keyed set's output is relocated into <c>OutputPath\output</c>; scratch removal is a user OPT-IN
+/// (<c>CleanupReconstructionWorkFiles</c>) — the removal-asserting tests opt in via
+/// <see cref="FakeAppSettingsService"/>, while the default keeps each set's work-root for diagnostics
+/// (per-attempt rar logs, input copies). The legacy empty-key set stays byte-identical; a cancelled
+/// in-flight set's scratch follows the same gate (cases g, byte-identical, headline, default-keep).
 /// </summary>
 public sealed class ReconstructorRelocationRunTests : TempDirTestBase
 {
@@ -39,8 +42,12 @@ public sealed class ReconstructorRelocationRunTests : TempDirTestBase
             => Task.FromResult(OnRun(options));
     }
 
-    private static ReconstructorViewModel CreateVm(ScriptedBruteForceService brute) =>
-        new(brute, new NoOpFileDialogService(), new InlineUiDispatcher(), new TestUiTimerFactory(), settingsService: null);
+    private static ReconstructorViewModel CreateVm(ScriptedBruteForceService brute, IAppSettingsService? settings = null) =>
+        new(brute, new NoOpFileDialogService(), new InlineUiDispatcher(), new TestUiTimerFactory(), settingsService: settings);
+
+    /// <summary>Settings double opting into clearing the scratch work-roots (the pre-setting behaviour).</summary>
+    private static FakeAppSettingsService CleanupOptIn() =>
+        new() { Settings = new AppSettings { CleanupReconstructionWorkFiles = true } };
 
     private static SRRArchiveSet MakeSet(string key, string dir, params string[] volumes)
     {
@@ -70,13 +77,15 @@ public sealed class ReconstructorRelocationRunTests : TempDirTestBase
         return new BruteForceRunResult(true, combo) { Matches = [new CommittedMatch(combo, [file])] };
     }
 
-    // ── headline (#3): a keyed single set relocates to OutputPath\output and its scratch is removed ──
+    // ── headline (#3): keyed single set relocates; scratch removal now requires the cleanup opt-in ──
 
     [Fact]
     public async Task Run_KeyedSingleSet_RelocatesToOutput_AndRemovesScratch()
     {
+        // Scratch removal is now a user opt-in (CleanupReconstructionWorkFiles); this test opts in to
+        // keep asserting the clearing behaviour.
         var brute = new ScriptedBruteForceService { OnRun = o => WriteBruteSuccess(o, "store_little.rar") };
-        ReconstructorViewModel vm = CreateVm(brute);
+        ReconstructorViewModel vm = CreateVm(brute, CleanupOptIn());
         vm.WinRARPath = TempDir;
         vm.ReleasePath = TempDir;
         vm.OutputPath = TempDir;
@@ -89,6 +98,56 @@ public sealed class ReconstructorRelocationRunTests : TempDirTestBase
         Assert.False(Directory.Exists(Path.Combine(TempDir, ".rescene-work"))
             && Directory.EnumerateFileSystemEntries(Path.Combine(TempDir, ".rescene-work")).Any());
         Assert.True(vm.LastRunSucceeded);
+    }
+
+    [Fact]
+    public async Task Run_Default_KeepsScratchWorkRoot_AndLogsKeptPath()
+    {
+        // DEFAULT behaviour (no opt-in): the set's scratch work-root — per-attempt rar logs, input
+        // copies, attempted archives — survives the run for diagnostics, and its path is logged.
+        var brute = new ScriptedBruteForceService { OnRun = o => WriteBruteSuccess(o, "store_little.rar") };
+        ReconstructorViewModel vm = CreateVm(brute);
+        vm.WinRARPath = TempDir;
+        vm.ReleasePath = TempDir;
+        vm.OutputPath = TempDir;
+        vm.CompleteAllVolumes = false;
+        vm.SetImportStateForTest(ImportWith(MakeSet("store_little", "", "store_little.rar")));
+
+        await vm.RunArchiveSetsForTestAsync(CancellationToken.None);
+
+        // Relocation still commits the verified volume to the real output tree.
+        Assert.True(File.Exists(Path.Combine(TempDir, "output", "store_little.rar")));
+        Assert.True(vm.LastRunSucceeded);
+
+        // The scratch work-root is kept and findable via the logged path.
+        string scratchRoot = Path.Combine(TempDir, ".rescene-work");
+        Assert.True(Directory.Exists(scratchRoot) && Directory.EnumerateDirectories(scratchRoot).Any(),
+            "the set's work-root should survive under .rescene-work by default");
+        Assert.Contains(vm.LogEntries, l => l.Contains("Work files kept: ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Run_SetFailsBeforeScratchExists_DoesNotLogKeptWorkFiles()
+    {
+        // Peer-review F1: a set can fail before its work root is ever created (an unsatisfiable
+        // per-set version requirement throws in BuildOptionsForSet), and the default keep branch must
+        // not point the user at a diagnostics folder that does not exist.
+        var brute = new ScriptedBruteForceService { OnRun = o => WriteBruteSuccess(o, o.RAROptions.OriginalRARFileNames[0]) };
+        ReconstructorViewModel vm = CreateVm(brute);
+        vm.Version5 = false;
+        vm.Version6 = false; // only 3.x/4.x enabled — a RAR5 set is unsatisfiable
+        vm.ReleasePath = TempDir;
+        vm.OutputPath = TempDir;
+        vm.CompleteAllVolumes = false;
+        SRRArchiveSet bad = MakeSet("b", "", "b.rar");
+        bad.RARVersion = 50;
+        vm.SetImportStateForTest(ImportWith(bad));
+
+        await vm.RunArchiveSetsForTestAsync(CancellationToken.None);
+
+        Assert.Contains(vm.LogEntries, l => l.Contains("Set b failed:", StringComparison.Ordinal));
+        Assert.DoesNotContain(vm.LogEntries, l => l.Contains("Work files kept:", StringComparison.Ordinal));
+        Assert.False(vm.LastRunSucceeded);
     }
 
     // ── byte-identical: the legacy empty-key set keeps output at OutputPath\output, no scratch ──
@@ -112,11 +171,12 @@ public sealed class ReconstructorRelocationRunTests : TempDirTestBase
         Assert.True(vm.LastRunSucceeded);
     }
 
-    // ── (g) cancel mid-set: in-flight scratch removed; the already-committed set is untouched ──
+    // ── (g) cancel mid-set (cleanup opted in): in-flight scratch removed; committed set untouched ──
 
     [Fact]
     public async Task Run_CancelDuringSecondSet_CleansItsScratch_LeavesFirstSetCommitted()
     {
+        // Pins the CLEARING behaviour, so this test opts into CleanupReconstructionWorkFiles.
         using var cts = new CancellationTokenSource();
         var brute = new ScriptedBruteForceService
         {
@@ -134,7 +194,7 @@ public sealed class ReconstructorRelocationRunTests : TempDirTestBase
                 return WriteBruteSuccess(o, "a.rar");
             },
         };
-        ReconstructorViewModel vm = CreateVm(brute);
+        ReconstructorViewModel vm = CreateVm(brute, CleanupOptIn());
         vm.WinRARPath = TempDir;
         vm.ReleasePath = TempDir;
         vm.OutputPath = TempDir;

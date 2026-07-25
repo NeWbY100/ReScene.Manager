@@ -143,7 +143,7 @@ internal static class VerifiedOutputRelocator
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             log($"Set {label}: relocation failed ({ex.Message}); rolling back {moved.Count} move(s).");
-            bool fullyRolledBack = RollBack(moved, mover, label, log);
+            bool fullyRolledBack = RollBack(moved, mover, label, workRoot, log);
             return new RelocationOutcome(false, ScratchPreserved: !fullyRolledBack);
         }
 
@@ -255,7 +255,7 @@ internal static class VerifiedOutputRelocator
     /// Moves every <paramref name="moved"/> entry back to its source (reverse order). Returns false if
     /// any restore move itself fails — the caller must then preserve the scratch tree.
     /// </summary>
-    private static bool RollBack(List<(string Source, string Dest)> moved, IFileMover mover, string label, Action<string> log)
+    private static bool RollBack(List<(string Source, string Dest)> moved, IFileMover mover, string label, string workRoot, Action<string> log)
     {
         bool complete = true;
         for (int i = moved.Count - 1; i >= 0; i--)
@@ -268,7 +268,9 @@ internal static class VerifiedOutputRelocator
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 complete = false;
-                log($"Set {label}: rollback could not restore '{dest}' -> '{source}' ({ex.Message}); preserving the scratch work root.");
+                // Name the preserved path: this is the one outcome where the stranded scratch matters
+                // most, and the setting-gated "Work files kept:" line never fires for it.
+                log($"Set {label}: rollback could not restore '{dest}' -> '{source}' ({ex.Message}); preserving the scratch work root: {workRoot}");
             }
         }
 

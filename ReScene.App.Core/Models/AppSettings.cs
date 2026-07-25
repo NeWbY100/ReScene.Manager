@@ -41,6 +41,14 @@ public sealed class AppSettings
     public string ReconstructOutputPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets whether a reconstruction run's per-set scratch work folders (input copies,
+    /// attempted archives, and per-attempt rar process logs under the output folder's
+    /// <c>.rescene-work</c>) are deleted as each set finishes. Off by default: the work files are
+    /// kept for diagnostics; they can use significant disk space.
+    /// </summary>
+    public bool CleanupReconstructionWorkFiles { get; set; }
+
+    /// <summary>
     /// Gets or sets the persisted UI mode. Null means "not yet chosen" — resolved at load time.
     /// </summary>
     public UserMode? Mode { get; set; }

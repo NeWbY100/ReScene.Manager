@@ -23,6 +23,11 @@ public partial class ReconstructorViewModel : ViewModelBase
     private readonly IBruteForceService _bruteForceService;
     private readonly IFileDialogService _fileDialog;
     private readonly IAppSettingsService? _settingsService;
+
+    // Captured once at run start from settings: whether each finished set's scratch work-root is
+    // deleted (user opt-in) or kept for diagnostics (the default — per-attempt rar logs, input
+    // copies and attempted archives stay inspectable under the output folder's .rescene-work).
+    private bool _cleanupWorkFilesThisRun;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly ITempDirectoryService _tempDir;
     private readonly ILauncherService _launcher;
@@ -1759,6 +1764,9 @@ public partial class ReconstructorViewModel : ViewModelBase
         // even though HasScannedVersions correctly reads true.
         await (LastVersionScan ?? Task.CompletedTask);
 
+        // Run-scoped capture: a mid-run settings save must not flip cleanup behaviour between sets.
+        _cleanupWorkFilesThisRun = _settingsService?.Load().CleanupReconstructionWorkFiles ?? false;
+
         SharedReconstructionSettings shared = await BuildSharedSettingsAsync(token);
 
         // For the legacy / no-SRR single flat set the original RAR names may be empty; fall back to
@@ -1883,9 +1891,10 @@ public partial class ReconstructorViewModel : ViewModelBase
             }
             finally
             {
-                // A committed set's scratch was already removed by the relocation; a set whose rollback
-                // could not complete keeps its scratch (recoverable output). Everything else — a failed,
-                // errored, or cancelled set — has its scratch work-root removed here.
+                // A committed set's scratch was already handled by the relocation (cleared or kept per
+                // the work-files setting); a set whose rollback could not complete keeps its scratch
+                // (recoverable output). Everything else — a failed, errored, or cancelled set — goes
+                // through the same setting-gated CleanupWorkRoot here.
                 if (!committed && !preserveScratch)
                 {
                     CleanupWorkRoot(workRoot, set);
@@ -2047,8 +2056,9 @@ public partial class ReconstructorViewModel : ViewModelBase
 
     /// <summary>
     /// Relocates a set's verified volumes out of its guarded scratch work-root into the real output
-    /// tree (<c>OutputPath\output\…</c>) via <see cref="VerifiedOutputRelocator"/>, then removes the
-    /// now-emptied scratch. The legacy single-root set (empty key, work dir == OutputPath) is a no-op:
+    /// tree (<c>OutputPath\output\…</c>) via <see cref="VerifiedOutputRelocator"/>, then clears the
+    /// now-emptied scratch — or keeps it, per the work-files setting (see
+    /// <see cref="CleanupWorkRoot"/>). The legacy single-root set (empty key, work dir == OutputPath) is a no-op:
     /// its output already sits at <c>OutputPath\output\</c>, byte-identical to before.
     /// </summary>
     /// <returns>
@@ -2079,7 +2089,7 @@ public partial class ReconstructorViewModel : ViewModelBase
 
         if (outcome.Success)
         {
-            CleanupWorkRoot(workRoot, set); // remove the now-emptied scratch work-root
+            CleanupWorkRoot(workRoot, set); // clear or keep the now-emptied scratch per the work-files setting
             return (true, false);
         }
 
@@ -2088,14 +2098,29 @@ public partial class ReconstructorViewModel : ViewModelBase
 
     /// <summary>
     /// Removes a set's guarded scratch work-root (a strict descendant of the reserved
-    /// <c>.rescene-work</c> tree) so a cancelled, failed, or committed set leaves no scratch behind.
-    /// No-op for the legacy single-root set (empty key) whose work dir is <c>OutputPath</c> itself, and
-    /// for a work-root a junction would redirect outside the reserved scratch tree (fail-closed).
+    /// <c>.rescene-work</c> tree) — but only when the user opted into clearing work files
+    /// (<see cref="AppSettings.CleanupReconstructionWorkFiles"/>, captured at run start); by default
+    /// the work-root is KEPT for diagnostics and its path is logged. No-op for the legacy single-root
+    /// set (empty key) whose work dir is <c>OutputPath</c> itself, and for a work-root a junction
+    /// would redirect outside the reserved scratch tree (fail-closed).
     /// </summary>
     private void CleanupWorkRoot(string workRoot, SRRArchiveSet set)
     {
         if (string.IsNullOrEmpty(set.Key))
         {
+            return;
+        }
+
+        if (!_cleanupWorkFilesThisRun)
+        {
+            // Only log a path that actually exists: a set can fail before its scratch is ever created
+            // (e.g. an unsatisfiable per-set version requirement throws in BuildOptionsForSet), and
+            // pointing the user at a non-existent diagnostics folder would mislead.
+            if (Directory.Exists(workRoot))
+            {
+                Log(LogTarget.System, $"Work files kept: {workRoot}");
+            }
+
             return;
         }
 
@@ -2121,7 +2146,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     public static string OutputCleanupConfirmText(string outputPath) =>
         $"The output directory already contains reconstruction output:\n\n{outputPath}\n\n" +
         $"Its '{ReconstructionPathGuard.OutputDirName}' and '{ReconstructionPathGuard.ScratchDirName}' subfolders " +
-        "will be cleared before starting (other files are left untouched). Continue?";
+        "— including any kept work files — will be cleared before starting (other files are left untouched). Continue?";
 
     /// <summary>
     /// Whether either reserved subtree under <c>OutputPath</c> currently holds content the pre-run

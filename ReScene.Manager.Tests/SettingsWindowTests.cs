@@ -139,6 +139,44 @@ public class SettingsWindowTests
     }
 
     [AvaloniaFact]
+    public void WorkFilesCheckBox_TwoWayBound_DefaultsUnchecked_AndRoundTrips()
+    {
+        // x:CompileBindings is False in this window, so the CleanupReconstructionWorkFiles binding is
+        // only checked at runtime — this pins it two-way, plus the off-by-default (keep) semantics.
+        string originalFolder = AppDataConfig.FolderName;
+        string tempFolder = UseTempAppDataFolder();
+        try
+        {
+            SettingsViewModel vm = CreateViewModel();
+
+            using var sink = new BindingErrorSink();
+            var window = new SettingsWindow(vm);
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            CheckBox clear = window.GetVisualDescendants().OfType<CheckBox>()
+                .Single(c => (string?)c.Content == "Clear work files when finished");
+            Assert.False(clear.IsChecked);          // off by default: work files are kept
+            Assert.False(vm.CleanupReconstructionWorkFiles);
+
+            clear.IsChecked = true;                  // view -> VM
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.CleanupReconstructionWorkFiles);
+
+            vm.CleanupReconstructionWorkFiles = false; // VM -> view
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(clear.IsChecked);
+
+            Assert.Empty(sink.Messages);
+        }
+        finally
+        {
+            AppDataConfig.FolderName = originalFolder;
+            CleanUpTempAppDataFolder(tempFolder);
+        }
+    }
+
+    [AvaloniaFact]
     public void EditingDefaultAppNameTextBox_UpdatesViewModel()
     {
         string originalFolder = AppDataConfig.FolderName;

@@ -22,6 +22,7 @@ public partial class SettingsViewModel : ViewModelBase
         MKVMaxElements = settings.MKVMaxElements;
         ReconstructWinRARPath = settings.ReconstructWinRARPath;
         ReconstructOutputPath = settings.ReconstructOutputPath;
+        CleanupReconstructionWorkFiles = settings.CleanupReconstructionWorkFiles;
         Mode = settings.Mode ?? UserMode.Advanced;
     }
 
@@ -42,6 +43,9 @@ public partial class SettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     public partial string ReconstructOutputPath { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool CleanupReconstructionWorkFiles { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsBeginnerMode))]
@@ -106,6 +110,7 @@ public partial class SettingsViewModel : ViewModelBase
             MKVMaxElements = Math.Clamp(MKVMaxElements, 100, 1_000_000),
             ReconstructWinRARPath = ReconstructWinRARPath,
             ReconstructOutputPath = ReconstructOutputPath,
+            CleanupReconstructionWorkFiles = CleanupReconstructionWorkFiles,
             Mode = Mode,
         });
         DialogResult = true;
