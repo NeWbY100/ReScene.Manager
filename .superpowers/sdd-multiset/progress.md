@@ -924,3 +924,18 @@ composition root passes real settings service; TempDirTestBase reclaims CI scrat
 SettingsViewModel.Save untested app-wide (pre-existing); no real-run disk-retention test; multi-set
 kept-line cardinality untested. App.Core 689, Manager 199, gate 0/0. SWEEP ADDITION: SettingsWindow
 TextBox/NumericUpDown fields lack programmatic labels (a11y-scratch, pre-existing, own follow-up).
+
+CAV PROCESS-LOG FIX (user: "I don't see any logs being created" — kept work roots had input/+output/ but
+never logs/). Root cause: OpenLog called ONLY from RARCompressDirectoryAsync (standard path); the
+CompleteAllVolumes branch (the WIZARD DEFAULT — BeginnerWizardFactory hard-sets CAV=true) never registered
+its process; WriteOutput = silent TryGetValue no-op → NO CAV run ever produced a per-process log. FIX
+(lib, 2 lines): OpenLog(options.OutputDirectoryPath, rarFilePath) in the CAV branch before subscribe/run.
+PEER APPROVE (warm peer-scratch-review): close symmetry proven on all exit paths (success/swallowed-cancel/
+error-rethrow + early-kill/user-Stop reduce to cancel; the close mechanism was already debugged in anger —
+RARProcess.cs:228 comment); ctor-before-OpenLog ordering load-bearing (missing binary can't strand a
+writer); recorded follow-ups: (a) same-stem same-second log collision truncates under append:false
+(pre-existing, both paths; fix = attempt counter or append:true), (b) log path ~14 chars longer than
+archive path near MAX_PATH, (c) AutoFlush per-line I/O now also paid by CAV runs. OBSERVED-CORRECT: ran a
+throwaway probe with REAL Rar.exe (wrar602) exercising the exact OpenLog→stream→CloseLog sequence — logs/
+created, non-empty log, exit 0 — then deleted the probe (peer's reasoned-vs-observed recommendation).
+CODEX CATCH-UP QUEUE: now five peer-gated changes.
