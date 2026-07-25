@@ -872,3 +872,19 @@ files, created no archive, every combination read as clean "No Match". FIX (lib)
 Path.DirectorySeparatorChar (".\*" Windows byte-identical / "./*" Unix); NormalizeOutputFileName already
 stripped both prefixes. + RARProcessArgumentTests (arg order + platform mask). codex APPROVE (also
 confirmed a11y hook inapplicable — lib-only). Lib 1415, gate 0/0.
+
+COMPLETED-RUN FAILURE CLASSIFICATION (user-reported: rarlinux-3.1.0 loader failure "error while loading
+shared libraries ... libstdc++-libc6.2-2.so.3" showed as Complete/No Match). Root cause: loader failures
+START as a process (no exception) -> exit 127, stderr only, no archive -> the not-created branch treated it
+as an ordinary no-match; the earlier CombinationFailed path only fired from the catch. FIX (lib): keep the
+completed process exit code (standard: RARCompressDirectoryAsync return, previously DISCARDED; CAV: task
+Result when IsCompletedSuccessfully); not-created + known non-zero exit -> WARNING w/ exit code + Combination-
+Failed event (Error row + aggregate). GATE SUBSTITUTION: codex QUOTA-EXHAUSTED until 2026-07-29 07:05 ->
+peer adversarial reviewer (fresh Claude agent, same brief) substituted, TWO ROUNDS: r1 REVISE with a REAL
+regression — RARProcess.RunAsync SWALLOWS the cancellation OCE and returns exit 1, so user Stop before first
+file would fire a spurious "Run failed" (both modes; my brief's premise 1c/1d was wrong) + 2 inaccurate
+comments; FIXED by folding a cancellationRequested arm into the classifier (IsCompletedRunFailure(exit,
+cancel)) + comment corrections + 4-row cancellation Theory. r2 APPROVE (proved laundered-1 unreachable with
+flag false: the value only arises from _cts-linked cancel, monotonic; conservative suppression on the
+cancel-races-genuine-failure edge endorsed as the right tradeoff). Lib 1426, gate 0/0.
+CODEX CATCH-UP QUEUE (required before release push unless user waives): this exitcode change (lib c7e9fb3..HEAD).
