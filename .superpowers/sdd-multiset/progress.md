@@ -847,3 +847,20 @@ logList ListBox on BOTH surfaces; [P1]/[P2] prefixes + run-start legend line; Ad
 pane, AutoScrollToEnd bound to AutoScrollLog checkbox (caret trick deleted); SaveLogAsync drops section
 stitching; aggregate line reworded "...each failure is logged above."; LabeledBy both panes ("Log"/
 "Details"). a11y-lead design-APPROVED (Q1-Q4 answered; logList navigable+conditional-scroll verified).
+
+LOG MERGE (user-approved): Reconstructor's three logs (System/Phase1/Phase2, WPF-era) merged into ONE
+chronological LogEntries (ObservableCollection) — the split had hidden Phase-2 launch failures from wizard
+users. [P1]/[P2] tags stamped at enqueue + run-start legend line; #20 queue/flush/generation guard intact;
+Advanced 3-tab TabControl -> one virtualized logList ListBox (AutoScrollToEnd bound to the Auto-scroll
+checkbox; caret-trick code-behind deleted); wizard Details -> same ListBox; SaveLogAsync writes the log
+verbatim; aggregate reworded "...each failure is logged above."; LabeledBy names both panes (Log/Details).
+Net -60 lines, 12 files, app-only. TWO-ROUND dual-gate: a11y-lead design-APPROVE (Q1-Q4) + fix-APPROVE;
+codex r1 REVISE (REAL: live collection passed to async export -> "Collection was modified" partial-file
+risk, FIXED with UI-thread snapshot; long [P2] lines clipped in both ListBoxes, FIXED with
+HorizontalScrollBarVisibility=Auto on both + headless guards — a11y-lead approved h-scroll over wrap:
+SR-neutral, consistency-positive, wrap worse for magnifier users; Save log = guaranteed full-text path for
+keyboard users, ToolTip rejected); codex r2 APPROVE (0 crit/0 major/0 minor, all concurrency/order/labeling
+guarantees reconfirmed). Suites: App.Core 681, Manager 198, gate 0/0; bridge smoke: merged Advanced pane
+renders (single Log header row, tabs gone). SWEEP NOTE: sibling OperationViewModelBase.SaveLogToFileAsync
+has the same latent live-collection export pattern — snapshot hardening folds into the committed app-wide
+Save-log-outcome change (it touches that exact method).
