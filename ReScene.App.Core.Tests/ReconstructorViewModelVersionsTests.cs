@@ -349,7 +349,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
 
         await vm.RunArchiveSetsForTestAsync(CancellationToken.None);
 
-        Assert.True(vm.LastRunSucceeded, vm.SystemLog);
+        Assert.True(vm.LastRunSucceeded, string.Join(Environment.NewLine, vm.LogEntries));
         Assert.Equal(new[] { 390, 560 }, Ticked(vm)); // proves the completed (not stale) scan landed
     }
 }

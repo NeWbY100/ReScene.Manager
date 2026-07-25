@@ -164,11 +164,11 @@
                 Classes="primary" Padding="14,4" Margin="0,8,0,0"
                 HorizontalAlignment="Left"
                 IsVisible="{Binding LastRunSucceeded}" />
-        <!-- Log header with a Save-log action so the run output can be saved (e.g. to keep the Phase 2
-             failure details, which this System-only pane doesn't show). Mirrors the sibling operation
-             views and the Create-SRR wizard (WCAG 3.2.4 Consistent Identification): Content is the
-             accessible name; always-enabled — SaveLogAsync no-ops when all three logs are empty. The
-             header also names the log TextBox below via LabeledBy (4.1.2). -->
+        <!-- Log header with a Save-log action so the run output can be kept (incl. the [P2] failure
+             lines). Mirrors the sibling operation views and the Create-SRR wizard (WCAG 3.2.4
+             Consistent Identification): Content is the accessible name; always-enabled — SaveLogAsync
+             no-ops when the log is empty. The header also names the log list below via LabeledBy
+             (4.1.2). -->
         <DockPanel Margin="0,12,0,2">
           <Button DockPanel.Dock="Right" Content="Save log..."
                   Command="{Binding SaveLogCommand}"
@@ -176,13 +176,15 @@
           <TextBlock x:Name="DetailsHeader" Text="Details" FontWeight="SemiBold" VerticalAlignment="Center" />
         </DockPanel>
       </StackPanel>
+      <!-- The merged chronological log (same LogEntries the Advanced tab shows): the System-only
+           TextBox hid the engine's [P2] failure lines; the shared logList ListBox virtualizes and
+           auto-sticks to the newest line while the reader is at the bottom. -->
       <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1"
               Background="{DynamicResource SystemControlBackgroundAltHighBrush}" MinHeight="120">
-        <TextBox Text="{Binding SystemLog}" IsReadOnly="True" ScrollViewer.VerticalScrollBarVisibility="Auto"
+        <ListBox ItemsSource="{Binding LogEntries}" Classes="logList"
                  AutomationProperties.LabeledBy="{Binding #DetailsHeader}"
-                 TextWrapping="Wrap" FontFamily="{DynamicResource MonoFontFamily}"
-                 FontSize="{DynamicResource MonoFontSize}" Background="Transparent"
-                 BorderThickness="0" Padding="4" />
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                 FontFamily="{DynamicResource MonoFontFamily}" FontSize="{DynamicResource MonoFontSize}" />
       </Border>
     </DockPanel>
 

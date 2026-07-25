@@ -105,6 +105,9 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
     private static ReconstructorViewModel CreateVm(RaisingBruteForceService brute, IUiDispatcher dispatcher, IFileDialogService? dialog = null) =>
         new(brute, dialog ?? new NoOpFileDialogService(), dispatcher, new TestUiTimerFactory(), settingsService: null);
 
+    /// <summary>The merged log flattened to one string — for contains/order asserts and diagnostics.</summary>
+    private static string JoinedLog(ReconstructorViewModel vm) => string.Join(Environment.NewLine, vm.LogEntries);
+
     private static SRRArchiveSet MakeSet(string key, params string[] volumes)
     {
         var set = new SRRArchiveSet { Key = key, Directory = "" };
@@ -178,7 +181,7 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
 
         await vm.ExecuteReconstructionForTestAsync(CancellationToken.None);
 
-        Assert.True(vm.LastRunSucceeded, vm.SystemLog);
+        Assert.True(vm.LastRunSucceeded, JoinedLog(vm));
         (string Title, string Message) warning = Assert.Single(dialog.Warnings);
         Assert.Equal("Timestamp Preservation Failed", warning.Title);
     }
@@ -236,12 +239,11 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
     }
 
     [Fact]
-    public async Task Completion_WithErroredCombo_SystemLogCarriesCouldNotRunAggregate()
+    public async Task Completion_WithErroredCombo_LogCarriesCouldNotRunAggregate()
     {
-        // The wizard's Details pane binds ONLY the System log, and the per-failure WARNINGs go to the
-        // Phase 2 log — so this aggregate line is the wizard user's sole visible trace that combinations
-        // failed to run. It names the Save log... button by its exact label, since saving is how the
-        // wizard user reaches the Phase 2 section with the individual reasons.
+        // The scannable "did anything fail?" marker at the end of the merged log, matching the
+        // completion heading's "(N could not run)"; the per-failure [P2] WARNINGs sit earlier in the
+        // same log, so the line points up rather than at a separate pane.
         var brute = new RaisingBruteForceService();
         ReconstructorViewModel vm = CreateVm(brute, new InlineUiDispatcher());
         ConfigureRunnablePaths(vm);
@@ -256,9 +258,41 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
 
         await vm.ExecuteReconstructionForTestAsync(CancellationToken.None);
 
-        Assert.Contains("1 combination(s) could not run", vm.SystemLog, StringComparison.Ordinal);
-        Assert.Contains("Save log...", vm.SystemLog, StringComparison.Ordinal);
-        Assert.Contains("Phase 2", vm.SystemLog, StringComparison.Ordinal);
+        Assert.Contains(vm.LogEntries, l => l.Contains("1 combination(s) could not run", StringComparison.Ordinal));
+        Assert.Contains(vm.LogEntries, l => l.Contains("each failure is logged above", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunStart_LogsTagLegend_BeforeAnyPhaseLine()
+    {
+        // The [P1]/[P2] provenance tags need a live, in-log legend (a11y: a reader of the on-screen log
+        // never sees a saved-file header) — logged at the start of the run block, before any engine
+        // phase line can appear.
+        var brute = new RaisingBruteForceService();
+        ReconstructorViewModel vm = CreateVm(brute, new InlineUiDispatcher());
+        ConfigureRunnablePaths(vm);
+        vm.SetImportStateForTest(ImportWith(MakeSet("a", "a.rar")));
+        brute.OnRun = o => WriteBruteSuccess(o, o.RAROptions.OriginalRARFileNames[0]);
+
+        await vm.ExecuteReconstructionForTestAsync(CancellationToken.None);
+
+        int legendIndex = IndexOfContains(vm, "[P1] = Phase 1 (comment filtering), [P2] = Phase 2 (RAR creation)");
+        int startIndex = IndexOfContains(vm, "Starting brute-force...");
+        Assert.True(legendIndex >= 0, "legend line missing:" + Environment.NewLine + JoinedLog(vm));
+        Assert.True(legendIndex < startIndex, "legend must precede the run narrative");
+
+        static int IndexOfContains(ReconstructorViewModel vm, string fragment)
+        {
+            for (int i = 0; i < vm.LogEntries.Count; i++)
+            {
+                if (vm.LogEntries[i].Contains(fragment, StringComparison.Ordinal))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
     }
 
     [Fact]
@@ -315,13 +349,14 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
         // below N — and nothing is applied to the bound log until that flush runs.
         Assert.True(dispatcher.PostCount - postsBefore <= 2,
             $"expected <=2 flush dispatches for {n} events, got {dispatcher.PostCount - postsBefore}");
-        Assert.DoesNotContain("line 0", vm.SystemLog, StringComparison.Ordinal);
+        Assert.DoesNotContain(vm.LogEntries, l => l.Contains("line 0", StringComparison.Ordinal));
 
         dispatcher.Pump();
 
         for (int i = 0; i < n; i++)
         {
-            Assert.Contains($"line {i}", vm.SystemLog, StringComparison.Ordinal);
+            string expected = $"line {i}";
+            Assert.Contains(vm.LogEntries, l => l.EndsWith(expected, StringComparison.Ordinal));
         }
     }
 
@@ -337,7 +372,7 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
 
         // A new run begins: it clears the visible log and bumps the run generation.
         vm.BeginNewLogGenerationForTest();
-        Assert.Equal(string.Empty, vm.SystemLog);
+        Assert.Empty(vm.LogEntries);
 
         // A fresh line of the NEW generation is enqueued.
         brute.RaiseLog(LogTarget.System, "fresh line");
@@ -346,8 +381,8 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
         // batch must be discarded so it cannot repopulate the cleared log; the fresh line lands once.
         dispatcher.Pump();
 
-        Assert.DoesNotContain("stale line", vm.SystemLog, StringComparison.Ordinal);
-        Assert.Contains("fresh line", vm.SystemLog, StringComparison.Ordinal);
+        Assert.DoesNotContain(vm.LogEntries, l => l.Contains("stale line", StringComparison.Ordinal));
+        Assert.Contains(vm.LogEntries, l => l.Contains("fresh line", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -364,18 +399,18 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
 
         // Every batched flush was deferred (never pumped); the run's finally must drain the queue
         // synchronously so the run's log lines are present without the dispatcher ever running a flush.
-        Assert.Contains("Starting brute-force...", vm.SystemLog, StringComparison.Ordinal);
-        Assert.Contains("Brute-force completed", vm.SystemLog, StringComparison.Ordinal);
+        Assert.Contains(vm.LogEntries, l => l.Contains("Starting brute-force...", StringComparison.Ordinal));
+        Assert.Contains(vm.LogEntries, l => l.Contains("Brute-force completed", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void BatchedFlush_PreservesPerTargetOrder()
+    public void BatchedFlush_PreservesChronologicalOrder_AndTagsPhaseLines()
     {
         var brute = new RaisingBruteForceService();
         var dispatcher = new CountingUiDispatcher(deferPosts: true);
         ReconstructorViewModel vm = CreateVm(brute, dispatcher);
 
-        // Interleave targets so a single shared queue must keep each target's lines in enqueue order.
+        // Interleave targets: the merged log must keep the exact global enqueue order.
         brute.RaiseLog(LogTarget.System, "sys 1");
         brute.RaiseLog(LogTarget.Phase1, "p1 1");
         brute.RaiseLog(LogTarget.System, "sys 2");
@@ -385,14 +420,11 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
 
         dispatcher.Pump();
 
-        Assert.True(vm.SystemLog.IndexOf("sys 1", StringComparison.Ordinal) >= 0);
-        Assert.True(vm.SystemLog.IndexOf("sys 1", StringComparison.Ordinal)
-            < vm.SystemLog.IndexOf("sys 2", StringComparison.Ordinal));
-        Assert.True(vm.SystemLog.IndexOf("sys 2", StringComparison.Ordinal)
-            < vm.SystemLog.IndexOf("sys 3", StringComparison.Ordinal));
-        Assert.True(vm.Phase1Log.IndexOf("p1 1", StringComparison.Ordinal)
-            < vm.Phase1Log.IndexOf("p1 2", StringComparison.Ordinal));
-        Assert.Contains("p2 1", vm.Phase2Log, StringComparison.Ordinal);
+        // One merged log in exact enqueue (chronological) order; phase lines carry their [P1]/[P2]
+        // provenance tag, System lines are untagged. Tails strip the "HH:mm:ss " timestamp (9 chars).
+        Assert.Equal(6, vm.LogEntries.Count);
+        string[] tails = [.. vm.LogEntries.Select(l => l[9..])];
+        Assert.Equal(["sys 1", "[P1] p1 1", "sys 2", "[P2] p2 1", "[P1] p1 2", "sys 3"], tails);
     }
 
     // ── #24 — set/attempt progress label (seed vs full) ──

@@ -184,7 +184,7 @@ public sealed class ReconstructorRelocationRunTests : TempDirTestBase
 
         Assert.True(File.Exists(Path.Combine(TempDir, "output", "good.rar")));   // sibling continued & committed
         Assert.False(File.Exists(Path.Combine(TempDir, "output", "bad.rar")));   // failed set produced no output
-        Assert.Contains("Set bad failed:", vm.SystemLog, StringComparison.Ordinal); // recorded as this set's failure
+        Assert.Contains(vm.LogEntries, l => l.Contains("Set bad failed:", StringComparison.Ordinal)); // recorded as this set's failure
         Assert.False(vm.LastRunSucceeded);                                       // summary ran; not all sets matched
     }
 
@@ -222,8 +222,8 @@ public sealed class ReconstructorRelocationRunTests : TempDirTestBase
             AclDenyHelper.RestoreAccess(scratchRoot); // restore BEFORE temp-dir cleanup
         }
 
-        Assert.Contains("Set one failed:", vm.SystemLog, StringComparison.Ordinal);
-        Assert.Contains("Set two failed:", vm.SystemLog, StringComparison.Ordinal);
+        Assert.Contains(vm.LogEntries, l => l.Contains("Set one failed:", StringComparison.Ordinal));
+        Assert.Contains(vm.LogEntries, l => l.Contains("Set two failed:", StringComparison.Ordinal));
         Assert.False(vm.LastRunSucceeded); // summary ran and marked the run failed — the run did not abort
     }
 

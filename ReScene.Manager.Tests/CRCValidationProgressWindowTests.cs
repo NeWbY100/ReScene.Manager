@@ -134,7 +134,7 @@ public class CRCValidationProgressWindowTests
         Assert.False(cancel.IsEnabled);
         Assert.False(closed);
         // StopCommand ran (it logs "Cancellation requested..." to the system log).
-        Assert.Contains("Cancellation requested", vm.SystemLog, StringComparison.Ordinal);
+        Assert.Contains(vm.LogEntries, l => l.Contains("Cancellation requested", StringComparison.Ordinal));
     }
 
     [AvaloniaFact]

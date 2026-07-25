@@ -440,7 +440,13 @@
                   ResizeBehavior="PreviousAndNext"
                   Background="Transparent" />
 
-    <!-- ── Log tabs (bottom panel) ──────────────────────────── -->
+    <!-- ── Log (bottom panel) ───────────────────────────────────
+         One chronological log (LogEntries) replacing the WPF-era System/Phase 1/Phase 2 tabs — the
+         split hid Phase-2 failures from anyone parked on the System tab. Engine phase lines carry
+         [P1]/[P2] tags (legend logged at run start). The virtualized logList ListBox is the app-wide
+         log pattern; the Auto-scroll checkbox binds the style's stick-to-bottom behavior directly
+         (local value over the style's default True), replacing the old caret-to-end code-behind.
+         The header names the list via LabeledBy (4.1.2). -->
     <DockPanel Grid.Row="6">
       <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
         <Button DockPanel.Dock="Right" Content="Save log..."
@@ -452,49 +458,16 @@
                   IsChecked="{Binding AutoScrollLog}"
                   VerticalAlignment="Center"
                   Margin="0,0,8,0" />
-        <TextBlock Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock x:Name="LogHeader" Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
       </DockPanel>
-      <TabControl>
-        <TabItem Header="System">
-          <TextBox x:Name="SystemLogBox"
-                   Text="{Binding SystemLog}"
-                   IsReadOnly="True" AcceptsReturn="True"
-                   TextWrapping="NoWrap"
-                   ScrollViewer.VerticalScrollBarVisibility="Auto"
-                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                   ScrollViewer.AllowAutoHide="False"
-                   FontFamily="{DynamicResource MonoFontFamily}"
-                   FontSize="{DynamicResource MonoFontSize}"
-                   Background="{DynamicResource WindowBackground}"
-                   Foreground="{DynamicResource LogTerminalForeground}" />
-        </TabItem>
-        <TabItem Header="Phase 1">
-          <TextBox x:Name="Phase1LogBox"
-                   Text="{Binding Phase1Log}"
-                   IsReadOnly="True" AcceptsReturn="True"
-                   TextWrapping="NoWrap"
-                   ScrollViewer.VerticalScrollBarVisibility="Auto"
-                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                   ScrollViewer.AllowAutoHide="False"
-                   FontFamily="{DynamicResource MonoFontFamily}"
-                   FontSize="{DynamicResource MonoFontSize}"
-                   Background="{DynamicResource WindowBackground}"
-                   Foreground="{DynamicResource LogTerminalForeground}" />
-        </TabItem>
-        <TabItem Header="Phase 2">
-          <TextBox x:Name="Phase2LogBox"
-                   Text="{Binding Phase2Log}"
-                   IsReadOnly="True" AcceptsReturn="True"
-                   TextWrapping="NoWrap"
-                   ScrollViewer.VerticalScrollBarVisibility="Auto"
-                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                   ScrollViewer.AllowAutoHide="False"
-                   FontFamily="{DynamicResource MonoFontFamily}"
-                   FontSize="{DynamicResource MonoFontSize}"
-                   Background="{DynamicResource WindowBackground}"
-                   Foreground="{DynamicResource LogTerminalForeground}" />
-        </TabItem>
-      </TabControl>
+      <ListBox x:Name="RunLogList"
+               ItemsSource="{Binding LogEntries}"
+               Classes="logList"
+               behaviors:ListBoxAutoScroll.AutoScrollToEnd="{Binding AutoScrollLog}"
+               AutomationProperties.LabeledBy="{Binding #LogHeader}"
+               ScrollViewer.HorizontalScrollBarVisibility="Auto"
+               FontFamily="{DynamicResource MonoFontFamily}"
+               FontSize="{DynamicResource MonoFontSize}" />
     </DockPanel>
 
   </Grid>

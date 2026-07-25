@@ -1,4 +1,6 @@
+using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -6,6 +8,7 @@ using ReScene.App.Core.Services;
 using ReScene.App.Core.ViewModels;
 using ReScene.App.Core.ViewModels.Reconstruction;
 using ReScene.Core;
+using ReScene.Manager.Behaviors;
 using ReScene.Manager.Services;
 using ReScene.Manager.Views;
 
@@ -15,8 +18,8 @@ namespace ReScene.Manager.Tests;
 /// Headless render tests for the ported <see cref="ReconstructorView"/> (the RAR Reconstructor tab).
 /// The central gate is <b>zero binding errors</b> (via <see cref="BindingErrorSink"/>) with a
 /// <see cref="ReconstructorViewModel"/> DataContext, plus: the WinRAR/Release/Output path TextBoxes are
-/// two-way bound, the <c>VolumeSizeUnits</c> ComboBox is populated, the three log TextBoxes are present,
-/// and the log auto-scroll moves the caret to the end only while <c>AutoScrollLog</c> is on. The live
+/// two-way bound, the <c>VolumeSizeUnits</c> ComboBox is populated, the merged <c>LogEntries</c> log
+/// list renders and is named, and its stick-to-bottom behavior binds to <c>AutoScrollLog</c>. The live
 /// reconstruction run and the modal <see cref="BruteForceProgressWindow"/> actually opening over a real
 /// owner are the Reconstructor tab's launch-smoke — here we only assert the <c>IsRunning</c> handler is a
 /// safe no-op without an owning window.
@@ -87,17 +90,18 @@ public class ReconstructorViewTests
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(@"C:\WinRAR", winrar.Text);
 
-        // The settings TabControl has six tabs; the logs TabControl has three (System/Phase 1/Phase 2).
+        // The merged run log: one virtualized logList ListBox bound to LogEntries (the WPF-era
+        // System/Phase 1/Phase 2 log tabs are gone), named by the "Log" header via LabeledBy (4.1.2).
         TabControl[] tabControls = [.. window.GetVisualDescendants().OfType<TabControl>()];
-        TabControl logsTabs = tabControls.Single(t => t.ItemCount == 3);
-        Assert.Equal(["System", "Phase 1", "Phase 2"],
-            logsTabs.Items.OfType<TabItem>().Select(i => i.Header).ToArray());
-
-        // The System log TextBox is realized (its tab is selected) and reflects the bound SystemLog.
-        TextBox systemLog = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "SystemLogBox");
-        vm.SystemLog = "hello log";
+        ListBox runLog = window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "RunLogList");
+        Assert.Same(vm.LogEntries, runLog.ItemsSource);
+        var logLabel = Assert.IsType<TextBlock>(AutomationProperties.GetLabeledBy(runLog));
+        Assert.Equal("Log", logLabel.Text);
+        // Long [P2] command lines must stay reachable (the old TextBox had a horizontal scrollbar).
+        Assert.Equal(ScrollBarVisibility.Auto, ScrollViewer.GetHorizontalScrollBarVisibility(runLog));
+        vm.LogEntries.Add("hello log");
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal("hello log", systemLog.Text);
+        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "hello log");
 
         // The non-editable VolumeSizeUnits ComboBox is populated once the Options tab is realized.
         TabControl settingsTabs = tabControls.Single(t => t.ItemCount == 6);
@@ -111,8 +115,11 @@ public class ReconstructorViewTests
     }
 
     [AvaloniaFact]
-    public void LogAutoScroll_MovesCaretToEnd_OnlyWhenEnabled_NoBindingErrors()
+    public void LogAutoScroll_BehaviorBindsToVmToggle_NoBindingErrors()
     {
+        // The per-TextBox caret trick is gone: the merged log ListBox binds the logList style's
+        // stick-to-bottom behavior (ListBoxAutoScroll.AutoScrollToEnd) to the Auto-scroll checkbox's
+        // AutoScrollLog — unchecking disables even the at-bottom auto-scroll, re-checking restores it.
         ReconstructorViewModel vm = CreateVm();
 
         using var sink = new BindingErrorSink();
@@ -120,19 +127,18 @@ public class ReconstructorViewTests
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        TextBox systemLog = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "SystemLogBox");
+        ListBox runLog = window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "RunLogList");
 
-        // Enabled by default: appending text moves the caret to the end (Avalonia has no ScrollToEnd()).
         Assert.True(vm.AutoScrollLog);
-        vm.SystemLog = "line 1\nline 2\nline 3\n";
-        Dispatcher.UIThread.RunJobs();
-        Assert.Equal(vm.SystemLog.Length, systemLog.CaretIndex);
+        Assert.True(ListBoxAutoScroll.GetAutoScrollToEnd(runLog));
 
-        // Disabled: further appends do NOT jump the caret to the new end.
         vm.AutoScrollLog = false;
-        vm.SystemLog += "line 4\nline 5\n";
         Dispatcher.UIThread.RunJobs();
-        Assert.NotEqual(vm.SystemLog.Length, systemLog.CaretIndex);
+        Assert.False(ListBoxAutoScroll.GetAutoScrollToEnd(runLog));
+
+        vm.AutoScrollLog = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(ListBoxAutoScroll.GetAutoScrollToEnd(runLog));
 
         Assert.Empty(sink.Messages);
     }

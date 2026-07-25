@@ -1,5 +1,6 @@
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -20,7 +21,7 @@ namespace ReScene.Manager.Tests;
 /// <see cref="WizardViewModel.CurrentStepIndex"/> via <c>$parent[Window]</c> + the
 /// <c>IndexEqualsConverter</c>. The central gate is <b>zero binding errors</b> (via
 /// <see cref="BindingErrorSink"/>); the tests also confirm the panels toggle with the index and that
-/// the run step hosts the read-only <c>SystemLog</c> TextBox. The live reconstruction run and the modal
+/// the run step hosts the merged <c>LogEntries</c> log list. The live reconstruction run and the modal
 /// progress window are the Reconstructor's launch-smoke — never exercised here.
 /// </summary>
 public class ReconstructWizardBodyTests
@@ -155,7 +156,7 @@ public class ReconstructWizardBodyTests
     }
 
     [AvaloniaFact]
-    public void RunStep_HasSystemLogTextBox_NoBindingErrors()
+    public void RunStep_HasMergedLogList_NamedDetails_NoBindingErrors()
     {
         ReconstructorViewModel vm = CreateViewModel();
 
@@ -165,16 +166,20 @@ public class ReconstructWizardBodyTests
         wizard.CurrentStepIndex = 2;
         Dispatcher.UIThread.RunJobs();
 
-        // The only read-only TextBox in the body is the run step's SystemLog view.
-        TextBox systemLog = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.IsReadOnly);
-        vm.SystemLog = "hello log";
+        // The run step shows the merged chronological log (same LogEntries the Advanced tab binds).
+        ListBox log = window.GetVisualDescendants().OfType<ListBox>()
+            .Single(l => ReferenceEquals(l.ItemsSource, vm.LogEntries));
+        vm.LogEntries.Add("hello log");
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal("hello log", systemLog.Text);
+        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "hello log");
 
-        // 4.1.2: the bare log TextBox is named by the "Details" header via LabeledBy, so a screen
-        // reader announces what the field is instead of a nameless "edit, read only".
-        var label = Assert.IsType<TextBlock>(AutomationProperties.GetLabeledBy(systemLog));
+        // 4.1.2: the log list is named by the "Details" header via LabeledBy, so a screen reader
+        // announces what the list is instead of a nameless "list".
+        var label = Assert.IsType<TextBlock>(AutomationProperties.GetLabeledBy(log));
         Assert.Equal("Details", label.Text);
+
+        // Long [P2] command lines must stay reachable (the old TextBox wrapped; the list scrolls).
+        Assert.Equal(ScrollBarVisibility.Auto, ScrollViewer.GetHorizontalScrollBarVisibility(log));
 
         Assert.Empty(sink.Messages);
     }
@@ -182,10 +187,9 @@ public class ReconstructWizardBodyTests
     [AvaloniaFact]
     public void RunStep_SaveLogButton_BindsAndInvokesSaveLog()
     {
-        // The run step's log was save-less: the per-failure WARNINGs live in the Phase 2 log, which this
-        // System-only pane never shows, so without Save log... a wizard user had no way to reach them.
-        // The button mirrors the sibling operation views and the Create-SRR wizard, bound to the VM's
-        // existing SaveLogCommand (which writes the System + Phase 1 + Phase 2 sections to one .txt).
+        // The wizard's run log can be saved to a .txt (incl. the [P2] failure lines). The button mirrors
+        // the sibling operation views and the Create-SRR wizard, bound to the VM's SaveLogCommand,
+        // which writes the merged chronological log verbatim.
         var dialog = new RecordingFileDialogService();
         ReconstructorViewModel vm = CreateViewModel(dialog);
 
@@ -199,8 +203,8 @@ public class ReconstructWizardBodyTests
             .Single(b => b.Content is string s && s.StartsWith("Save log", StringComparison.Ordinal));
         Assert.Same(vm.SaveLogCommand, saveLog.Command);
 
-        // With log content present, executing routes to the save dialog (no-ops when all logs are empty).
-        vm.SystemLog = "a line";
+        // With log content present, executing routes to the save dialog (no-ops when the log is empty).
+        vm.LogEntries.Add("a line");
         saveLog.Command!.Execute(null);
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(1, dialog.SaveFileCalls);

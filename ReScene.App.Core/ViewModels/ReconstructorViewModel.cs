@@ -432,11 +432,16 @@ public partial class ReconstructorViewModel : ViewModelBase
         }
     }
 
-    // ── Logs ──
+    // ── Log ──
 
-    [ObservableProperty] public partial string SystemLog { get; set; } = string.Empty;
-    [ObservableProperty] public partial string Phase1Log { get; set; } = string.Empty;
-    [ObservableProperty] public partial string Phase2Log { get; set; } = string.Empty;
+    /// <summary>
+    /// The run's single chronological log, shown by both the Advanced tab and the Beginner wizard and
+    /// written verbatim by Save log. Replaces the WPF-era System/Phase 1/Phase 2 split (the split made
+    /// Phase-2 failures invisible to wizard users parked on the System view). Engine phase lines carry
+    /// a [P1]/[P2] provenance tag (stamped in <see cref="AppendLog"/>; legend logged at run start);
+    /// narrative lines are untagged. Mutated on the UI thread only, via the batched flush (#20).
+    /// </summary>
+    public ObservableCollection<string> LogEntries { get; } = [];
 
     // ── RAR Versions ──
 
@@ -894,10 +899,8 @@ public partial class ReconstructorViewModel : ViewModelBase
         EtaText = string.Empty;
         _progress.Clear();
 
-        // Logs
-        SystemLog = string.Empty;
-        Phase1Log = string.Empty;
-        Phase2Log = string.Empty;
+        // Log
+        LogEntries.Clear();
 
         // The brute-force option toggles (versions, compression, dictionary, timestamps,
         // volume, etc.) are intentionally left untouched: they are re-applied wholesale by
@@ -1598,6 +1601,9 @@ public partial class ReconstructorViewModel : ViewModelBase
     {
         try
         {
+            // Legend for the [P1]/[P2] provenance tags on engine phase lines — logged live (not only in
+            // the saved file) so a reader of the on-screen log can decode the tags (§4a).
+            Log(LogTarget.System, "[P1] = Phase 1 (comment filtering), [P2] = Phase 2 (RAR creation)");
             Log(LogTarget.System, "Starting brute-force...");
             Log(LogTarget.System, $"WinRAR: {WinRARPath}");
             Log(LogTarget.System, $"Release: {ReleasePath}");
@@ -2157,14 +2163,13 @@ public partial class ReconstructorViewModel : ViewModelBase
             ? "Brute-force completed: all sets matched!"
             : "Brute-force completed: not all sets matched.");
 
-        // Existence-of-errors aggregate in the System log: the per-failure WARNINGs live in the Phase 2
-        // log, which the Beginner wizard's Details pane (System-only) never shows — without this line a
-        // wizard user has no visible trace that combinations failed to run at all. Names the Save log...
-        // button by its exact label since that is how the wizard user reaches the Phase 2 section.
+        // Existence-of-errors aggregate: the scannable "did anything fail?" marker at the end of the
+        // log, matching the completion heading's "(N could not run)". The per-failure [P2] WARNINGs sit
+        // earlier in the same merged log, so the line points up rather than at a separate pane.
         if (errorCount > 0)
         {
             Log(LogTarget.System,
-                $"{errorCount} combination(s) could not run — use Save log... to see each failure (Phase 2 section).");
+                $"{errorCount} combination(s) could not run — each failure is logged above.");
         }
     }
 
@@ -2204,9 +2209,9 @@ public partial class ReconstructorViewModel : ViewModelBase
     [RelayCommand]
     private async Task SaveLogAsync()
     {
-        bool hasContent = SystemLog.Length > 0 || Phase1Log.Length > 0 || Phase2Log.Length > 0;
-
-        if (!hasContent)
+        // The single chronological log is saved verbatim — the [P1]/[P2] tags carry the provenance the
+        // old three-section stitching used to encode.
+        if (LogEntries.Count == 0)
         {
             return;
         }
@@ -2221,37 +2226,11 @@ public partial class ReconstructorViewModel : ViewModelBase
 
         try
         {
-            var lines = new List<string>();
-
-            if (SystemLog.Length > 0)
-            {
-                lines.Add("=== System ===");
-                lines.AddRange(SystemLog.Split(Environment.NewLine));
-            }
-
-            if (Phase1Log.Length > 0)
-            {
-                if (lines.Count > 0)
-                {
-                    lines.Add(string.Empty);
-                }
-
-                lines.Add("=== Phase 1 ===");
-                lines.AddRange(Phase1Log.Split(Environment.NewLine));
-            }
-
-            if (Phase2Log.Length > 0)
-            {
-                if (lines.Count > 0)
-                {
-                    lines.Add(string.Empty);
-                }
-
-                lines.Add("=== Phase 2 ===");
-                lines.AddRange(Phase2Log.Split(Environment.NewLine));
-            }
-
-            await LogExporter.SaveAsync(lines, path);
+            // Snapshot on the UI thread before exporting: a run may still be appending via the batched
+            // drain while the exporter enumerates across awaits — writing the live collection can throw
+            // "Collection was modified" mid-write and leave a partial file.
+            string[] snapshot = [.. LogEntries];
+            await LogExporter.SaveAsync(snapshot, path);
             Log(LogTarget.System, $"Log saved to {Path.GetFileName(path)}");
         }
         catch (Exception ex)
@@ -2531,12 +2510,19 @@ public partial class ReconstructorViewModel : ViewModelBase
 
     /// <summary>
     /// Enqueues a timestamped log line (thread-safe) stamped with the current run generation, then
-    /// schedules a single batched flush. Never mutates the bound log properties directly (#20).
+    /// schedules a single batched flush. Never mutates the bound log collection directly (#20).
+    /// Phase lines get their [P1]/[P2] provenance tag here, at enqueue, so the drain is a plain append.
     /// </summary>
     private void AppendLog(LogTarget target, string message)
     {
-        string line = $"{DateTime.Now:HH:mm:ss} {message}";
-        _logQueue.Enqueue(new PendingLogLine(target, line, Volatile.Read(ref _logGeneration)));
+        string tag = target switch
+        {
+            LogTarget.Phase1 => "[P1] ",
+            LogTarget.Phase2 => "[P2] ",
+            _ => string.Empty,
+        };
+        string line = $"{DateTime.Now:HH:mm:ss} {tag}{message}";
+        _logQueue.Enqueue(new PendingLogLine(line, Volatile.Read(ref _logGeneration)));
         ScheduleLogFlush();
     }
 
@@ -2563,7 +2549,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Drains the queue onto the bound log properties, dropping any line whose generation is not the
+    /// Drains the queue onto the bound log collection, dropping any line whose generation is not the
     /// current one — so a stale flush queued by a prior run cannot repopulate a log the next run has
     /// already cleared (#20). Also called synchronously from the run's finally as the final drain.
     /// </summary>
@@ -2577,24 +2563,7 @@ public partial class ReconstructorViewModel : ViewModelBase
                 continue;
             }
 
-            AppendLogLine(entry.Target, entry.Line);
-        }
-    }
-
-    /// <summary>Appends one already-formatted line to its target log property (UI thread only).</summary>
-    private void AppendLogLine(LogTarget target, string line)
-    {
-        switch (target)
-        {
-            case LogTarget.Phase1:
-                Phase1Log = Phase1Log.Length == 0 ? line : Phase1Log + Environment.NewLine + line;
-                break;
-            case LogTarget.Phase2:
-                Phase2Log = Phase2Log.Length == 0 ? line : Phase2Log + Environment.NewLine + line;
-                break;
-            default:
-                SystemLog = SystemLog.Length == 0 ? line : SystemLog + Environment.NewLine + line;
-                break;
+            LogEntries.Add(entry.Line);
         }
     }
 
@@ -2605,9 +2574,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// </summary>
     private void BeginNewLogGeneration()
     {
-        SystemLog = string.Empty;
-        Phase1Log = string.Empty;
-        Phase2Log = string.Empty;
+        LogEntries.Clear();
         Interlocked.Increment(ref _logGeneration);
         Interlocked.Exchange(ref _logFlushScheduled, 0);
     }
@@ -2629,7 +2596,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     internal void BeginNewLogGenerationForTest() => BeginNewLogGeneration();
 
     /// <summary>One queued log line, tagged with the run generation it belongs to (#20).</summary>
-    private readonly record struct PendingLogLine(LogTarget Target, string Line, int Generation);
+    private readonly record struct PendingLogLine(string Line, int Generation);
 
     /// <summary>The active set/attempt label for progress messages: <c>Set X/N · &lt;stage&gt;</c> (#24).</summary>
     private sealed record SetStageLabel(int SetIndex, int SetCount, string Stage)

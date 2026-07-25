@@ -95,7 +95,7 @@ public sealed class ReconstructorPerSetMatrixTests : TempDirTestBase
 
         Assert.True(File.Exists(Path.Combine(TempDir, "output", "a.rar")));   // sibling set committed
         Assert.False(File.Exists(Path.Combine(TempDir, "output", "b.rar")));  // failed set never ran
-        Assert.Contains("Set b failed: no selected WinRAR version can produce RAR5", vm.SystemLog, StringComparison.Ordinal);
+        Assert.Contains(vm.LogEntries, l => l.Contains("Set b failed: no selected WinRAR version can produce RAR5", StringComparison.Ordinal));
         Assert.False(vm.LastRunSucceeded); // not all sets matched
     }
 }
