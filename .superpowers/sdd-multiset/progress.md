@@ -822,3 +822,28 @@ heading gains "(N could not run)" aggregate; heading is a Polite live region. TR
 SHIP (adjudicated codex's 4.1.3 per-cell finding -> text-only grid cells UPHELD + Polite aggregate completion
 heading is the correct locus); codex APPROVE round 3 (r1: double-count + 4.1.3; r2: CompleteAllVolumes fault +
 progress overshoot throw; all fixed). Lib 1414, App.Core 679, Manager 197, gate 0/0.
+
+WIZARD LOG VISIBILITY + SAVE LOG (user-reported: launch-failure errors invisible in the Reconstruct wizard's
+Details; no way to save the log). App-only: (A) completion appends aggregate System-log line when combos
+errored ("N combination(s) could not run - use Save log... to see each failure (Phase 2 section)."); (B)
+"Save log..." button on the wizard Details header -> existing SaveLogCommand (writes System+P1+P2 sections);
+(C) LabeledBy names the log TextBox "Details" (4.1.2). TWO-ROUND dual-gate: a11y-lead APPROVE (wording/
+pattern/LabeledBy) + TWO adjudications on record: (1) wizard-local live completion line WITHDRAWN - the
+BruteForce modal cannot be dismissed mid-run (OnClosing -> Stop), so its Polite heading is the guaranteed
+4.1.3 carrier in wizard runs; a background live region = inert/double-speak. (2) codex's VALID finding
+(Save-log outcome unannounced; silent-failure harm) ruled PRE-EXISTING+UNIFORM across ALL Save-log surfaces
+-> committed dedicated app-wide fix (dedicated Polite save-status via FieldStatusLine on ALL SEVEN surfaces
+- codex round-2 corrected the count from six), TOP of tracked sweep, sequenced immediately after the log
+merge. codex round-1 REVISE (that finding + user's own untracked FolderProfile.pubxml misread as scope);
+round-2 APPROVE with both adjudications. pubxml = user's local VS linux-x64 publish profile, left alone,
+gitignore offer pending with user. App.Core 680, Manager 198, gate 0/0.
+
+TRACKED A11Y SWEEP (priority order): 1. Save-log outcome Polite announcement (SEVEN surfaces, after log
+merge, TOP). 2. logList context-menu Copy (app-wide; precedent: BruteForce grid Copy menu). 3. MessageDialog
+body auto-announce + severity glyph AccessibilityView=Raw. 4. Sibling log-pane LabeledBy names.
+
+NEXT (user-approved): Reconstructor LOG MERGE - one chronological LogEntries (ObservableCollection) +
+logList ListBox on BOTH surfaces; [P1]/[P2] prefixes + run-start legend line; Advanced TabControl -> one
+pane, AutoScrollToEnd bound to AutoScrollLog checkbox (caret trick deleted); SaveLogAsync drops section
+stitching; aggregate line reworded "...each failure is logged above."; LabeledBy both panes ("Log"/
+"Details"). a11y-lead design-APPROVED (Q1-Q4 answered; logList navigable+conditional-scroll verified).
