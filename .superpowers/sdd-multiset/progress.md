@@ -888,3 +888,19 @@ cancel)) + comment corrections + 4-row cancellation Theory. r2 APPROVE (proved l
 flag false: the value only arises from _cts-linked cancel, monotonic; conservative suppression on the
 cancel-races-genuine-failure edge endorsed as the right tradeoff). Lib 1426, gate 0/0.
 CODEX CATCH-UP QUEUE (required before release push unless user waives): this exitcode change (lib c7e9fb3..HEAD).
+
+RUNNABLE COPY FULL COMMAND LINE (user-requested: "It should probably copy the whole command, as-is run" -
+the switches-only copy printed rar's usage screen and twice suggested broken args). Events carry
+InputDirectoryPath/OutputFilePath/ExecutedArguments (BuildFinalArguments HOISTED - pure - so all FIVE
+fire sites incl. the row-creating one carry them); tracker createRow widened; VersionEntry.FullCommandLine
+composes cd/pushd "<inputDir>" && "<rar>" <EXECUTED args> "<out>" mask (Windows=cmd dialect by documented
+choice); ExeAndArguments keeps the terse display form for the "Testing" log lines (a11y-lead's
+dual-consumer catch - log stays byte-identical). GATES: a11y-copycmd APPROVE (payload-only; label kept;
+3 pre-existing minors -> sweep: VersionGrid unnamed, silent no-op copy w/o selection, right-click-selection
+check). peer-copycmd-review THREE ROUNDS: r1 MAJOR - copied line used DISPLAY args, omitting engine-added
+-ma4/-z/-vn -> could silently build RAR5 where the run forced RAR4 (the exact silent-divergence the feature
+exists to kill); FIXED executed-args plumb (r1 also verified 5-site coverage + honest note: plumb test is
+hand-built events, fire-site population rests on review). r2 MODERATE - -z<commentfile> joined unquoted ->
+splits under output path with spaces; FIXED JoinExecutedArguments whole-token quoting (quoting never leaks
+into the real invocation). r3 APPROVE (re-verified from scratch). Lib 1428, App.Core 686, Manager 198, gate
+0/0 (one CA1307 fixed). CODEX CATCH-UP QUEUE now: exitcode change + this change.
