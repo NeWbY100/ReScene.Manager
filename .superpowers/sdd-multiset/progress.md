@@ -864,3 +864,11 @@ guarantees reconfirmed). Suites: App.Core 681, Manager 198, gate 0/0; bridge smo
 renders (single Log header row, tabs gone). SWEEP NOTE: sibling OperationViewModelBase.SaveLogToFileAsync
 has the same latent live-collection export pattern — snapshot hardening folds into the committed app-wide
 Save-log-outcome change (it touches that exact method).
+
+LINUX RAR INPUT-MASK FIX (user-reported: post-chmod, rar executes but "arguments might be wrong" — the
+diagnostic log was rar's HELP screen from a switches-only paste; all switches valid). REAL root cause:
+RARProcess hardcoded input mask ".\*" — on Linux backslash is a plain filename char, rar matched ZERO
+files, created no archive, every combination read as clean "No Match". FIX (lib): mask composed with
+Path.DirectorySeparatorChar (".\*" Windows byte-identical / "./*" Unix); NormalizeOutputFileName already
+stripped both prefixes. + RARProcessArgumentTests (arg order + platform mask). codex APPROVE (also
+confirmed a11y hook inapplicable — lib-only). Lib 1415, gate 0/0.
