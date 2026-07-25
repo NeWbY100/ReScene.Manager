@@ -236,6 +236,32 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
     }
 
     [Fact]
+    public async Task Completion_WithErroredCombo_SystemLogCarriesCouldNotRunAggregate()
+    {
+        // The wizard's Details pane binds ONLY the System log, and the per-failure WARNINGs go to the
+        // Phase 2 log — so this aggregate line is the wizard user's sole visible trace that combinations
+        // failed to run. It names the Save log... button by its exact label, since saving is how the
+        // wizard user reaches the Phase 2 section with the individual reasons.
+        var brute = new RaisingBruteForceService();
+        ReconstructorViewModel vm = CreateVm(brute, new InlineUiDispatcher());
+        ConfigureRunnablePaths(vm);
+        vm.SetImportStateForTest(ImportWith(MakeSet("a", "a.rar")));
+
+        brute.OnRun = _ =>
+        {
+            brute.RaiseProgress(MakeProgress(1));
+            brute.RaiseProgress(MakeFailedProgress(1));
+            return new BruteForceRunResult(false, null);
+        };
+
+        await vm.ExecuteReconstructionForTestAsync(CancellationToken.None);
+
+        Assert.Contains("1 combination(s) could not run", vm.SystemLog, StringComparison.Ordinal);
+        Assert.Contains("Save log...", vm.SystemLog, StringComparison.Ordinal);
+        Assert.Contains("Phase 2", vm.SystemLog, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TimestampFailures_ConcurrentAddWhileSummarising_IsLockGuarded()
     {
         var brute = new RaisingBruteForceService();

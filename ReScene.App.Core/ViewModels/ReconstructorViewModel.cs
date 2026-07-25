@@ -2156,6 +2156,16 @@ public partial class ReconstructorViewModel : ViewModelBase
         Log(LogTarget.System, allOk
             ? "Brute-force completed: all sets matched!"
             : "Brute-force completed: not all sets matched.");
+
+        // Existence-of-errors aggregate in the System log: the per-failure WARNINGs live in the Phase 2
+        // log, which the Beginner wizard's Details pane (System-only) never shows — without this line a
+        // wizard user has no visible trace that combinations failed to run at all. Names the Save log...
+        // button by its exact label since that is how the wizard user reaches the Phase 2 section.
+        if (errorCount > 0)
+        {
+            Log(LogTarget.System,
+                $"{errorCount} combination(s) could not run — use Save log... to see each failure (Phase 2 section).");
+        }
     }
 
     [RelayCommand]

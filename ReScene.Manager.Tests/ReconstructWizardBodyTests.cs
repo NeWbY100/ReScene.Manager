@@ -1,3 +1,4 @@
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
@@ -59,10 +60,27 @@ public class ReconstructWizardBodyTests
         }
     }
 
-    private static ReconstructorViewModel CreateViewModel() =>
+    /// <summary>Counts save-dialog invocations (returning null = user cancels); everything else no-ops.</summary>
+    private sealed class RecordingFileDialogService : IFileDialogService
+    {
+        public int SaveFileCalls { get; private set; }
+
+        public Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters) => Task.FromResult<string?>(null);
+        public Task<IReadOnlyList<string>> OpenFilesAsync(string title, IReadOnlyList<string> filters) => Task.FromResult<IReadOnlyList<string>>([]);
+        public Task<string?> SaveFileAsync(string title, string defaultExtension, IReadOnlyList<string> filters, string? defaultFileName = null) { SaveFileCalls++; return Task.FromResult<string?>(null); }
+        public Task<string?> OpenFolderAsync(string title) => Task.FromResult<string?>(null);
+        public Task<bool> ShowConfirmAsync(string title, string message) => Task.FromResult(false);
+        public Task<string?> PromptForTextAsync(string title, string message, string initialValue) => Task.FromResult<string?>(null);
+        public void ShowError(string title, string message) { }
+        public void ShowWarning(string title, string message) { }
+        public void ShowInfo(string title, string message) { }
+        public bool Confirm(string title, string message) => false;
+    }
+
+    private static ReconstructorViewModel CreateViewModel(IFileDialogService? dialog = null) =>
         new(
             new InertBruteForceService(),
-            new AvaloniaFileDialogService(static () => null), // headless: dialogs no-op, never block
+            dialog ?? new AvaloniaFileDialogService(static () => null), // headless: dialogs no-op, never block
             new InlineUiDispatcher(),
             new InertUiTimerFactory());
 
@@ -152,6 +170,40 @@ public class ReconstructWizardBodyTests
         vm.SystemLog = "hello log";
         Dispatcher.UIThread.RunJobs();
         Assert.Equal("hello log", systemLog.Text);
+
+        // 4.1.2: the bare log TextBox is named by the "Details" header via LabeledBy, so a screen
+        // reader announces what the field is instead of a nameless "edit, read only".
+        var label = Assert.IsType<TextBlock>(AutomationProperties.GetLabeledBy(systemLog));
+        Assert.Equal("Details", label.Text);
+
+        Assert.Empty(sink.Messages);
+    }
+
+    [AvaloniaFact]
+    public void RunStep_SaveLogButton_BindsAndInvokesSaveLog()
+    {
+        // The run step's log was save-less: the per-failure WARNINGs live in the Phase 2 log, which this
+        // System-only pane never shows, so without Save log... a wizard user had no way to reach them.
+        // The button mirrors the sibling operation views and the Create-SRR wizard, bound to the VM's
+        // existing SaveLogCommand (which writes the System + Phase 1 + Phase 2 sections to one .txt).
+        var dialog = new RecordingFileDialogService();
+        ReconstructorViewModel vm = CreateViewModel(dialog);
+
+        using var sink = new BindingErrorSink();
+        (Window window, _, WizardViewModel wizard) = Show(vm);
+
+        wizard.CurrentStepIndex = 2;
+        Dispatcher.UIThread.RunJobs();
+
+        Button saveLog = window.GetVisualDescendants().OfType<Button>()
+            .Single(b => b.Content is string s && s.StartsWith("Save log", StringComparison.Ordinal));
+        Assert.Same(vm.SaveLogCommand, saveLog.Command);
+
+        // With log content present, executing routes to the save dialog (no-ops when all logs are empty).
+        vm.SystemLog = "a line";
+        saveLog.Command!.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(1, dialog.SaveFileCalls);
 
         Assert.Empty(sink.Messages);
     }
