@@ -145,6 +145,56 @@ public class ReconstructorViewTests
     }
 
     [AvaloniaFact]
+    public void VersionsTree_WpfClassicExpander_TogglesAndNamesEverything()
+    {
+        // The versionGroup re-template restores the WPF-classic chrome. Pins: the header toggle
+        // carries the group's accessible name (Avalonia derives none from control content); the
+        // template's IsChecked binding is TWO-WAY (one-way — TemplateBinding's default — would
+        // silently stop expansion); collapsed content leaves the tree; the left chevron Path
+        // exists; and both checkbox tiers expose their 4.1.2 names.
+        ReconstructorViewModel vm = CreateVm();
+        var leaf = new RARVersionLeaf(390, "wrar390");
+        vm.VersionGroups.Add(new RARVersionGroup(3, [leaf]));
+
+        using var sink = new BindingErrorSink();
+        var window = new Window { Width = 1000, Height = 760, Content = new ReconstructorView { DataContext = vm } };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        TabControl settingsTabs = window.GetVisualDescendants().OfType<TabControl>().Single(t => t.ItemCount == 6);
+        settingsTabs.SelectedIndex = 1; // Versions
+        Dispatcher.UIThread.RunJobs();
+
+        Expander group = window.GetVisualDescendants().OfType<Expander>().Single();
+        Assert.Contains("versionGroup", group.Classes);
+
+        ToggleButton toggle = group.GetVisualDescendants().OfType<ToggleButton>()
+            .Single(t => t is not CheckBox);
+        Assert.Equal("RAR 3.x versions", AutomationProperties.GetName(toggle));
+        Assert.Single(group.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Path>(),
+            p => p.Name == "ChevronGlyph");
+
+        // Collapsed by default (no leaf ticked): the leaf checkbox is not realized.
+        Assert.False(group.IsExpanded);
+        Assert.DoesNotContain(group.GetVisualDescendants().OfType<CheckBox>(),
+            c => AutomationProperties.GetName(c) == leaf.AccessibleName);
+
+        // Toggle via the template's button — the two-way pin: a one-way binding leaves IsExpanded false.
+        toggle.IsChecked = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(group.IsExpanded);
+
+        CheckBox headerBox = group.GetVisualDescendants().OfType<CheckBox>()
+            .Single(c => AutomationProperties.GetName(c) == "Select all RAR 3.x versions");
+        Assert.NotNull(headerBox);
+        CheckBox leafBox = group.GetVisualDescendants().OfType<CheckBox>()
+            .Single(c => AutomationProperties.GetName(c) == leaf.AccessibleName);
+        Assert.Equal("3.90 (wrar390)", AutomationProperties.GetName(leafBox));
+
+        Assert.Empty(sink.Messages);
+    }
+
+    [AvaloniaFact]
     public void Header_ShowsWinRarPackDownloadLinks_MatchingWizard()
     {
         // The header's three pack-download links must identify identically to the Beginner

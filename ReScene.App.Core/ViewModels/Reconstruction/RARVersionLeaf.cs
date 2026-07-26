@@ -19,6 +19,12 @@ public sealed partial class RARVersionLeaf(int version, string folderName, strin
         ? $"{version / 100}.{version % 100:D2}"
         : $"{version / 100}.{version % 100:D2} {tag}";
 
+    /// <summary>
+    /// The leaf checkbox's screen-reader name — the visible label plus folder, composed
+    /// explicitly because Avalonia derives no name from panel content (4.1.2).
+    /// </summary>
+    public string AccessibleName => $"{LabelWithTag} {FolderDisplay}";
+
     /// <summary>The originating folder name, parenthesised for the muted ground-truth suffix.</summary>
     public string FolderDisplay { get; } = $"({folderName})";
 

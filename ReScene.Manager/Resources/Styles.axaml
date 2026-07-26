@@ -303,4 +303,72 @@
     <Setter Property="Padding" Value="6,3" />
   </Style>
 
+  <!-- ── Expander.versionGroup — the WPF-classic expander look for the Versions tree ──
+       User feedback preferred the v1.x WPF layout; the markup was always identical, the
+       difference was pure theme chrome. This scoped re-template restores it: small LEFT
+       chevron (a Path — Shapes expose no automation peer, so it is correctly invisible to
+       AT), transparent text-height header instead of Fluent's full-width bar, content
+       unboxed. The header stays a STOCK ToggleButton restyled by properties only, keeping
+       Fluent's focus ring and Space/Enter handling; IsChecked MUST bind TwoWay
+       (TemplateBinding defaults OneWay — one-way silently stops expansion). The
+       ExpanderAutomationPeer rides on the control class, unaffected by the template;
+       PART_ContentPresenter is the one registration-sensitive name. MinHeight 24 on the
+       toggle is the 2.5.8 floor — the sole deliberate deviation from raw WPF density. -->
+  <Style Selector="Expander.versionGroup">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <StackPanel x:CompileBindings="False">
+          <ToggleButton IsChecked="{TemplateBinding IsExpanded, Mode=TwoWay}"
+                        AutomationProperties.Name="{Binding Header, StringFormat='RAR {0} versions'}"
+                        Background="Transparent" BorderThickness="0"
+                        Padding="2,1" MinHeight="24"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Path Name="ChevronGlyph" Data="M 0 0 L 4 4 L 0 8 Z"
+                    Fill="{DynamicResource ForegroundPrimary}"
+                    Width="8" Height="8" Stretch="Uniform"
+                    VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5" />
+              <ContentPresenter Content="{TemplateBinding Header}"
+                                ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                VerticalAlignment="Center" />
+            </StackPanel>
+          </ToggleButton>
+          <ContentPresenter Name="PART_ContentPresenter"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            IsVisible="{TemplateBinding IsExpanded}" />
+        </StackPanel>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="Expander.versionGroup:expanded /template/ Path#ChevronGlyph">
+    <Setter Property="RenderTransform">
+      <RotateTransform Angle="90" />
+    </Setter>
+  </Style>
+  <!-- Fluent ToggleButton paints the ACCENT background when :checked (and tints on hover/press)
+       — an expanded header would become a blue bar. All states stay transparent with the normal
+       foreground; expansion is conveyed by the chevron plus the programmatic Toggle/
+       ExpandCollapse state, so nothing rests on color. -->
+  <Style Selector="Expander.versionGroup /template/ ToggleButton:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundPrimary}" />
+  </Style>
+  <Style Selector="Expander.versionGroup /template/ ToggleButton:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundPrimary}" />
+  </Style>
+  <Style Selector="Expander.versionGroup /template/ ToggleButton:checked /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundPrimary}" />
+  </Style>
+  <Style Selector="Expander.versionGroup /template/ ToggleButton:checked:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundPrimary}" />
+  </Style>
+  <Style Selector="Expander.versionGroup /template/ ToggleButton:checked:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundPrimary}" />
+  </Style>
+
 </Styles>

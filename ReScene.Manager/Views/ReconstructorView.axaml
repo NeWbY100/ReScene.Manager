@@ -204,10 +204,16 @@
                        checkbox toggles all leaves. Groups with ticked leaves start expanded. The
                        WPF bound Run.Text runs are restructured here as horizontal TextBlocks because
                        Avalonia Inlines do not inherit the item DataContext for bindings. -->
-                  <Expander IsExpanded="{Binding IsExpanded}" Margin="0,2,0,0">
+                  <!-- versionGroup restores the WPF-classic expander chrome (left chevron, plain
+                       text-height header) — see the scoped template in Resources/Styles.axaml.
+                       The explicit AutomationProperties.Name entries exist because Avalonia does
+                       not derive names from panel content: without them every checkbox on this
+                       tab reads as an unnamed checkbox to a screen reader (4.1.2). -->
+                  <Expander Classes="versionGroup" IsExpanded="{Binding IsExpanded}" Margin="0,2,0,0">
                     <Expander.Header>
                       <CheckBox IsThreeState="True" IsChecked="{Binding IsChecked, Mode=OneWay}"
-                                Command="{Binding ToggleAllCommand}">
+                                Command="{Binding ToggleAllCommand}"
+                                AutomationProperties.Name="{Binding Header, StringFormat='Select all RAR {0} versions'}">
                         <StackPanel Orientation="Horizontal">
                           <TextBlock Text="RAR " />
                           <TextBlock Text="{Binding Header}" />
@@ -227,6 +233,7 @@
                           <!-- Fixed width keeps the wrap columns aligned; the tooltip carries the
                                full folder name. -->
                           <CheckBox IsChecked="{Binding IsChecked}" ToolTip.Tip="{Binding FolderName}"
+                                    AutomationProperties.Name="{Binding AccessibleName}"
                                     Margin="0,1" Width="230">
                             <StackPanel Orientation="Horizontal">
                               <TextBlock Text="{Binding LabelWithTag}" TextTrimming="CharacterEllipsis" />
