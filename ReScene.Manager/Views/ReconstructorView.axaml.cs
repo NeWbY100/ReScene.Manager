@@ -50,23 +50,9 @@ public partial class ReconstructorView : UserControl
     }
 
     // Opens the resource download link in the OS default browser. Replaces the WPF
-    // OnHyperlinkRequestNavigate + Process.Start; the URL travels on the Button's Tag.
-    private void OnResourceLinkClick(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: string url } && !string.IsNullOrWhiteSpace(url))
-        {
-            // OpenUrl already swallows launch failures; the try/catch is belt-and-braces so a
-            // click can never surface an unhandled exception.
-            try
-            {
-                new SystemLauncherService().OpenUrl(url);
-            }
-            catch
-            {
-                // Best-effort: opening a link should never crash the app.
-            }
-        }
-    }
+    // OnHyperlinkRequestNavigate + Process.Start; the URL travels on the Button's Tag. Behavior is
+    // shared with the wizard and Settings surfaces via ResourceLink.
+    private void OnResourceLinkClick(object? sender, RoutedEventArgs e) => ResourceLink.OpenFromTag(sender);
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {

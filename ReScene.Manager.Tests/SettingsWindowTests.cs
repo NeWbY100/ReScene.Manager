@@ -55,6 +55,19 @@ public class SettingsWindowTests
         }
     }
 
+    /// <summary>
+    /// Selects the settings tab at <paramref name="index"/> and pumps the dispatcher. Unselected tab
+    /// content is not materialized, so every control lookup must select its tab first
+    /// (0 Interface, 1 General, 2 Inspector &amp; Compare, 3 RAR Reconstruction).
+    /// </summary>
+    private static TabControl SelectTab(Window window, int index)
+    {
+        TabControl tabs = window.GetVisualDescendants().OfType<TabControl>().Single();
+        tabs.SelectedIndex = index;
+        Dispatcher.UIThread.RunJobs();
+        return tabs;
+    }
+
     [AvaloniaFact]
     public void Window_IsResizable_WithCenteredFooterButtons()
     {
@@ -70,7 +83,7 @@ public class SettingsWindowTests
             {
                 // Resizable with a sane floor; content scrolls when shrunk below natural height.
                 Assert.True(window.CanResize);
-                Assert.Equal(480, window.MinWidth);
+                Assert.Equal(560, window.MinWidth);
                 Assert.NotNull(window.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault());
 
                 // Cancel/Save carry MinWidth=75, so the global WPF-parity centering style (Fluent
@@ -114,20 +127,25 @@ public class SettingsWindowTests
             window.Show();
             Dispatcher.UIThread.RunJobs();
 
-            TextBox appNameBox = window.GetVisualDescendants().OfType<TextBox>()
-                .Single(t => t.Text == "seeded-app");
-            Assert.Equal(vm.DefaultAppName, appNameBox.Text);
-
-            NumericUpDown[] numerics = [.. window.GetVisualDescendants().OfType<NumericUpDown>()];
-            Assert.Equal(2, numerics.Length);
-            Assert.Contains(numerics, n => n.Value == 42m);
-            Assert.Contains(numerics, n => n.Value == 5000m);
-
+            // Interface tab (default): the seeded Advanced mode is reflected in the radios.
             RadioButton[] radios = [.. window.GetVisualDescendants().OfType<RadioButton>()];
             RadioButton beginner = radios.Single(r => (string?)r.Content == "Beginner");
             RadioButton advanced = radios.Single(r => (string?)r.Content == "Advanced");
             Assert.False(beginner.IsChecked);
             Assert.True(advanced.IsChecked);
+
+            // General tab: app name + recent-files limit.
+            SelectTab(window, 1);
+            TextBox appNameBox = window.GetVisualDescendants().OfType<TextBox>()
+                .Single(t => t.Text == "seeded-app");
+            Assert.Equal(vm.DefaultAppName, appNameBox.Text);
+            NumericUpDown recent = window.GetVisualDescendants().OfType<NumericUpDown>().Single();
+            Assert.Equal(42m, recent.Value);
+
+            // Inspector & Compare tab: the MKV element limit.
+            SelectTab(window, 2);
+            NumericUpDown mkv = window.GetVisualDescendants().OfType<NumericUpDown>().Single();
+            Assert.Equal(5000m, mkv.Value);
 
             Assert.Empty(sink.Messages);
         }
@@ -153,6 +171,7 @@ public class SettingsWindowTests
             var window = new SettingsWindow(vm);
             window.Show();
             Dispatcher.UIThread.RunJobs();
+            SelectTab(window, 3); // work files live on the RAR Reconstruction tab
 
             CheckBox clear = window.GetVisualDescendants().OfType<CheckBox>()
                 .Single(c => (string?)c.Content == "Clear work files when finished");
@@ -187,8 +206,12 @@ public class SettingsWindowTests
             var window = new SettingsWindow(vm);
             window.Show();
             Dispatcher.UIThread.RunJobs();
+            SelectTab(window, 1); // the app-name TextBox lives on the General tab
 
-            TextBox appNameBox = window.GetVisualDescendants().OfType<TextBox>().First();
+            // Declared TextBoxes only: NumericUpDown's template contains its own editor TextBox,
+            // so an unfiltered First() couples to the numeric being declared last on the tab.
+            TextBox appNameBox = window.GetVisualDescendants().OfType<TextBox>()
+                .First(t => t.TemplatedParent is null);
             appNameBox.Text = "Renamed Tool";
             Dispatcher.UIThread.RunJobs();
 
@@ -258,6 +281,71 @@ public class SettingsWindowTests
 
             Assert.True(save.IsDefault);
             Assert.True(cancel.IsCancel);
+        }
+        finally
+        {
+            AppDataConfig.FolderName = originalFolder;
+            CleanUpTempAppDataFolder(tempFolder);
+        }
+    }
+
+    [AvaloniaFact]
+    public void Tabs_FourSectionHeaders_InOrder_DefaultingToInterface()
+    {
+        string originalFolder = AppDataConfig.FolderName;
+        string tempFolder = UseTempAppDataFolder();
+        try
+        {
+            using var sink = new BindingErrorSink();
+            var window = new SettingsWindow(CreateViewModel());
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            // The former section names, verbatim, as plain-string tab headers (2.4.6 + UIA name
+            // derivation); default tab hosts the mode radios — the premise the radio tests rely on.
+            TabControl tabs = window.GetVisualDescendants().OfType<TabControl>().Single();
+            string?[] headers = [.. tabs.Items.OfType<TabItem>().Select(t => t.Header as string)];
+            string?[] expectedHeaders = ["Interface", "General", "Inspector & Compare", "RAR Reconstruction"];
+            Assert.Equal(expectedHeaders, headers);
+            Assert.Equal(0, tabs.SelectedIndex);
+
+            Assert.Empty(sink.Messages);
+            window.Close();
+        }
+        finally
+        {
+            AppDataConfig.FolderName = originalFolder;
+            CleanUpTempAppDataFolder(tempFolder);
+        }
+    }
+
+    [AvaloniaFact]
+    public void RarTab_ShowsWinRarPackDownloadLinks_MatchingOtherSurfaces()
+    {
+        // Settings is the THIRD surface offering the pack downloads; all three assert against
+        // ResourceLinkExpectations so none can silently diverge (WCAG 3.2.4).
+        string originalFolder = AppDataConfig.FolderName;
+        string tempFolder = UseTempAppDataFolder();
+        try
+        {
+            using var sink = new BindingErrorSink();
+            var window = new SettingsWindow(CreateViewModel());
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            SelectTab(window, 3);
+
+            (string?, string?)[] links =
+            [
+                .. window.GetVisualDescendants().OfType<Button>()
+                    .Where(b => b.Classes.Contains("link"))
+                    .Select(b => (b.Content as string, b.Tag as string)),
+            ];
+            Assert.Equal(
+                ResourceLinkExpectations.WinRarPackLinks.Select(p => ((string?)p.Label, (string?)p.Url)),
+                links);
+
+            Assert.Empty(sink.Messages);
+            window.Close();
         }
         finally
         {

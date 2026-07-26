@@ -3,20 +3,183 @@
         x:Class="ReScene.Manager.Views.SettingsWindow"
         x:CompileBindings="False"
         Title="Settings"
-        Width="560"
-        MinWidth="480"
-        MinHeight="320"
-        SizeToContent="Height"
+        Width="700"
+        MinWidth="560"
+        Height="520"
+        MinHeight="360"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         CanResize="True"
         Background="{DynamicResource WindowBackground}"
         Foreground="{DynamicResource ForegroundPrimary}"
         FontFamily="{DynamicResource UIFontFamily}">
-  <DockPanel>
+  <!-- Content row is declared BEFORE the footer row so keyboard focus reaches the tab strip and
+       fields before Cancel/Save (2.4.3 Focus Order — the previous DockPanel declared the footer
+       first). Height is fixed (not SizeToContent) so switching tabs never resizes the window. -->
+  <Grid RowDefinitions="*,Auto">
+
+    <!-- One tab per former section, headers verbatim (2.4.6 / returning-user recognition); plain
+         string headers so each TabItem's UIA name derives from the text. Tab anatomy mirrors the
+         Reconstructor's settings tabs: ScrollViewer + StackPanel, no section chrome inside. -->
+    <TabControl Grid.Row="0" Margin="{DynamicResource PageMargin}">
+
+      <TabItem Header="Interface">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+          <StackPanel>
+            <TextBlock TextWrapping="Wrap" Margin="0,0,0,6">
+              <Run Text="Mode " FontWeight="SemiBold" />
+              <Run Text="— Beginner shows guided wizards on the Home page; Advanced shows every tool as its own tab."
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+            </TextBlock>
+            <StackPanel Orientation="Horizontal">
+              <RadioButton Content="Beginner" GroupName="UiMode"
+                           IsChecked="{Binding IsBeginnerMode}" Margin="0,0,16,0" VerticalAlignment="Center" />
+              <RadioButton Content="Advanced" GroupName="UiMode"
+                           IsChecked="{Binding IsAdvancedMode}" VerticalAlignment="Center" />
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="General">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+          <StackPanel>
+            <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+              <Run Text="Default app name " FontWeight="SemiBold" />
+              <Run Text="— Written into SRR and SRS files you create as the creating application."
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+            </TextBlock>
+            <TextBox Text="{Binding DefaultAppName}"
+                     Margin="0,0,0,10" />
+
+            <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+              <Run Text="Default output directory " FontWeight="SemiBold" />
+              <Run Text="— Pre-filled as the save location when creating SRR and SRS files."
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+            </TextBlock>
+            <DockPanel Margin="0,0,0,10">
+              <Button DockPanel.Dock="Right"
+                      Content="Browse..."
+                      Command="{Binding BrowseOutputDirCommand}"
+                      Classes="ghost"
+                      MinWidth="75"
+                      Margin="4,0,0,0" />
+              <TextBox Text="{Binding DefaultOutputDirectory}" />
+            </DockPanel>
+
+            <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+              <Run Text="Recent files limit " FontWeight="SemiBold" />
+              <Run Text="— How many recently opened files the Home page remembers (1–100)."
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+            </TextBlock>
+            <NumericUpDown Value="{Binding RecentFilesLimit, Mode=TwoWay}"
+                           Minimum="1" Maximum="100"
+                           FormatString="0"
+                           Width="120"
+                           HorizontalAlignment="Left" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="Inspector &amp; Compare">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+          <StackPanel>
+            <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+              <Run Text="MKV element limit " FontWeight="SemiBold" />
+              <Run Text="— Elements parsed when opening an MKV file. Higher shows more of huge files but loads slower."
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+            </TextBlock>
+            <NumericUpDown Value="{Binding MKVMaxElements, Mode=TwoWay}"
+                           Minimum="100" Maximum="1000000"
+                           FormatString="0"
+                           Width="120"
+                           HorizontalAlignment="Left" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="RAR Reconstruction">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+          <StackPanel>
+            <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+              <Run Text="WinRAR versions folder " FontWeight="SemiBold" />
+              <Run Text="— Folder holding your WinRAR versions, each in its own subfolder. Pre-filled into the Reconstructor."
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+            </TextBlock>
+            <DockPanel Margin="0,0,0,2">
+              <Button DockPanel.Dock="Right"
+                      Content="Browse..."
+                      Command="{Binding BrowseReconstructWinRARCommand}"
+                      Classes="ghost"
+                      MinWidth="75"
+                      Margin="4,0,0,0" />
+              <TextBox Text="{Binding ReconstructWinRARPath}" />
+            </DockPanel>
+            <!-- Same three links as the Reconstructor tab header and the Reconstruct wizard
+                 (WCAG 3.2.4: identical labels + URLs, opened via OnResourceLinkClick ->
+                 ResourceLink.OpenFromTag; the FTP-originals archive contains only the Windows
+                 binaries). The lead-in names its antecedent explicitly. -->
+            <WrapPanel Margin="0,0,0,10">
+              <TextBlock Text="Download WinRAR versions from:"
+                         Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                         VerticalAlignment="Center" Margin="0,0,4,0" />
+              <Button Classes="link" Content="Extracted files for Windows (ready to use)"
+                      Tag="https://drive.google.com/file/d/1of053kS2Wxk-foHN_ALRu-u6Tcck58yn/view?usp=drive_link"
+                      Click="OnResourceLinkClick"
+                      FontSize="{DynamicResource FontSizeCaption}" VerticalAlignment="Center" />
+              <TextBlock Text=","
+                         Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                         VerticalAlignment="Center" Margin="0,0,4,0" />
+              <Button Classes="link" Content="Extracted files for Linux (ready to use)"
+                      Tag="https://drive.google.com/file/d/1TcpA7RXoTUEr3pHZ8-4YTcQFRGZYP7v_/view?usp=drive_link"
+                      Click="OnResourceLinkClick"
+                      FontSize="{DynamicResource FontSizeCaption}" VerticalAlignment="Center" Margin="0,0,4,0" />
+              <TextBlock Text="or"
+                         Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                         VerticalAlignment="Center" Margin="0,0,4,0" />
+              <Button Classes="link" Content="Original files from RAR FTP (Windows)"
+                      Tag="https://drive.google.com/file/d/1hvgzSY6YH_ZS3cpy7bHcw2zpjiwuP_Xi/view?usp=drive_link"
+                      Click="OnResourceLinkClick"
+                      FontSize="{DynamicResource FontSizeCaption}" VerticalAlignment="Center" />
+            </WrapPanel>
+
+            <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+              <Run Text="Reconstruction output folder " FontWeight="SemiBold" />
+              <Run Text="— Pre-filled into the Reconstructor. Anything inside is deleted when a reconstruction starts."
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+            </TextBlock>
+            <DockPanel Margin="0,0,0,10">
+              <Button DockPanel.Dock="Right"
+                      Content="Browse..."
+                      Command="{Binding BrowseReconstructOutputCommand}"
+                      Classes="ghost"
+                      MinWidth="75"
+                      Margin="4,0,0,0" />
+              <TextBox Text="{Binding ReconstructOutputPath}" />
+            </DockPanel>
+
+            <!-- Header + self-labeled CheckBox + indented caption — the window's Mode-row anatomy (§4a).
+                 The HelpText carries the kept-for-diagnostics and disk-space context to a Tab-focused
+                 screen reader user, since the caption TextBlocks are only visually associated. -->
+            <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+              <Run Text="Work files " FontWeight="SemiBold" />
+              <Run Text="— Each run's work files (input copies, attempted archives, per-attempt rar logs) under the output folder's .rescene-work."
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+            </TextBlock>
+            <CheckBox Content="Clear work files when finished"
+                      IsChecked="{Binding CleanupReconstructionWorkFiles}"
+                      AutomationProperties.HelpText="When unchecked, each run's work files (input copies, attempted archives, rar logs) are kept under .rescene-work for diagnostics and can use significant disk space." />
+            <TextBlock Text="When unchecked, work files are kept for diagnostics — they can use significant disk space."
+                       Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                       TextWrapping="Wrap" Margin="20,0,0,0" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+    </TabControl>
 
     <!-- ── Footer ────────────────────────────────────────────────── -->
-    <Border DockPanel.Dock="Bottom"
+    <Border Grid.Row="1"
             Background="{DynamicResource SurfaceBackground}"
             BorderBrush="{DynamicResource StatusSeparatorBrush}"
             BorderThickness="0,1,0,0"
@@ -36,138 +199,5 @@
       </StackPanel>
     </Border>
 
-    <!-- Scrollable so the window stays usable when resized below its natural height. -->
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-    <StackPanel Margin="{DynamicResource PageMargin}">
-
-      <!-- ── Interface ─────────────────────────────────────────── -->
-      <TextBlock Text="Interface" FontWeight="SemiBold" Margin="0,0,0,4" />
-      <Border Classes="section" Padding="12">
-        <StackPanel>
-          <TextBlock TextWrapping="Wrap" Margin="0,0,0,6">
-            <Run Text="Mode " FontWeight="SemiBold" />
-            <Run Text="— Beginner shows guided wizards on the Home page; Advanced shows every tool as its own tab."
-                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-          </TextBlock>
-          <StackPanel Orientation="Horizontal">
-            <RadioButton Content="Beginner" GroupName="UiMode"
-                         IsChecked="{Binding IsBeginnerMode}" Margin="0,0,16,0" VerticalAlignment="Center" />
-            <RadioButton Content="Advanced" GroupName="UiMode"
-                         IsChecked="{Binding IsAdvancedMode}" VerticalAlignment="Center" />
-          </StackPanel>
-        </StackPanel>
-      </Border>
-
-      <!-- ── General ───────────────────────────────────────────── -->
-      <TextBlock Text="General" FontWeight="SemiBold" Margin="0,14,0,4" />
-      <Border Classes="section" Padding="12">
-        <StackPanel>
-          <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
-            <Run Text="Default app name " FontWeight="SemiBold" />
-            <Run Text="— Written into SRR and SRS files you create as the creating application."
-                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-          </TextBlock>
-          <TextBox Text="{Binding DefaultAppName}"
-                   Margin="0,0,0,10" />
-
-          <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
-            <Run Text="Default output directory " FontWeight="SemiBold" />
-            <Run Text="— Pre-filled as the save location when creating SRR and SRS files."
-                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-          </TextBlock>
-          <DockPanel Margin="0,0,0,10">
-            <Button DockPanel.Dock="Right"
-                    Content="Browse..."
-                    Command="{Binding BrowseOutputDirCommand}"
-                    Classes="ghost"
-                    MinWidth="75"
-                    Margin="4,0,0,0" />
-            <TextBox Text="{Binding DefaultOutputDirectory}" />
-          </DockPanel>
-
-          <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
-            <Run Text="Recent files limit " FontWeight="SemiBold" />
-            <Run Text="— How many recently opened files the Home page remembers (1–100)."
-                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-          </TextBlock>
-          <NumericUpDown Value="{Binding RecentFilesLimit, Mode=TwoWay}"
-                         Minimum="1" Maximum="100"
-                         FormatString="0"
-                         Width="120"
-                         HorizontalAlignment="Left" />
-        </StackPanel>
-      </Border>
-
-      <!-- ── Inspector & Compare ───────────────────────────────── -->
-      <TextBlock Text="Inspector &amp; Compare" FontWeight="SemiBold" Margin="0,14,0,4" />
-      <Border Classes="section" Padding="12">
-        <StackPanel>
-          <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
-            <Run Text="MKV element limit " FontWeight="SemiBold" />
-            <Run Text="— Elements parsed when opening an MKV file. Higher shows more of huge files but loads slower."
-                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-          </TextBlock>
-          <NumericUpDown Value="{Binding MKVMaxElements, Mode=TwoWay}"
-                         Minimum="100" Maximum="1000000"
-                         FormatString="0"
-                         Width="120"
-                         HorizontalAlignment="Left" />
-        </StackPanel>
-      </Border>
-
-      <!-- ── RAR Reconstruction ────────────────────────────────── -->
-      <TextBlock Text="RAR Reconstruction" FontWeight="SemiBold" Margin="0,14,0,4" />
-      <Border Classes="section" Padding="12">
-        <StackPanel>
-          <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
-            <Run Text="WinRAR versions folder " FontWeight="SemiBold" />
-            <Run Text="— Folder holding your WinRAR versions, each in its own subfolder. Pre-filled into the Reconstructor."
-                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-          </TextBlock>
-          <DockPanel Margin="0,0,0,10">
-            <Button DockPanel.Dock="Right"
-                    Content="Browse..."
-                    Command="{Binding BrowseReconstructWinRARCommand}"
-                    Classes="ghost"
-                    MinWidth="75"
-                    Margin="4,0,0,0" />
-            <TextBox Text="{Binding ReconstructWinRARPath}" />
-          </DockPanel>
-
-          <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
-            <Run Text="Reconstruction output folder " FontWeight="SemiBold" />
-            <Run Text="— Pre-filled into the Reconstructor. Anything inside is deleted when a reconstruction starts."
-                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-          </TextBlock>
-          <DockPanel Margin="0,0,0,10">
-            <Button DockPanel.Dock="Right"
-                    Content="Browse..."
-                    Command="{Binding BrowseReconstructOutputCommand}"
-                    Classes="ghost"
-                    MinWidth="75"
-                    Margin="4,0,0,0" />
-            <TextBox Text="{Binding ReconstructOutputPath}" />
-          </DockPanel>
-
-          <!-- Header + self-labeled CheckBox + indented caption — the window's Mode-row anatomy (§4a).
-               The HelpText carries the kept-for-diagnostics and disk-space context to a Tab-focused
-               screen reader user, since the caption TextBlocks are only visually associated. -->
-          <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
-            <Run Text="Work files " FontWeight="SemiBold" />
-            <Run Text="— Each run's work files (input copies, attempted archives, per-attempt rar logs) under the output folder's .rescene-work."
-                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-          </TextBlock>
-          <CheckBox Content="Clear work files when finished"
-                    IsChecked="{Binding CleanupReconstructionWorkFiles}"
-                    AutomationProperties.HelpText="When unchecked, each run's work files (input copies, attempted archives, rar logs) are kept under .rescene-work for diagnostics and can use significant disk space." />
-          <TextBlock Text="When unchecked, work files are kept for diagnostics — they can use significant disk space."
-                     Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
-                     TextWrapping="Wrap" Margin="20,0,0,0" />
-        </StackPanel>
-      </Border>
-
-    </StackPanel>
-    </ScrollViewer>
-
-  </DockPanel>
+  </Grid>
 </Window>

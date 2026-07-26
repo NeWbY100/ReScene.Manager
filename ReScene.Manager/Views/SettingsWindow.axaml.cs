@@ -24,6 +24,10 @@ public partial class SettingsWindow : Window
 
     private void OnCancelClick(object? sender, RoutedEventArgs e) => Close(false);
 
+    // Opens a WinRAR-pack download link in the OS default browser; the URL travels on the Button's
+    // Tag. Shared behavior with the Reconstructor tab and wizard via ResourceLink.
+    private void OnResourceLinkClick(object? sender, RoutedEventArgs e) => ResourceLink.OpenFromTag(sender);
+
     private void OnSaveClick(object? sender, RoutedEventArgs e)
     {
         // Mirrors the WPF code-behind: the save must be driven from the Click handler (Command

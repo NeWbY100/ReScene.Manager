@@ -2,10 +2,11 @@ namespace ReScene.Manager.Tests;
 
 /// <summary>
 /// The (accessible name, URL) pairs every surface offering the WinRAR-pack downloads must show —
-/// currently the RAR Reconstructor tab header and the Beginner Reconstruct wizard's step 1. Both
-/// views' tests assert against THIS list so editing one surface without the other fails its twin
-/// test instead of silently diverging the identification (WCAG 3.2.4 Consistent Identification).
-/// The FTP-originals archive contains only the Windows binaries, hence its qualifier.
+/// currently the RAR Reconstructor tab header, the Beginner Reconstruct wizard's step 1, and the
+/// Settings window's RAR Reconstruction tab. All three views' tests assert against THIS list so
+/// editing one surface without the others fails its twin test instead of silently diverging the
+/// identification (WCAG 3.2.4 Consistent Identification). The FTP-originals archive contains only
+/// the Windows binaries, hence its qualifier.
 /// </summary>
 internal static class ResourceLinkExpectations
 {

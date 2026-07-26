@@ -3,7 +3,6 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
-using ReScene.App.Core.Services;
 using ReScene.App.Core.ViewModels;
 
 namespace ReScene.Manager.Views.Wizards;
@@ -59,23 +58,8 @@ public partial class ReconstructWizardBody : UserControl
     }
 
     // Opens a WinRAR-pack download link in the OS default browser; the URL travels on the Button's
-    // Tag (mirrors ReconstructorView — the wizard's step 1 shows the same three links).
-    private void OnResourceLinkClick(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: string url } && !string.IsNullOrWhiteSpace(url))
-        {
-            // OpenUrl already swallows launch failures; the try/catch is belt-and-braces so a
-            // click can never surface an unhandled exception.
-            try
-            {
-                new SystemLauncherService().OpenUrl(url);
-            }
-            catch
-            {
-                // Best-effort: opening a link should never crash the app.
-            }
-        }
-    }
+    // Tag. Shared behavior with the Reconstructor tab and Settings via ResourceLink.
+    private void OnResourceLinkClick(object? sender, RoutedEventArgs e) => ResourceLink.OpenFromTag(sender);
 
     // IsRunning only raises a change notification on transition, so this fires exactly once per run.
     // Deferred to the dispatcher (Avalonia's ShowDialog is async; the returned Task is fire-and-forget)
