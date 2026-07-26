@@ -10,10 +10,10 @@ namespace ReScene.App.Core.Tests;
 /// </summary>
 public class NoOpFileDialogService : IFileDialogService
 {
-    public virtual Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters) => Task.FromResult<string?>(null);
-    public virtual Task<IReadOnlyList<string>> OpenFilesAsync(string title, IReadOnlyList<string> filters) => Task.FromResult<IReadOnlyList<string>>([]);
+    public virtual Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters, string? initialPath = null) => Task.FromResult<string?>(null);
+    public virtual Task<IReadOnlyList<string>> OpenFilesAsync(string title, IReadOnlyList<string> filters, string? initialPath = null) => Task.FromResult<IReadOnlyList<string>>([]);
     public virtual Task<string?> SaveFileAsync(string title, string defaultExtension, IReadOnlyList<string> filters, string? defaultFileName = null) => Task.FromResult<string?>(null);
-    public virtual Task<string?> OpenFolderAsync(string title) => Task.FromResult<string?>(null);
+    public virtual Task<string?> OpenFolderAsync(string title, string? initialPath = null) => Task.FromResult<string?>(null);
     public virtual Task<bool> ShowConfirmAsync(string title, string message) => Task.FromResult(false);
     public virtual Task<string?> PromptForTextAsync(string title, string message, string initialValue) => Task.FromResult<string?>(null);
     public virtual void ShowError(string title, string message) { }

@@ -45,7 +45,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
     private async Task BrowseFileAsync()
     {
         string? path = await _fileDialog.OpenFileAsync("Open File to Inspect",
-            FileDialogFilters.InspectFiles);
+            FileDialogFilters.InspectFiles, LoadedFilePath);
 
         if (path is not null)
         {
@@ -702,7 +702,7 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
         }
 
         string? filePath = await _fileDialog.OpenFileAsync("Select File to Add",
-            FileDialogFilters.AllFiles);
+            FileDialogFilters.AllFiles, LoadedFilePath);
 
         if (filePath is null)
         {

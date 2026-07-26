@@ -132,15 +132,15 @@ public class SRREditorViewModelTests
         public string? LastPromptInitialValue { get; private set; }
         public string? LastSaveDefaultFileName { get; private set; }
 
-        public override Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters) => Task.FromResult(OpenFileResult);
-        public override Task<IReadOnlyList<string>> OpenFilesAsync(string title, IReadOnlyList<string> filters) => Task.FromResult(OpenFilesResult);
+        public override Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters, string? initialPath = null) => Task.FromResult(OpenFileResult);
+        public override Task<IReadOnlyList<string>> OpenFilesAsync(string title, IReadOnlyList<string> filters, string? initialPath = null) => Task.FromResult(OpenFilesResult);
 
         public override Task<string?> SaveFileAsync(string title, string defaultExtension, IReadOnlyList<string> filters, string? defaultFileName = null)
         {
             LastSaveDefaultFileName = defaultFileName;
             return Task.FromResult(SaveFileResult);
         }
-        public override Task<string?> OpenFolderAsync(string title) => Task.FromResult(OpenFolderResult);
+        public override Task<string?> OpenFolderAsync(string title, string? initialPath = null) => Task.FromResult(OpenFolderResult);
         public override Task<bool> ShowConfirmAsync(string title, string message) => Task.FromResult(true);
 
         public override Task<string?> PromptForTextAsync(string title, string message, string initialValue)

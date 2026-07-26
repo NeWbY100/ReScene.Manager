@@ -104,7 +104,7 @@ public partial class SampleRestorerViewModel : OperationViewModelBase
     private async Task BrowseSRRAsync()
     {
         string? path = await _fileDialog.OpenFileAsync("Select SRR File",
-            FileDialogFilters.SRRFiles);
+            FileDialogFilters.SRRFiles, SRRFilePath);
 
         if (path is null)
         {
@@ -117,7 +117,8 @@ public partial class SampleRestorerViewModel : OperationViewModelBase
     [RelayCommand]
     private async Task BrowseMediaDirectoryAsync()
     {
-        string? path = await _fileDialog.OpenFolderAsync("Select Media Directory");
+        string? path = await _fileDialog.OpenFolderAsync("Select Media Directory",
+            string.IsNullOrWhiteSpace(MediaDirectoryPath) ? SRRFilePath : MediaDirectoryPath); // media usually sits near the SRR
 
         if (path is null)
         {
@@ -131,7 +132,7 @@ public partial class SampleRestorerViewModel : OperationViewModelBase
     [RelayCommand]
     private async Task BrowseOutputDirectoryAsync()
     {
-        string? path = await _fileDialog.OpenFolderAsync("Select Output Directory");
+        string? path = await _fileDialog.OpenFolderAsync("Select Output Directory", OutputDirectoryPath);
 
         if (path is null)
         {

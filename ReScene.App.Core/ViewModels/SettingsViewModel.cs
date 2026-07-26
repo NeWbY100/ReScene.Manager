@@ -69,7 +69,7 @@ public partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private async Task BrowseOutputDirAsync()
     {
-        string? path = await _fileDialog.OpenFolderAsync("Select default output directory");
+        string? path = await _fileDialog.OpenFolderAsync("Select default output directory", DefaultOutputDirectory);
 
         if (path is not null)
         {
@@ -80,7 +80,7 @@ public partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private async Task BrowseReconstructWinRARAsync()
     {
-        string? path = await _fileDialog.OpenFolderAsync("Select WinRAR versions folder");
+        string? path = await _fileDialog.OpenFolderAsync("Select WinRAR versions folder", ReconstructWinRARPath);
 
         if (path is not null)
         {
@@ -91,7 +91,7 @@ public partial class SettingsViewModel : ViewModelBase
     [RelayCommand]
     private async Task BrowseReconstructOutputAsync()
     {
-        string? path = await _fileDialog.OpenFolderAsync("Select reconstruction output folder");
+        string? path = await _fileDialog.OpenFolderAsync("Select reconstruction output folder", ReconstructOutputPath);
 
         if (path is not null)
         {

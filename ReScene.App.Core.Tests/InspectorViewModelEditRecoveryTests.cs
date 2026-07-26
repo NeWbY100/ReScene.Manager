@@ -55,7 +55,7 @@ public sealed class InspectorViewModelEditRecoveryTests : TempDirTestBase
     // Dialog whose OpenFileAsync returns a fixed path (the file to add).
     private sealed class OpenReturnsPathDialog(string path) : NoOpFileDialogService
     {
-        public override Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters)
+        public override Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters, string? initialPath = null)
             => Task.FromResult<string?>(path);
     }
 

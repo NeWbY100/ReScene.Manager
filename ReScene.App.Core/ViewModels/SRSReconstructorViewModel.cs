@@ -152,7 +152,7 @@ public partial class SRSReconstructorViewModel : OperationViewModelBase
     private async Task BrowseSRSAsync()
     {
         string? path = await _fileDialog.OpenFileAsync("Select SRS File",
-            FileDialogFilters.SRSFiles);
+            FileDialogFilters.SRSFiles, SRSFilePath);
 
         if (path is not null)
         {
@@ -164,7 +164,8 @@ public partial class SRSReconstructorViewModel : OperationViewModelBase
     private async Task BrowseMediaAsync()
     {
         string? path = await _fileDialog.OpenFileAsync("Select Media File",
-            FileDialogFilters.MediaFiles);
+            FileDialogFilters.MediaFiles,
+            string.IsNullOrWhiteSpace(MediaFilePath) ? SRSFilePath : MediaFilePath); // media usually sits beside the SRS
 
         if (path is null)
         {

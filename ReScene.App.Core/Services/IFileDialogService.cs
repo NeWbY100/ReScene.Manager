@@ -2,10 +2,16 @@ namespace ReScene.App.Core.Services;
 
 public interface IFileDialogService
 {
-    public Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters);
-    public Task<IReadOnlyList<string>> OpenFilesAsync(string title, IReadOnlyList<string> filters);
+    // initialPath: the bound field's current value (file or folder, possibly stale or blank).
+    // The picker opens in the nearest existing directory it implies; null keeps the platform
+    // default. Windows' own last-folder memory only applies when no initialPath resolves —
+    // a populated field deliberately wins, so the picker start always matches visible state
+    // (WCAG 3.3.7 Redundant Entry adjacency: never make the user re-navigate a path they
+    // already provided).
+    public Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters, string? initialPath = null);
+    public Task<IReadOnlyList<string>> OpenFilesAsync(string title, IReadOnlyList<string> filters, string? initialPath = null);
     public Task<string?> SaveFileAsync(string title, string defaultExtension, IReadOnlyList<string> filters, string? defaultFileName = null);
-    public Task<string?> OpenFolderAsync(string title);
+    public Task<string?> OpenFolderAsync(string title, string? initialPath = null);
     public Task<bool> ShowConfirmAsync(string title, string message);
     public Task<string?> PromptForTextAsync(string title, string message, string initialValue);
 

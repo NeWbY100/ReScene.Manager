@@ -110,7 +110,7 @@ public sealed class CreatorViewModelTests : IDisposable
         public Queue<string?> PromptResults { get; } = new();   // consumed first, for re-prompt loops
         public IReadOnlyList<string> OpenFilesResult { get; set; } = [];
 
-        public override Task<IReadOnlyList<string>> OpenFilesAsync(string title, IReadOnlyList<string> filters) => Task.FromResult(OpenFilesResult);
+        public override Task<IReadOnlyList<string>> OpenFilesAsync(string title, IReadOnlyList<string> filters, string? initialPath = null) => Task.FromResult(OpenFilesResult);
         public override Task<bool> ShowConfirmAsync(string title, string message) => Task.FromResult(true);
         public override Task<string?> PromptForTextAsync(string title, string message, string initialValue)
             => Task.FromResult(PromptResults.Count > 0 ? PromptResults.Dequeue() : PromptResult);

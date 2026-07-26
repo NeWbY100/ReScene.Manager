@@ -288,7 +288,7 @@ public partial class SRSCreatorViewModel : OperationViewModelBase
     private async Task BrowseInputAsync()
     {
         string? path = await _fileDialog.OpenFileAsync("Select Sample File",
-            FileDialogFilters.MediaSamples);
+            FileDialogFilters.MediaSamples, InputPath);
 
         if (path is null)
         {
@@ -304,7 +304,8 @@ public partial class SRSCreatorViewModel : OperationViewModelBase
     private async Task BrowseMainFileAsync()
     {
         string? path = await _fileDialog.OpenFileAsync("Select Main File (Full Movie)",
-            FileDialogFilters.MediaFiles);
+            FileDialogFilters.MediaFiles,
+            string.IsNullOrWhiteSpace(MainFilePath) ? InputPath : MainFilePath); // movie usually sits beside the sample
 
         if (path is not null)
         {

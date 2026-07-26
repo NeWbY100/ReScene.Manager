@@ -35,7 +35,49 @@ public sealed class AvaloniaFileDialogService : IFileDialogService
 
     private IStorageProvider? GetStorageProvider() => TopLevel.GetTopLevel(_activeWindow())?.StorageProvider;
 
-    public async Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters)
+    /// <summary>
+    /// Resolves the directory an open/save picker should start in from a field's current value:
+    /// an existing directory is itself the answer; anything else (an existing file, or a stale
+    /// leaf that was renamed/deleted) falls back to its containing directory when that exists;
+    /// otherwise <see langword="null"/> — the picker keeps the platform default. Never throws:
+    /// Browse must work no matter what garbage sits in the field (Exists checks and
+    /// <see cref="Path.GetDirectoryName(string)"/> swallow invalid input rather than throwing).
+    /// </summary>
+    internal static string? ResolveStartDirectory(string? initialPath)
+    {
+        if (string.IsNullOrWhiteSpace(initialPath))
+        {
+            return null;
+        }
+
+        if (Directory.Exists(initialPath))
+        {
+            return initialPath;
+        }
+
+        string? parent = null;
+        try
+        {
+            parent = Path.GetDirectoryName(initialPath);
+        }
+        catch (PathTooLongException)
+        {
+            // Unreachable on .NET 10 (GetDirectoryName returns empty for over-long garbage — the
+            // IsNullOrEmpty check below is the real guard); kept as belt-and-braces for other
+            // runtimes/framework changes.
+        }
+
+        return !string.IsNullOrEmpty(parent) && Directory.Exists(parent) ? parent : null;
+    }
+
+    /// <summary>Maps a field value to the picker's <c>SuggestedStartLocation</c> (null = default).</summary>
+    private static async Task<IStorageFolder?> GetStartLocationAsync(IStorageProvider storage, string? initialPath)
+    {
+        string? directory = ResolveStartDirectory(initialPath);
+        return directory is null ? null : await storage.TryGetFolderFromPathAsync(directory);
+    }
+
+    public async Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters, string? initialPath = null)
     {
         IStorageProvider? storage = GetStorageProvider();
         if (storage is null)
@@ -48,12 +90,13 @@ public sealed class AvaloniaFileDialogService : IFileDialogService
             Title = title,
             AllowMultiple = false,
             FileTypeFilter = FilePickerFilters.ToFileTypes(filters),
+            SuggestedStartLocation = await GetStartLocationAsync(storage, initialPath),
         });
 
         return files.Count > 0 ? files[0].TryGetLocalPath() : null;
     }
 
-    public async Task<IReadOnlyList<string>> OpenFilesAsync(string title, IReadOnlyList<string> filters)
+    public async Task<IReadOnlyList<string>> OpenFilesAsync(string title, IReadOnlyList<string> filters, string? initialPath = null)
     {
         IStorageProvider? storage = GetStorageProvider();
         if (storage is null)
@@ -66,6 +109,7 @@ public sealed class AvaloniaFileDialogService : IFileDialogService
             Title = title,
             AllowMultiple = true,
             FileTypeFilter = FilePickerFilters.ToFileTypes(filters),
+            SuggestedStartLocation = await GetStartLocationAsync(storage, initialPath),
         });
 
         return files
@@ -92,17 +136,13 @@ public sealed class AvaloniaFileDialogService : IFileDialogService
         };
 
         // Callers may suggest a full path; open in that folder but show only the file name.
-        string? directory = string.IsNullOrEmpty(defaultFileName) ? null : Path.GetDirectoryName(defaultFileName);
-        if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
-        {
-            options.SuggestedStartLocation = await storage.TryGetFolderFromPathAsync(directory);
-        }
+        options.SuggestedStartLocation = await GetStartLocationAsync(storage, defaultFileName);
 
         IStorageFile? file = await storage.SaveFilePickerAsync(options);
         return file?.TryGetLocalPath();
     }
 
-    public async Task<string?> OpenFolderAsync(string title)
+    public async Task<string?> OpenFolderAsync(string title, string? initialPath = null)
     {
         IStorageProvider? storage = GetStorageProvider();
         if (storage is null)
@@ -114,6 +154,7 @@ public sealed class AvaloniaFileDialogService : IFileDialogService
         {
             Title = title,
             AllowMultiple = false,
+            SuggestedStartLocation = await GetStartLocationAsync(storage, initialPath),
         });
 
         return folders.Count > 0 ? folders[0].TryGetLocalPath() : null;

@@ -106,7 +106,7 @@ public partial class BeginnerRestoreViewModel(IFileDialogService fileDialog) : V
     private async Task BrowseInputAsync()
     {
         string? path = await fileDialog.OpenFileAsync(
-            "Select an SRR or SRS file", FileDialogFilters.SRRAndSRS);
+            "Select an SRR or SRS file", FileDialogFilters.SRRAndSRS, InputPath);
         if (path is not null)
         {
             InputPath = path;

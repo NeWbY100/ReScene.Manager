@@ -45,7 +45,7 @@ public class ReconstructorViewModelArchiveSetTests
     {
         private int _openFileCalls;
 
-        public override Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters)
+        public override Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters, string? initialPath = null)
         {
             if (_openFileCalls++ == 0)
             {
@@ -64,7 +64,7 @@ public class ReconstructorViewModelArchiveSetTests
     {
         private int _index;
 
-        public override Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters) =>
+        public override Task<string?> OpenFileAsync(string title, IReadOnlyList<string> filters, string? initialPath = null) =>
             Task.FromResult(_index < paths.Length ? paths[_index++] : null);
     }
 

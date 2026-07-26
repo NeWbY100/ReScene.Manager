@@ -224,7 +224,7 @@ public partial class SRREditorViewModel(ISRREditingService srrEditing, IFileDial
     [RelayCommand]
     private async Task BrowseSourceAsync()
     {
-        string? path = await _fileDialog.OpenFileAsync("Select SRR to Edit", FileDialogFilters.SRRFiles);
+        string? path = await _fileDialog.OpenFileAsync("Select SRR to Edit", FileDialogFilters.SRRFiles, SourcePath);
         if (path is not null)
         {
             SourcePath = path;
@@ -261,7 +261,7 @@ public partial class SRREditorViewModel(ISRREditingService srrEditing, IFileDial
         }
 
         IReadOnlyList<string> paths = await _fileDialog.OpenFilesAsync(
-            "Select Files to Store", FileDialogFilters.StoredFiles);
+            "Select Files to Store", FileDialogFilters.StoredFiles, SourcePath);
 
         if (paths.Count == 0)
         {
@@ -380,7 +380,8 @@ public partial class SRREditorViewModel(ISRREditingService srrEditing, IFileDial
 
         List<string> names = [.. SelectedStoredFiles.Select(f => f.Name)];
         string? folder = await _fileDialog.OpenFolderAsync(
-            names.Count == 1 ? "Choose where to save the file" : "Choose where to save the files");
+            names.Count == 1 ? "Choose where to save the file" : "Choose where to save the files",
+            SourcePath);
         if (folder is null)
         {
             return;

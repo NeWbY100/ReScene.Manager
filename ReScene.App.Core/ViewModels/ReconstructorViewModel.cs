@@ -990,7 +990,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     [RelayCommand]
     private async Task BrowseWinRARAsync()
     {
-        string? path = await _fileDialog.OpenFolderAsync("Select WinRAR Installations Directory");
+        string? path = await _fileDialog.OpenFolderAsync("Select WinRAR Installations Directory", WinRARPath);
         if (path is not null)
         {
             WinRARPath = path;
@@ -1000,7 +1000,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     [RelayCommand]
     private async Task BrowseReleaseAsync()
     {
-        string? path = await _fileDialog.OpenFolderAsync("Select Release Directory");
+        string? path = await _fileDialog.OpenFolderAsync("Select Release Directory", ReleasePath);
         if (path is not null)
         {
             ReleasePath = path;
@@ -1010,8 +1010,15 @@ public partial class ReconstructorViewModel : ViewModelBase
     [RelayCommand]
     private async Task BrowseVerificationAsync()
     {
+        // Anchor on the field unless it is blank OR points at the SRR import's auto-extracted SFV
+        // in the scratch temp dir — starting the picker inside that scratch folder would strand the
+        // user far from their release; the .sfv they actually want lives in the release.
+        bool fieldIsUsableAnchor = !string.IsNullOrWhiteSpace(VerificationPath)
+            && !(_sfvTempDir is not null && VerificationPath.StartsWith(_sfvTempDir, StringComparison.Ordinal));
+
         string? path = await _fileDialog.OpenFileAsync("Select Verification File",
-            FileDialogFilters.VerificationFiles);
+            FileDialogFilters.VerificationFiles,
+            fieldIsUsableAnchor ? VerificationPath : ReleasePath);
         if (path is not null)
         {
             VerificationPath = path;
@@ -1021,7 +1028,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     [RelayCommand]
     private async Task BrowseOutputAsync()
     {
-        string? path = await _fileDialog.OpenFolderAsync("Select Output Directory");
+        string? path = await _fileDialog.OpenFolderAsync("Select Output Directory", OutputPath);
         if (path is not null)
         {
             OutputPath = path;
@@ -1034,7 +1041,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     private async Task ImportSRRAsync()
     {
         string? path = await _fileDialog.OpenFileAsync("Select SRR File",
-            FileDialogFilters.SRRFiles);
+            FileDialogFilters.SRRFiles, ReleasePath); // SRRs are typically kept near the release
         if (path is null)
         {
             return;
@@ -1267,7 +1274,7 @@ public partial class ReconstructorViewModel : ViewModelBase
     private async Task ImportConfigAsync()
     {
         string? path = await _fileDialog.OpenFileAsync("Select Reconstructor Configuration",
-            FileDialogFilters.ReconstructorConfig);
+            FileDialogFilters.ReconstructorConfig); // no meaningful anchor — deliberate platform-default start
         if (path is null)
         {
             return;

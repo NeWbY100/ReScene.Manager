@@ -171,7 +171,7 @@ public partial class CreatorViewModel : OperationViewModelBase
     [RelayCommand]
     private async Task BrowseInputFolderAsync()
     {
-        string? path = await _fileDialog.OpenFolderAsync("Select Release Folder");
+        string? path = await _fileDialog.OpenFolderAsync("Select Release Folder", InputPath);
 
         if (path is not null)
         {
@@ -302,7 +302,7 @@ public partial class CreatorViewModel : OperationViewModelBase
     private async Task BrowseInputAsync()
     {
         string? path = await _fileDialog.OpenFileAsync("Select Input File",
-            FileDialogFilters.SFVAndRAR);
+            FileDialogFilters.SFVAndRAR, InputPath);
 
         if (path is not null)
         {
@@ -430,7 +430,7 @@ public partial class CreatorViewModel : OperationViewModelBase
     private async Task AddStoredFileAsync()
     {
         IReadOnlyList<string> paths = await _fileDialog.OpenFilesAsync(
-            "Select Files to Store", FileDialogFilters.StoredFiles);
+            "Select Files to Store", FileDialogFilters.StoredFiles, InputPath);
 
         foreach (string path in paths)
         {
@@ -546,7 +546,7 @@ public partial class CreatorViewModel : OperationViewModelBase
     private async Task AddSampleAsync()
     {
         IReadOnlyList<string> paths = await _fileDialog.OpenFilesAsync(
-            "Select Sample File(s)", FileDialogFilters.MediaSamples);
+            "Select Sample File(s)", FileDialogFilters.MediaSamples, InputPath);
 
         foreach (string path in paths)
         {
@@ -570,7 +570,7 @@ public partial class CreatorViewModel : OperationViewModelBase
     private async Task AddSubtitleAsync()
     {
         IReadOnlyList<string> paths = await _fileDialog.OpenFilesAsync(
-            "Select Subtitle .sfv (its .rar volumes must sit beside it)", FileDialogFilters.SubtitleSfv);
+            "Select Subtitle .sfv (its .rar volumes must sit beside it)", FileDialogFilters.SubtitleSfv, InputPath);
 
         foreach (string path in paths)
         {

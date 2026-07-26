@@ -160,7 +160,8 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
     private async Task BrowseLeftAsync()
     {
         string? path = await _fileDialog.OpenFileAsync("Open Left File",
-            FileDialogFilters.CompareFiles);
+            FileDialogFilters.CompareFiles,
+            string.IsNullOrWhiteSpace(LeftFilePath) ? RightFilePath : LeftFilePath); // compared files are usually siblings
 
         if (path is not null)
         {
@@ -172,7 +173,8 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
     private async Task BrowseRightAsync()
     {
         string? path = await _fileDialog.OpenFileAsync("Open Right File",
-            FileDialogFilters.CompareFiles);
+            FileDialogFilters.CompareFiles,
+            string.IsNullOrWhiteSpace(RightFilePath) ? LeftFilePath : RightFilePath); // compared files are usually siblings
 
         if (path is not null)
         {

@@ -286,7 +286,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private async Task OpenFileAsync()
     {
         string? path = await _fileDialog.OpenFileAsync(
-            "Open Scene File", FileDialogFilters.SceneFiles);
+            "Open Scene File", FileDialogFilters.SceneFiles, Inspector.LoadedFilePath);
 
         if (path is not null)
         {
