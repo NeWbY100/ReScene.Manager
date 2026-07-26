@@ -23,19 +23,29 @@
                  Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" />
       <!-- WPF inline Hyperlinks have no Avalonia equivalent; the "download from … or …" line becomes a
-           caption plus two Button Classes="link" that open through the SystemLauncherService (see code-behind). -->
+           caption plus link-class Buttons that open through the SystemLauncherService (see code-behind).
+           Every link carries its platform qualifier — the FTP-originals archive contains only the
+           Windows binaries. The comma TextBlock carries the gap so it renders flush against the first
+           link (§4a nit). -->
       <WrapPanel Margin="0,2,0,0">
         <TextBlock Text="WinRAR versions needed for reconstruction can be downloaded from:"
                    Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
                    VerticalAlignment="Center" Margin="0,0,4,0" />
-        <Button Classes="link" Content="Extracted files (ready to use)"
+        <Button Classes="link" Content="Extracted files for Windows (ready to use)"
                 Tag="https://drive.google.com/file/d/1of053kS2Wxk-foHN_ALRu-u6Tcck58yn/view?usp=drive_link"
+                Click="OnResourceLinkClick"
+                FontSize="{DynamicResource FontSizeCaption}" VerticalAlignment="Center" />
+        <TextBlock Text=","
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                   VerticalAlignment="Center" Margin="0,0,4,0" />
+        <Button Classes="link" Content="Extracted files for Linux (ready to use)"
+                Tag="https://drive.google.com/file/d/1TcpA7RXoTUEr3pHZ8-4YTcQFRGZYP7v_/view?usp=drive_link"
                 Click="OnResourceLinkClick"
                 FontSize="{DynamicResource FontSizeCaption}" VerticalAlignment="Center" Margin="0,0,4,0" />
         <TextBlock Text="or"
                    Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
                    VerticalAlignment="Center" Margin="0,0,4,0" />
-        <Button Classes="link" Content="Original files from RAR FTP"
+        <Button Classes="link" Content="Original files from RAR FTP (Windows)"
                 Tag="https://drive.google.com/file/d/1hvgzSY6YH_ZS3cpy7bHcw2zpjiwuP_Xi/view?usp=drive_link"
                 Click="OnResourceLinkClick"
                 FontSize="{DynamicResource FontSizeCaption}" VerticalAlignment="Center" />
