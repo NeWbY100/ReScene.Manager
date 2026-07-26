@@ -9,8 +9,9 @@
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource WindowBackground}"
         Foreground="{DynamicResource ForegroundPrimary}"
-        FontFamily="{DynamicResource UIFontFamily}"
-        FontSize="{DynamicResource FontSizeBody}">
+        FontFamily="{DynamicResource UIFontFamily}">
+  <!-- No root FontSize: replaces the native MessageBox (~12px text); follows the app-wide 12
+       (default + :is(Window) enforcement). PromptDialog differs deliberately (v1.9 pinned Body). -->
   <DockPanel Margin="{DynamicResource PageMargin}">
 
     <StackPanel DockPanel.Dock="Bottom"

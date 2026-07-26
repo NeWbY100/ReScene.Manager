@@ -7,8 +7,10 @@
         WindowStartupLocation="CenterOwner" CanResize="True"
         Background="{DynamicResource WindowBackground}"
         Foreground="{DynamicResource ForegroundPrimary}"
-        FontFamily="{DynamicResource UIFontFamily}"
-        FontSize="{DynamicResource FontSizeBody}">
+        FontFamily="{DynamicResource UIFontFamily}">
+  <!-- No root FontSize: wizard body text follows the app-wide 12 (default + :is(Window)
+       enforcement), keeping Beginner pages consistent with the hub in MainWindow; headings keep
+       their explicit tokens. -->
   <DockPanel Margin="{DynamicResource PageMargin}">
 
     <!-- Header -->

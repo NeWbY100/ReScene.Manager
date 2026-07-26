@@ -8,12 +8,17 @@
     <Setter Property="Padding" Value="4,0,0,0" />
   </Style>
 
-  <!-- 12px content parity (see the ControlContentThemeFontSize note in Density.axaml): the
-       Window-level FontSize covers UNSTYLED TextBlocks via inheritance in every window (this is
-       an app-level style, so Settings/About/progress windows inherit too). Popup-hosted trees
-       (tooltips, menu flyouts) do not inherit from a Window — their themed content follows the
-       Density resource instead. -->
-  <Style Selector="Window">
+  <!-- 12px content parity (see the ControlContentThemeFontSize note in Density.axaml). Avalonia's
+       DEFAULT FontSize is already 12, so this style is enforcement against default/theme drift
+       plus the written contract, not the supply. MUST be :is(Window) — a plain "Window" selector
+       matches the style KEY, and every app window is a subclass (MainWindow, SettingsWindow, ...),
+       so "Window" silently matches nothing. The real hazard is a root-level FontSize pin on a
+       window: a LOCAL VALUE out-prioritizes this style and re-inflates every inheriting control
+       (that was the shipped 14px regression) — PromptDialog is the one sanctioned pin (v1.9
+       parity, 14). Popup-hosted trees (tooltips, menu flyouts) do not inherit from a Window —
+       their themed content follows the Density resource instead. WindowFontSizeParityTests
+       enforces the whole map. -->
+  <Style Selector=":is(Window)">
     <Setter Property="FontSize" Value="12" />
   </Style>
 

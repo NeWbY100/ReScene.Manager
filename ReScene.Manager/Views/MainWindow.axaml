@@ -8,8 +8,11 @@
         Width="1100" Height="720"
         Icon="/app.ico"
         Background="{DynamicResource WindowBackground}"
-        FontFamily="{DynamicResource UIFontFamily}"
-        FontSize="{DynamicResource FontSizeBody}">
+        FontFamily="{DynamicResource UIFontFamily}">
+  <!-- No root FontSize (v1.9 parity): the WPF MainWindow had none, so content rendered at the
+       12px default — as does Avalonia's. A root pin here is a LOCAL VALUE: it out-prioritizes
+       the :is(Window) enforcement style and silently re-inflates every inheriting control
+       (TextBox/CheckBox), which is exactly the shipped 14px regression. -->
 
   <Window.KeyBindings>
     <KeyBinding Gesture="Ctrl+O" Command="{Binding OpenFileCommand}" />

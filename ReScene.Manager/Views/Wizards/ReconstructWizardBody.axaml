@@ -67,6 +67,8 @@
       <Border IsVisible="{Binding HasCustomPackerWarning}"
               Background="#3DE0A030" BorderBrush="#E0A030" BorderThickness="1"
               CornerRadius="3" Margin="0,8,0,0" Padding="8,5">
+        <!-- FontSizeBody on purpose: mirrors the Advanced tab's CustomPackerWarning, which is
+             v1.9 parity (ReconstructorView.xaml:74 pinned Body) — not a stray root-pin-era 14. -->
         <TextBlock Text="{Binding CustomPackerWarning}" Foreground="#FFD080"
                    FontSize="{DynamicResource FontSizeBody}" TextWrapping="Wrap" />
       </Border>
