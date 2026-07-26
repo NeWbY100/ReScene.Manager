@@ -115,6 +115,32 @@ public class ReconstructorViewTests
     }
 
     [AvaloniaFact]
+    public void Header_ShowsWinRarPackDownloadLinks_MatchingWizard()
+    {
+        // The header's three pack-download links must identify identically to the Beginner
+        // Reconstruct wizard's step 1 (WCAG 3.2.4 Consistent Identification) — both sides assert
+        // against ResourceLinkExpectations so editing one surface without the other fails its twin.
+        ReconstructorViewModel vm = CreateVm();
+
+        using var sink = new BindingErrorSink();
+        var window = new Window { Width = 1000, Height = 760, Content = new ReconstructorView { DataContext = vm } };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        (string?, string?)[] links =
+        [
+            .. window.GetVisualDescendants().OfType<Button>()
+                .Where(b => b.Classes.Contains("link"))
+                .Select(b => (b.Content as string, b.Tag as string)),
+        ];
+        Assert.Equal(
+            ResourceLinkExpectations.WinRarPackLinks.Select(p => ((string?)p.Label, (string?)p.Url)),
+            links);
+
+        Assert.Empty(sink.Messages);
+    }
+
+    [AvaloniaFact]
     public void LogAutoScroll_BehaviorBindsToVmToggle_NoBindingErrors()
     {
         // The per-TextBox caret trick is gone: the merged log ListBox binds the logList style's

@@ -83,48 +83,78 @@
                  FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,12" />
 
-      <TextBlock Text="WinRAR versions folder" FontWeight="SemiBold" Margin="0,0,0,2" />
+      <TextBlock x:Name="WinRarFolderLabel" Text="WinRAR versions folder" FontWeight="SemiBold" Margin="0,0,0,2" />
       <TextBlock Text="The folder holding your different WinRAR versions, each in its own subfolder. ReScene uses the version that matches the release so the rebuilt archives are byte-identical."
                  Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,2" />
+      <!-- Same three links as the Advanced tab header (WCAG 3.2.4: identical labels + URLs, opened via
+           OnResourceLinkClick in code-behind; the FTP-originals archive contains only the Windows
+           binaries). The lead-in names its antecedent explicitly for the beginner audience. -->
+      <WrapPanel Margin="0,0,0,4">
+        <TextBlock Text="Download WinRAR versions from:"
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                   VerticalAlignment="Center" Margin="0,0,4,0" />
+        <Button Classes="link" Content="Extracted files for Windows (ready to use)"
+                Tag="https://drive.google.com/file/d/1of053kS2Wxk-foHN_ALRu-u6Tcck58yn/view?usp=drive_link"
+                Click="OnResourceLinkClick"
+                FontSize="{DynamicResource FontSizeCaption}" VerticalAlignment="Center" />
+        <TextBlock Text=","
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                   VerticalAlignment="Center" Margin="0,0,4,0" />
+        <Button Classes="link" Content="Extracted files for Linux (ready to use)"
+                Tag="https://drive.google.com/file/d/1TcpA7RXoTUEr3pHZ8-4YTcQFRGZYP7v_/view?usp=drive_link"
+                Click="OnResourceLinkClick"
+                FontSize="{DynamicResource FontSizeCaption}" VerticalAlignment="Center" Margin="0,0,4,0" />
+        <TextBlock Text="or"
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                   VerticalAlignment="Center" Margin="0,0,4,0" />
+        <Button Classes="link" Content="Original files from RAR FTP (Windows)"
+                Tag="https://drive.google.com/file/d/1hvgzSY6YH_ZS3cpy7bHcw2zpjiwuP_Xi/view?usp=drive_link"
+                Click="OnResourceLinkClick"
+                FontSize="{DynamicResource FontSizeCaption}" VerticalAlignment="Center" />
+      </WrapPanel>
       <DockPanel Margin="0,0,0,2">
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseWinRARCommand}"
+                AutomationProperties.Name="Browse for WinRAR versions folder"
                 Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
-        <TextBox Text="{Binding WinRARPath}" />
+        <TextBox Text="{Binding WinRARPath}" AutomationProperties.LabeledBy="{Binding #WinRarFolderLabel}" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding WinRARStatus}" />
 
-      <TextBlock Text="Extracted release files" FontWeight="SemiBold" Margin="0,12,0,2" />
+      <TextBlock x:Name="ReleaseFilesLabel" Text="Extracted release files" FontWeight="SemiBold" Margin="0,12,0,2" />
       <TextBlock Text="The folder with the release's already-extracted files — the originals that were inside the .rar archives (the movie, sample, subtitles, …)."
                  Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,2" />
       <DockPanel Margin="0,0,0,2">
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseReleaseCommand}"
+                AutomationProperties.Name="Browse for extracted release files"
                 Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
-        <TextBox Text="{Binding ReleasePath}" />
+        <TextBox Text="{Binding ReleasePath}" AutomationProperties.LabeledBy="{Binding #ReleaseFilesLabel}" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding ReleaseStatus}" />
 
-      <TextBlock Text="Output folder" FontWeight="SemiBold" Margin="0,12,0,2" />
+      <TextBlock x:Name="OutputFolderLabel" Text="Output folder" FontWeight="SemiBold" Margin="0,12,0,2" />
       <TextBlock Text="Where the rebuilt .rar / .r00… volumes are written. Pick an empty folder so nothing is overwritten."
                  Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,2" />
       <DockPanel Margin="0,0,0,2">
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseOutputCommand}"
+                AutomationProperties.Name="Browse for output folder"
                 Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
-        <TextBox Text="{Binding OutputPath}" />
+        <TextBox Text="{Binding OutputPath}" AutomationProperties.LabeledBy="{Binding #OutputFolderLabel}" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding OutputStatus}" />
 
-      <TextBlock Text="Verification file (.sfv or .sha1)" FontWeight="SemiBold" Margin="0,12,0,2" />
+      <TextBlock x:Name="VerificationFileLabel" Text="Verification file (.sfv or .sha1)" FontWeight="SemiBold" Margin="0,12,0,2" />
       <TextBlock Text="Auto-filled from the SRR when it includes one — otherwise pick the release's .sfv. The rebuilt archives are checked against it to confirm they came out identical."
                  Foreground="{DynamicResource ForegroundSecondary}"
                  FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,2" />
       <DockPanel Margin="0,0,0,2">
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseVerificationCommand}"
+                AutomationProperties.Name="Browse for verification file"
                 Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
-        <TextBox Text="{Binding VerificationPath}" />
+        <TextBox Text="{Binding VerificationPath}" AutomationProperties.LabeledBy="{Binding #VerificationFileLabel}" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding VerifyStatus}" />
 

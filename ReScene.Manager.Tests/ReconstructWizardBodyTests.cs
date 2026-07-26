@@ -156,6 +156,73 @@ public class ReconstructWizardBodyTests
     }
 
     [AvaloniaFact]
+    public void Step1_ShowsWinRarPackDownloadLinks_MatchingAdvancedTab()
+    {
+        // The wizard's WinRAR-folder field offers the same three pack-download links as the RAR
+        // Reconstructor tab header. Both sides assert against ResourceLinkExpectations so editing one
+        // surface without the other fails its twin test (WCAG 3.2.4 Consistent Identification).
+        ReconstructorViewModel vm = CreateViewModel();
+
+        using var sink = new BindingErrorSink();
+        (_, ReconstructWizardBody body, WizardViewModel wizard) = Show(vm);
+        wizard.CurrentStepIndex = 1;
+        Dispatcher.UIThread.RunJobs();
+
+        Grid root = Assert.IsType<Grid>(body.Content);
+        var step1 = root.Children[1];
+
+        (string?, string?)[] links =
+        [
+            .. step1.GetVisualDescendants().OfType<Button>()
+                .Where(b => b.Classes.Contains("link"))
+                .Select(b => (b.Content as string, b.Tag as string)),
+        ];
+        Assert.Equal(
+            ResourceLinkExpectations.WinRarPackLinks.Select(p => ((string?)p.Label, (string?)p.Url)),
+            links);
+
+        Assert.Empty(sink.Messages);
+    }
+
+    [AvaloniaFact]
+    public void Step1_FieldInputsAndBrowseButtons_HaveAccessibleNames()
+    {
+        // A screen reader must announce each path field by its heading (4.1.2) and tell the four
+        // visually identical Browse buttons apart (2.4.6); each Browse name contains the visible
+        // "Browse" label (2.5.3 Label in Name).
+        ReconstructorViewModel vm = CreateViewModel();
+
+        using var sink = new BindingErrorSink();
+        (_, ReconstructWizardBody body, WizardViewModel wizard) = Show(vm);
+        wizard.CurrentStepIndex = 1;
+        Dispatcher.UIThread.RunJobs();
+
+        Grid root = Assert.IsType<Grid>(body.Content);
+        var step1 = root.Children[1];
+
+        string?[] fieldLabels =
+        [
+            .. step1.GetVisualDescendants().OfType<TextBox>()
+                .Select(t => Assert.IsType<TextBlock>(AutomationProperties.GetLabeledBy(t)).Text),
+        ];
+        string?[] expectedLabels =
+            ["WinRAR versions folder", "Extracted release files", "Output folder", "Verification file (.sfv or .sha1)"];
+        Assert.Equal(expectedLabels, fieldLabels);
+
+        string?[] browseNames =
+        [
+            .. step1.GetVisualDescendants().OfType<Button>()
+                .Where(b => b.Content as string == "Browse")
+                .Select(AutomationProperties.GetName),
+        ];
+        string?[] expectedBrowseNames =
+            ["Browse for WinRAR versions folder", "Browse for extracted release files", "Browse for output folder", "Browse for verification file"];
+        Assert.Equal(expectedBrowseNames, browseNames);
+
+        Assert.Empty(sink.Messages);
+    }
+
+    [AvaloniaFact]
     public void RunStep_HasMergedLogList_NamedDetails_NoBindingErrors()
     {
         ReconstructorViewModel vm = CreateViewModel();
