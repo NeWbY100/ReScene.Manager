@@ -54,7 +54,7 @@ public class FieldStatusLineTests
 
         TextBlock message = control.GetVisualDescendants().OfType<TextBlock>().First(t => t.Name != "Glyph");
 
-        Assert.Equal(Color.Parse("#FF9E9E9E"), ((ISolidColorBrush)message.Foreground!).Color); // ForegroundSecondary
+        Assert.Equal(Color.Parse("#FFAAAAAA"), ((ISolidColorBrush)message.Foreground!).Color); // ForegroundSecondary (a11y-bumped #AAAAAA)
     }
 
     [AvaloniaFact]

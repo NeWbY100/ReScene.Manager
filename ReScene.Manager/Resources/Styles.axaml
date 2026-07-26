@@ -8,6 +8,15 @@
     <Setter Property="Padding" Value="4,0,0,0" />
   </Style>
 
+  <!-- 12px content parity (see the ControlContentThemeFontSize note in Density.axaml): the
+       Window-level FontSize covers UNSTYLED TextBlocks via inheritance in every window (this is
+       an app-level style, so Settings/About/progress windows inherit too). Popup-hosted trees
+       (tooltips, menu flyouts) do not inherit from a Window — their themed content follows the
+       Density resource instead. -->
+  <Style Selector="Window">
+    <Setter Property="FontSize" Value="12" />
+  </Style>
+
   <!-- WPF parity: WPF buttons center their content; Avalonia's Fluent Button theme sets no
        content alignment, so any button wider than its text (MinWidth Save/Cancel/Browse
        buttons) renders the label left-hugging. Button.link / Button.recentItem re-assert Left
@@ -164,7 +173,7 @@
        it never showed any hover affordance. Moving the rest color into a style setter (this class,
        declared AFTER .link so it wins at equal specificity) lets :pointerover override it. -->
   <Style Selector="Button.statusVersion">
-    <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundSecondary}" />
   </Style>
   <Style Selector="Button.statusVersion:pointerover">
     <Setter Property="Foreground" Value="{DynamicResource HyperlinkHoverForeground}" />

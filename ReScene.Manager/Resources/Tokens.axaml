@@ -53,7 +53,12 @@
 
   <!-- ══ Text ════════════════════════════════════════════════ -->
   <SolidColorBrush x:Key="ForegroundPrimary" Color="#FFD4D4D4" />
-  <SolidColorBrush x:Key="ForegroundSecondary" Color="#FF9E9E9E" />
+  <!-- #AAAAAA, bumped from the WPF #9E9E9E (a11y 1.4.3): the old value was 4.0:1 on
+       HoverBackground — under the 4.5:1 normal-text floor wherever secondary text sits on a
+       hover fill (Beginner hub cards). #AAAAAA: 4.58:1 on Hover (thin margin — darkening
+       HoverBackground even slightly goes under), 5.9 on Surface, 6.6 on Panel, 7.2 on Window —
+       strictly better everywhere, visually +12/255. -->
+  <SolidColorBrush x:Key="ForegroundSecondary" Color="#FFAAAAAA" />
   <SolidColorBrush x:Key="ForegroundDisabled" Color="#FF5A5A5A" />
   <SolidColorBrush x:Key="HeaderForeground" Color="#FFE0E0E0" />
 
@@ -132,6 +137,8 @@
        them with their original colors keeps those views porting unchanged. -->
   <SolidColorBrush x:Key="SystemControlForegroundBaseMediumHighBrush" Color="#FFE0E0E0" />
   <SolidColorBrush x:Key="SystemControlForegroundBaseMediumBrush" Color="#FFD4D4D4" />
+  <!-- Deliberately unreferenced (last consumers moved to ForegroundSecondary for a11y 1.4.3);
+       retained at the WPF value for port-table fidelity. Do not re-point it at ForegroundSecondary. -->
   <SolidColorBrush x:Key="SystemControlForegroundBaseMediumLowBrush" Color="#FF9E9E9E" />
   <SolidColorBrush x:Key="SystemControlForegroundBaseLowBrush" Color="#FF5A5A5A" />
   <SolidColorBrush x:Key="SystemControlForegroundBaseHighBrush" Color="#FFFFFFFF" />

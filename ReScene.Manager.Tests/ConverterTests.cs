@@ -119,7 +119,7 @@ public class ConverterTests
         var ok = (ISolidColorBrush)converter.Convert(FieldState.Ok, typeof(IBrush), "Message", Culture)!;
         var error = (ISolidColorBrush)converter.Convert(FieldState.Error, typeof(IBrush), "Message", Culture)!;
 
-        Assert.Equal(Color.Parse("#FF9E9E9E"), ok.Color); // ForegroundSecondary
+        Assert.Equal(Color.Parse("#FFAAAAAA"), ok.Color); // ForegroundSecondary (a11y-bumped #AAAAAA)
         Assert.Equal(Color.Parse("#FFF44747"), error.Color); // AccentError
     }
 }

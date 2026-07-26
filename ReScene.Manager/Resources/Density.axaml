@@ -20,6 +20,17 @@
        default (ContentControlThemeFontFamily) so popups/tooltips match the windows. -->
   <FontFamily x:Key="ContentControlThemeFontFamily">Segoe UI, fonts:Inter#Inter, $Default</FontFamily>
 
+  <!-- Content text size — WPF parity, USER DECISION 2026-07-26 ("Let's use 12px"): the old app's
+       TabItem FontSize=12 style INHERITED into all tab content, so v1.9 rendered effectively
+       every content surface at 12px; Fluent's default is 14. NOTE the inverted token semantics
+       this restores (also true in v1.9): FontSizeCaption (13) is INTENTIONALLY larger than the
+       inherited content text (12), and FontSizeBody (14) is not the de facto body size — do not
+       "normalize" content text to FontSizeBody, that silently drifts back to 14. Enlargement path
+       is OS display scaling (per-monitor, honored by Avalonia). A Window-level FontSize style in
+       Styles.axaml covers unstyled TextBlocks; this resource covers every Fluent-themed control
+       including popup-hosted ones (theme resources are app-global). -->
+  <x:Double x:Key="ControlContentThemeFontSize">12</x:Double>
+
   <!-- TabItem — WPF: FontSize 12, FontWeight Normal, Padding 12,6, MinHeight 0 (App.xaml:359-394).
        Fluent default: 24px SemiLight, MinHeight 48. TabItemHeaderMargin is consumed as the
        TabItem PADDING by the Fluent template (despite its name). The Fluent 2px bottom selection
@@ -71,6 +82,8 @@
   <SolidColorBrush x:Key="TabItemHeaderBackgroundSelected" Color="#FF1E1E1E" />
   <SolidColorBrush x:Key="TabItemHeaderBackgroundSelectedPointerOver" Color="#FF1E1E1E" />
   <SolidColorBrush x:Key="TabItemHeaderBackgroundSelectedPressed" Color="#FF1E1E1E" />
+  <!-- Deliberately keeps the WPF #9E9E9E (≈5:1 on the strip — passes 1.4.3) even though
+       ForegroundSecondary was bumped to #AAAAAA; do not "tidy" them back into alignment. -->
   <SolidColorBrush x:Key="TabItemHeaderForegroundUnselected" Color="#FF9E9E9E" />
   <SolidColorBrush x:Key="TabItemHeaderForegroundUnselectedPointerOver" Color="#FFE0E0E0" />
   <SolidColorBrush x:Key="TabItemHeaderForegroundUnselectedPressed" Color="#FFE0E0E0" />

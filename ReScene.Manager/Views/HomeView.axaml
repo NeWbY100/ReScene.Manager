@@ -110,14 +110,14 @@
                                  FontSize="{DynamicResource FontSizeBody}" />
                       <TextBlock Text="{Binding FilePath}"
                                  FontSize="{DynamicResource FontSizeCaption}"
-                                 Foreground="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                                 Foreground="{DynamicResource ForegroundSecondary}"
                                  TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                       <TextBlock Text="{Binding LastOpened, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}"
                                  FontSize="{DynamicResource FontSizeCaption}"
                                  VerticalAlignment="Center"
-                                 Foreground="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                                 Foreground="{DynamicResource ForegroundSecondary}"
                                  Margin="8,0,0,0" />
                       <Button Content="Remove"
                               Command="{Binding DataContext.RemoveRecentFileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"

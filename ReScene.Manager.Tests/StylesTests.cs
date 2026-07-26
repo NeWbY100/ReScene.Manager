@@ -29,7 +29,7 @@ public class StylesTests
     private static Color HeaderForeground => Color.Parse("#FFE0E0E0");
     private static Color PanelHeaderSeparator => Color.Parse("#FF333333");
     private static Color LogTerminalForeground => Color.Parse("#FF4EC9B0");
-    private static Color StatusVersionForeground => Color.Parse("#FF9E9E9E");
+    private static Color StatusVersionForeground => Color.Parse("#FFAAAAAA");
 
     private static Color Solid(IBrush? brush) => Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color;
 
