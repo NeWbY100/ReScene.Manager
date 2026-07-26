@@ -939,3 +939,10 @@ archive path near MAX_PATH, (c) AutoFlush per-line I/O now also paid by CAV runs
 throwaway probe with REAL Rar.exe (wrar602) exercising the exact OpenLog→stream→CloseLog sequence — logs/
 created, non-empty log, exit 0 — then deleted the probe (peer's reasoned-vs-observed recommendation).
 CODEX CATCH-UP QUEUE: now five peer-gated changes.
+
+## 2026-07-26: run-rar wrapper resolution + platform-labeled pack links
+- Lib f9d0101: RarExecutable.ResolveIn prefers a version dir's run-rar launcher on Unix (internal seam preferUnixWrapper; Windows never shadowed; public API unchanged, baseline untouched). +2 seam tests (lib 1430).
+- App bae7611: ReconstructorView header now three labeled links - Windows extracted pack, NEW Linux wrapper pack (Drive 1TcpA7RXoTUEr3pHZ8-4YTcQFRGZYP7v_), RAR FTP originals "(Windows)" (USER corrected my wrong "(all platforms)" claim: archive is Windows-only).
+- Dual gate: a11y-rarlinks APPROVE (corrected label confirmed, "(all platforms)" withdrawn as premised on wrong fact); peer-scratch-review APPROVE (codex quota-exhausted substitute) - re-ran all suites itself (lib 1430 / App.Core 689 / Manager 199) + forced rebuild 0W/0E on real tree; verified diff blobs match tree.
+- Peer non-blocking notes carried: (a) resolution-failure messages (RARVersionSelector:170, ReconstructorViewModel:1434) name only {FileName}, never run-rar - copy nit, follow-up; (b) production delegation boolean at RarExecutable.cs:19 is the one uncovered line (seam tests drive the internal arm); (c) macOS stray-wrapper asymmetry accepted (hypothetical, loud on failure).
+- Codex catch-up queue now SIX: exit-code classification, runnable Copy Full Command Line, quoting doc clause, keep-work-files setting, CAV process-log fix, run-rar wrapper + links. Quota returns 2026-07-29 ~07:05.
