@@ -70,6 +70,13 @@ public class HomeViewTests
         DockPanel panel = window.GetVisualDescendants().OfType<DockPanel>().Single(d => d.Name == "RecentFilesPanel");
         Assert.True(panel.IsVisible);
 
+        // The list's scroller keeps Auto visibility WITH AllowAutoHide=false: the Fluent overlay
+        // bar otherwise draws over the right edge of the full-width file-row buttons.
+        ScrollViewer scroll = window.GetVisualDescendants().OfType<ScrollViewer>()
+            .Single(sv => sv.TemplatedParent is null);
+        Assert.Equal(Avalonia.Controls.Primitives.ScrollBarVisibility.Auto, scroll.VerticalScrollBarVisibility);
+        Assert.False(ScrollViewer.GetAllowAutoHide(scroll));
+
         Assert.Empty(sink.Messages);
     }
 

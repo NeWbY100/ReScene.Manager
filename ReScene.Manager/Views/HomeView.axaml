@@ -87,7 +87,7 @@
       <Border BorderBrush="{DynamicResource PanelBorderBrush}"
               BorderThickness="1"
               Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
-        <ScrollViewer VerticalScrollBarVisibility="Auto"
+        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False"
                       HorizontalScrollBarVisibility="Disabled">
           <ItemsControl ItemsSource="{Binding RecentFiles}">
             <ItemsControl.ItemTemplate>

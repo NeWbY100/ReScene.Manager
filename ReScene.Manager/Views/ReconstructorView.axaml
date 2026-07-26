@@ -109,7 +109,7 @@
                        IsVisible="{Binding PathsNeedAttention}" />
           </StackPanel>
         </TabItem.Header>
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" Padding="4">
           <StackPanel>
             <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
               <Run Text="WinRAR " FontWeight="SemiBold" />
@@ -178,7 +178,7 @@
 
       <!-- Versions -->
       <TabItem Header="Versions">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" Padding="4">
           <StackPanel>
             <TextBlock Text="The WinRAR versions to try. Only versions found in your WinRAR versions folder are listed — tick the ones you think produced the release."
                        TextWrapping="Wrap" Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" Margin="0,0,0,4" />
@@ -248,7 +248,7 @@
 
       <!-- Compression -->
       <TabItem Header="Compression">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" Padding="4">
           <StackPanel>
             <TextBlock Text="Select the switches to pass on to the RAR process. If a switch is not supported by a RAR version, it will not be supplied as argument."
                        TextWrapping="Wrap" Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" Margin="0,0,0,4" />
@@ -303,7 +303,7 @@
 
       <!-- Timestamps -->
       <TabItem Header="Timestamps">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" Padding="4">
           <Grid HorizontalAlignment="Left">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="Auto" />
@@ -346,7 +346,7 @@
 
       <!-- Options -->
       <TabItem Header="Options">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" Padding="4">
           <StackPanel>
             <CheckBox Content="-ai: Ignore file attributes. Mutually exclusive with A/I attribute testing." IsChecked="{Binding SwitchAI}"
                       IsEnabled="{Binding IsSwitchAIEnabled}" Margin="0,1" />
@@ -418,7 +418,7 @@
 
       <!-- Output -->
       <TabItem Header="Output">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" Padding="4">
           <StackPanel>
             <CheckBox Content="Delete non-matching RAR files after testing. Saves disk space during brute force."
                       IsChecked="{Binding DeleteRARFiles}" Margin="0,1" />

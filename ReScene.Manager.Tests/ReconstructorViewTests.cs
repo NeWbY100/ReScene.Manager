@@ -115,6 +115,36 @@ public class ReconstructorViewTests
     }
 
     [AvaloniaFact]
+    public void SettingsTabsAndRunLog_ScrollbarsReserveLayoutSpace()
+    {
+        // All six settings-tab scrollers keep Auto visibility WITH AllowAutoHide=false so the
+        // Fluent overlay bar never draws over the right-edge Browse/TextBox controls (Linux
+        // especially); the run log gets the same via the shared logList style.
+        ReconstructorViewModel vm = CreateVm();
+
+        using var sink = new BindingErrorSink();
+        var window = new Window { Width = 1000, Height = 760, Content = new ReconstructorView { DataContext = vm } };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        TabControl settingsTabs = window.GetVisualDescendants().OfType<TabControl>().Single(t => t.ItemCount == 6);
+        for (int i = 0; i < settingsTabs.ItemCount; i++)
+        {
+            settingsTabs.SelectedIndex = i;
+            Dispatcher.UIThread.RunJobs();
+            ScrollViewer scroll = window.GetVisualDescendants().OfType<ScrollViewer>()
+                .Single(sv => sv.TemplatedParent is null); // the tab's declared scroller, not TextBox internals
+            Assert.Equal(ScrollBarVisibility.Auto, scroll.VerticalScrollBarVisibility);
+            Assert.False(ScrollViewer.GetAllowAutoHide(scroll));
+        }
+
+        ListBox runLog = window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "RunLogList");
+        Assert.False(ScrollViewer.GetAllowAutoHide(runLog));
+
+        Assert.Empty(sink.Messages);
+    }
+
+    [AvaloniaFact]
     public void Header_ShowsWinRarPackDownloadLinks_MatchingWizard()
     {
         // The header's three pack-download links must identify identically to the Beginner

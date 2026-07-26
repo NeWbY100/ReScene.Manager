@@ -309,6 +309,18 @@ public class SettingsWindowTests
             Assert.Equal(expectedHeaders, headers);
             Assert.Equal(0, tabs.SelectedIndex);
 
+            // Every tab's declared scroller keeps Auto visibility WITH AllowAutoHide=false — the
+            // Fluent overlay bar otherwise draws over the right-edge TextBox/Browse controls
+            // (Linux especially); this pair reserves the gutter only while the bar shows.
+            for (int i = 0; i < 4; i++)
+            {
+                SelectTab(window, i);
+                ScrollViewer scroll = window.GetVisualDescendants().OfType<ScrollViewer>()
+                    .Single(sv => sv.TemplatedParent is null);
+                Assert.Equal(Avalonia.Controls.Primitives.ScrollBarVisibility.Auto, scroll.VerticalScrollBarVisibility);
+                Assert.False(ScrollViewer.GetAllowAutoHide(scroll));
+            }
+
             Assert.Empty(sink.Messages);
             window.Close();
         }

@@ -223,6 +223,32 @@ public class ReconstructWizardBodyTests
     }
 
     [AvaloniaFact]
+    public void FormAndLogScrollbars_ReserveLayoutSpace()
+    {
+        // The Fluent overlay scrollbar (persistently expanded on Linux) drew ON TOP of the step-1
+        // Browse buttons and the newest log line. Auto + AllowAutoHide=false is the intended pair:
+        // the bar takes real layout space, but only while it is actually shown.
+        ReconstructorViewModel vm = CreateViewModel();
+
+        using var sink = new BindingErrorSink();
+        (_, ReconstructWizardBody body, WizardViewModel wizard) = Show(vm);
+
+        wizard.CurrentStepIndex = 1;
+        Dispatcher.UIThread.RunJobs();
+        ScrollViewer step1Scroll = body.GetVisualDescendants().OfType<ScrollViewer>()
+            .Single(sv => sv.TemplatedParent is null); // declared scroller only, not TextBox internals
+        Assert.Equal(ScrollBarVisibility.Auto, step1Scroll.VerticalScrollBarVisibility);
+        Assert.False(ScrollViewer.GetAllowAutoHide(step1Scroll));
+
+        wizard.CurrentStepIndex = 2;
+        Dispatcher.UIThread.RunJobs();
+        ListBox log = body.GetVisualDescendants().OfType<ListBox>().Single();
+        Assert.False(ScrollViewer.GetAllowAutoHide(log)); // via the shared logList style setter
+
+        Assert.Empty(sink.Messages);
+    }
+
+    [AvaloniaFact]
     public void RunStep_HasMergedLogList_NamedDetails_NoBindingErrors()
     {
         ReconstructorViewModel vm = CreateViewModel();

@@ -51,7 +51,7 @@
                    AutomationProperties.Name="Scanning release folder" />
       <!-- Informational (non-focusable) list of the detected RAR sets; collapses when there are none.
            Its automation Name is the grammatically-correct summary; each item surfaces its RelativeName. -->
-      <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="96" IsVisible="{Binding HasDetectedSets}">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" MaxHeight="96" IsVisible="{Binding HasDetectedSets}">
         <ItemsControl ItemsSource="{Binding DetectedSets}"
                       AutomationProperties.Name="{Binding DetectedSetsSummary}">
           <ItemsControl.ItemTemplate>
@@ -92,7 +92,8 @@
                   Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
             <ListBox ItemsSource="{Binding ExtraSampleFiles}" SelectedItem="{Binding SelectedExtraSample}"
                      BorderThickness="0" Background="Transparent"
-                     ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                     ScrollViewer.AllowAutoHide="False" />
           </Border>
         </DockPanel>
 
@@ -109,7 +110,8 @@
                   Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
             <ListBox ItemsSource="{Binding ExtraSubtitleSfvFiles}" SelectedItem="{Binding SelectedExtraSubtitle}"
                      BorderThickness="0" Background="Transparent"
-                     ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                     ScrollViewer.AllowAutoHide="False" />
           </Border>
         </DockPanel>
       </Grid>

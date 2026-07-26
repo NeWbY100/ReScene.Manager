@@ -249,6 +249,10 @@
     <!-- Auto-scroll to the newest log line as entries append (while the user is at the bottom).
          Mirrors the WPF shared log style; see Behaviors/ListBoxAutoScroll.cs. -->
     <Setter Property="behaviors:ListBoxAutoScroll.AutoScrollToEnd" Value="True" />
+    <!-- Scrollbars take layout space instead of overlaying: the Fluent overlay bar (Linux
+         especially) draws ON the newest log line — the exact line auto-scroll keeps in view.
+         Same rationale as the BruteForceProgressWindow version grid. -->
+    <Setter Property="(ScrollViewer.AllowAutoHide)" Value="False" />
   </Style>
   <Style Selector="ListBox.logList ListBoxItem">
     <Setter Property="MinHeight" Value="18" />

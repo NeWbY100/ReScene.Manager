@@ -73,8 +73,10 @@
     </StackPanel>
 
     <!-- Step 1: files & folders (WinRAR versions, release files, output, verification).
-         Scrollable: this step is dense and must not clip on small windows. -->
-    <ScrollViewer VerticalScrollBarVisibility="Auto"
+         Scrollable: this step is dense and must not clip on small windows. AllowAutoHide=False:
+         the Fluent overlay scrollbar (persistently expanded on Linux) drew ON TOP of the
+         right-edge Browse buttons; reserving layout space keeps controls clear of the bar. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False"
                   IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
                                       Converter={StaticResource IndexEqualsConverter}, ConverterParameter=1}">
       <StackPanel>
