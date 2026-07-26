@@ -315,33 +315,55 @@
        PART_ContentPresenter is the one registration-sensitive name. MinHeight 24 on the
        toggle is the 2.5.8 floor — the sole deliberate deviation from raw WPF density. -->
   <Style Selector="Expander.versionGroup">
+    <!-- The group bar spans the tab like v1.9 even when collapsed (content no longer forces width). -->
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
     <Setter Property="Template">
       <ControlTemplate>
-        <StackPanel x:CompileBindings="False">
-          <ToggleButton IsChecked="{TemplateBinding IsExpanded, Mode=TwoWay}"
-                        AutomationProperties.Name="{Binding Header, StringFormat='RAR {0} versions'}"
-                        Background="Transparent" BorderThickness="0"
-                        Padding="2,1" MinHeight="24"
-                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <!-- No RenderTransformOrigin: the default is already RelativePoint.Center, and the
-                   string form "0.5,0.5" parses as ABSOLUTE (half a PIXEL — relative needs
-                   "50%,50%"), which rotated the glyph around its corner and swung it out of its
-                   box. -->
-              <Path Name="ChevronGlyph" Data="M 0 0 L 4 4 L 0 8 Z"
-                    Fill="{DynamicResource ForegroundPrimary}"
-                    Width="8" Height="8" Stretch="Uniform"
-                    VerticalAlignment="Center" />
-              <ContentPresenter Content="{TemplateBinding Header}"
-                                ContentTemplate="{TemplateBinding HeaderTemplate}"
-                                VerticalAlignment="Center" />
-            </StackPanel>
-          </ToggleButton>
-          <ContentPresenter Name="PART_ContentPresenter"
-                            Content="{TemplateBinding Content}"
-                            ContentTemplate="{TemplateBinding ContentTemplate}"
-                            IsVisible="{TemplateBinding IsExpanded}" />
-        </StackPanel>
+        <!-- Faithful port of the v1.9 WPF custom Expander template (App.xaml:515-585 at the
+             v1.9.0 tag): bordered rounded group, Surface header bar with hover, stroked MDL2-style
+             chevron, Panel-tinted body. Deviations from exact-old, both invisible: the header
+             stays a FOCUSABLE stock ToggleButton (v1.9 shipped Focusable=False - its header was
+             keyboard-unreachable, a defect, not a look), and the chevron is a stroked Path rather
+             than the Windows-only Segoe MDL2 font glyph (E76C/E70D) so Linux/macOS render it. -->
+        <Border x:CompileBindings="False"
+                BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1"
+                CornerRadius="{DynamicResource MediumRadius}">
+          <StackPanel>
+            <!-- COUPLED VALUES: this Background pairs with the :checked override below (rest state
+                 paints via TemplateBinding, expanded via the override — both must stay
+                 SurfaceBackground or the header shifts color on expand). CornerRadius 3,3,0,0
+                 mirrors MediumRadius (=3) so the header's top corners meet the outer Border's
+                 radius exactly — retune one, retune both. -->
+            <ToggleButton IsChecked="{TemplateBinding IsExpanded, Mode=TwoWay}"
+                          AutomationProperties.Name="{Binding Header, StringFormat='RAR {0} versions'}"
+                          Background="{DynamicResource SurfaceBackground}" BorderThickness="0"
+                          Padding="8,6" MinHeight="24" CornerRadius="3,3,0,0"
+                          Cursor="Hand"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <!-- Stroked angle bracket approximating MDL2 E76C; :expanded rotates it 90deg to
+                     the E70D down-chevron. Default RenderTransformOrigin IS Center - the string
+                     "0.5,0.5" parses as an ABSOLUTE half-pixel and must never come back. -->
+                <Path Name="ChevronGlyph" Data="M 1 1 L 5 5 L 1 9"
+                      Stroke="{DynamicResource ForegroundSecondary}" StrokeThickness="1.3"
+                      StrokeLineCap="Round" StrokeJoin="Round"
+                      Width="10" Height="10" Stretch="Uniform"
+                      VerticalAlignment="Center" />
+                <ContentPresenter Content="{TemplateBinding Header}"
+                                  ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                  VerticalAlignment="Center" />
+              </StackPanel>
+            </ToggleButton>
+            <!-- Visibility gated on the BORDER: gating only the presenter left a 1-2px empty
+                 Panel-tinted sliver under every collapsed header. -->
+            <Border Background="{DynamicResource PanelBackground}"
+                    IsVisible="{TemplateBinding IsExpanded}">
+              <ContentPresenter Name="PART_ContentPresenter"
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}" />
+            </Border>
+          </StackPanel>
+        </Border>
       </ControlTemplate>
     </Setter>
   </Style>
@@ -350,28 +372,26 @@
       <RotateTransform Angle="90" />
     </Setter>
   </Style>
-  <!-- Fluent ToggleButton paints the ACCENT background when :checked (and tints on hover/press)
-       — an expanded header would become a blue bar. All states stay transparent with the normal
-       foreground; expansion is conveyed by the chevron plus the programmatic Toggle/
-       ExpandCollapse state, so nothing rests on color. -->
+  <!-- The v1.9 header states: Surface at rest AND expanded (state is the chevron, never color),
+       Hover tint on mouse-over. These also suppress Fluent's accent-:checked painting. -->
   <Style Selector="Expander.versionGroup /template/ ToggleButton:pointerover /template/ ContentPresenter">
-    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Background" Value="{DynamicResource HoverBackground}" />
     <Setter Property="Foreground" Value="{DynamicResource ForegroundPrimary}" />
   </Style>
   <Style Selector="Expander.versionGroup /template/ ToggleButton:pressed /template/ ContentPresenter">
-    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Background" Value="{DynamicResource HoverBackground}" />
     <Setter Property="Foreground" Value="{DynamicResource ForegroundPrimary}" />
   </Style>
   <Style Selector="Expander.versionGroup /template/ ToggleButton:checked /template/ ContentPresenter">
-    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
     <Setter Property="Foreground" Value="{DynamicResource ForegroundPrimary}" />
   </Style>
   <Style Selector="Expander.versionGroup /template/ ToggleButton:checked:pointerover /template/ ContentPresenter">
-    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Background" Value="{DynamicResource HoverBackground}" />
     <Setter Property="Foreground" Value="{DynamicResource ForegroundPrimary}" />
   </Style>
   <Style Selector="Expander.versionGroup /template/ ToggleButton:checked:pressed /template/ ContentPresenter">
-    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Background" Value="{DynamicResource HoverBackground}" />
     <Setter Property="Foreground" Value="{DynamicResource ForegroundPrimary}" />
   </Style>
 
