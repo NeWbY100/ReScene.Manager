@@ -2,6 +2,66 @@
 
 All notable changes to ReScene Manager (formerly ReScene.NET) are documented here. Releases follow [SemVer](https://semver.org/) and this file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0] — 2026-07-26
+
+ReScene Manager 2.0 is a full cross-platform rewrite: the WPF app has been rebuilt on Avalonia
+and now runs natively on **Windows, Linux, and macOS** (Intel and Apple Silicon), shipped as a
+self-contained single file per platform — no .NET install needed. Everything survives the move:
+all eight Advanced tabs, the Beginner wizards, and the secondary windows, in a Fluent dark theme.
+
+### Added
+
+- **Multi-set SRR creation.** Point the SRR Creator at a release directory whose subdirectories
+  carry their own SFVs (`dvd1`/`dvd2`-style) and it writes one SRR covering every set — matching
+  pyReScene's output byte-for-byte. The Reconstructor understands multi-set SRRs too: each
+  archive set is reconstructed independently in a single run.
+- **WinRAR on Linux.** The RAR Reconstructor runs Linux rar binaries, preferring each version
+  folder's `run-rar` launcher (a bundled-runtime wrapper, so 2002-era rar builds work on any
+  modern x86_64 distro with nothing installed). Download links for the Windows pack, the Linux
+  pack, and the RAR FTP originals (Windows-only) are offered on the Reconstructor tab, the
+  Reconstruct wizard, and Settings.
+- **One chronological run log** replaces the Reconstructor's three separate log panes, tagging
+  the engine phases `[P1]`/`[P2]`, with **Save log…** buttons on the wizards as well.
+- **Copy Full Command Line** on a version row copies the exact command the engine ran —
+  including the switches it adds itself (`-ma4`, `-vn`, comment file) — as a paste-runnable
+  `cd … && rar …` line in your platform's shell dialect.
+- **Keep work files for diagnostics.** A new setting (off by default, meaning scratch is kept)
+  controls whether each run's work files — input copies, attempted archives, per-attempt rar
+  logs — are cleared when a run finishes.
+- **A tabbed, wider Settings window** (Interface / General / Inspector & Compare /
+  RAR Reconstruction).
+
+### Fixed
+
+- **Failed rar launches say so.** A version whose rar cannot start (missing loader, not
+  executable, wrong arguments) now shows an **Error** row naming the exit code instead of a
+  fake "Complete", cancelled runs are never misreported, and per-attempt rar output is logged
+  in every mode.
+- **Verified output lands in your output folder.** Fixed the case where a verified
+  reconstruction reported success while its volumes stayed stranded in the hidden scratch
+  directory — placement is now transactional with rollback, and a failed rollback preserves the
+  scratch rather than deleting recoverable output.
+- **Linux paper cuts**, found running the real thing: WinRAR version folders parse
+  case-correctly, the archive input mask is platform-correct, scrollbars no longer draw over
+  the Browse buttons or the newest log line (they reserve real space), and every file picker
+  opens where its field points instead of `$HOME` — with sensible anchors when a field is empty
+  (the movie picker starts beside your sample; the verification picker in the release folder).
+- **Byte-exact reconstruction fixes** (via ReScene.Lib): a further round of RAR-header and
+  rebuild correctness fixes, proven against real WinRAR output.
+- **Accessibility.** Wizard path fields announce their names to screen readers and the four
+  identical Browse buttons are distinguishable; the Settings window reaches its tab strip before
+  the footer in Tab order; run completion is announced politely, including the could-not-run
+  count.
+
+### Changed
+
+- **Renamed: ReScene.NET → ReScene Manager** (the GitHub repository redirects). Settings live in
+  a fresh `ReScene.Manager` settings folder — 1.x settings are not migrated.
+- On Windows, file pickers now start at the folder the field shows, taking precedence over the
+  dialog's own last-folder memory.
+- Release artifacts are self-contained single files named `ReSceneManager-<version>-<rid>` for
+  win-x64, linux-x64, osx-x64, and osx-arm64.
+
 ## [1.9.0] — 2026-07-05
 
 ### Added
