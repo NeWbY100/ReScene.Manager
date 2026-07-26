@@ -1119,3 +1119,11 @@ frame: pinned 14 boxes over 12 chrome render as designed; GAP RECORDED: DataGrid
 Dual-gate: a11y-fontsize APPROVE x2 (R1-R3 folded), peer-scratch-review APPROVE (with recorded
 process-miss admission: answered the angles handed to it instead of asking "does this do the thing
 it claims").
+
+## 2026-07-26 addendum: peer post-approval correction (counts rule)
+WindowFontSizeParityTests = TWO test methods (3 assertion legs inside the MainWindow one), not the
+"3/3" I told the peer (that filtered run included the throwaway Compare grab test). Committed ledger
+was already correct (237 = 235 + 2). RULE (peer, 4th count discrepancy this stream: 700/702-vs-703,
+twelve-vs-eleven log panes, 22-vs-21 fixtures, 3-vs-2 parity tests): counts in dispatch messages are
+APPROXIMATE UNTIL MEASURED — measure before a number enters the ledger; a ledger that inherits an
+unmeasured count will eventually mislead someone who cannot re-measure.
