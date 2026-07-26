@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using ReScene.App.Core.ViewModels.Reconstruction;
 using ReScene.SRR;
 
@@ -38,22 +37,6 @@ public sealed class ReconstructionPreflightTests : TempDirTestBase
             releaseInputs ?? [],
             customPacker,
             hasArchiveFileList);
-
-    private static void CreateJunction(string link, string target)
-    {
-        Directory.CreateDirectory(target);
-        var psi = new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
-        using Process p = Process.Start(psi)!;
-        p.WaitForExit();
-        Assert.True(p.ExitCode == 0 && Directory.Exists(link),
-            $"Could not create junction '{link}' -> '{target}': {p.StandardError.ReadToEnd()}");
-    }
 
     // ── multi-set custom packer ────────────────────────────────
 
@@ -157,7 +140,7 @@ public sealed class ReconstructionPreflightTests : TempDirTestBase
         string output = Path.Combine(TempDir, "out");
         Directory.CreateDirectory(Path.Combine(output, "output"));
         // .rescene-work is a junction INTO output — the two reserved roots now resolve nested.
-        CreateJunction(Path.Combine(output, ".rescene-work"), Path.Combine(output, "output"));
+        TestDirLink.Create(Path.Combine(output, ".rescene-work"), Path.Combine(output, "output"));
 
         string? reason = ReconstructionPreflight.Evaluate(Inputs(output: output));
 

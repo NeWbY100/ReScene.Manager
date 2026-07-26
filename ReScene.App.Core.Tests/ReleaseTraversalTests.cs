@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using ReScene.App.Core.Services;
 
 namespace ReScene.App.Core.Tests;
@@ -156,7 +155,7 @@ public class ReleaseTraversalTests : TempDirTestBase
         File.WriteAllText(Path.Combine(outside, "hidden.txt"), "x");
 
         string link = Path.Combine(TempDir, "link");
-        CreateDirLink(link, outside);
+        TestDirLink.Create(link, outside);
         Make("visible.txt");
 
         try
@@ -201,35 +200,4 @@ public class ReleaseTraversalTests : TempDirTestBase
         }
     }
 
-    /// <summary>
-    /// Creates a directory reparse point: a junction via <c>mklink /J</c> on Windows (no
-    /// elevation required), or a symlink via <see cref="Directory.CreateSymbolicLink"/> elsewhere.
-    /// Fails the test loudly (rather than skipping) if creation genuinely does not succeed.
-    /// </summary>
-    private static void CreateDirLink(string link, string target)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            var psi = new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            };
-
-            using Process proc = Process.Start(psi)
-                ?? throw new InvalidOperationException("Failed to start 'mklink /J' — cannot create the junction test fixture.");
-            proc.WaitForExit();
-
-            if (proc.ExitCode != 0)
-            {
-                throw new InvalidOperationException(
-                    $"'mklink /J \"{link}\" \"{target}\"' failed (exit {proc.ExitCode}): {proc.StandardError.ReadToEnd()}");
-            }
-        }
-        else
-        {
-            Directory.CreateSymbolicLink(link, target);
-        }
-    }
 }

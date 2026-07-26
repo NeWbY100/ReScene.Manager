@@ -106,7 +106,10 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
     {
         string dir = NewTempDir();
         Directory.CreateDirectory(Path.Combine(dir, "winrar-500"));
-        File.WriteAllText(Path.Combine(dir, "winrar-500", "rar.exe"), "stub");
+        // The scanner looks for the platform's console binary (rar.exe on Windows, rar elsewhere),
+        // so stub whichever name this OS resolves to — otherwise the folder scans as version-less
+        // and every test here stops at the "no WinRAR versions" guard instead of its own branch.
+        File.WriteAllText(Path.Combine(dir, "winrar-500", RarExecutable.FileName), "stub");
         vm.WinRARPath = dir;
         if (vm.LastVersionScan is { } scan)
         {
@@ -136,7 +139,7 @@ public sealed class ReconstructorViewModelDialogTests : IDisposable
     {
         ReconstructorViewModel vm = CreateVm(out RecordingFileDialogService dialog, out FakeBruteForceService brute);
         await SetWinRARWithVersionAsync(vm);
-        vm.ReleasePath = @"C:\does\not\exist\release";
+        vm.ReleasePath = Path.Combine(NewTempDir(), "does", "not", "exist");
         vm.OutputPath = NewTempDir();
 
         await vm.StartCommand.ExecuteAsync(null);

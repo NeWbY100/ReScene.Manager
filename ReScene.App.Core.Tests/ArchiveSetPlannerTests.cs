@@ -498,11 +498,15 @@ public class ArchiveSetPlannerTests
     public void WorkRootFor_KeyedSet_IsIsolatedSubdir()
     {
         SRRArchiveSet set = MakeSet("DVD1/aln-re4a", "DVD1", ["DVD1\\aln-re4a.rar"], [("aln-re4a.iso", "00000000")]);
-        SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with { OutputPath = "C:\\out" };
+        // A keyed set's work root is real-resolved against the filesystem, so the output path has to
+        // be a genuine absolute path for this OS — a bare "C:\out" is a relative name off Windows and
+        // would resolve under the test's working directory instead.
+        string outputPath = Path.Combine(Path.GetTempPath(), "rescene_planner_out");
+        SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings() with { OutputPath = outputPath };
 
         string root = ArchiveSetPlanner.WorkRootFor(shared, set);
 
-        Assert.StartsWith(Path.Combine("C:\\out", ".rescene-work"), root, StringComparison.Ordinal);
+        Assert.StartsWith(Path.Combine(outputPath, ".rescene-work"), root, StringComparison.Ordinal);
         Assert.DoesNotContain('/', Path.GetFileName(root)); // key separators sanitized
     }
 

@@ -19,7 +19,9 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
     }
 
     /// <summary>Creates a real WinRAR versions folder containing one "winrar-NNN" subfolder (with a
-    /// rar.exe stub) per version, so setting WinRARPath drives the actual async folder scan.</summary>
+    /// console-binary stub) per version, so setting WinRARPath drives the actual async folder scan.
+    /// The stub is named for the platform's binary (rar.exe on Windows, rar elsewhere), or the
+    /// scanner would find no versions at all.</summary>
     private string MakeWinRARFolder(params int[] versions)
     {
         string root = Path.Combine(Path.GetTempPath(), "rvm-versions-" + Guid.NewGuid().ToString("N"));
@@ -29,7 +31,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
         {
             string dir = Path.Combine(root, $"winrar-{v}");
             Directory.CreateDirectory(dir);
-            File.WriteAllText(Path.Combine(dir, "rar.exe"), "stub");
+            File.WriteAllText(Path.Combine(dir, RarExecutable.FileName), "stub");
         }
 
         return root;
@@ -331,7 +333,7 @@ public sealed class ReconstructorViewModelVersionsTests : IDisposable
         vm.Version5 = true;
         string dir560 = Path.Combine(folder, "winrar-560");
         Directory.CreateDirectory(dir560);
-        File.WriteAllText(Path.Combine(dir560, "rar.exe"), "stub");
+        File.WriteAllText(Path.Combine(dir560, RarExecutable.FileName), "stub");
 
         // RescanVersions kicks off a new scan that is deliberately NOT awaited here —
         // RunArchiveSetsForTestAsync itself must await it (the fix under test).

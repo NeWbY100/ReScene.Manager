@@ -375,7 +375,9 @@ public class SRREditorViewModelTests
         TestSRREditorViewModel vm = CreateVm(out FakeSRREditingService editing, out FakeFileDialogService dialog);
         vm.SourcePath = @"C:\rel\movie.srr";
         vm.EnsureWorkingCopy();
-        dialog.OpenFilesResult = [@"C:\rel\new.nfo"];
+        // The stored name is the picked file's name, so the path must use this OS's separator —
+        // on POSIX a backslash is an ordinary name character and the whole string is the name.
+        dialog.OpenFilesResult = [Path.Combine(Path.GetTempPath(), "rel", "new.nfo")];
 
         vm.AddStoredFilesCommand.Execute(null);
 

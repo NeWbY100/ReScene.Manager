@@ -14,7 +14,7 @@ public class ReconstructionPathGuardTests : TempDirTestBase
         Directory.CreateDirectory(Path.Combine(realTarget, "leaf"));
 
         string junction = Path.Combine(root, "junction");
-        CreateDirLink(junction, realTarget);
+        TestDirLink.Create(junction, realTarget);
 
         string resolved = ReconstructionPathGuard.ResolveReal(Path.Combine(junction, "leaf"));
 
@@ -123,7 +123,7 @@ public class ReconstructionPathGuardTests : TempDirTestBase
         Directory.CreateDirectory(Path.Combine(escapeTarget, "normalChild"));
 
         string junctionAncestor = Path.Combine(root, "junctionAncestor");
-        CreateDirLink(junctionAncestor, escapeTarget);
+        TestDirLink.Create(junctionAncestor, escapeTarget);
 
         string normalChild = Path.Combine(junctionAncestor, "normalChild");
 
@@ -139,7 +139,7 @@ public class ReconstructionPathGuardTests : TempDirTestBase
         Directory.CreateDirectory(escapeTarget);
 
         string outputJunction = Path.Combine(outputPath, ReconstructionPathGuard.OutputDirName);
-        CreateDirLink(outputJunction, escapeTarget);
+        TestDirLink.Create(outputJunction, escapeTarget);
 
         Assert.Throws<IOException>(() => ReconstructionPathGuard.ResolveOutputRoot(outputPath));
     }
@@ -225,41 +225,9 @@ public class ReconstructionPathGuardTests : TempDirTestBase
 
         // ".rescene-work" is a junction landing on the exact same real directory as "output".
         string scratchLink = Path.Combine(outputPath, ReconstructionPathGuard.ScratchDirName);
-        CreateDirLink(scratchLink, realOutputDir);
+        TestDirLink.Create(scratchLink, realOutputDir);
 
         Assert.Throws<IOException>(() => ReconstructionPathGuard.ResolveReservedRoots(outputPath));
-    }
-
-    /// <summary>
-    /// Creates a directory reparse point: a junction via <c>mklink /J</c> on Windows (no elevation
-    /// required), or a symlink via <see cref="Directory.CreateSymbolicLink"/> elsewhere. Fails the
-    /// test loudly (rather than skipping) if creation genuinely does not succeed.
-    /// </summary>
-    private static void CreateDirLink(string link, string target)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            var psi = new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            };
-
-            using Process proc = Process.Start(psi)
-                ?? throw new InvalidOperationException("Failed to start 'mklink /J' — cannot create the junction test fixture.");
-            proc.WaitForExit();
-
-            if (proc.ExitCode != 0)
-            {
-                throw new InvalidOperationException(
-                    $"'mklink /J \"{link}\" \"{target}\"' failed (exit {proc.ExitCode}): {proc.StandardError.ReadToEnd()}");
-            }
-        }
-        else
-        {
-            Directory.CreateSymbolicLink(link, target);
-        }
     }
 
     /// <summary>

@@ -53,7 +53,10 @@ public sealed class ReconstructorOutputCleanupTests : TempDirTestBase
     {
         string dir = Path.Combine(TempDir, "winrar");
         Directory.CreateDirectory(Path.Combine(dir, "winrar-500"));
-        File.WriteAllText(Path.Combine(dir, "winrar-500", "rar.exe"), "stub");
+        // The scanner looks for the platform's console binary (rar.exe on Windows, rar elsewhere),
+        // so stub whichever name this OS resolves to — otherwise the folder scans as version-less
+        // and StartAsync fails on the "no WinRAR versions" guard before reaching the branch under test.
+        File.WriteAllText(Path.Combine(dir, "winrar-500", RarExecutable.FileName), "stub");
         vm.WinRARPath = dir;
         if (vm.LastVersionScan is { } scan)
         {

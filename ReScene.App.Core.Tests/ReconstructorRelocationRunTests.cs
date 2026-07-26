@@ -237,7 +237,7 @@ public sealed class ReconstructorRelocationRunTests : TempDirTestBase
         // guard) OUTSIDE the per-set try. The sibling's scratch child does not exist and resolves normally.
         string badScratch = ReconstructionPathGuard.ResolveScratchChild(TempDir, "bad");
         Directory.CreateDirectory(Path.GetDirectoryName(badScratch)!); // the reserved .rescene-work root
-        CreateJunction(badScratch, Path.Combine(TempDir, "escape-scratch")); // target is outside .rescene-work
+        TestDirLink.Create(badScratch, Path.Combine(TempDir, "escape-scratch")); // target is outside .rescene-work
 
         // Must NOT throw: the WorkRootFor failure is caught per-set, never propagated out of the loop.
         await vm.RunArchiveSetsForTestAsync(CancellationToken.None);
@@ -285,22 +285,5 @@ public sealed class ReconstructorRelocationRunTests : TempDirTestBase
         Assert.Contains(vm.LogEntries, l => l.Contains("Set one failed:", StringComparison.Ordinal));
         Assert.Contains(vm.LogEntries, l => l.Contains("Set two failed:", StringComparison.Ordinal));
         Assert.False(vm.LastRunSucceeded); // summary ran and marked the run failed — the run did not abort
-    }
-
-    /// <summary>Creates a directory junction (reparse point) at <paramref name="link"/> pointing to a real target.</summary>
-    private static void CreateJunction(string link, string target)
-    {
-        Directory.CreateDirectory(target);
-        var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
-        using System.Diagnostics.Process p = System.Diagnostics.Process.Start(psi)!;
-        p.WaitForExit();
-        Assert.True(p.ExitCode == 0 && Directory.Exists(link),
-            $"Could not create junction '{link}' -> '{target}': {p.StandardError.ReadToEnd()}");
     }
 }

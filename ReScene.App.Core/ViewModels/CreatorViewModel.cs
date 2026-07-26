@@ -604,7 +604,9 @@ public partial class CreatorViewModel : OperationViewModelBase
             return;
         }
 
-        string releaseDir = Path.GetDirectoryName(InputPath) ?? ".";
+        // Same trap as ComputeStoredName: GetDirectoryName returns "" (not null) for a bare file
+        // name, and the scanners throw on an empty path — a bare input means the current directory.
+        string releaseDir = Path.GetDirectoryName(InputPath) is { Length: > 0 } dir ? dir : ".";
         List<string> samples = [.. ReleaseFileScanner.FindSampleFiles(releaseDir)
             .Concat(ExtraSampleFiles)
             .Distinct(StringComparer.OrdinalIgnoreCase)];
@@ -820,7 +822,9 @@ public partial class CreatorViewModel : OperationViewModelBase
             }
             else
             {
-                string releaseDir = Path.GetDirectoryName(InputPath) ?? ".";
+                // GetDirectoryName returns "" (not null) for a bare file name — same guard as
+                // ComputeStoredName and BuildSampleAndSubtitlePlaceholders.
+                string releaseDir = Path.GetDirectoryName(InputPath) is { Length: > 0 } dir ? dir : ".";
 
                 // Phase 0: Materialize the wizard's sample/subtitle placeholders — generate their
                 // actual .srs/.srr now, in the order the user arranged. (Advanced has no placeholders.)
@@ -2171,7 +2175,10 @@ public partial class CreatorViewModel : OperationViewModelBase
             return Path.GetFileName(fullPath);
         }
 
-        string releaseDir = Path.GetDirectoryName(InputPath) ?? ".";
+        // GetDirectoryName yields null for a root path but "" for a bare file name (which the
+        // Input text box accepts); both mean "no release folder", and an empty relativeTo would
+        // throw out of AddStoredFiles.
+        string releaseDir = Path.GetDirectoryName(InputPath) is { Length: > 0 } dir ? dir : ".";
         string relative = Path.GetRelativePath(releaseDir, fullPath);
 
         // GetRelativePath returns a rooted path when the file is on a different drive, and a

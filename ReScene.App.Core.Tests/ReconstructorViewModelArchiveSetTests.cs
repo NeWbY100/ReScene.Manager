@@ -117,7 +117,7 @@ public class ReconstructorViewModelArchiveSetTests
     public async Task ArchiveSetStatus_MultipleSets_ShowsInfo()
     {
         ReconstructorViewModel vm = CreateVm(
-            @"cleanup_script\007.A.View.To.A.Kill.1985.UE.iNTERNAL.DVDRip.XviD-iNCiTE.fine_2cd.srr");
+            Path.Combine("cleanup_script", "007.A.View.To.A.Kill.1985.UE.iNTERNAL.DVDRip.XviD-iNCiTE.fine_2cd.srr"));
 
         await ImportAsync(vm);
 
@@ -140,7 +140,7 @@ public class ReconstructorViewModelArchiveSetTests
     {
         var temp = new RecordingTempDirectoryService();
         ReconstructorViewModel vm = CreateVm(
-            @"cleanup_script\007.A.View.To.A.Kill.1985.UE.iNTERNAL.DVDRip.XviD-iNCiTE.fine_2cd.srr",
+            Path.Combine("cleanup_script", "007.A.View.To.A.Kill.1985.UE.iNTERNAL.DVDRip.XviD-iNCiTE.fine_2cd.srr"),
             temp);
 
         await ImportAsync(vm);

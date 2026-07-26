@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using ReScene.App.Core.ViewModels.Reconstruction;
 using ReScene.SRR;
 
@@ -71,22 +70,6 @@ public sealed class VerifiedOutputRelocatorTests : TempDirTestBase
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
         return path;
-    }
-
-    private static void CreateJunction(string link, string target)
-    {
-        Directory.CreateDirectory(target);
-        var psi = new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
-        using Process p = Process.Start(psi)!;
-        p.WaitForExit();
-        Assert.True(p.ExitCode == 0 && Directory.Exists(link),
-            $"Could not create junction '{link}' -> '{target}': {p.StandardError.ReadToEnd()}");
     }
 
     private VerifiedOutputRelocator.RelocationOutcome Relocate(
@@ -323,7 +306,7 @@ public sealed class VerifiedOutputRelocatorTests : TempDirTestBase
         Directory.CreateDirectory(Path.Combine(workRoot, "output"));
         // The committed "file" is actually a junction (reparse point) — must never be moved as a link.
         string linkLeaf = Path.Combine(workRoot, "output", "x.rar");
-        CreateJunction(linkLeaf, Path.Combine(TempDir, "junction-target"));
+        TestDirLink.Create(linkLeaf, Path.Combine(TempDir, "junction-target"));
 
         VerifiedOutputRelocator.RelocationOutcome outcome = Relocate(
             workRoot, set, 1, VerifiedOutputRelocator.Branch.BruteForce, false, [linkLeaf], Real);
@@ -340,7 +323,7 @@ public sealed class VerifiedOutputRelocatorTests : TempDirTestBase
         string realBacking = Path.Combine(TempDir, "real-backing");
         string workRoot = Path.Combine(OutputPath, ".rescene-work", "k");
         Directory.CreateDirectory(Path.Combine(OutputPath, ".rescene-work"));
-        CreateJunction(workRoot, realBacking);
+        TestDirLink.Create(workRoot, realBacking);
         string source = WriteBruteVolume(workRoot, "x.rar"); // resolves into realBacking\output\x.rar
 
         VerifiedOutputRelocator.RelocationOutcome outcome = Relocate(
@@ -364,7 +347,7 @@ public sealed class VerifiedOutputRelocatorTests : TempDirTestBase
         string outputPath = Path.Combine(TempDir, "run-io");
         Directory.CreateDirectory(outputPath);
         string escapeTarget = Path.Combine(TempDir, "escape-io"); // sibling of outputPath — outside it
-        CreateJunction(Path.Combine(outputPath, "output"), escapeTarget);
+        TestDirLink.Create(Path.Combine(outputPath, "output"), escapeTarget);
 
         SRRArchiveSet set = MakeSet("k", "", "x.rar");
         string workRoot = Path.Combine(outputPath, ".rescene-work", "k");

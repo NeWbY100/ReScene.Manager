@@ -56,17 +56,22 @@ public class FileCompareViewModelCloseAllTests : TempDirTestBase
         Assert.Equal(left, vm.LeftFilePath);
         Assert.Equal(right, vm.RightFilePath);
 
-        // The loaded panes memory-map the files: deleting must fail while they are open,
-        // otherwise the release assertion below would prove nothing.
-        bool lockedWhileLoaded = true;
-        try
+        // The loaded panes memory-map the files: on Windows, deleting must fail while they are open,
+        // otherwise the release assertion below would prove nothing. POSIX has no mandatory sharing
+        // lock — unlinking a mapped file always succeeds there — so the probe is Windows-only, and
+        // running it elsewhere would delete the file this test still needs.
+        if (OperatingSystem.IsWindows())
         {
-            File.Delete(left);
-            lockedWhileLoaded = false;
+            bool lockedWhileLoaded = true;
+            try
+            {
+                File.Delete(left);
+                lockedWhileLoaded = false;
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            Assert.True(lockedWhileLoaded, "expected the loaded left file to be locked");
         }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
-        Assert.True(lockedWhileLoaded, "expected the loaded left file to be locked");
 
         await vm.CloseAllAsync();
 

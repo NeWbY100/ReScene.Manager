@@ -93,7 +93,10 @@ public class FieldGuidanceTests
         Directory.CreateDirectory(dir);
         try
         {
-            string? result = FieldGuidance.SuggestSaveFileName(dir, @"C:\rel\movie.sample.mkv", ".srs");
+            // The input path must use this OS's separator: the suggestion takes its file name, and
+            // on POSIX a backslash is an ordinary name character, not a directory boundary.
+            string input = Path.Combine(Path.GetTempPath(), "rel", "movie.sample.mkv");
+            string? result = FieldGuidance.SuggestSaveFileName(dir, input, ".srs");
             Assert.Equal(Path.Combine(dir, "movie.sample.srs"), result);
         }
         finally

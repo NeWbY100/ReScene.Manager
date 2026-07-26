@@ -137,6 +137,15 @@ public sealed class CreatorViewModelTests : IDisposable
         return vm;
     }
 
+    /// <summary>
+    /// Builds an absolute path under a fixed root, using this OS's separator. Stored-name
+    /// computation never touches disk, so these files need not exist — but they must be shaped
+    /// like real paths: a Windows-style literal is one separator-less file name on POSIX, which
+    /// would make the whole string the stored name.
+    /// </summary>
+    private static string FakePath(params string[] segments) =>
+        Path.Combine([Path.Combine(Path.GetTempPath(), "creator-vm-tests"), .. segments]);
+
     /// <summary>Creates a temp release directory containing the given (empty) files and returns its path.</summary>
     private string CreateTempRelease(params string[] fileNames)
     {
@@ -234,7 +243,7 @@ public sealed class CreatorViewModelTests : IDisposable
         vm.OutputPath = Path.Combine(dir, "movie.srr");
         // Two distinct files from different folders, both outside the release → both resolve to
         // the bare filename "dup.nfo", so they collide on the stored name.
-        vm.AddStoredFiles([@"X:\a\dup.nfo", @"Y:\b\dup.nfo"]);
+        vm.AddStoredFiles([FakePath("a", "dup.nfo"), FakePath("b", "dup.nfo")]);
         Assert.Equal(2, vm.StoredFiles.Count);
         Assert.All(vm.StoredFiles, f => Assert.Equal("dup.nfo", f.StoredName));
 
@@ -424,6 +433,14 @@ public sealed class CreatorViewModelTests : IDisposable
     [Fact]
     public void AddStoredFiles_OnDifferentDrive_StoresFilenameOnly()
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            // "A different drive" is a Windows-only concept: POSIX has a single rooted tree, so
+            // GetRelativePath can always express the relationship and never returns a rooted path.
+            // The sibling test below covers the outside-the-release-folder branch on every platform.
+            return;
+        }
+
         CreatorViewModel vm = CreateVm(out _);
         vm.InputPath = @"D:\rel\movie.sfv";              // release on D:
         vm.AddStoredFiles([@"Z:\elsewhere\extra.nfo"]);  // file on a different drive
@@ -437,10 +454,37 @@ public sealed class CreatorViewModelTests : IDisposable
     public void AddStoredFiles_OutsideReleaseFolder_StoresFilenameOnly()
     {
         CreatorViewModel vm = CreateVm(out _);
-        vm.InputPath = @"D:\rel\movie.sfv";
-        vm.AddStoredFiles([@"D:\other\extra.nfo"]);   // sibling of the release dir → "..\other\..."
+        vm.InputPath = FakePath("rel", "movie.sfv");
+        vm.AddStoredFiles([FakePath("other", "extra.nfo")]);   // sibling of the release dir → "../other/..."
 
         Assert.Equal("extra.nfo", vm.StoredFiles[0].StoredName);
+    }
+
+    [Fact]
+    public void AddStoredFiles_InputPathIsBareFileName_StoresFilenameOnly()
+    {
+        // The Input text box accepts a typed bare file name, which has no directory component at
+        // all. GetDirectoryName returns "" (not null) for it, so an unguarded relativeTo would
+        // throw ArgumentException straight out of AddStoredFiles.
+        CreatorViewModel vm = CreateVm(out _);
+        vm.InputPath = "movie.sfv";
+
+        vm.AddStoredFiles([FakePath("other", "extra.nfo")]);
+
+        Assert.Equal("extra.nfo", vm.StoredFiles[0].StoredName);
+    }
+
+    [Fact]
+    public void BuildSampleAndSubtitlePlaceholders_InputPathIsBareFileName_DoesNotThrow()
+    {
+        // Sibling of the AddStoredFiles bare-name bug (same field, same GetDirectoryName-""
+        // trap): the release scanners throw ArgumentException on an empty path, so an unguarded
+        // releaseDir crashed the wizard's samples step for a typed bare file name. A bare input
+        // means the current directory — the scan must run there instead of throwing.
+        CreatorViewModel vm = CreateVm(out _);
+        vm.InputPath = "movie.sfv";
+
+        vm.BuildSampleAndSubtitlePlaceholders();
     }
 
     // ── Rename ──────────────────────────────────────────────
@@ -462,7 +506,7 @@ public sealed class CreatorViewModelTests : IDisposable
     public async Task RenameStoredFile_DuplicateName_RepromptsUntilUnique()
     {
         CreatorViewModel vm = CreateVm(out _);
-        vm.AddStoredFiles([@"X:\a.nfo", @"X:\b.nfo"]);
+        vm.AddStoredFiles([FakePath("a.nfo"), FakePath("b.nfo")]);
         vm.SelectedStoredFile = vm.StoredFiles[1];   // rename b.nfo
         _dialog.PromptResults.Enqueue("a.nfo");      // collides → re-prompt
         _dialog.PromptResults.Enqueue("c.nfo");      // unique → applied
@@ -476,7 +520,7 @@ public sealed class CreatorViewModelTests : IDisposable
     public async Task RenameStoredFile_DuplicateThenCancel_KeepsOriginal()
     {
         CreatorViewModel vm = CreateVm(out _);
-        vm.AddStoredFiles([@"X:\a.nfo", @"X:\b.nfo"]);
+        vm.AddStoredFiles([FakePath("a.nfo"), FakePath("b.nfo")]);
         vm.SelectedStoredFile = vm.StoredFiles[1];
         _dialog.PromptResults.Enqueue("a.nfo");      // collides → re-prompt
         _dialog.PromptResults.Enqueue(null);         // cancel → keep original
@@ -502,7 +546,7 @@ public sealed class CreatorViewModelTests : IDisposable
     public async Task RenameStoredFile_BlankInput_LeavesNameUnchanged()
     {
         CreatorViewModel vm = CreateVm(out _);
-        vm.AddStoredFiles([@"X:\rel\a.nfo"]);
+        vm.AddStoredFiles([FakePath("rel", "a.nfo")]);
         vm.SelectedStoredFile = vm.StoredFiles[0];
         _dialog.PromptResult = null;   // user cancelled
 
@@ -583,7 +627,7 @@ public sealed class CreatorViewModelTests : IDisposable
     public void MoveStoredFile_ReordersList_AndStopsAtBounds()
     {
         CreatorViewModel vm = CreateVm(out _);
-        vm.AddStoredFiles([@"X:\rel\a.nfo", @"X:\rel\b.sfv"]);
+        vm.AddStoredFiles([FakePath("rel", "a.nfo"), FakePath("rel", "b.sfv")]);
         vm.SelectedStoredFile = vm.StoredFiles[1];
 
         vm.MoveStoredFileUpCommand.Execute(null);
@@ -634,7 +678,7 @@ public sealed class CreatorViewModelTests : IDisposable
     public void MoveStoredFile_ReordersAndKeepsSelection()
     {
         CreatorViewModel vm = CreateVm(out _);
-        vm.AddStoredFiles([@"X:\r\a.nfo", @"X:\r\b.sfv", @"X:\r\c.jpg"]);
+        vm.AddStoredFiles([FakePath("r", "a.nfo"), FakePath("r", "b.sfv"), FakePath("r", "c.jpg")]);
 
         vm.SelectedStoredFile = vm.StoredFiles[2]; // c.jpg
         vm.MoveStoredFileUpCommand.Execute(null);
