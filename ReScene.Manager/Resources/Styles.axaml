@@ -324,10 +324,14 @@
                         Padding="2,1" MinHeight="24"
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
             <StackPanel Orientation="Horizontal" Spacing="6">
+              <!-- No RenderTransformOrigin: the default is already RelativePoint.Center, and the
+                   string form "0.5,0.5" parses as ABSOLUTE (half a PIXEL — relative needs
+                   "50%,50%"), which rotated the glyph around its corner and swung it out of its
+                   box. -->
               <Path Name="ChevronGlyph" Data="M 0 0 L 4 4 L 0 8 Z"
                     Fill="{DynamicResource ForegroundPrimary}"
                     Width="8" Height="8" Stretch="Uniform"
-                    VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5" />
+                    VerticalAlignment="Center" />
               <ContentPresenter Content="{TemplateBinding Header}"
                                 ContentTemplate="{TemplateBinding HeaderTemplate}"
                                 VerticalAlignment="Center" />

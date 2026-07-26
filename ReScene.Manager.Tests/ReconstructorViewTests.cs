@@ -171,8 +171,12 @@ public class ReconstructorViewTests
         ToggleButton toggle = group.GetVisualDescendants().OfType<ToggleButton>()
             .Single(t => t is not CheckBox);
         Assert.Equal("RAR 3.x versions", AutomationProperties.GetName(toggle));
-        Assert.Single(group.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Path>(),
-            p => p.Name == "ChevronGlyph");
+        Avalonia.Controls.Shapes.Path chevron = group.GetVisualDescendants()
+            .OfType<Avalonia.Controls.Shapes.Path>().Single(p => p.Name == "ChevronGlyph");
+        // The origin must stay the DEFAULT RelativePoint.Center: the string "0.5,0.5" parses as
+        // an ABSOLUTE half-pixel origin, rotating the glyph around its corner and swinging it out
+        // of its box (frame-capture-diagnosed from the user's screenshot).
+        Assert.Equal(Avalonia.RelativePoint.Center, chevron.RenderTransformOrigin);
 
         // Collapsed by default (no leaf ticked): the leaf checkbox is not realized.
         Assert.False(group.IsExpanded);
