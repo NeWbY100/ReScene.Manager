@@ -238,7 +238,14 @@
                 Command="{Binding SaveLogCommand}"
                 Classes="ghost"
                 Padding="8,2" />
-        <TextBlock Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock DockPanel.Dock="Left" Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <!-- Live save-outcome line (4.1.3): always in the tree — visibility-toggling would race
+             the announcement; empty text renders nothing. No AutomationProperties.Name: the
+             announced name IS the text. -->
+        <TextBlock x:Name="SaveLogStatus" Text="{Binding SaveLogAnnouncement}"
+                   AutomationProperties.LiveSetting="Polite"
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
       </DockPanel>
 
       <!-- ── Log list (fills remaining space) ───────────────── -->

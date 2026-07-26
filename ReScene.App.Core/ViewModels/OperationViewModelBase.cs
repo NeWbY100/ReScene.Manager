@@ -34,6 +34,16 @@ public abstract partial class OperationViewModelBase : ViewModelBase
     public ObservableCollection<string> LogEntries { get; } = [];
 
     /// <summary>
+    /// The last Save-log outcome ("Log saved to …", "Could not save …", "Nothing to save …"),
+    /// bound by every surface to a visible TextBlock with <c>AutomationProperties.LiveSetting=
+    /// Polite</c> so the outcome is announced to screen readers (4.1.3) — the log list itself is
+    /// deliberately not a live region. Empty when no save was attempted or the dialog was
+    /// cancelled (the cancel is its own feedback; a stale success line would mislead).
+    /// </summary>
+    [ObservableProperty]
+    public partial string SaveLogAnnouncement { get; set; } = string.Empty;
+
+    /// <summary>
     /// Appends a timestamped entry to <see cref="LogEntries"/>.
     /// </summary>
     protected void Log(string message) => AppendLogEntry(LogEntries, message);
@@ -61,8 +71,17 @@ public abstract partial class OperationViewModelBase : ViewModelBase
     /// </summary>
     protected async Task SaveLogToFileAsync(IFileDialogService fileDialog)
     {
+        // Cleared FIRST so every outcome below is a genuine empty-to-message transition: both
+        // CommunityToolkit's setter and Avalonia's TextBlock.Text suppress equal-value changes,
+        // so a repeat save to the same file would otherwise announce nothing. Do not simplify
+        // this away.
+        SaveLogAnnouncement = string.Empty;
+
         if (LogEntries.Count == 0)
         {
+            // The button is always enabled (a disabled button could not explain itself), so the
+            // empty press must say why nothing happened.
+            SaveLogAnnouncement = SaveLogMessages.Empty;
             return;
         }
 
@@ -76,12 +95,18 @@ public abstract partial class OperationViewModelBase : ViewModelBase
 
         try
         {
-            await LogExporter.SaveAsync(LogEntries, path);
+            // Snapshot on the UI thread before exporting: a run may still be appending via the batched
+            // drain while the exporter enumerates across awaits — writing the live collection can throw
+            // "Collection was modified" mid-write and leave a partial file.
+            string[] snapshot = [.. LogEntries];
+            await LogExporter.SaveAsync(snapshot, path);
             Log($"Log saved to {Path.GetFileName(path)}");
+            SaveLogAnnouncement = SaveLogMessages.Saved(path);
         }
         catch (Exception ex)
         {
             Log($"ERROR saving log: {ex.Message}");
+            SaveLogAnnouncement = SaveLogMessages.Failed(ex.Message);
         }
     }
 }

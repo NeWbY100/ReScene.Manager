@@ -198,14 +198,21 @@
                 IsVisible="{Binding LastRunSucceeded}" />
         <!-- Log header with a Save-log action so the run output can be kept (incl. the [P2] failure
              lines). Mirrors the sibling operation views and the Create-SRR wizard (WCAG 3.2.4
-             Consistent Identification): Content is the accessible name; always-enabled — SaveLogAsync
-             no-ops when the log is empty. The header also names the log list below via LabeledBy
-             (4.1.2). -->
+             Consistent Identification): Content is the accessible name; always-enabled — an empty
+             press announces "nothing to save" via the live status line. The header also names the
+             log list below via LabeledBy (4.1.2). -->
         <DockPanel Margin="0,12,0,2">
           <Button DockPanel.Dock="Right" Content="Save log..."
                   Command="{Binding SaveLogCommand}"
                   Classes="ghost" Padding="8,2" />
-          <TextBlock x:Name="DetailsHeader" Text="Details" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <TextBlock x:Name="DetailsHeader" DockPanel.Dock="Left" Text="Details" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <!-- Live save-outcome line (4.1.3): always in the tree — visibility-toggling would race
+               the announcement; empty text renders nothing. No AutomationProperties.Name: the
+               announced name IS the text. -->
+          <TextBlock x:Name="SaveLogStatus" Text="{Binding SaveLogAnnouncement}"
+                     AutomationProperties.LiveSetting="Polite"
+                     Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                     TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
         </DockPanel>
       </StackPanel>
       <!-- The merged chronological log (same LogEntries the Advanced tab shows): the System-only

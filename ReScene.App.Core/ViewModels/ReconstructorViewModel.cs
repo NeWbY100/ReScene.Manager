@@ -2307,13 +2307,31 @@ public partial class ReconstructorViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// The last Save-log outcome, bound by both Reconstructor surfaces (Advanced tab + wizard) to
+    /// a visible TextBlock with <c>AutomationProperties.LiveSetting=Polite</c> (4.1.3) — the log
+    /// list itself is deliberately not a live region. Same contract as
+    /// <see cref="OperationViewModelBase.SaveLogAnnouncement"/>.
+    /// </summary>
+    [ObservableProperty]
+    public partial string SaveLogAnnouncement { get; set; } = string.Empty;
+
     [RelayCommand]
     private async Task SaveLogAsync()
     {
+        // Cleared FIRST so every outcome below is a genuine empty-to-message transition: both
+        // CommunityToolkit's setter and Avalonia's TextBlock.Text suppress equal-value changes,
+        // so a repeat save to the same file would otherwise announce nothing. Do not simplify
+        // this away.
+        SaveLogAnnouncement = string.Empty;
+
         // The single chronological log is saved verbatim — the [P1]/[P2] tags carry the provenance the
         // old three-section stitching used to encode.
         if (LogEntries.Count == 0)
         {
+            // The button is always enabled (a disabled button could not explain itself), so the
+            // empty press must say why nothing happened.
+            SaveLogAnnouncement = SaveLogMessages.Empty;
             return;
         }
 
@@ -2333,10 +2351,12 @@ public partial class ReconstructorViewModel : ViewModelBase
             string[] snapshot = [.. LogEntries];
             await LogExporter.SaveAsync(snapshot, path);
             Log(LogTarget.System, $"Log saved to {Path.GetFileName(path)}");
+            SaveLogAnnouncement = SaveLogMessages.Saved(path);
         }
         catch (Exception ex)
         {
             Log(LogTarget.System, $"ERROR saving log: {ex.Message}");
+            SaveLogAnnouncement = SaveLogMessages.Failed(ex.Message);
         }
     }
 

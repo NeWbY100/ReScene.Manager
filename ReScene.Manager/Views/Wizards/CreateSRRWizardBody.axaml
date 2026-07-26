@@ -197,12 +197,20 @@
              something goes wrong). Mirrors the sibling operation views (CreatorView, SRSCreatorView,
              SRSReconstructorView, ReconstructorView, SampleRestorerView) so the affordance is identical
              app-wide (WCAG 3.2.4 Consistent Identification): Content is the accessible name
-             (Label-in-Name, no explicit Name); always-enabled — SaveLogAsync no-ops on an empty log. -->
+             (Label-in-Name, no explicit Name); always-enabled — an empty press announces "nothing
+             to save" via the live status line. -->
         <DockPanel Margin="0,12,0,2">
           <Button DockPanel.Dock="Right" Content="Save log..."
                   Command="{Binding SaveLogCommand}"
                   Classes="ghost" Padding="8,2" />
-          <TextBlock Text="Details" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <TextBlock DockPanel.Dock="Left" Text="Details" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <!-- Live save-outcome line (4.1.3): always in the tree — visibility-toggling would race
+               the announcement; empty text renders nothing. No AutomationProperties.Name: the
+               announced name IS the text. -->
+          <TextBlock x:Name="SaveLogStatus" Text="{Binding SaveLogAnnouncement}"
+                     AutomationProperties.LiveSetting="Polite"
+                     Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                     TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
         </DockPanel>
       </StackPanel>
       <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1"
