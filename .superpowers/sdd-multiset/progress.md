@@ -1055,3 +1055,27 @@ CODEX CATCH-UP QUEUE: now five peer-gated changes.
 - 2.5.8 DEVIATION RECORD (a11y B5 verbatim + peer precision): Versions tab Expander.versionGroup subtree; leaf AND header select-all checkboxes ~16px height / 18px pitch; below 24 minimum AND the spacing exception FAILS TOO (18px centers < 24 required); no exception applies (preference not essential); mitigations: ~226px-wide targets (only vertical axis sub-minimum), full keyboard operability (Tab+Space - LOAD-BEARING invariant: breaking leaf keyboard access VOIDS the deviation), desktop mouse+keyboard, OS scaling; header expansion ToggleButton keeps MinHeight>=24 (H=28 measured); invariants: scoped-only, no leakage. Severity: Major, accepted-and-documented. Revisit on missed-click/precision feedback.
 - NVDA SMOKE REOPEN TRIGGER (a11y sign-off condition): unnamed toggle / ExpandCollapse not flipping / stray chevron node in UIA => reopens F3/ruling-A as CRITICAL, fix precedes next release.
 - A11y: full code-side sign-off (F4 on new chrome: 2400px focus-ring delta, ring traces the full-width bar). Peer APPROVE (contrast 5.72:1 computed independently - large-text framing runs OPPOSITE: shrinking text can never raise the bar above 4.5; Viewbox scales at 87.5%, no clipping). Codex queue ~18.
+
+## 2026-07-26: App-wide 12px content text (v1.9 WPF parity) — 125d111
+User decision ("Let's use 12px") after old/new full-tab screenshots showed Avalonia one size bigger.
+Design rationale (a11y ruling B): 12px is the v1.9 WPF-parity size, not a new design choice — WPF's
+default FontSize IS 12, so v1.9 rendered 12 everywhere (its TabItem style merely re-asserted the
+default); enlargement path is OS display scaling, honored per-monitor by Avalonia. No 2.5.8/1.4.4
+deviation record needed for 14->12 itself.
+Mechanics: ControlContentThemeFontSize 14->12 (themed controls incl. popup-hosted — menu probe=12)
++ Window FontSize=12 style (unstyled TextBlocks); headings keep explicit resources. INVERTED TOKEN
+SEMANTICS restored and commented: FontSizeCaption(13) > inherited content(12); FontSizeBody(14) is
+NOT the de facto body size — do not "normalize" (drifts back to 14).
+A11y fold-ins (gate F3/F4): ForegroundSecondary #9E9E9E->#AAAAAA (3.97:1 on HoverBackground = 1.4.3
+fail on Beginner hub cards; now 4.58:1 — THIN margin, darkening HoverBackground goes under, value
+recorded in Tokens.axaml comment) + last 3 MediumLowBrush consumers (~3.7:1) moved onto it
+(HomeView x2, Button.statusVersion). Peer swept: shim now has ZERO consumers repo-wide = failure
+class closed exhaustively; shim kept-but-dead with do-not-repoint comment. Tab-strip grey stays
+#9E9E9E (~5:1 passes) — now a SECOND secondary grey, commented against "tidying" into alignment.
+2.5.8 spot-checks post-shrink: Browse 29 / TextBox 29 / Save 26 — all >=24; versionGroup rows stay
+under the existing recorded deviation.
+Tests: 3 literals track the token (FieldStatusLine/Converter pin ForegroundSecondary, StylesTests
+pins statusVersion now on it) — literal-vs-token coupling is DELIBERATE drift detection, expect
+breakage on every palette change (intended cost). DensityStyleTests' 9E9E9E pin = different brush,
+correctly untouched. Suites Manager 235/235 + App.Core 706/706 (peer re-ran both), rebuild 0W/0E.
+Dual-gate: a11y-fontsize APPROVE (F1-F5, rulings A-D), peer-scratch-review APPROVE.
