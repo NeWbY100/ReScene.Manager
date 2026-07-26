@@ -1079,3 +1079,43 @@ pins statusVersion now on it) — literal-vs-token coupling is DELIBERATE drift 
 breakage on every palette change (intended cost). DensityStyleTests' 9E9E9E pin = different brush,
 correctly untouched. Suites Manager 235/235 + App.Core 706/706 (peer re-ran both), rebuild 0W/0E.
 Dual-gate: a11y-fontsize APPROVE (F1-F5, rulings A-D), peer-scratch-review APPROVE.
+
+## 2026-07-26: Root-pin fix — the 12px change SHIPPED MASKED (426000f)
+USER CAUGHT IT post-relaunch: path TextBoxes/CheckBoxes still 14 (path text ~16% wider = 14/12).
+Root cause, two layers + one discovery:
+(1) MainWindow root FontSize={FontSizeBody}(14) LOCAL VALUE — out-prioritizes every style; port-era,
+NOT parity (v1.9 MainWindow.xaml had no root FontSize). (2) "Window" selector DEAD — Avalonia
+selectors match concrete style keys; every app window is a subclass; must be :is(Window).
+(3) Red-verification discovery: Avalonia DEFAULT FontSize IS 12 — Fluent never sets 14 on windows;
+the 14 came ENTIRELY from root pins; the :is(Window) style is ENFORCEMENT not supply (comments
+reworded). NOTE: default-is-12 is SINGLE-verified (my measurement; peer ran the root-pin red, not
+the dead-selector red — recorded per peer's (d)).
+FALSE-PASS LESSON #3 (ledger rule hardened): first red (revert to dead "Window" selector) STILL
+PASSED — reverting to something equally dead is not a red. A red-verification is only evidence if
+the failure message NAMES the thing you broke (here: "MainWindow: FontSize 14" + the TextBox
+assert line). Prior instances: python3-absent sed rig, stale CaptureRenderedFrame. Verification
+harnesses producing false passes is a PROPERTY of verification harnesses, not bad luck.
+WHY BOTH GATES MISSED IT ORIGINALLY (recorded verbatim-ish from peer): all four original probes
+(button/radio/menu/menuText) travel ONE acquisition path — theme-resource — while the change
+depended on window INHERITANCE (TextBox/CheckBox), unprobed. Rule: when a change exists to produce
+an observable outcome, the FIRST check is that outcome measured on the surface the user complained
+about; probe sets must span acquisition paths (inheritance / theme-resource / explicit token).
+v1.9 PARITY MAP (evidence-based, replaces blanket-12 assumption): v1.9 was DELIBERATELY MIXED —
+FontSizeBody=14 pins on Inspector path/warning/tree, Compare boxes x2 + trees x2, Home recent NAME,
+PromptWindow ROOT+input, CustomPackerWarning; everything else inherited default 12. Port pins were
+FAITHFUL; only the 3 root pins were bugs (MainWindow/MessageDialog/WizardWindow removed; PromptDialog
+kept = the one sanctioned pin, cited in an exception dictionary in the test).
+Change: 3 root pins removed (each commented with the local-value hazard), :is(Window) + honest
+comment, R1 wizard-warning pin commented (mirrors v1.9 ReconstructorView.xaml:74), NEW
+WindowFontSizeParityTests (reflection over ALL Window subclasses, >=12 count sanity, size map
+{PromptDialog:14, rest:12}, fail-loudly on parameterless-ctor-less windows; MainWindow probes span
+all 3 acquisition paths + Inspector TreeView==14 element-pin guard [R2] + BruteForce DataGrid==12
+[A1]). Peer coverage-model note: tests pin OUTCOME not mechanism — only uncovered combo is "style
+deleted while default still 12" which is harmless until it matters, then covered.
+Verification: red-green both directions (peer INDEPENDENTLY re-ran: byte-exact md5 restore,
+237/237), full Manager suite 237/237, rebuild 0W/0E (CA1310 fixed: StartsWith Ordinal). R3 Compare
+frame: pinned 14 boxes over 12 chrome render as designed; GAP RECORDED: DataGrid ROW height >=24
+(2.5.8) NOT pixel-checked — needs data plumbing; covered by user's Compare smoke.
+Dual-gate: a11y-fontsize APPROVE x2 (R1-R3 folded), peer-scratch-review APPROVE (with recorded
+process-miss admission: answered the angles handed to it instead of asking "does this do the thing
+it claims").
