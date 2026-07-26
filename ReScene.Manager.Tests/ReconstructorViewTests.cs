@@ -154,7 +154,8 @@ public class ReconstructorViewTests
         // exists; and both checkbox tiers expose their 4.1.2 names.
         ReconstructorViewModel vm = CreateVm();
         var leaf = new RARVersionLeaf(390, "wrar390");
-        vm.VersionGroups.Add(new RARVersionGroup(3, [leaf]));
+        var leaf2 = new RARVersionLeaf(391, "wrar391");
+        vm.VersionGroups.Add(new RARVersionGroup(3, [leaf, leaf2]));
 
         using var sink = new BindingErrorSink();
         var window = new Window { Width = 1000, Height = 760, Content = new ReconstructorView { DataContext = vm } };
@@ -194,6 +195,21 @@ public class ReconstructorViewTests
         CheckBox leafBox = group.GetVisualDescendants().OfType<CheckBox>()
             .Single(c => AutomationProperties.GetName(c) == leaf.AccessibleName);
         Assert.Equal("3.90 (wrar390)", AutomationProperties.GetName(leafBox));
+
+        // The v1.9 density (18px pitch) rests on shrinking THREE unnamed Fluent template
+        // primitives (box, glyph Viewbox, wrapper Grid) - an Avalonia bump could silently
+        // restore the 20px floor with no build error. Layout is the only honest witness.
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(leafBox.Bounds.Height <= 18,
+            $"leaf row grew to {leafBox.Bounds.Height} - a Fluent template change likely restored a 20px primitive");
+        // Pitch guard (peer): at this window width the two leaves sit side by side, so the
+        // pitch is proven arithmetically - realized height (16) plus the fixed 0,1 margins = the
+        // 18px v1.9 row pitch. Both operands are asserted; neither can drift silently.
+        CheckBox leafBox2 = group.GetVisualDescendants().OfType<CheckBox>()
+            .Single(c => AutomationProperties.GetName(c) == leaf2.AccessibleName);
+        Assert.True(leafBox2.Bounds.Height <= 16, $"leaf2 height {leafBox2.Bounds.Height} > 16");
+        Assert.Equal(new Avalonia.Thickness(0, 1), leafBox.Margin);
 
         Assert.Empty(sink.Messages);
     }

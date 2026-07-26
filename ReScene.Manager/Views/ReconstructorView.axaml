@@ -232,9 +232,14 @@
                         <DataTemplate>
                           <!-- Fixed width keeps the wrap columns aligned; the tooltip carries the
                                full folder name. -->
+                          <!-- 226, not the WPF 230: the fixed-position scrollbar (16px, the Linux
+                               overlay fix) plus the group border eat the old slack — at 1920w the
+                               wrap got exactly 8x230 with zero margin, so the 8th column vanished
+                               whenever the bar showed. Labels never fill the width; TextTrimming
+                               guards the rest. -->
                           <CheckBox IsChecked="{Binding IsChecked}" ToolTip.Tip="{Binding FolderName}"
                                     AutomationProperties.Name="{Binding AccessibleName}"
-                                    Margin="0,1" Width="230">
+                                    Margin="0,1" Width="226">
                             <StackPanel Orientation="Horizontal">
                               <TextBlock Text="{Binding LabelWithTag}" TextTrimming="CharacterEllipsis" />
                               <TextBlock Text="  " />

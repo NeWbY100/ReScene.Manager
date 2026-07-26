@@ -367,6 +367,35 @@
       </ControlTemplate>
     </Setter>
   </Style>
+  <!-- v1.9 leaf density (user-measured: old pitch 18px, new 22px). THREE coupled causes, all
+       scoped to this tree: (1) WPF's TabItem FontSize=12 INHERITED into all tab content, so the
+       old tree's text was 12px — the port carries 12 only into tab headers, leaving content at
+       14; (2) the app-wide CheckBoxMinHeight=20 (Density.axaml); (3) Fluent's 20x20 checkbox box
+       primitive (height = max(MinHeight, content), so MinHeight alone cannot shrink a row). Box
+       floor 14px per the a11y ruling (WPF's own box was 13x13; brushes untouched so the contrast
+       analysis carries). 2.5.8 deviation blessed + recorded in the ledger; invariants: scoped
+       here only, header toggle keeps MinHeight >= 24, every leaf stays keyboard-reachable. -->
+  <Style Selector="Expander.versionGroup CheckBox">
+    <Setter Property="MinHeight" Value="16" />
+    <Setter Property="FontSize" Value="12" />
+  </Style>
+  <Style Selector="Expander.versionGroup CheckBox /template/ Border#NormalRectangle">
+    <Setter Property="Width" Value="14" />
+    <Setter Property="Height" Value="14" />
+  </Style>
+  <!-- The check-glyph Viewbox is a sibling 20x20 primitive that props the row height even after
+       the box shrinks (height = max of the glyph cell's children); it scales its Path content. -->
+  <Style Selector="Expander.versionGroup CheckBox /template/ Viewbox">
+    <Setter Property="Width" Value="14" />
+    <Setter Property="Height" Value="14" />
+  </Style>
+  <!-- The glyph cell's wrapper Grid hardcodes its own 20px height in the Fluent template (the
+       one unnamed Grid; RootGrid is the template root). Height only — its width rides the
+       RootGrid's fixed glyph column and is harmless to the row. -->
+  <Style Selector="Expander.versionGroup CheckBox /template/ Grid:not(#RootGrid)">
+    <Setter Property="Height" Value="14" />
+    <Setter Property="MinHeight" Value="0" />
+  </Style>
   <Style Selector="Expander.versionGroup:expanded /template/ Path#ChevronGlyph">
     <Setter Property="RenderTransform">
       <RotateTransform Angle="90" />
