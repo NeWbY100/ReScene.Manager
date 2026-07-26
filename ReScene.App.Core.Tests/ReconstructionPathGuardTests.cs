@@ -29,7 +29,37 @@ public class ReconstructionPathGuardTests : TempDirTestBase
 
         string resolved = ReconstructionPathGuard.ResolveReal(Path.Combine(root, "does", "not", "exist.txt"));
 
-        Assert.Equal(Path.Combine(root, "does", "not", "exist.txt"), resolved);
+        // The property under test is the literal suffix append; the existing PREFIX is
+        // canonicalized by the walk (macOS: /var -> /private/var), so build the expectation from
+        // the resolved prefix.
+        Assert.Equal(
+            Path.Combine(ReconstructionPathGuard.ResolveReal(root), "does", "not", "exist.txt"),
+            resolved);
+    }
+
+    [Fact]
+    public void ResolveReal_LinkTargetRoutedThroughAnotherLink_FullyResolvesAncestors()
+    {
+        // macOS surfaced this via /var -> /private/var: a link's STORED target string can route
+        // through another link, and the adopted target must be re-walked — or a linked path and a
+        // directly-walked path to the same file compare unequal, and containment falsely rejects.
+        // The alias link builds that shape explicitly so the case runs on every POSIX platform
+        // (mirrors SrrNameCanonicalizer's regression test for the identical lib-side fix).
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string real = Path.Combine(TempDir, "alias_real");
+        Directory.CreateDirectory(Path.Combine(real, "dir"));
+        string alias = Path.Combine(TempDir, "alias_link");
+        Directory.CreateSymbolicLink(alias, real);
+        string entry = Path.Combine(TempDir, "alias_entry");
+        Directory.CreateSymbolicLink(entry, Path.Combine(alias, "dir")); // target string via the alias
+
+        Assert.Equal(
+            ReconstructionPathGuard.ResolveReal(Path.Combine(real, "dir")),
+            ReconstructionPathGuard.ResolveReal(entry));
     }
 
     [Fact]
@@ -40,8 +70,12 @@ public class ReconstructionPathGuardTests : TempDirTestBase
 
         string child = ReconstructionPathGuard.ResolveOutputChild(outputPath, Path.Combine("DVD1", "aln-re4a.rar"));
 
-        Assert.Equal(
-            Path.Combine(outputPath, ReconstructionPathGuard.OutputDirName, "DVD1", "aln-re4a.rar"), child);
+        // EndsWith pins the CHILD-COMPOSITION property without sharing ResolveReal with the
+        // expectation (a canonicalization regression would move an Equal's both sides together);
+        // canonicalization itself is pinned by the alias regression test, and under-the-right-root
+        // is ResolveOutputChild's own escape guard, covered by the fail-closed tests.
+        Assert.EndsWith(
+            Path.Combine(ReconstructionPathGuard.OutputDirName, "DVD1", "aln-re4a.rar"), child, StringComparison.Ordinal);
     }
 
     [Fact]

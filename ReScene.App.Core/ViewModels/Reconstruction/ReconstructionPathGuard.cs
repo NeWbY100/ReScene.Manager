@@ -36,8 +36,19 @@ internal static class ReconstructionPathGuard
     /// </summary>
     /// <exception cref="IOException">An existing component could not be resolved.</exception>
     /// <exception cref="UnauthorizedAccessException">An existing component could not be inspected.</exception>
-    public static string ResolveReal(string path)
+    public static string ResolveReal(string path) => ResolveReal(path, depth: 0);
+
+    // depth guards the recursion introduced by link-target adoption below (a link's stored target
+    // can itself route through links; pathological target cycles would otherwise recurse forever
+    // — the BCL's returnFinalTarget loop detection only catches pure link-to-link cycles). Same
+    // guard as SrrNameCanonicalizer.ResolveAncestorChain.
+    private static string ResolveReal(string path, int depth)
     {
+        if (depth > 40)
+        {
+            throw new IOException($"Too many nested links while resolving '{path}'.");
+        }
+
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         string full = Path.GetFullPath(path);
@@ -76,9 +87,13 @@ internal static class ReconstructionPathGuard
                 continue;
             }
 
-            // Null means candidate exists but is not a link; otherwise it's the fully-resolved
-            // final target. Either way this component is verified to exist.
-            resolved = target?.FullName ?? candidate;
+            // Null means candidate exists but is not a link. An adopted target's STRING can
+            // itself route through unresolved ancestor links (macOS /var -> /private/var: links
+            // created toward temp paths store the /var spelling) — re-walk it so every arm leaves
+            // `resolved` fully canonical, or a linked path and a directly-walked path to the same
+            // file compare unequal and containment falsely rejects. Same fix as
+            // SrrNameCanonicalizer.ApplyComponent.
+            resolved = target is null ? candidate : ResolveReal(target.FullName, depth + 1);
         }
 
         return resolved;

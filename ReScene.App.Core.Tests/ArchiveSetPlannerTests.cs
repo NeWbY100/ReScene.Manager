@@ -506,7 +506,12 @@ public class ArchiveSetPlannerTests
 
         string root = ArchiveSetPlanner.WorkRootFor(shared, set);
 
-        Assert.StartsWith(Path.Combine(outputPath, ".rescene-work"), root, StringComparison.Ordinal);
+        // The expectation must be canonicalized the same way the planner canonicalizes: macOS's
+        // GetTempPath hands out /var/... which real-resolves to /private/var/....
+        Directory.CreateDirectory(outputPath);
+        Assert.StartsWith(
+            Path.Combine(ReconstructionPathGuard.ResolveReal(outputPath), ".rescene-work"),
+            root, StringComparison.Ordinal);
         Assert.DoesNotContain('/', Path.GetFileName(root)); // key separators sanitized
     }
 
