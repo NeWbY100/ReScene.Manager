@@ -1237,3 +1237,11 @@ plain labels inherit WHITE while grid uses #D4D4D4 (pre-existing split, now ensh
 Suites Manager 241/241 (239+2), 0W/0E. Dual-gate: a11y APPROVE ×2 + required tree probe discharged
 + consult closed; peer REVISE→APPROVE (independent red-green ×2 with per-revert hash backups —
 its own lesson: re-backup before EACH revert, comment edits change the hash).
+
+## 2026-07-27 addendum: peer post-landing ratification + restore-hygiene rule
+Peer re-verified the COMMITTED BLOB of f43dc63 (not just working tree): both red gates fire on
+current bytes (recycled assert line 219 "Actual: Black"; in-place assert line 100 "Actual: Black"),
+restores byte-identical, 241/241 + 0W/0E re-confirmed post-cycle. RULE (peer, bitten twice — the
+change was edited under it mid-review three times): before EVERY red-check revert, re-backup and
+re-hash the CURRENT file — a stale backup silently reverts intervening fixes; pairs with the
+CRLF/sed lesson as "verify the file you're about to restore is the file you backed up."
