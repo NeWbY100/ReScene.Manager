@@ -22,6 +22,31 @@
     <Setter Property="FontSize" Value="12" />
   </Style>
 
+  <!-- WPF parity: v1.9 had NO press animation; Fluent scales Button/ToggleButton/RepeatButton
+       to 0.98 on :pressed (transition-animated). The slide is width-proportional — each edge
+       moves inward by 1% of width — so a full-row control (the Versions group header, Home
+       recentItem rows) slides its left-edge content up to ~18px sideways DURING the press.
+       Worse than cosmetic: RenderTransform moves the HIT bounds and IsPressed re-evaluates
+       containment on pointer-move, so once the row slid out from under a parked pointer ANY
+       pointer movement mid-press — even a zero-displacement re-evaluation — silently cancelled
+       the activation (user-reported: "moves to the right, hard to click"). Pressed FEEDBACK
+       stays where v1.9 had it: our button classes keep their distinct :pressed brushes
+       (v1.9's five IsPressed triggers were all Button templates); link/toolbar/versionGroup
+       header showing no during-hold change matches v1.9, whose Hyperlink/ToolbarToggleButton/
+       Expander-header styles had no IsPressed trigger either. Style keys are matched exactly,
+       so a future SplitButton/DropDownButton would need its own line (CheckBox/RadioButton
+       need none — their themes have no press transform, drift-probed 0). PressStabilityTests
+       pins the two user-facing surfaces. -->
+  <Style Selector="Button:pressed">
+    <Setter Property="RenderTransform" Value="none" />
+  </Style>
+  <Style Selector="ToggleButton:pressed">
+    <Setter Property="RenderTransform" Value="none" />
+  </Style>
+  <Style Selector="RepeatButton:pressed">
+    <Setter Property="RenderTransform" Value="none" />
+  </Style>
+
   <!-- WPF parity: WPF buttons center their content; Avalonia's Fluent Button theme sets no
        content alignment, so any button wider than its text (MinWidth Save/Cancel/Browse
        buttons) renders the label left-hugging. Button.link / Button.recentItem re-assert Left
