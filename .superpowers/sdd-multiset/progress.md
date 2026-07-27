@@ -1165,3 +1165,37 @@ live-app repro of both bug and fix, RadioButton/CheckBox 0-drift under bug). Sui
 (237+2), rebuild 0W/0E. GAP recorded: none — live verification done by peer this time.
 Dual-gate: a11y-press-scale APPROVE (fresh agent — a11y-fontsize + peer-scratch-review sessions
 ended; successors carry the standing rules), peer-press-scale APPROVE.
+
+## 2026-07-27: ReScene.NET rebrand leftovers purged (32521f5, lib c76814a)
+User: "still 'ReScene.NET' references around — check, rename/remove". SWEEP SCOPE (state it — peer
+rule): source-file globs (cs/axaml/csproj/slnx/md/yml/json) excluding .superpowers/, docs/superpowers/,
+obj/bin = 138 pre-change hits; peer measured 119 post-change same scope; ~5.4k on the raw worktree
+incl. process docs/.git — a bare grep will still show thousands (ledger+specs are history).
+FIXED (functional): (1) THE stamp — released v2.0.0 wrote "ReScene.NET v2.0.0 (…)" into created
+SRR/SRS files; GetDefaultAppName → "ReScene Manager v…"; NormalizeAppName matches BOTH new AND
+legacy "ReScene.NET v" prefixes (v1.9- and v2.0.0-era stored settings must keep refreshing —
+dropping the legacy match freezes them forever; theory test ×2 added; peer red-verified the match
+AND verified the outcome LIVE: user's real settings.json carries "ReScene.NET v1.0.0 (5eea776…)"
+→ Creator field showed "ReScene Manager v1.0.0 (00c7448…)" — normalize-on-load is in-memory, file
+untouched). (2) %TEMP%\ReScene.NET → ReScene.Manager (no cleanup coupled to the root — confirmed;
+NOTE: ~209 orphaned old-root dirs on user's machine now permanently stranded, may contain KEPT
+work files — user's call to delete, never auto-sweep). (3) AppInfo.DisplayName/"ReScene Manager" +
+AppDataConfig.FolderName/"ReScene.Manager" class defaults aligned (WPF head deleted; startup
+overrides kept as belt). (4) CreatorViewModel blank-fallbacks ×3. (5) LIB default AppName →
+"ReScene.Lib" (byte-length-identical 11 chars — moot per peer: no length-sensitive assert exists,
+golden NormalizeDeep rewrites the field both sides). (6) PEER FINDING: ReScene.Cli relied on the
+lib default ("app always passes explicit" was FALSE for the CLI) → CreateCommand now stamps
+"ReScene.Cli" explicitly (pyrescene convention: tool names itself; CLI is CI-built but not
+released). (7) PEER FINDING: .editorconfig headers + LICENSE holders in BOTH repos → "ReScene
+Manager"/"ReScene.Lib" (LICENSE = recorded decision: project-name-as-holder pattern preserved,
+no personal name per standing rule). (8) Tokens.axaml banner, coding-guidelines header.
+KEPT (recorded): ~30 ported-from-WPF XML-doc citations (ReScene.NET.* type names are historical
+fact), v1.9 provenance comments, CHANGELOG/README "formerly" + old release URLs (redirect),
+FullPipelineGoldenTests explicit vectors (inert — golden normalizes appname), multiset README
+fixture-bytes line, NormalizeAppName legacy literal + its test data (back-compat, not leftovers).
+LEDGER LESSON #6 (peer): sed -i in Git Bash silently converts CRLF→LF; FormatUtilities.cs is CRLF
+while most of the tree is LF — content-diff clean, only the HASH caught it. Hash-verify sed-based
+red checks, don't diff-verify.
+Suites lib 1431 / App.Core 709 (706+3) / Manager 239, rebuild 0W/0E (CS1503 caught by gate:
+CreateAsync's 3rd positional is storedFiles → named options:). Lib pushed 94eaaee→c76814a (ff
+checked first). Dual-gate: a11y ACK ("ends the title-vs-stamp split-brand"), peer APPROVE.
