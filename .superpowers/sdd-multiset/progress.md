@@ -1199,3 +1199,41 @@ red checks, don't diff-verify.
 Suites lib 1431 / App.Core 709 (706+3) / Manager 239, rebuild 0W/0E (CS1503 caught by gate:
 CreateAsync's 3rd positional is storedFiles → named options:). Lib pushed 94eaaee→c76814a (ff
 checked first). Dual-gate: a11y ACK ("ends the title-vs-stamp split-brand"), peer APPROVE.
+
+## 2026-07-27: Compare name-column black text — always-real-brush at every tier (f43dc63)
+USER: "we still are showing text in black (I though we fixed this??)" — user RIGHT both ways:
+840fb8f fixed this bug class at the CELL tier; the name column's OWN TextBlock (one tier deeper)
+kept the single-key form. FALSE-PASS #5 THEN THE MECHANISM: first regression test PASSED on
+unfixed code — fresh binds inherit the fixed cell foreground; the bug needs the grid's per-tree-
+click REPOPULATION where a RECYCLED container rebinding indented→plain lands UnsetValue on
+TextBlock's BLACK default instead of re-inheriting ("Expected: #ffd4d4d4, Actual: Black").
+RULE: recycled-rebind is a distinct bind path — regression tests for binding fixes must exercise
+repopulation, not only initial population (the initial asserts are decorative; commented so).
+FIX: IndentDiffBrushConverter (IMultiValueConverter, [IsIndented,IsDifferent] → Medium/AccentError/
+ForegroundPrimary — v1.9-verified: its row trigger reached non-indented names) + MultiBinding at
+both grid sites; fail-safe short-list guard resolves ForegroundPrimary (peer nit: returning
+UnsetValue there is the failure mode the class exists to prevent).
+PEER REFUTED "TREE IS SAFE" (my assertion — gate had required the probe): recycling IS safe
+(probe: recycled labels revert to inherited WHITE — NOT ForegroundPrimary! pinning primary would
+DIM the tree, gate's warning), but IN-PLACE IsDifferent flip true→false lands BLACK — TreeNodeViewModel
+is [ObservableProperty] (binding re-evaluates without rebind) while PropertyItem is non-notifying
+(grid can only fail via recycling) — THE structural insight. Unreachable today (CompareHighlighter
+only SETS the flag = monotonic invariant) but hardened anyway: two-key AccentError|BaseHigh(#FFF =
+measured steady state, zero visual delta). TreeForegroundRecyclingTests pins recycling + in-place
+(red both reviewers: "Expected: White, Actual: Black").
+PEER BLOCKER CAUGHT PRE-COMMIT: my debug frame-capture hardcoded the scratchpad path — would have
+broken dotnet test on ALL THREE CI runners (peer proved with a repoint: DirectoryNotFoundException).
+Removed. RULE: throwaway capture blocks must never survive into permanent tests.
+A11Y RECORD (gate corrections, outlive the consult): AccentError-as-text = 3.39:1 on diff tint /
+4.26:1 on panel — BELOW 4.5 AA floor; my "4.6-5:1" was the on-black figure and 840fb8f's approval
+used the same wrong arithmetic. Fix approved anyway (cures black at 1.3:1; parity + value-column
+consistency govern). MAJOR FOLLOW-UP OPENED (a11y sweep item 9): lighter AccentError TEXT-variant
+token (candidate #FF7B7B ≈4.9:1 on tint) across 5 markup sites; blast radius 9 test asserts in 6
+files (ConverterTests:123, FieldStatusLineTests:45/46, FileCompareViewTests ×3, MessageDialogTests:44,
+StylesTests:24, TreeForegroundRecyclingTests:70) — all break together when the token lands, NOT a
+mass regression. PARITY-VS-AA CONFLICT logged: exact v1.9 red vs AA floor — USER DECIDES the shade.
+Also noted: 1.4.1 color-only diff signaling (pre-existing, minor, in the follow-up ticket); tree
+plain labels inherit WHITE while grid uses #D4D4D4 (pre-existing split, now enshrined as steadyPlain).
+Suites Manager 241/241 (239+2), 0W/0E. Dual-gate: a11y APPROVE ×2 + required tree probe discharged
++ consult closed; peer REVISE→APPROVE (independent red-green ×2 with per-revert hash backups —
+its own lesson: re-backup before EACH revert, comment edits change the hash).
