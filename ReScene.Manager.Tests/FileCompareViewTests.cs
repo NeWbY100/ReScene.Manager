@@ -113,6 +113,24 @@ public class FileCompareViewTests
         // Both structure trees exist.
         Assert.Equal(2, window.GetVisualDescendants().OfType<TreeView>().Count());
 
+        // Column headers carry the v1.9 panel-toned band (SurfaceBackground), not Fluent's
+        // near-black default — the port originally dropped the Background/border setters.
+        var headers = window.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .Where(h => h.Content is string s && (s == "Property" || s == "Value")).ToList();
+        Assert.Equal(4, headers.Count);
+        Assert.All(headers, h =>
+        {
+            Assert.Equal(Color.Parse("#FF2D2D30"),
+                Assert.IsAssignableFrom<ISolidColorBrush>(h.Background).Color);
+            Assert.Equal(new Thickness(0, 0, 1, 1), h.BorderThickness);
+        });
+        // Interior separator: Fluent's template element is retinted dark (v1.9 look) — its
+        // stock #66FFFFFF reads as a bright line on the panel-toned band.
+        var separator = headers[0].GetVisualDescendants()
+            .OfType<Avalonia.Controls.Shapes.Rectangle>().First(r => r.Name == "VerticalSeparator");
+        Assert.Equal(Color.Parse("#FF333333"),
+            Assert.IsAssignableFrom<ISolidColorBrush>(separator.Fill).Color);
+
         // Two embedded HexView composites (one per side).
         Assert.Equal(2, window.GetVisualDescendants().OfType<HexView>().Count());
 

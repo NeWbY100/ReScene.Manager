@@ -142,6 +142,10 @@ public class BruteForceProgressWindowTests
         Assert.Equal(["Set", "Version", "Status", "Result", "Start", "End", "Duration", "Arguments"],
             grid.Columns.Select(c => c.Header).ToArray());
         Assert.True(grid.IsReadOnly);
+        // Explicitly off: this was the ONE grid inheriting Avalonia's CanUserSortColumns=True
+        // default — live click-to-sort on the flat header band with no assessed affordance
+        // (peer finding); all nine grids now agree. Re-gate before enabling sorting anywhere.
+        Assert.False(grid.CanUserSortColumns);
         Assert.Same(vm.VersionEntries, grid.ItemsSource);
 
         int rows = window.GetVisualDescendants().OfType<DataGridRow>().Count();

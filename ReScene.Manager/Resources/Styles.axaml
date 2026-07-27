@@ -337,6 +337,21 @@
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource ForegroundSecondary}" />
     <Setter Property="Padding" Value="6,4" />
+    <!-- v1.9 parity (App.xaml:1172-1180): panel-toned header band with subtle right+bottom
+         separators — the port originally dropped these two, leaving Fluent's near-black band
+         (user report). 5.9:1 with the bumped ForegroundSecondary. All NINE grids keep
+         CanUserSortColumns=False (VersionGrid was the stray inheriting Avalonia's TRUE default;
+         v1.9 default-allowed sorting there but with WPF's own themed sort chrome — this flat
+         band has no assessed interactive affordance, so sorting stays off; re-gate 2.4.7/hover
+         through a11y before enabling it anywhere). -->
+    <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderSeparator}" />
+    <Setter Property="BorderThickness" Value="0,0,1,1" />
+    <!-- Interior column boundaries: Fluent's separator Rectangle template-binds the header's
+         SeparatorBrush and its stock value is a semi-transparent WHITE (#66FFFFFF) that reads
+         bright on the panel-toned band; v1.9's separators were dark. (Styling the Rectangle's
+         Fill directly does NOT work — the template-provided value outranks plain styles.) -->
+    <Setter Property="SeparatorBrush" Value="{DynamicResource BorderSeparator}" />
   </Style>
   <Style Selector="DataGridCell">
     <Setter Property="Padding" Value="6,3" />

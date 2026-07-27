@@ -91,6 +91,7 @@
               IsReadOnly="True"
               CanUserReorderColumns="False"
               CanUserResizeColumns="True"
+              CanUserSortColumns="False"
               ScrollViewer.AllowAutoHide="False"
               HeadersVisibility="Column"
               SelectionMode="Single"
