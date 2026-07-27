@@ -1127,3 +1127,41 @@ was already correct (237 = 235 + 2). RULE (peer, 4th count discrepancy this stre
 twelve-vs-eleven log panes, 22-vs-21 fixtures, 3-vs-2 parity tests): counts in dispatch messages are
 APPROXIMATE UNTIL MEASURED — measure before a number enters the ledger; a ledger that inherits an
 unmeasured count will eventually mislead someone who cannot re-measure.
+
+## 2026-07-27: Press-scale suppression — Versions header slide (8b0f01c)
+USER REPORT #3 in the Versions neighborhood, NEW mechanism (distinct from chevron-origin): group
+header "still moving to the right — hard to click". ROOT CAUSE: Fluent Button/ToggleButton themes
+apply RenderTransform scale(0.98) on :pressed, TRANSITION-ANIMATED; width-proportional slide (1%
+per edge) → full-row header (~1846 DIP live) slid chevron/checkbox up to ~18px DURING the press;
+226px leaves <2px + CheckBox theme has NO press transform (probed null) → "only groups misbehave".
+A11y gate sharpening (upgraded severity to Major): RenderTransform moves HIT bounds + IsPressed
+re-evaluates containment on pointer-move → once slid out from under a parked pointer, ANY movement
+cancels activation — peer proved even a ZERO-DISPLACEMENT move cancels (clicked=False under bug) =
+intermittent activation failure, the literal "hard to click" mechanism.
+FALSE-ACQUITTAL LESSON #4 (animated-property sibling of stale-frame): forcing :pressed via
+IPseudoClasses and reading RenderTransform immediately returns IDENTITY — the transition means t=0
+reads the OLD value; the correct hypothesis was wrongly killed once. Sample DURING a held real
+press across ForceRenderTimerTick loop. PEER'S ADDITION (lesson #5): when probing styled properties
+on the LIVE app, read the property's SOURCE field, not just value — peer's own first live probe
+false-passed via a local-value contamination it caught by source=StyleTrigger check.
+FIX (a11y option A app-wide, unconditional): Button/ToggleButton/RepeatButton :pressed →
+RenderTransform none. RepeatButton = peer-measured latent hole (own style key; 18px slide with fix
+present; unreachable today — no RepeatButton in any axaml, ScrollBar's internal ones have dedicated
+ControlTheme, probed 0). Rejected alt: :is(Button):pressed (covers derived types incl. 3rd-party
+templates — broader than needed, on record per peer). SplitButton/DropDownButton remain named gaps
+if ever introduced. none vs x:Null: none = identity TransformOperations, type-compatible with the
+theme's transition (identity→identity = never engages; firstFrameDrift=0.000); x:Null would hand
+the transition a null.
+FEEDBACK PARITY (peer challenged the a11y gate's "all five have :pressed" as overcounted — link/
+toolbar/versionGroup have :pressed == :pointerover): verified against v1.9 App.xaml — its FIVE
+IsPressed triggers are ALL Button templates (matching our classes with distinct pressed brushes);
+Hyperlink/ToolbarToggleButton/Expander-header had NO IsPressed trigger → no-during-hold-change on
+those surfaces IS literal v1.9 parity, recorded qualified.
+Tests: PressStabilityTests ×2 — held-press drift <0.5px on real Versions header (red 18.42px =
+exactly 1% of 1842 test width) + synthetic 1800px recentItem (red magnitude TIMING-DEPENDENT:
+mine 10.34, peer 8.75 — do not quote as fixed) + jitter-still-clicks (peer: strongest assert in
+the file). Red-green BOTH reviewers independently (peer: byte-identical restore SHA256-confirmed,
+live-app repro of both bug and fix, RadioButton/CheckBox 0-drift under bug). Suites 239/239
+(237+2), rebuild 0W/0E. GAP recorded: none — live verification done by peer this time.
+Dual-gate: a11y-press-scale APPROVE (fresh agent — a11y-fontsize + peer-scratch-review sessions
+ended; successors carry the standing rules), peer-press-scale APPROVE.
