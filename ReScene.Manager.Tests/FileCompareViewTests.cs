@@ -163,6 +163,67 @@ public class FileCompareViewTests
     }
 
     [AvaloniaFact]
+    public void PropertyNameColumn_RealizesV19Foregrounds_NeverTheBlackDefault()
+    {
+        // The 840fb8f cell-level fix cured black-on-tinted-rows for the CELL, but the name
+        // column's own TextBlock was missed: its single-key IsIndented binding returned
+        // UnsetValue for non-indented rows and DataGrid content inheritance is unreliable, so
+        // "Block Type"-style names rendered TextBlock's BLACK default (user screenshot,
+        // ~1.3:1 on the panel). v1.9 spec: indented -> Medium; non-indented -> the row's diff
+        // state (AccentError on diff rows, primary otherwise).
+        FileCompareViewModel vm = CreateViewModel();
+        vm.LeftProperties.Add(new PropertyItem { Name = "Block Type", Value = "File Header" });
+        vm.LeftProperties.Add(new PropertyItem { Name = "Header CRC", Value = "0x1325", IsDifferent = true });
+        vm.LeftProperties.Add(new PropertyItem { Name = "  Method", Value = "Store", IsIndented = true });
+        vm.RightProperties.Add(new PropertyItem { Name = "Right Plain", Value = "x" }); // right grid: same template, own site
+
+        using var sink = new BindingErrorSink();
+        (Window window, _) = Show(vm);
+
+        TextBlock NameBlock(string name) => window.GetVisualDescendants().OfType<DataGridRow>()
+            .Single(r => r.DataContext is PropertyItem p && p.Name == name)
+            .GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == name);
+
+        Avalonia.Media.Color Fg(TextBlock t) =>
+            Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(t.Foreground).Color;
+
+        // Non-indented, non-diff: primary — the regression pin (was #FF000000).
+        Assert.Equal(Avalonia.Media.Color.Parse("#FFD4D4D4"), Fg(NameBlock("Block Type")));
+        // Non-indented, diff: the v1.9 row trigger made names red too.
+        Assert.Equal(Avalonia.Media.Color.Parse("#FFF44747"), Fg(NameBlock("Header CRC")));
+        // Indented: Medium — numerically identical to ForegroundPrimary today (#D4D4D4 both),
+        // so this assert CANNOT distinguish the token routing until the two values diverge.
+        Assert.Equal(Avalonia.Media.Color.Parse("#FFD4D4D4"), Fg(NameBlock("  Method")));
+        // The right grid's template is a separate markup site — pin it too.
+        Assert.Equal(Avalonia.Media.Color.Parse("#FFD4D4D4"), Fg(NameBlock("Right Plain")));
+
+        // The real app REPOPULATES the grid on every tree-node click, recycling row containers.
+        // A recycled name TextBlock that previously carried the indented Medium brush and gets
+        // rebound to a NON-indented item is where the black default appeared in the field
+        // (initial population renders fine — the user's screenshot state only occurs after a
+        // selection change). Rebind indented->plain in the same container positions.
+        vm.LeftProperties.Clear();
+        vm.LeftProperties.Add(new PropertyItem { Name = "  Packed Size", Value = "1", IsIndented = true });
+        vm.LeftProperties.Add(new PropertyItem { Name = "  Unpacked", Value = "2", IsIndented = true });
+        vm.LeftProperties.Add(new PropertyItem { Name = "  OS", Value = "3", IsIndented = true });
+        Dispatcher.UIThread.RunJobs();
+        vm.LeftProperties.Clear();
+        vm.LeftProperties.Add(new PropertyItem { Name = "Start Offset", Value = "0x14" });
+        vm.LeftProperties.Add(new PropertyItem { Name = "Header Size", Value = "49 bytes" });
+        vm.LeftProperties.Add(new PropertyItem { Name = "Flags", Value = "0x90C2", IsDifferent = true });
+        Dispatcher.UIThread.RunJobs();
+
+        // NOTE: these recycled-phase asserts are the LOAD-BEARING part of this test — the
+        // initial-population asserts above pass even under the old single-key binding (fresh
+        // binds inherit correctly). Do not "simplify" this test by dropping the repopulation.
+        Assert.Equal(Avalonia.Media.Color.Parse("#FFD4D4D4"), Fg(NameBlock("Start Offset")));
+        Assert.Equal(Avalonia.Media.Color.Parse("#FFD4D4D4"), Fg(NameBlock("Header Size")));
+        Assert.Equal(Avalonia.Media.Color.Parse("#FFF44747"), Fg(NameBlock("Flags")));
+
+        Assert.Empty(sink.Messages);
+    }
+
+    [AvaloniaFact]
     public void BoolToBrushConverter_MapsTrueToTokenBrush_AndFalseOrNonBoolToUnset()
     {
         var converter = new BoolToBrushConverter();

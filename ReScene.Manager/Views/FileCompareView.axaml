@@ -16,7 +16,10 @@
        The Foreground uses the two-key converter form: non-diff cells must resolve a REAL brush
        (ForegroundPrimary), because an UnsetValue falls back to inherited Foreground, which does not
        reliably reach the alternating tinted rows — they then render TextBlock's black default (the
-       same bug the Inspector grid had; see BoolToBrushConverter). The density/focus overrides mirror
+       same bug the Inspector grid had; see BoolToBrushConverter). The NAME column's TextBlock needs
+       the same always-real-brush treatment one level deeper (IndentDiffBrushConverter): UnsetValue
+       inherits on FIRST bind, but the grid repopulates per tree click and a RECYCLED container
+       rebinding indented→plain lands on TextBlock's black default. The density/focus overrides mirror
        the Inspector's approved treatment: caption-size text instead of Fluent's 15px cell default,
        a compact row floor instead of MinHeight 32, and no white per-cell focus rectangle. -->
   <UserControl.Styles>
@@ -150,9 +153,15 @@
               </TreeView.Styles>
               <TreeView.ItemTemplate>
                 <TreeDataTemplate ItemsSource="{Binding Children}">
+                  <!-- Two-key on purpose: TreeNodeViewModel.IsDifferent is [ObservableProperty], so
+                       an IN-PLACE flip true->false re-evaluates the binding — a single-key UnsetValue
+                       lands on TextBlock's black default (peer-proven); it just never fires today
+                       because CompareHighlighter only ever SETS the flag. BaseHigh (#FFF) matches the
+                       tree's measured inherited steady state exactly — NOT ForegroundPrimary
+                       (#D4D4D4), which would visibly dim every plain label. -->
                   <TextBlock Text="{Binding Text}"
                              TextTrimming="CharacterEllipsis"
-                             Foreground="{Binding IsDifferent, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=AccentError}" />
+                             Foreground="{Binding IsDifferent, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=AccentError|SystemControlForegroundBaseHighBrush}" />
                 </TreeDataTemplate>
               </TreeView.ItemTemplate>
             </TreeView>
@@ -204,8 +213,14 @@
                         <TextBlock Text="{Binding Name}"
                                    TextTrimming="CharacterEllipsis"
                                    VerticalAlignment="Center"
-                                   Margin="{Binding IsIndented, Converter={StaticResource IndentToMarginConverter}}"
-                                   Foreground="{Binding IsIndented, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=SystemControlForegroundBaseMediumBrush}" />
+                                   Margin="{Binding IsIndented, Converter={StaticResource IndentToMarginConverter}}">
+                          <TextBlock.Foreground>
+                            <MultiBinding Converter="{StaticResource IndentDiffBrushConverter}">
+                              <Binding Path="IsIndented" />
+                              <Binding Path="IsDifferent" />
+                            </MultiBinding>
+                          </TextBlock.Foreground>
+                        </TextBlock>
                       </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                   </DataGridTemplateColumn>
@@ -292,9 +307,15 @@
               </TreeView.Styles>
               <TreeView.ItemTemplate>
                 <TreeDataTemplate ItemsSource="{Binding Children}">
+                  <!-- Two-key on purpose: TreeNodeViewModel.IsDifferent is [ObservableProperty], so
+                       an IN-PLACE flip true->false re-evaluates the binding — a single-key UnsetValue
+                       lands on TextBlock's black default (peer-proven); it just never fires today
+                       because CompareHighlighter only ever SETS the flag. BaseHigh (#FFF) matches the
+                       tree's measured inherited steady state exactly — NOT ForegroundPrimary
+                       (#D4D4D4), which would visibly dim every plain label. -->
                   <TextBlock Text="{Binding Text}"
                              TextTrimming="CharacterEllipsis"
-                             Foreground="{Binding IsDifferent, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=AccentError}" />
+                             Foreground="{Binding IsDifferent, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=AccentError|SystemControlForegroundBaseHighBrush}" />
                 </TreeDataTemplate>
               </TreeView.ItemTemplate>
             </TreeView>
@@ -346,8 +367,14 @@
                         <TextBlock Text="{Binding Name}"
                                    TextTrimming="CharacterEllipsis"
                                    VerticalAlignment="Center"
-                                   Margin="{Binding IsIndented, Converter={StaticResource IndentToMarginConverter}}"
-                                   Foreground="{Binding IsIndented, Converter={StaticResource BoolToBrushConverter}, ConverterParameter=SystemControlForegroundBaseMediumBrush}" />
+                                   Margin="{Binding IsIndented, Converter={StaticResource IndentToMarginConverter}}">
+                          <TextBlock.Foreground>
+                            <MultiBinding Converter="{StaticResource IndentDiffBrushConverter}">
+                              <Binding Path="IsIndented" />
+                              <Binding Path="IsDifferent" />
+                            </MultiBinding>
+                          </TextBlock.Foreground>
+                        </TextBlock>
                       </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                   </DataGridTemplateColumn>
