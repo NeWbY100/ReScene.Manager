@@ -1245,3 +1245,27 @@ restores byte-identical, 241/241 + 0W/0E re-confirmed post-cycle. RULE (peer, bi
 change was edited under it mid-review three times): before EVERY red-check revert, re-backup and
 re-hash the CURRENT file — a stale backup silently reverts intervening fixes; pairs with the
 CRLF/sed lesson as "verify the file you're about to restore is the file you backed up."
+
+## 2026-07-27: Grid header colors — v1.9 band + dark separators + sort census (see commit above)
+USER: headers black vs v1.9's panel-blended band. Port's header style had dropped v1.9's
+Background=SurfaceBackground + BorderSeparator 0,0,1,1 (App.xaml:1172-1180) — re-added; red
+"Actual: Black" ×4. PEER FOUND the second half: Fluent's interior separator Rectangle carries a
+stock #66FFFFFF fill = BRIGHT line on the new band (v1.9's separators were dark). First fix
+attempt (/template/ Rectangle#VerticalSeparator Fill) FAILED — LEDGER RULE (peer: "keep verbatim"):
+Avalonia BindingPriority orders Template(2) ahead of Style(3) — a TemplateBinding beats a plain
+style setter; the distinguishing question is NOT "is the element inside a template" but "does the
+template already BIND that property" (the TabControl WrapPanel Background override works because
+nothing template-binds it). Fix: the header's SeparatorBrush styled property (template-bound by
+the Rectangle) → #333; peer live-verified before(#66ffffff)/after(#ff333333), source stays
+Template = mechanism proof. Red "Actual: #66ffffff".
+SORT CENSUS (peer): 9 DataGrids; EIGHT set CanUserSortColumns=False, BruteForce VersionGrid
+inherited Avalonia's TRUE default = live click-to-sort on the unassessed flat band TODAY (the
+a11y gate's "if sorting is ever enabled" caveat was live, not hypothetical). Closed: explicit
+False, nine agree (peer re-census: 9/9 + comment as 10th grep hit). V1.9 DEVIATION RECORDED:
+WPF default-allowed sorting there but with its own themed sort chrome; a11y ratified as REMOVING
+a latent 2.4.7 surface (transient progress dialog, sort inherited-not-designed); re-gate
+2.4.7/hover before re-enabling sorting anywhere. Red "Expected: False, Actual: True".
+Contrast: #AAAAAA on #2D2D30 = 5.905:1 (gate + peer independently) — beats actual v1.9 (~5.1
+with old #9E9E9E). Frame matches the v1.9 reference. Suites 241/241 (asserts landed in existing
+tests — count unchanged, stated), 0W/0E. Dual-gate: a11y APPROVE + additions ratified; peer
+APPROVE (3 red gates, live measurements, hash restores).
