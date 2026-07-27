@@ -72,23 +72,26 @@ public static class FormatUtilities
 
         if (version is null)
         {
-            return "ReScene.NET";
+            return "ReScene Manager";
         }
 
         int plus = version.IndexOf('+', StringComparison.Ordinal);
         return plus >= 0
-            ? $"ReScene.NET v{version[..plus]} ({version[(plus + 1)..]})"
-            : $"ReScene.NET v{version}";
+            ? $"ReScene Manager v{version[..plus]} ({version[(plus + 1)..]})"
+            : $"ReScene Manager v{version}";
     }
 
     /// <summary>
     /// Returns the effective default app name: the live <see cref="GetDefaultAppName"/> when the
-    /// stored value is blank or an auto-generated "ReScene.NET v…" string (so it refreshes across
-    /// upgrades), otherwise the user's custom value unchanged.
+    /// stored value is blank or an auto-generated "…v…" string (so it refreshes across upgrades),
+    /// otherwise the user's custom value unchanged. The legacy "ReScene.NET v" prefix MUST stay
+    /// matched: settings written by the WPF era AND by v2.0.0 (which still stamped the old name)
+    /// carry it — dropping the match would freeze those installs on the old stamp forever.
     /// </summary>
     public static string NormalizeAppName(string? stored)
     {
         if (string.IsNullOrWhiteSpace(stored)
+            || stored.StartsWith("ReScene Manager v", StringComparison.Ordinal)
             || stored.StartsWith("ReScene.NET v", StringComparison.Ordinal))
         {
             return GetDefaultAppName();

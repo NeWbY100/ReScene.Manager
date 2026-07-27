@@ -59,7 +59,10 @@ public static class CreateCommand
         try
         {
             var writer = new SRRWriter();
-            SRRCreationResult result = await writer.CreateAsync(outPath, rarPaths, ct: cts.Token);
+            // Stamp the CLI's own name (pyrescene convention: the tool, not the library, names
+            // itself in the SRR header) instead of inheriting the lib's "ReScene.Lib" default.
+            var options = new SRRCreationOptions { AppName = "ReScene.Cli" };
+            SRRCreationResult result = await writer.CreateAsync(outPath, rarPaths, options: options, ct: cts.Token);
 
             if (!result.Success)
             {

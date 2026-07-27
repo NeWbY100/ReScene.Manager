@@ -12,7 +12,7 @@ namespace ReScene.Manager.Tests;
 public class AppDataConfigTests
 {
     [Fact]
-    public void FolderName_DefaultsTo_ReSceneNET() => Assert.Equal("ReScene.NET", AppDataConfig.FolderName);
+    public void FolderName_DefaultsTo_ReSceneManager() => Assert.Equal("ReScene.Manager", AppDataConfig.FolderName);
 
     [Fact]
     public void AppSettingsService_SaveThenLoad_RoundTripsThroughConfiguredFolder()

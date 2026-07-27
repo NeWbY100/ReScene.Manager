@@ -7,7 +7,7 @@ public class TempDirectoryService : ITempDirectoryService
 {
     public string CreateTempDirectory()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "ReScene.NET", Guid.NewGuid().ToString("N")[..8]);
+        string dir = Path.Combine(Path.GetTempPath(), "ReScene.Manager", Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(dir);
         return dir;
     }

@@ -665,7 +665,7 @@ public partial class CreatorViewModel : OperationViewModelBase
     {
         var srsOptions = new SRSCreationOptions
         {
-            AppName = string.IsNullOrWhiteSpace(AppName) ? "ReScene.NET" : AppName
+            AppName = string.IsNullOrWhiteSpace(AppName) ? "ReScene Manager" : AppName
         };
 
         var materialized = new Dictionary<StoredFileItem, string>();
@@ -1549,7 +1549,7 @@ public partial class CreatorViewModel : OperationViewModelBase
 
         var srsOptions = new SRSCreationOptions
         {
-            AppName = string.IsNullOrWhiteSpace(AppName) ? "ReScene.NET" : AppName
+            AppName = string.IsNullOrWhiteSpace(AppName) ? "ReScene Manager" : AppName
         };
 
         var result = new List<StoredFileEntry>();
@@ -1942,7 +1942,7 @@ public partial class CreatorViewModel : OperationViewModelBase
 
         var srsOptions = new SRSCreationOptions
         {
-            AppName = string.IsNullOrWhiteSpace(AppName) ? "ReScene.NET" : AppName
+            AppName = string.IsNullOrWhiteSpace(AppName) ? "ReScene Manager" : AppName
         };
 
         await GenerateAndRecordAsync(

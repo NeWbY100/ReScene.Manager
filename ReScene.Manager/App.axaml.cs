@@ -34,10 +34,10 @@ public partial class App : Application
                 e.SetObserved();
             };
 
-            // Fresh-start settings folder — set BEFORE any settings service reads/writes.
+            // Settings folder + display name — both now equal the App.Core defaults (the WPF
+            // head that needed different values is deleted); kept as explicit belt so a future
+            // second head can't silently inherit this head's identity.
             AppDataConfig.FolderName = "ReScene.Manager";
-            // Rebrand: this head shows "ReScene Manager"; the WPF app never sets this, so it
-            // keeps the "ReScene.NET" default.
             AppInfo.DisplayName = "ReScene Manager";
 
             var window = new MainWindow

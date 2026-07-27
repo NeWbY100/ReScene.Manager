@@ -18,7 +18,7 @@ namespace ReScene.Manager.Tests;
 public class AppInfoTests
 {
     [Fact]
-    public void DisplayName_DefaultsTo_ReSceneNET() => Assert.Equal("ReScene.NET", AppInfo.DisplayName);
+    public void DisplayName_DefaultsTo_ReSceneManager() => Assert.Equal("ReScene Manager", AppInfo.DisplayName);
 
     [AvaloniaFact]
     public void SettingDisplayName_FlowsInto_FreshlyConstructedMainWindowViewModel_WindowTitle()

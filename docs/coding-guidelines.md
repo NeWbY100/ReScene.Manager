@@ -1,6 +1,6 @@
 # Coding Guidelines
 
-Conventions for ReScene.NET (WPF app) and its `ReScene.Lib` submodule. Formatting and
+Conventions for ReScene Manager (Avalonia app) and its `ReScene.Lib` submodule. Formatting and
 most style rules are enforced by [`.editorconfig`](../.editorconfig) — run `dotnet format`
 or let the IDE apply it. This document covers the conventions that the analyzer does **not**
 enforce, and reinforces the few style preferences that matter most here.
