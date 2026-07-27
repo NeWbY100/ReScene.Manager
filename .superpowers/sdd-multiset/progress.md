@@ -1269,3 +1269,13 @@ Contrast: #AAAAAA on #2D2D30 = 5.905:1 (gate + peer independently) — beats act
 with old #9E9E9E). Frame matches the v1.9 reference. Suites 241/241 (asserts landed in existing
 tests — count unchanged, stated), 0W/0E. Dual-gate: a11y APPROVE + additions ratified; peer
 APPROVE (3 red gates, live measurements, hash restores).
+
+## 2026-07-27 addendum: grid-header peer notes (post-landing resend)
+Note 1 (standing fact): DataGridColumnHeader's template Border 'HeaderBorder' template-binds
+Background, BorderBrush AND BorderThickness — all three header setters render; the border half of
+the assert is meaningful, not decorative. Note 3 reach (coverage stated per no-silent-caps): the
+app-wide header style lands on NINE grids across EIGHT views (Compare ×2, CreatorView, InspectorView,
+SampleRestorerView, CreateSRRWizardBody, RestoreWizardBody, StoredFilesManagePanel, BruteForce
+VersionGrid); the band assert covers the Compare 4 headers only — 7 of 9 grids inherit it untested
+(v1.9's style was global too; visual risk uniform). Mitigation detail recorded: headers are
+Focusable=False/IsTabStop=False, so the closed sorting exposure was mouse-only, never keyboard.
