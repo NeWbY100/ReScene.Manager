@@ -86,7 +86,7 @@ internal static class RarFormatCompatibility
                 return false;
 
             case RarFormat.Rar5:
-                if (exeVersion >= Rar5Floor && exeVersion < Rar7Floor)
+                if (exeVersion is >= Rar5Floor and < Rar7Floor)
                 {
                     needsMa5 = true;
                     return true;

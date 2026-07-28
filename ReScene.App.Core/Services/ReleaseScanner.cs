@@ -388,7 +388,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         }
 
         // excerpt: remove_unwanted_sfvs L357-385 (rule 4: proof state machine)
-        if (pardir == "proof" || pardir == "proofs")
+        if (pardir is "proof" or "proofs")
         {
             SfvClass? proofResult = ClassifyProof(sfv, dir, warnings, ct);
             if (proofResult is { } result)
@@ -1048,7 +1048,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         return (width, height);
     }
 
-    private static bool IsSofMarker(int ftype) => ftype is >= 0xc0 and <= 0xcf && ftype is not (0xc4 or 0xc8 or 0xcc);
+    private static bool IsSofMarker(int ftype) => ftype is >= 0xc0 and <= 0xcf and not (0xc4 or 0xc8 or 0xcc);
 
     /// <summary>
     /// excerpt: filter_proof_rar_files L204-211 (independent pass — unlike proof images, gated
@@ -1358,7 +1358,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         // design spec §2e L186-188 ("rules 3-6" includes rule 4) + excerpt L357 (proof pardir
         // check). Loose-RAR discovery has no SFV to run rule 4's full state machine against, but
         // the directory-name exclusion still applies: a proof RAR is never a release set.
-        if (pardir == "proof" || pardir == "proofs")
+        if (pardir is "proof" or "proofs")
         {
             return true;
         }
