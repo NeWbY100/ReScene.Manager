@@ -1,8 +1,9 @@
 # SRR-Guided Volume Assembly — Design
 
-Status: rev 5 — codex-APPROVED 2026-07-28 (rev-4 verdict; review rounds: rev-1 7B/3A,
-rev-2 2B/3A, rev-3 1B/1A, rev-4 0B/1A — all folded in). User-approved walkthrough
-2026-07-28; user delegated per-step review to codex.
+Status: rev 5 — implemented 2026-07-29 (ReScene.Lib avalonia-feature @ 49a4984);
+codex-APPROVED 2026-07-28 (rev-4 verdict; review rounds: rev-1 7B/3A, rev-2 2B/3A,
+rev-3 1B/1A, rev-4 0B/1A — all folded in). User-approved walkthrough 2026-07-28;
+user delegated per-step review to codex.
 Scope: ReScene.Lib (`ReScene/Core/`) + one wiring touch in `Manager`. No UI changes.
 
 ## Problem

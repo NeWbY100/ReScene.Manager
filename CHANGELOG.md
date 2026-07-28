@@ -2,6 +2,14 @@
 
 All notable changes to ReScene Manager (formerly ReScene.NET) are documented here. Releases follow [SemVer](https://semver.org/) and this file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- RAR reconstruction now assembles output volumes from the SRR's original headers, fixing
+  cross-platform reconstruction (e.g. Linux rar builds that omit the EXT_TIME header field);
+  SRRs with recovery records fall back to the legacy path with a clear diagnostic.
+
 ## [2.0.0] — 2026-07-26
 
 ReScene Manager 2.0 is a full cross-platform rewrite: the WPF app has been rebuilt on Avalonia
