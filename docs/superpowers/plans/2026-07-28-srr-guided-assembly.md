@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Rev 3 — codex plan-review rev-1 (8B/3A) and rev-2 (7B/2A) folded in.
+Rev 4 — codex plan-review rev-1 (8B/3A), rev-2 (7B/2A), rev-3 (6B/2A) folded in.
 
 **Goal:** Reconstruct byte-perfect RAR sets on any host by splicing SRR-stored headers with the brute-forced rar output's packed stream, replacing in-place header patching whenever an SRR is available.
 
@@ -699,8 +699,10 @@ public class ProducedVolumesPackedSourceTests : TempDirTestBase
 Both walks begin with the same pre-check, extracted as
 `internal static SRRReconstructionResult? ValidateSetSelector(IReadOnlyList<string> setNames, IReadOnlyList<string> allSectionNames)`:
 build the section inventory in one preliminary pass over the SRR's RARFile block names
-(cheap: base headers only, same seeks); for every BARE selector (no `/` after
-normalization) whose basename occurs on more than one section, return
+(cheap: base headers + name fields only, same seeks; a malformed/truncated inventory
+read returns `Fail(Error, …)` — malformation is never `UnsupportedSrr`, which is
+reserved for VALID SRRs with unassemblable evidence); for every BARE selector (no `/`
+after normalization) whose basename occurs on more than one section, return
 `Fail(Error, $"volume name '{name}' is ambiguous in this SRR — qualify it with its directory")`;
 otherwise return null (valid). After validation, per-section matching is
 `internal static bool SectionMatchesSet(string sectionName, IReadOnlyList<string> setNames)` —
@@ -832,6 +834,9 @@ it is the consumer.)
 - Create: `ReScene.Lib/ReScene/Core/Diagnostics/IRARProcessRunner.cs`
 - Create: `ReScene.Lib/ReScene/Core/Diagnostics/RealRARProcessRunner.cs`
 - Modify: `ReScene.Lib/ReScene/Core/Manager.cs`
+- Create: `ReScene.Lib/ReScene.Tests/FakeRunner.cs` (shared test support — internal, top-level)
+- Create: `ReScene.Lib/ReScene.Tests/RecordingLogger.cs` (shared test support)
+- Create: `ReScene.Lib/ReScene.Tests/AssemblyTestHost.cs` (shared test support)
 - Test: `ReScene.Lib/ReScene.Tests/ManagerProducerLifecycleTests.cs`
 
 ```csharp
@@ -892,7 +897,7 @@ nothing), and cancellation exits.
 latch pattern codex plan B7 requires; a bare TCS cannot observe awaiting):
 
 ```csharp
-private sealed class FakeRunner : IRARProcessRunner
+internal sealed class FakeRunner : IRARProcessRunner   // own file: FakeRunner.cs
 {
     public sealed class Launch(string outputFilePath)
     {
@@ -957,16 +962,32 @@ internal sealed class AssemblyTestHost : IDisposable
     public BruteForceOptions Options(AssemblyFixture? fixture, bool completeAllVolumes,
         bool deleteRarFiles = true, bool deleteDuplicates = false)
     {
-        // Adjust member names to the REAL BruteForceOptions/RAROptions at implementation
-        // (grep them); this block names every required knob:
-        //   RAROptions: CompleteAllVolumes, DeleteRARFiles, DeleteDuplicateCRCFiles,
-        //     StopOnFirstMatch=true, RenameToOriginalNames=true, SRRFilePath,
-        //     OriginalRARFileNames, version range covering "fake100"
-        //   BruteForceOptions: ReleaseDirectoryPath=ReleaseDir, OutputDirectoryPath=WorkDir,
-        //     WinRAR directory=VersionsDir, HashType=CRC32,
-        //     Hashes=[CRC32 of fixture.OriginalVolumePaths[0]],
-        //     ExpectedVolumeCrcs from fixture.ExpectedVolumeCrcs
-        throw null!; // transcribe with real member names — the harness test below pins it
+        // Real shapes (BruteForceOptions.cs:19; RAROptions members verified in-code):
+        var options = new BruteForceOptions(VersionsDir, ReleaseDir, WorkDir)
+        {
+            HashType = HashType.CRC32,
+            RAROptions = new RAROptions
+            {
+                CompleteAllVolumes = completeAllVolumes,
+                DeleteRARFiles = deleteRarFiles,
+                DeleteDuplicateCRCFiles = deleteDuplicates,
+                StopOnFirstMatch = true,
+                RenameToOriginalNames = true,
+                SRRFilePath = fixture?.SrrPath,
+                OriginalRARFileNames = fixture?.OriginalVolumeNames ?? [],
+                // RARVersions left EMPTY = no version filtering (verify at implementation:
+                // if empty filters everything instead, add a VersionRange covering 100).
+            },
+        };
+        if (fixture is not null)
+        {
+            options.Hashes.Add(HashCalculator.Calculate(HashType.CRC32, fixture.OriginalVolumePaths[0]));
+            foreach (var kv in fixture.ExpectedVolumeCrcs)
+            {
+                options.ExpectedVolumeCrcs[kv.Key] = kv.Value;
+            }
+        }
+        return options;
     }
 
     public void Dispose() => Manager.Dispose();
@@ -1007,11 +1028,13 @@ public async Task QuickMismatch_ObservesProducer_BeforeNextCandidateLaunch()
 public async Task MidCandidateError_LogsErrorRow_ObservesProducer_AndContinues()
 {
     // Manager's generic-candidate-error contract is error row + CONTINUE
-    // (Manager.cs:973), not propagation. Induce the error AFTER launch via malformed
-    // carrier data: launch 1 writes an unparseable volume 1 (garbage bytes) so the
-    // candidate body throws while Exit is held. Assert: no second launch while launch
-    // 1's Exit is held; release; candidate 2 launches; run completes with a
-    // CombinationFailed progress event recorded for candidate 1.
+    // (Manager.cs:973), not propagation. Malformed bytes are still hashable, so they
+    // produce a mismatch, not a throw — induce a DETERMINISTIC post-launch exception
+    // instead: launch 1 writes carrier volume 1, then the test opens that file with
+    // FileShare.None and HOLDS the handle, so Manager's hash read throws while Exit
+    // is held. Assert: no second launch while launch 1's Exit is held; release handle
+    // + Exit; candidate 2 launches; run completes with a CombinationFailed progress
+    // event recorded for candidate 1.
 }
 
 [Fact]
@@ -1130,10 +1153,12 @@ public async Task PreflightError_FailsTheSet_BeforeAnyLaunch()
 /// </summary>
 private async Task<SRRReconstructionResult> AssembleCandidateAsync(
     BruteForceOptions options, string producedFirstVolume, string assemblyDir,
-    int volumeCount, CancellationToken ct)
+    string candidateSlug, int volumeCount, CancellationToken ct)
 {
     IReadOnlyList<string> names = options.RAROptions.OriginalRARFileNames;
     if (volumeCount < names.Count) { names = [.. names.Take(volumeCount)]; }
+    // The ATTEMPT PROBE the flow tests count — one line per invocation, retry included:
+    _logger.Debug(this, $"Assembly attempt for {candidateSlug}: volumes={volumeCount}", LogTarget.Phase2);
     using var source = new ProducedVolumesPackedSource(producedFirstVolume);
     return await new SRRReconstructor(_logger).ReconstructAsync(
         options.RAROptions.SRRFilePath!, source, options.ReleaseDirectoryPath,
@@ -1146,7 +1171,8 @@ the point where `actualRARFilePath` is known):
 
 ```csharp
 string assemblyDir = Path.Combine(rarOutputDir, $"assembled-{candidateSlug}");
-SRRReconstructionResult quick = await AssembleCandidateAsync(options, actualRARFilePath, assemblyDir, 1, _cts.Token).ConfigureAwait(false);
+bool skipRetentionCleanup = false;   // per-candidate; true ONLY for persistent Error (diagnosis retention)
+SRRReconstructionResult quick = await AssembleCandidateAsync(options, actualRARFilePath, assemblyDir, candidateSlug, 1, _cts.Token).ConfigureAwait(false);
 
 bool producerRunning = runningProcessTask is { IsCompleted: false };
 if (quick.Status != SRRReconstructionStatus.Success && producerRunning)
@@ -1155,13 +1181,16 @@ if (quick.Status != SRRReconstructionStatus.Success && producerRunning)
     // Error from RARStream's missing/short-header ArgumentException — awaits completion
     // and retries ONCE with a fresh source.
     completedExitCode = await ObserveProducerAsync(runningProcessTask, processCts, cancelFirst: false).ConfigureAwait(false);
-    quick = await AssembleCandidateAsync(options, actualRARFilePath, assemblyDir, 1, _cts.Token).ConfigureAwait(false);
+    quick = await AssembleCandidateAsync(options, actualRARFilePath, assemblyDir, candidateSlug, 1, _cts.Token).ConfigureAwait(false);
 }
 
 string? quickHash = quick.Status == SRRReconstructionStatus.Success && quick.WrittenPaths.Count >= 1
     ? HashCalculator.Calculate(options.HashType, quick.WrittenPaths[0])
     : null;
 bool quickMatch = quickHash != null && options.Hashes.Contains(quickHash);
+// Duplicate detection BEFORE recording the hash (mirrors the legacy fileHashes pattern):
+bool isDuplicateHash = quickHash != null && fileHashes.Contains(quickHash);
+if (quickHash != null) { fileHashes.Add(quickHash); }
 _logger.Information(this, $"Assembled hash for {(quick.WrittenPaths.Count >= 1 ? quick.WrittenPaths[0] : assemblyDir)}: {quickHash ?? quick.Status.ToString()} (match: {quickMatch})", LogTarget.Phase2);
 
 if (!quickMatch)
@@ -1173,8 +1202,8 @@ if (!quickMatch)
             // Persistent parse/I-O failure = failed combination — the EXISTING error-row
             // shape (CombinationFailed progress event + warning). RETENTION: like the
             // exception disposition, BOTH artifact classes are LEFT IN PLACE for
-            // diagnosis (spec §5) — set skipRetentionCleanup = true so the deletion
-            // block below is bypassed; then continue to the next candidate.
+            // diagnosis (spec §5).
+            skipRetentionCleanup = true;
             break;
         case SRRReconstructionStatus.SourceExhausted when !options.RAROptions.CompleteAllVolumes:
             // Mirror shift in non-CAV: vol-2 bytes were never written — INCONCLUSIVE.
@@ -1222,10 +1251,11 @@ existing `fileHashes` set against `quickHash`.
 // Assert exactly 2 "Assembly attempt" DEBUG lines.
 
 [Fact] public async Task Cav_PostRetry_SourceExhausted_IsNoMatch()
-// Produced set genuinely one volume short; Exit completed immediately (producer done
-// before attempt 1 → no retry beyond the single allowed one). Status SourceExhausted;
-// assert NO CombinationFailed event and the candidate proceeds as no-match; retention
-// cleanup applied (mismatch class).
+// Produced set genuinely one volume short; Exit HELD through attempt 1 (producer
+// running → SourceExhausted triggers the retry await), then released WITHOUT adding
+// the missing volume → attempt 2 SourceExhausted after completion = real no-match.
+// Assert 2 "Assembly attempt" lines, NO CombinationFailed event, retention cleanup
+// applied (mismatch class).
 
 [Fact] public async Task Cav_PersistentError_IsFailedCombination_AndRetains()
 // OnLaunch writes garbage bytes as vol 1 and HOLDS Exit → attempt 1 Error with
@@ -1266,7 +1296,7 @@ completedExitCode = await ObserveProducerAsync(runningProcessTask, processCts, c
 
 // FULL assembly — fresh source over the now-complete produced set. Verification and
 // finalization use THIS result's ordered WrittenPaths (codex plan B1), never `quick`'s.
-SRRReconstructionResult assembled = await AssembleCandidateAsync(options, actualRARFilePath, assemblyDir, int.MaxValue, _cts.Token).ConfigureAwait(false);
+SRRReconstructionResult assembled = await AssembleCandidateAsync(options, actualRARFilePath, assemblyDir, candidateSlug, int.MaxValue, _cts.Token).ConfigureAwait(false);
 if (assembled.Status != SRRReconstructionStatus.Success)
 {
     // Completed-producer full assembly cannot be an incomplete snapshot: classify as in
@@ -1293,7 +1323,7 @@ plan-rev-2 B6; the win path calls it for both modes):
 /// "{slug}-assembled.part01.rar", "foo.r00" → "{slug}-assembled.r00") via
 /// RARVolumeNaming.GetBaseName — never Path.GetExtension.
 /// </summary>
-private (IReadOnlyList<string> Placed, bool Complete) FinalizeAssembledSet(
+internal (IReadOnlyList<string> Placed, bool Complete) FinalizeAssembledSet(
     BruteForceOptions options, IReadOnlyList<string> assembledPaths,
     string candidateSlug, string rarOutputDir)
 {
@@ -1334,7 +1364,7 @@ options object carrying the toggle under test, assert destination paths/existenc
 Non-CAV mode on `quickMatch`: the single assembled volume IS the mode's outcome —
 report through the legacy first-volume success shape with
 `assembled = quick` (one volume), skip per-volume verification (parity), finalize that
-one path (Task 10's finalizer handles both counts).
+one path (FinalizeAssembledSet — this task — handles both counts).
 
 The `*** MATCH FOUND ***` summary block: prints `SRR-guided assembly` on this path and
 skips the patch-note lines.
@@ -1386,8 +1416,8 @@ all meaningful combinations, both artifact classes):**
 [InlineData("error",         true,  false, true,  true )] // diagnosis: Error retains BOTH regardless of flags
 [InlineData("exception",     true,  false, true,  true )]
 [InlineData("cancellation",  true,  false, true,  true )]
-[InlineData("success",       true,  false, false, true )] // assembled MOVED out (survives as output); carrier deleted
-[InlineData("success",       false, false, false, true )] // carrier retained in work area
+[InlineData("success",       true,  false, false, false)] // assembled MOVED out; carrier DELETED (flag true)
+[InlineData("success",       false, false, false, true )] // carrier retained in work area (flag false)
 public async Task RetentionMatrix(string outcome, bool deleteRarFiles,
     bool deleteDuplicateCrcFiles, bool expectAssembledInWorkArea, bool expectCarrierInWorkArea)
 {
@@ -1411,7 +1441,9 @@ public async Task RetentionMatrix(string outcome, bool deleteRarFiles,
             f = f with { }; // launch writes garbage vol 1 instead (set in OnLaunch below)
             break;
         case "exception":
-            // OnLaunch deletes the input dir mid-candidate to force a generic throw
+            // Post-launch, the test opens candidate 1's carrier volume with
+            // FileShare.None and holds the handle — Manager's hash/assembly read then
+            // throws deterministically at a path it actually accesses.
             break;
         case "cancellation":
             // host.Manager.Stop() after the first launch (Exit held, then released)
@@ -1424,14 +1456,29 @@ public async Task RetentionMatrix(string outcome, bool deleteRarFiles,
     Task run = RunManagerAsync(host, options, outcome);       // handles Stop()/Exit choreography per outcome
     await run;
 
-    string assembledDir = Directory.GetDirectories(Path.Combine(host.WorkDir, "output"), "assembled-*")
-        .FirstOrDefault() ?? Path.Combine(host.WorkDir, "output", "assembled-none");
-    bool assembledSurvives = Directory.Exists(assembledDir) && Directory.EnumerateFiles(assembledDir).Any();
+    // Per-candidate observability (codex plan-rev-3 B3): the expectations target the
+    // candidate the outcome is ABOUT — candidate 2 for "duplicate" (fake200 carrier +
+    // its assembled-fake200-* dir), candidate 1 otherwise. Track exact paths:
+    string targetVersion = outcome == "duplicate" ? "fake200" : "fake100";
+    string outputDir = Path.Combine(host.WorkDir, "output");
+    string? targetAssembledDir = Directory.Exists(outputDir)
+        ? Directory.GetDirectories(outputDir, $"assembled-{targetVersion}*").FirstOrDefault()
+        : null;
+    bool assembledSurvives = targetAssembledDir is not null && Directory.EnumerateFiles(targetAssembledDir).Any();
     Assert.Equal(expectAssembledInWorkArea, assembledSurvives);
 
-    bool carrierSurvives = Directory.EnumerateFiles(Path.Combine(host.WorkDir, "output"))
-        .Any(p => Path.GetFileName(p).StartsWith("fake100", StringComparison.OrdinalIgnoreCase));
+    bool carrierSurvives = Directory.Exists(outputDir) && Directory.EnumerateFiles(outputDir)
+        .Any(p2 => Path.GetFileName(p2).StartsWith(targetVersion, StringComparison.OrdinalIgnoreCase));
     Assert.Equal(expectCarrierInWorkArea, carrierSurvives);
+
+    if (outcome == "duplicate")
+    {
+        // The UNIQUE first candidate follows the ordinary no-match flags,independent of the
+        // duplicate handling — with deleteRarFiles=false it must SURVIVE.
+        bool cand1Survives = Directory.Exists(outputDir) && Directory.EnumerateFiles(outputDir)
+            .Any(p2 => Path.GetFileName(p2).StartsWith("fake100", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(!deleteRarFiles, cand1Survives);
+    }
 
     if (outcome == "success")
     {
