@@ -1279,3 +1279,18 @@ SampleRestorerView, CreateSRRWizardBody, RestoreWizardBody, StoredFilesManagePan
 VersionGrid); the band assert covers the Compare 4 headers only — 7 of 9 grids inherit it untested
 (v1.9's style was global too; visual risk uniform). Mitigation detail recorded: headers are
 Focusable=False/IsTabStop=False, so the closed sorting exposure was mouse-only, never keyboard.
+
+## 2026-07-28: SRR-guided assembly — SPEC + PLAN phase COMPLETE (codex-gated per user directive)
+User: Linux reconstruction fails (EXTTIME structural divergence, itw-gaor evidence); approved the
+assembly design; delegated per-step review to CODEX (quota back). SPEC: 5 revs, codex APPROVE
+(rounds: 7B/3A, 2B/3A, 1B/1A, 0B/1A) — killed the RR-flag guard (RecoveryBlocksRemoved is
+UNCONDITIONAL in every writer), the impossible non-CAV await, RARStream snapshot misuse, carrier-
+finalization bug, name-only multiset filtering, ASCII/Unicode seam mismatch, unimplementable tests.
+PLAN: 8 revs, codex APPROVE (rounds: 8B/3A, 7B/2A, 6B/2A, 7B/1A, 4B/1A, 2B/1A, 0B/2A) — 11 tasks;
+biggest catches: vol1-only verification (would fail every multi-volume match), FakeRunner latch
+that couldn't prove observation, zero-candidate harness (regex/empty-ranges/empty-args), quiet-
+observer swallowing late producer faults on WINNING paths, Error-arm retention violation,
+directory-order-dependent duplicate assertions, unbuildable verification block. Spec rev 5 @7a7b21b
+(+2 advisory folds), plan rev 8 (approved) — the review loop repeatedly caught design errors that
+would each have surfaced as broken mid-execution tasks. NEXT: subagent-driven execution, codex
+reviews EVERY task diff (user directive), tasks 1-11 per the plan.

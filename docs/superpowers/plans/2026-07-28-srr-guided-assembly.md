@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Rev 7 — codex plan-review rev-1 (8B/3A), rev-2 (7B/2A), rev-3 (6B/2A), rev-4 (7B/1A), rev-5 (4B/1A), rev-6 (2B/1A) folded in.
+Rev 8 — codex-APPROVED (rev-7 verdict, 0B/2A folded). Review rounds: rev-1 8B/3A, rev-2 7B/2A, rev-3 6B/2A, rev-4 7B/1A, rev-5 4B/1A, rev-6 2B/1A, rev-7 0B/2A.
 
 **Goal:** Reconstruct byte-perfect RAR sets on any host by splicing SRR-stored headers with the brute-forced rar output's packed stream, replacing in-place header patching whenever an SRR is available.
 
@@ -1428,8 +1428,9 @@ if (options.RAROptions.CompleteAllVolumes && expectedInOrder.Count > 0)
     VolumeMatchResult verify = VolumeMatchEvaluator.Evaluate(assembledCrcs, expectedInOrder);
     if (!verify.AllMatch)
     {
-        // Full-verification mismatch: mismatch retention on BOTH classes, then the
-        // existing mismatch logging/continue.
+        // PRESERVE the existing detailed per-volume mismatch log from the legacy block
+        // (name + expected/actual CRC + count mismatch lines) — transcribe it here
+        // verbatim against assembled.WrittenPaths before the retention call.
         ApplyMismatchRetention(assemblyDir, actualRARFilePath, options, isDuplicateHash);
         continue;
     }
@@ -1462,7 +1463,7 @@ try
         Directory.Delete(assemblyDir, recursive: true);   // empty dirs (CD2/) remain — recursive
     }
 }
-catch (IOException) { /* best-effort; leftover empty dirs are harmless */ }
+catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best-effort: an empty-dir cleanup failure must never convert a committed match into a failure */ }
 // Then the existing match bookkeeping/summary ("SRR-guided assembly" note).
 
 // Per-volume verification: EXACTLY today's gate — CAV && BuildExpectedInOrder non-empty;
