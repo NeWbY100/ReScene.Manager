@@ -1,7 +1,8 @@
 # SRR-Guided Volume Assembly — Design
 
-Status: rev 4 — user-approved walkthrough 2026-07-28; codex rev-1 (7B/3A), rev-2 (2B/3A), rev-3 (1B/1A) folded in
-Rev 4 codex re-review pending.
+Status: rev 5 — codex-APPROVED 2026-07-28 (rev-4 verdict; review rounds: rev-1 7B/3A,
+rev-2 2B/3A, rev-3 1B/1A, rev-4 0B/1A — all folded in). User-approved walkthrough
+2026-07-28; user delegated per-step review to codex.
 Scope: ReScene.Lib (`ReScene/Core/`) + one wiring touch in `Manager`. No UI changes.
 
 ## Problem
@@ -196,12 +197,16 @@ hash of volume 1 (the full-set assembly then re-emits and re-verifies it) — ac
 no reuse mechanism is specified. Beyond that, each assembled volume is copied once
 and hashed once.
 
-**Producer lifecycle hygiene (codex B3).** Every non-winning exit from a candidate —
-quick mismatch, inconclusive, exception, cancellation — cancels AND observes
-(awaits) the running rar process before cleanup or the next candidate; today's
-generic exception path only disposes the CTS (Manager.cs:968/999). This is a bug-fix
-requirement of the rewiring, tested explicitly. (Preflight declines are not in this
-list — they happen before any producer exists.)
+**Producer lifecycle hygiene (codex B3 + rev-4 A1).** Producer observation (await of
+the process task after cancellation or natural exit) is an INVARIANT before any
+finalization or cleanup — on every non-winning exit (quick mismatch, inconclusive,
+exception, cancellation) AND on successful exits, including non-CAV success: the
+current non-CAV helper can return after its one-second grace period with the process
+task still incomplete (Manager.cs:474), and finalization must never delete or move
+artifacts under a live producer. Today's generic exception path only disposes the
+CTS (Manager.cs:968/999). Bug-fix requirement of the rewiring; lifecycle tests cover
+the success case too. (Preflight declines are not in this list — they happen before
+any producer exists.)
 
 ### 5. Finalization + retention (codex B4 — new finalizer, not `RenameMatchedOutput`)
 
