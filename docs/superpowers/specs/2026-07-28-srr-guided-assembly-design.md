@@ -1,7 +1,7 @@
 # SRR-Guided Volume Assembly — Design
 
-Status: rev 3 — user-approved walkthrough 2026-07-28; codex rev-1 REVISE (7B/3A) and rev-2 REVISE (2B/3A) folded in
-Rev 3 codex re-review pending.
+Status: rev 4 — user-approved walkthrough 2026-07-28; codex rev-1 (7B/3A), rev-2 (2B/3A), rev-3 (1B/1A) folded in
+Rev 4 codex re-review pending.
 Scope: ReScene.Lib (`ReScene/Core/`) + one wiring touch in `Manager`. No UI changes.
 
 ## Problem
@@ -166,10 +166,14 @@ does not exist there:
   producer completion, retry ONCE with an entirely fresh source (codex B3). Failure
   after that retry is a real no-match. On quick match: await completion, assemble
   the full set (fresh source again), then per-volume verification (next paragraph),
-  then finalize. Post-retry outcome mapping (codex rev-2 A3): `SourceExhausted` or
-  `VerificationFailed` after producer completion = a real no-match for this
-  candidate; a persistent parse/I-O `Error` = a failed combination, surfacing
-  through the Manager's existing error-row behavior — the two are not conflated.
+  then finalize. Post-retry outcome mapping (codex rev-2 A3, layering per rev-3
+  A1): on Manager calls the reconstructor's own verification is a no-op (empty
+  hashes), so `VerificationFailed` is UNREACHABLE there — it exists for the
+  custom-packer caller only. In Manager flows: reconstructor `SourceExhausted`
+  after completion = real no-match; MANAGER-side hash mismatch (its own quick or
+  per-volume comparison) = real no-match; persistent reconstructor `Error` = a
+  failed combination via the existing error-row behavior. Not conflated, and no
+  layer waits on a status the other cannot emit.
 - **CompleteAllVolumes = false** (fast version hunt): first-volume-only assembly
   outcome. Assemble original volume 1 from the produced volume-1 data available at
   the kill point; on success report the match exactly as the legacy first-volume
@@ -211,10 +215,14 @@ The assembly path gets a dedicated finalizer:
   `VerifiedOutputRelocator` contract, which only accepts committed files there);
 - naming policy (codex rev-2 B2 — `RenameToOriginalNames` is a live setting and
   "no settings change" means honoring it): when `RenameToOriginalNames` is true,
-  the original volume names; when false, a collision-free generated convention
-  `<candidate-slug>-assembled.<ext>` per volume — carrier filenames cannot be
+  the original volume names; when false, a collision-free generated name formed by
+  **basename replacement that preserves the COMPLETE volume suffix** (codex rev-3
+  B1): `foo.part01.rar` → `<candidate-slug>-assembled.part01.rar`, `foo.r00` →
+  `<candidate-slug>-assembled.r00` — never `Path.GetExtension`-style, which would
+  collapse every `.partNN.rar` volume to one name. Carrier filenames cannot be
   reused because success may retain the carriers (`DeleteRARFiles=false`). Tests
-  cover both toggle values × both carrier-retention values;
+  cover both toggle values × both carrier-retention values AND a new-style
+  `.partNN.rar` set;
 - assembled artifacts live under a per-candidate work subdirectory
   (`assembled-<candidate-slug>/`) so they can never collide with rar's own outputs.
 
