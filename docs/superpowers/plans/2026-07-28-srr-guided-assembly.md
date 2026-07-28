@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Rev 5 — codex plan-review rev-1 (8B/3A), rev-2 (7B/2A), rev-3 (6B/2A), rev-4 (7B/1A) folded in.
+Rev 6 — codex plan-review rev-1 (8B/3A), rev-2 (7B/2A), rev-3 (6B/2A), rev-4 (7B/1A), rev-5 (4B/1A) folded in.
 
 **Goal:** Reconstruct byte-perfect RAR sets on any host by splicing SRR-stored headers with the brute-forced rar output's packed stream, replacing in-place header patching whenever an SRR is available.
 
@@ -871,7 +871,14 @@ modes):
 /// (spec §4): no finalization, deletion, or next-candidate launch while a producer task
 /// is unobserved.
 /// </summary>
-private async Task<int?> ObserveProducerAsync(Task<int>? processTask,
+// TWO observers with distinct fault contracts (codex rev-5 B1 — one quiet observer
+// on winning paths would silently accept a producer that faulted AFTER the volume-2
+// trigger and could finalize a broken candidate):
+
+/// <summary>Cleanup-path observer: never throws. ONLY for catch blocks and
+/// cancellation/mismatch cleanup, where a producer fault must not abort the run
+/// (the run is already abandoning this candidate).</summary>
+private async Task<int?> ObserveProducerQuietlyAsync(Task<int>? processTask,
     CancellationTokenSource? processCts, bool cancelFirst)
 {
     if (processTask is null) { return null; }
@@ -880,26 +887,28 @@ private async Task<int?> ObserveProducerAsync(Task<int>? processTask,
     catch (OperationCanceledException) { return null; }
     catch (Exception ex)
     {
-        // QUIET observer (codex rev-4 B5): observation must never throw — the candidate
-        // body's DELIBERATE fault-surfacing await (Manager.cs:772) is the one place a
-        // producer fault is meant to reach the generic catch; observing an
-        // already-faulted task from INSIDE that catch (or any cleanup path) must not
-        // abort the run. Log and swallow.
-        _logger.Debug(this, $"Producer observed faulted: {ex.Message}", LogTarget.Phase2);
+        _logger.Debug(this, $"Producer observed faulted during cleanup: {ex.Message}", LogTarget.Phase2);
         return null;
     }
 }
+
+/// <summary>Winning/normal-wait observation is a PLAIN awaited task — a producer fault
+/// there MUST propagate into the candidate's generic catch (one error row, next
+/// candidate; matching the existing Manager.cs:897 behavior). Do not wrap those awaits.
+/// Concretely: the assembly retry-await and the pre-full-assembly completion await are
+/// `completedExitCode = await runningProcessTask.ConfigureAwait(false);` guarded only
+/// by the cancellation filter the legacy path already uses.</summary>
 ```
 
 `RARCompressDirectoryAsync`'s early-termination tail replaces
 `Task.WhenAny(processTask, Task.Delay(1000, …))` with
-`await ObserveProducerAsync(processTask, linkedCts, cancelFirst: false)` after its
+`await ObserveProducerQuietlyAsync(processTask, linkedCts, cancelFirst: false)` after its
 cancel — and its XML doc's exit-code contract is UPDATED (codex plan A2): an
 early-terminated run now returns the OBSERVED cancellation exit (normally 1), never a
 synthetic 0; the call-site comment at ~788 is updated to match (both tolerate this —
 early termination implies a volume exists).
 
-Wire `ObserveProducerAsync` also at: the `actualRARFilePath == null` branch, the
+Wire `ObserveProducerQuietlyAsync` at the CLEANUP exits: the `actualRARFilePath == null` branch, the
 quick-mismatch branch, the generic `catch` (Manager.cs:968 — currently observes
 nothing), and cancellation exits.
 
@@ -1071,6 +1080,17 @@ public async Task ProducerFault_BecomesOneErrorRow_AndNextCandidateRuns()
 }
 
 [Fact]
+public async Task LateFault_AfterVolumeTrigger_IsFailedCombination_NeverAMatch()
+{
+    // Codex rev-5 B1: the fault lands AFTER the volume-2 trigger passed the initial
+    // IsFaulted check. Launch 1 stages a MATCHING set + vol 2 (trigger fires), holds
+    // Exit; the test waits for the quick gate (attempt-probe log + assembled vol 1 on
+    // disk), then Exit.TrySetException(...). The completion await must PROPAGATE the
+    // fault → one CombinationFailed row for this candidate, NO match reported, run
+    // continues/completes. Guards the silently-accepted-fault regression.
+}
+
+[Fact]
 public async Task UserStop_ObservesProducerBeforeReturn()
 {
     // Hold Exit; call host.Manager.Stop() (the real cancellation API — there is no
@@ -1210,7 +1230,8 @@ if (quick.Status != SRRReconstructionStatus.Success && producerRunning)
     // Incomplete snapshot (spec §4): ANY non-success while the producer runs — including
     // Error from RARStream's missing/short-header ArgumentException — awaits completion
     // and retries ONCE with a fresh source.
-    completedExitCode = await ObserveProducerAsync(runningProcessTask, processCts, cancelFirst: false).ConfigureAwait(false);
+    // Normal wait — faults PROPAGATE (generic catch = error row); not the quiet observer.
+    if (runningProcessTask is not null) { completedExitCode = await runningProcessTask.ConfigureAwait(false); }
     quick = await AssembleCandidateAsync(options, actualRARFilePath, assemblyDir, candidateSlug, 1, _cts.Token).ConfigureAwait(false);
 }
 
@@ -1251,27 +1272,48 @@ if (!quickMatch)
             // SourceExhausted (CAV, producer done) or a hash mismatch: real no-match.
             break;
     }
-    await ObserveProducerAsync(runningProcessTask, processCts, cancelFirst: true).ConfigureAwait(false);
+    await ObserveProducerQuietlyAsync(runningProcessTask, processCts, cancelFirst: true).ConfigureAwait(false);
     if (!skipRetentionCleanup) // false for mismatch/SourceExhausted/duplicate; true for Error
     {
-        DeleteAssemblyDirUnderRetentionFlags(assemblyDir, options, duplicate: isDuplicateHash);
-        // …existing carrier deletion under the same flags…
+        ApplyMismatchRetention(assemblyDir, actualRARFilePath, options, isDuplicateHash);
     }
-    // existing continue;
+    continue;
 }
 ```
 
-`FireAssemblyErrorRow(...)` — a small private helper wrapping the EXISTING error-row
-shape (Manager.cs:973's warning + the `CombinationFailed = true` progress event with
-the same argument set the legacy path uses) so T8's quick path and T9's full-assembly
-path emit identical rows; its parameter list mirrors the progress-event call sites
-already in the loop.
+```csharp
+/// <summary>The error-row shape (Manager.cs:973) shared by the quick and full assembly
+/// paths: one warning + one CombinationFailed progress event; then callers continue.</summary>
+private void FireAssemblyErrorRow(BruteForceOptions options, string rarVersionDirectoryPath,
+    string displayArguments, int totalProgressSize, int currentProgress,
+    DateTime bruteForceStartDateTime, string inputFilesDir, string rarFilePath,
+    string executedArguments, string? diagnostic)
+{
+    _logger.Warning(this, $"{Path.GetFileName(rarVersionDirectoryPath)} / {displayArguments}: assembly failed ({diagnostic}) — marking this combination as failed", LogTarget.Phase2);
+    FireBruteForceProgress(new(options.ReleaseDirectoryPath, rarVersionDirectoryPath,
+        displayArguments, totalProgressSize, currentProgress, bruteForceStartDateTime)
+    {
+        PhaseDescription = "Phase 2: Full RAR Creation",
+        CombinationFailed = true,
+        InputDirectoryPath = inputFilesDir,
+        OutputFilePath = rarFilePath,
+        ExecutedArguments = executedArguments,
+    });
+}
 
-`DeleteAssemblyDirUnderRetentionFlags(string dir, BruteForceOptions options, bool duplicate)`
-— deletes `dir` recursively when (`options.RAROptions.DeleteRARFiles`) or
-(`duplicate && options.RAROptions.DeleteDuplicateCRCFiles`); otherwise retains for
-debugging (mirrors the carrier flags; spec §5). Duplicate detection reuses the
-existing `fileHashes` set against `quickHash`.
+/// <summary>Mismatch/no-match retention applied to BOTH artifact classes under the
+/// standard flags (spec §5): the assembled dir and the carrier volume set.</summary>
+private void ApplyMismatchRetention(string assemblyDir, string actualRARFilePath,
+    BruteForceOptions options, bool duplicate)
+{
+    bool delete = options.RAROptions.DeleteRARFiles
+        || (duplicate && options.RAROptions.DeleteDuplicateCRCFiles);
+    if (!delete) { return; }
+    try { if (Directory.Exists(assemblyDir)) { Directory.Delete(assemblyDir, true); } }
+    catch (IOException) { /* best-effort, mirrors carrier deletion */ }
+    DeleteRARFileAndVolumes(actualRARFilePath);   // the existing carrier helper
+}
+```
 
 - [ ] **Step 1: Failing tests (extend `ManagerAssemblyFlowTests`; FakeRunner + `AssemblyFixtureBuilder` produced sets copied in `OnLaunch`):**
 
@@ -1331,8 +1373,10 @@ define once in this test file, reuse in T9.)
 Win path (`quickMatch == true`), CAV mode:
 
 ```csharp
-// Let the producer FINISH (never cancel a winner mid-write), observing it (invariant).
-completedExitCode = await ObserveProducerAsync(runningProcessTask, processCts, cancelFirst: false).ConfigureAwait(false);
+// Let the producer FINISH (never cancel a winner mid-write). Normal wait: a fault here
+// PROPAGATES to the generic catch — a candidate whose producer died must never finalize
+// as a match (codex rev-5 B1).
+if (runningProcessTask is not null) { completedExitCode = await runningProcessTask.ConfigureAwait(false); }
 
 // FULL assembly — fresh source over the now-complete produced set. Verification and
 // finalization use THIS result's ordered WrittenPaths (codex plan B1), never `quick`'s.
@@ -1349,16 +1393,32 @@ if (assembled.Status != SRRReconstructionStatus.Success)
     }
     else // SourceExhausted: real no-match — mismatch retention applies to BOTH classes.
     {
-        DeleteAssemblyDirUnderRetentionFlags(assemblyDir, options, duplicate: false);
-        // …existing carrier deletion under the same flags…
+        ApplyMismatchRetention(assemblyDir, actualRARFilePath, options, isDuplicateHash);
     }
     continue;
 }
 
-// Full per-volume VERIFICATION failure (mismatch) applies the SAME mismatch retention:
-// DeleteAssemblyDirUnderRetentionFlags + carrier deletion under the flags, then the
-// existing mismatch continue. A finalization that returns Complete=false is a failed
-// combination: FireAssemblyErrorRow + RETAIN both classes for diagnosis + continue.
+VolumeMatchResult verify = VolumeMatchEvaluator.Evaluate(assembledCrcs, expectedInOrder);
+if (!verify.AllMatch)
+{
+    // Full-verification mismatch: same mismatch retention on BOTH classes, then the
+    // existing mismatch logging/continue.
+    ApplyMismatchRetention(assemblyDir, actualRARFilePath, options, isDuplicateHash);
+    continue;
+}
+
+(IReadOnlyList<string> placed, bool complete) = FinalizeAssembledSet(options, assembled.WrittenPaths, candidateSlug, rarOutputDir);
+if (!complete)
+{
+    // Transactional finalization failed: a failed combination — error row + RETAIN both
+    // classes for diagnosis + continue (codex rev-4 B6 / rev-5 B3).
+    FireAssemblyErrorRow(options, rarVersionDirectoryPath, displayArguments,
+        totalProgressSize, currentProgress, bruteForceStartDateTime, inputFilesDir,
+        rarFilePath, executedArguments, "finalization incomplete — destination occupied or move failed");
+    continue;
+}
+// Success retention: delete carriers when DeleteRARFiles, else retain; remove the
+// now-empty assemblyDir. Then the existing match bookkeeping/summary.
 
 // Per-volume verification: EXACTLY today's gate — CAV && BuildExpectedInOrder non-empty;
 // CRC32 regardless of options.HashType (the SRR-embedded SFV is CRC32); compares
@@ -1426,11 +1486,11 @@ one path (FinalizeAssembledSet — this task — handles both counts).
 The `*** MATCH FOUND ***` summary block: prints `SRR-guided assembly` on this path and
 skips the patch-note lines.
 
-**Checkpoint 9a — finalizer (implement + direct tests green + gate) BEFORE 9b — flow
-integration (win paths + flow tests). One dependency task, two reviewable checkpoints
-(codex rev-4 A1); the task report records both checkpoints separately.**
+**One dependency task, two reviewable checkpoints (codex rev-4 A1 / rev-5 A1):**
 
-- [ ] **Step 1 (9b): Failing flow tests:**
+- [ ] **Step 9a-1: Implement `FinalizeAssembledSet` (internal) + the five direct finalizer tests (write failing → implement → green).**
+- [ ] **Step 9a-2: Rebuild gate 0W/0E; record checkpoint 9a in the task report.**
+- [ ] **Step 9b-1: Failing flow tests:**
 
 ```csharp
 [Fact] public async Task Cav_EndToEnd_ExtTimeScenario_MatchesAndVerifiesAllVolumes()
@@ -1452,7 +1512,7 @@ integration (win paths + flow tests). One dependency task, two reviewable checkp
 // success reported with exactly one assembled volume.
 ```
 
-- [ ] **Step 2: Implement; green; suites; gate; commit** `feat(lib): full assembly + verification parity + non-CAV success`.
+- [ ] **Step 9b-2: Implement the win paths; green; full suites; gate; record checkpoint 9b; commit** `feat(lib): full assembly + finalizer + verification parity + non-CAV success`.
 
 ---
 
@@ -1504,16 +1564,20 @@ public async Task RetentionMatrix(string outcome, bool deleteRarFiles,
             f = f with { }; // launch writes garbage vol 1 instead (set in OnLaunch below)
             break;
         case "exception":
-            // On the ASSEMBLY path a locked carrier is normalized to typed Error inside
-            // ReconstructAsync (codex rev-4 B4) — the GENERIC exception disposition needs
-            // a fault that bypasses normalization: the producer task itself faults.
-            // StageProducedSet stages a valid set, then launch.Exit.TrySetException(
-            // new InvalidOperationException("producer fault")) — Manager observes the
-            // faulted task (its existing IsFaulted rethrow path), lands in the generic
-            // catch, emits one error row, retains both classes.
+            // The generic disposition must be provoked AFTER assembled artifacts exist
+            // (codex rev-5 B2 — an immediate fault aborts before any assembly and the
+            // retention assertion would target nothing): StageProducedSet stages a
+            // MATCHING set + vol 2 and HOLDS Exit; RunManagerAsync waits for the quick
+            // gate to complete (poll: the "Assembly attempt" log line AND the assembled
+            // vol-1 file existing on disk), THEN launch.Exit.TrySetException(new
+            // InvalidOperationException("producer fault")). The completion await
+            // propagates the fault → generic catch → error row → both classes retained,
+            // with the assembled artifact demonstrably present.
             break;
         case "cancellation":
-            // host.Manager.Stop() after the first launch (Exit held, then released)
+            // Same synchronization (codex rev-5 B2): wait for the attempt probe + the
+            // assembled vol-1 file, THEN host.Manager.Stop(); release Exit via the
+            // cancellation flow. Retention asserted with artifacts provably existing.
             break;
         case "success":
             break; // fixture CRCs already match
@@ -1528,9 +1592,14 @@ public async Task RetentionMatrix(string outcome, bool deleteRarFiles,
     await run;
 
     // Per-candidate observability (codex plan-rev-3 B3): the expectations target the
-    // candidate the outcome is ABOUT — candidate 2 for "duplicate" (fake200 carrier +
-    // its assembled-fake200-* dir), candidate 1 otherwise. Track exact paths:
-    string targetVersion = outcome == "duplicate" ? "rar200" : "rar100";
+    // candidate the outcome is ABOUT. Candidate ORDER IS NOT GUARANTEED by directory
+    // enumeration (codex rev-5 B4) — derive identity from the actual launches:
+    // Launches[i].OutputFilePath's filename starts with the version directory name.
+    static string VersionOf(FakeRunner.Launch l) =>
+        Path.GetFileName(l.OutputFilePath).Split('-')[0]; // "rar100-..." / "rar200-..."
+    string targetVersion = outcome == "duplicate"
+        ? VersionOf(host.Runner.Launches[1])   // the SECOND launch is the duplicate
+        : VersionOf(host.Runner.Launches[0]);
     string outputDir = Path.Combine(host.WorkDir, "output");
     string? targetAssembledDir = Directory.Exists(outputDir)
         ? Directory.GetDirectories(outputDir, $"assembled-{targetVersion}*").FirstOrDefault()
@@ -1544,10 +1613,12 @@ public async Task RetentionMatrix(string outcome, bool deleteRarFiles,
 
     if (outcome == "duplicate")
     {
-        // The UNIQUE first candidate follows the ordinary no-match flags,independent of the
-        // duplicate handling — with deleteRarFiles=false it must SURVIVE.
+        // The UNIQUE first candidate follows the ordinary no-match flags, independent of
+        // the duplicate handling — with deleteRarFiles=false it must SURVIVE. Identity
+        // from the FIRST launch, never from directory order (codex rev-5 B4).
+        string firstVersion = VersionOf(host.Runner.Launches[0]);
         bool cand1Survives = Directory.Exists(outputDir) && Directory.EnumerateFiles(outputDir)
-            .Any(p2 => Path.GetFileName(p2).StartsWith("rar100", StringComparison.OrdinalIgnoreCase));
+            .Any(p2 => Path.GetFileName(p2).StartsWith(firstVersion, StringComparison.OrdinalIgnoreCase));
         Assert.Equal(!deleteRarFiles, cand1Survives);
     }
 
