@@ -1,6 +1,7 @@
 # SRR-Guided Volume Assembly — Design
 
-Status: approved by user 2026-07-28 (verbal design walkthrough); codex review pending.
+Status: rev 2 — user-approved design walkthrough 2026-07-28; rev 1 codex verdict REVISE
+(7 blocking, 3 advisory — all folded in below); rev 2 codex re-review pending.
 Scope: ReScene.Lib (`ReScene/Core/`) + one wiring touch in `Manager`. No UI changes.
 
 ## Problem
@@ -8,182 +9,275 @@ Scope: ReScene.Lib (`ReScene/Core/`) + one wiring touch in `Manager`. No UI chan
 RAR reconstruction verifies candidates by byte-comparing produced volumes against the
 originals' CRCs. The produced volumes must therefore be byte-identical, and today the
 pipeline achieves that by patching the produced headers **in place** (host OS byte,
-attributes, DOS mtime, EXT_TIME remainder, header CRCs — `RARPatcher`).
+attributes, DOS mtime, EXT_TIME remainder, header CRCs — `RARPatcher`; it can also
+structurally rewrite LARGE fields within one file). What the patcher cannot do is
+**globally re-split the packed stream across volumes** after a header-layout
+divergence has shifted every volume's split point.
 
-In-place patching cannot bridge **structural** header differences. Proven failing case
-(`Golden.Age.Of.Racing-iTWINS`, logs `D:\Temp3\windows_log.txt` / `linnux_logs.txt`):
+Proven failing case (`Golden.Age.Of.Racing-iTWINS`, logs `D:\Temp3\windows_log.txt` /
+`linnux_logs.txt`):
 
-- Original (made by WinRAR 3.40 on Windows, `-tsm4`): file header 49 bytes, flags
-  `0x90C2`, EXT_TIME present (5 bytes: flags + remainder).
+- Original (WinRAR 3.40 on Windows, `-tsm4`): file header 49 bytes, flags `0x90C2`,
+  EXT_TIME present (5 bytes: flags word + 3-byte remainder).
 - Linux `rarlinux-3.4.1` output, same switches: header 44 bytes, flags `0x80C2`,
   **no EXT_TIME field**. Unix builds of RAR 3.x read whole-second `st_mtime` and omit
   the field entirely; no switch can force it.
 - Hex comparison proves the **compressed data streams are byte-identical**, shifted by
   exactly the 5 missing header bytes. Volume split points shift accordingly (vol 1
-  packs 14,999,916 data bytes instead of 14,999,911). Every downstream byte cascades;
-  all 89 Linux candidates hash `match: False` while Windows matches with `wrar340`.
-
-Conclusion: when the local rar build's header *layout* differs from the original's,
-patch-in-place can never match — on any OS, in either direction.
+  packs 14,999,916 data bytes instead of 14,999,911); all 89 Linux candidates hash
+  `match: False` while Windows matches with `wrar340`.
 
 ## Solution
 
 Stop patching the produced container. **Assemble** the output volumes instead:
 
 1. Take every header byte verbatim from the SRR (an SRR stores the complete original
-   RAR headers — marker, archive header, file headers incl. EXT_TIME, service blocks
-   incl. comment data, end blocks, padding).
+   RAR headers — marker, archive header, file headers incl. EXT_TIME, the comment
+   service block incl. its data, end blocks, padding).
 2. Take the packed data from the brute-forced rar output, treated as one logical
    per-file packed stream (its container is irrelevant).
 3. Re-split that stream at the original headers' ADD_SIZE boundaries.
 
-Byte-perfect output by construction. Reconstruction becomes host-, filesystem- and
-rar-build-agnostic: only the compressed stream must match, which is precisely what the
-brute-force varies. Host-OS/attr/mtime patching is unnecessary on this path.
+Byte-perfect output by construction; only the compressed stream must match, which is
+precisely what the brute-force varies. Header patching is unnecessary on this path.
 
-### Reuse (this is mostly plumbing, not new machinery)
+### Reuse
 
-- `SRRReconstructor.ReconstructAsync` (lib `Core/`) already walks an SRR and emits
-  volumes: SRR bookkeeping blocks handled, embedded RAR header bytes written verbatim,
-  `RARPadding` blocks emitted, Zip-Slip guard, per-volume verify + progress. Its data
-  source is hardwired to raw release files (`FindSourceFile` + per-file `FileStream`) —
-  correct only for store-method custom packers, which is its only caller today
-  (`Manager` line ~241, gated on `CustomPackerDetected != None`).
-- `RARStream(firstRARPath, packedFileName)` already provides a seekable read stream
-  over one archived file's packed bytes **across volumes** of a RAR set. Opened on the
-  produced set, it IS the produced-volumes data source.
+- `SRRReconstructor.ReconstructAsync` already walks an SRR and emits volumes (SRR
+  bookkeeping blocks, embedded RAR header bytes verbatim, `RARPadding` emission,
+  Zip-Slip guard, progress). Its data source is hardwired to raw release files —
+  correct only for its sole caller, the store-method custom-packer path
+  (`Manager` ~line 241).
+- `RARStream(firstRARPath, packedFileName)` provides a seekable read stream over one
+  archived file's packed bytes across the volumes of a RAR set (cross-volume
+  `Read`/`Seek` verified suitable). **Caveat (codex B3): it snapshots the volume list
+  at construction and never discovers volumes created later** — the flow below
+  therefore constructs fresh instances at defined points, never reuses one across a
+  producer state change.
 
 ## Architecture
 
-### 1. Data-source seam in `SRRReconstructor`
-
-Extract the packed-byte supply behind a small interface (one clear purpose: "give me
-this archived file's packed stream"):
+### 1. Data-source seam + outcome type in `SRRReconstructor`
 
 ```
 internal interface IPackedSource : IDisposable
 {
-    // Sequential per-file access; called once per archived file, in SRR order.
-    // Returns a readable stream positioned at the file's packed byte 0.
+    // Sequential per-file access, in SRR order; stream positioned at packed byte 0.
     Stream OpenPackedStream(string archivedFileName);
 }
 ```
 
-- `ReleaseFilePackedSource` — current behavior (open the release file from the input
-  directory; bytes are stored, packed == unpacked). Used by the custom-packer path,
-  behavior unchanged.
-- `ProducedVolumesPackedSource` — new. Wraps `RARStream(producedFirstVolumePath,
-  archivedFileName)` per archived file. Directory entries never reach the source
-  (existing guard). Reading past the currently-written produced volumes while rar is
-  still completing them is a caller-level concern (see flow below) — the source itself
-  simply reads; the caller ensures volume completion before full assembly.
+- `ReleaseFilePackedSource` — current behavior (release file from the input
+  directory; store-method: packed == unpacked). Custom-packer path, unchanged.
+- `ProducedVolumesPackedSource` — new; wraps `RARStream(producedFirstVolumePath,
+  archivedFileName)` per archived file. Instances are cheap and **single-snapshot**:
+  the Manager creates a fresh source (fresh `RARStream`s) for each assembly attempt.
 
-`ReconstructAsync` keeps its signature plus an `IPackedSource` parameter (the existing
-custom-packer call site passes `ReleaseFilePackedSource`). Its per-file open/copy/close
-logic moves onto the seam; split-volume copy arithmetic (`packedSize` per piece,
-SplitBefore/SplitAfter bookkeeping) is unchanged.
+Archived-name handling (codex B6): the reconstructor currently decodes header names
+as ASCII + NUL-truncate, while `RARStream` matches against Unicode/OEM-decoded
+`RARFileHeader.FileName`. The seam refactor decodes with `RARUtils.DecodeFileName`
+(honoring the LHD_UNICODE flag and the LARGE-shifted name offset) so both sides of
+the seam speak the same names. A Unicode archived-name test pins this.
 
-### 2. Set filtering (multi-set SRRs)
-
-`ReconstructAsync` gains the rule: only RARFile sections whose volume name matches the
-provided `originalRARFileNames` (OrdinalIgnoreCase, name-only comparison — consistent
-with the pipeline's set keying) are emitted; other sets' sections are skipped without
-opening output streams. The custom-packer path gets this fix for free.
-
-### 3. `Manager` flow (the wiring change)
-
-Engagement rule — the assembly path replaces patch+hash **iff**:
+Outcome type (codex B1): the `(bool, IReadOnlyList<string>)` tuple cannot express why
+assembly did not produce a verified set. `ReconstructAsync` returns:
 
 ```
-options.RAROptions.SRRFilePath is non-empty
-&& CustomPackerDetected == None
-&& the SRR carries no removed recovery records (see Limitations)
+internal enum SRRReconstructionStatus
+{
+    Success,            // all requested volumes written (and verified, where CRCs exist)
+    UnsupportedSrr,     // preflight declined: required payload not present in the SRR
+    SourceExhausted,    // packed source ended before the last requested ADD_SIZE byte
+    VerificationFailed, // volumes written but hash comparison failed
+    Error               // I/O or parse failure
+}
+record SRRReconstructionResult(
+    SRRReconstructionStatus Status,
+    IReadOnlyList<string> WrittenPaths,   // ordered, exactly as emitted
+    string? Diagnostic);
 ```
 
-SFV-only runs (no SRR imported) keep the legacy patch+hash path untouched.
+The custom-packer call site maps `Success` to its current `true` and everything else
+to its current `false` + logged diagnostic — observable behavior preserved, honesty
+gained.
 
-Per-candidate flow (replacing `PatchRARFilesHostOS` + first-volume hash):
+### 2. Preflight (codex B1 — replaces the rev-1 "RR flag" guard, which was wrong)
 
-1. rar finishes producing volume 1 (same trigger point as today).
-2. Assemble original volume 1 only: SRR vol-1 section headers + the first
-   `sum(vol1 ADD_SIZEs)` packed bytes via `ProducedVolumesPackedSource`.
-3. Hash the assembled volume with `options.HashType`; compare against
-   `options.Hashes` — the same quick-check contract as today.
-4. Insufficient-data edge (produced headers larger than originals — the mirror
-   direction, e.g. reconstructing a Unix-made original on Windows): assembled vol 1
-   may need bytes from produced vol 2. If the packed stream runs dry and rar is still
-   running, skip the quick check for this candidate, await volume completion, then
-   assemble vol 1 and compare (log the reason at DEBUG).
-5. On quick-check match: await completion of all produced volumes, assemble the full
-   set, then run the existing `VolumeMatchEvaluator` per-volume CRC32 verification
-   (CRCs from the SRR-embedded SFV, exactly as today) against the **assembled** files.
-6. Finalization (move/rename into the user's output directory) consumes the assembled
-   files — which already carry the original volume names — through the existing
-   `MatchedRARWriter` finalize step. Assembled artifacts are written under a
-   dedicated per-candidate subdirectory of the work area so they can never collide
-   with rar's own `<slug>.rar` outputs, and non-matching candidates' assemblies are
-   deleted under the same retention flags as rar outputs today
-   (`DeleteRARFiles` / `DeleteDuplicateCRCFiles`).
-7. Logging: candidate lines read `Assembled hash for <path>: <hash> (match: …)`;
-   the match summary prints `SRR-guided assembly` instead of `(patched)`. The
-   patch-describing log block is skipped on this path.
+`SRRBlockFlags.RecoveryBlocksRemoved` is set **unconditionally** by `SRRWriter`
+(SRRWriter.cs:722) even when no recovery record ever existed — it is not evidence and
+MUST NOT gate anything. A flag-only SRR with no actual RR content remains eligible.
 
-### 4. What the assembly path makes irrelevant
+The real hazard: the SRR stores payload only for the comment (CMT) service block;
+`SRRWriter` strips the data of every other data-bearing embedded block (other service
+blocks such as AV, and data-bearing old-style blocks — SRRWriter.cs:916/942), yet the
+current reconstructor trusts each embedded block's declared ADD_SIZE and would consume
+the following headers as payload (SRRReconstructor.cs:291/311) — a latent bug in the
+custom-packer path too.
+
+**Preflight rule:** before any output file is created, walk the selected set's
+sections and decline (`UnsupportedSrr`) if any embedded block's payload is required
+but not stored in the SRR:
+
+- archive header with the Protected flag, old-style recovery block `0x78`, or an
+  `RR`-subtype service block → decline (recovery data unreconstructible);
+- any other data-bearing block whose payload the SRR format strips (non-CMT service
+  blocks with ADD_SIZE > 0, data-bearing old-style blocks) → decline;
+- CMT service blocks (payload stored) and all pure-header blocks → eligible.
+
+The preflight is part of the reconstructor (the component that reads the SRR) and
+protects both callers. The Manager caches an `UnsupportedSrr` decline **once per
+set** — it must not re-decline for every candidate (codex A1).
+
+### 3. Set filtering (codex B5 — directory-qualified, not name-only)
+
+Multi-set SRRs can contain `CD1/x.rar` and `CD2/x.rar`. Matching a section to the
+requested set uses **separator-normalized, case-insensitive relative names** whenever
+the provided `originalRARFileNames` are directory-qualified (mirroring
+`Manager`'s existing qualified-key-then-basename lookup and
+`RARVolumeIdentifier.GetArchiveSetKey` semantics). A bare-basename fallback is
+accepted only when the basename is unique across the SRR. The multi-set test uses
+identical basenames in different directories.
+
+### 4. `Manager` flow
+
+Engagement rule — the assembly path replaces patch+hash **iff**
+`SRRFilePath` is non-empty AND `CustomPackerDetected == None` AND the per-set
+preflight did not decline. SFV-only runs (no SRR) keep the legacy patch+hash path
+untouched. On decline: one log line, cached, legacy path for that set — described
+honestly as "trying legacy reconstruction" (for an actually-Protected original the
+legacy path will also fail verification; it is a diagnostic courtesy, not an RR
+solution).
+
+**CAV split (codex B2).** The two lifecycles differ fundamentally — non-CAV mode
+kills rar as soon as volume 2 appears (Manager.cs:447/474/783), so "await completion"
+does not exist there:
+
+- **CompleteAllVolumes = true** (recreate-whole-release): at the existing
+  vol-2-exists trigger, attempt the quick check — assemble original volume 1 only
+  (fresh `ProducedVolumesPackedSource`), hash with `options.HashType`, compare
+  against `options.Hashes` (same contract as today). Any failure while the producer
+  is still running — short read, missing/incomplete header, sharing or parse error,
+  `SourceExhausted` — is treated as an *incomplete snapshot*, not a mismatch: await
+  producer completion, retry ONCE with an entirely fresh source (codex B3). Failure
+  after that retry is a real no-match. On quick match: await completion, assemble
+  the full set (fresh source again), then per-volume verification (next paragraph),
+  then finalize.
+- **CompleteAllVolumes = false** (fast version hunt): first-volume-only assembly
+  outcome. Assemble original volume 1 from the produced volume-1 data available at
+  the kill point; on success report the match exactly as the legacy first-volume
+  path does. If the source runs short (the mirror-shift direction needs produced
+  vol-2 bytes that were never written), the candidate is logged as *inconclusive —
+  enable "Complete all volumes" to test this candidate* (once per set at INFO,
+  per-candidate at DEBUG) and treated as no-match. This is an explicit, logged v1
+  trade-off, not silent.
+
+**Verification coverage parity (codex B2).** Per-volume CRC verification engages
+exactly as today: only in CAV mode and only when `BuildExpectedInOrder` is non-empty
+(an imported SRR need not embed an SFV). With no CRC map, the assembly path preserves
+today's first-hash-only success semantics — no silent strengthening or weakening.
+
+**Single hashing responsibility (codex A2).** The Manager owns all match hashing; the
+reconstructor's internal per-volume verify is disabled on Manager calls (hashes
+parameter empty ⇒ `VerifyAndReportVolumeAsync` no-ops, as it already does) so each
+assembled volume is copied once and hashed once.
+
+**Producer lifecycle hygiene (codex B3).** Every non-winning exit from a candidate —
+quick mismatch, inconclusive, decline, exception, cancellation — cancels AND observes
+(awaits) the running rar process before cleanup or the next candidate; today's
+generic exception path only disposes the CTS (Manager.cs:968/999). This is a bug-fix
+requirement of the rewiring, tested explicitly.
+
+### 5. Finalization + retention (codex B4 — new finalizer, not `RenameMatchedOutput`)
+
+`RenameMatchedOutput` rediscovers volumes from the rar-produced `rarFilePath` and
+patches them — pointed at an assembly win it would finalize the *carrier* volumes.
+The assembly path gets a dedicated finalizer:
+
+- input: the reconstructor's ordered `WrittenPaths`, verbatim — no volume
+  rediscovery, no patching;
+- action: transactional move into `<workRoot>/output` under the original volume
+  names (satisfying the app-side `VerifiedOutputRelocator` contract, which only
+  accepts committed files there);
+- assembled artifacts live under a per-candidate work subdirectory
+  (`assembled-<candidate-slug>/`) so they can never collide with rar's own outputs.
+
+Retention matrix — BOTH artifact classes (assembled volumes AND rar-produced carrier
+volumes) have defined dispositions for: quick mismatch, full-verification mismatch,
+duplicate-hash candidate, exception, cancellation, and success. Mismatch/duplicate
+honor the existing `DeleteRARFiles` / `DeleteDuplicateCRCFiles` flags for both
+classes; success deletes the carrier volumes (they are not the reconstruction) unless
+`DeleteRARFiles` is false, in which case they remain in the work area for debugging;
+exception/cancellation leave both classes for diagnosis, as today.
+
+### 6. What the assembly path makes irrelevant
 
 `EnableHostOSPatching`, detected host OS / attributes / mtimes, and the EXT_TIME
 remainder patcher are not consulted on the assembly path (headers are verbatim). They
-remain fully functional for the legacy SFV-only path. No settings change.
+remain fully functional for the legacy path. No settings change.
 
 ## Limitations (v1, recorded)
 
-- **Recovery records.** SRRs strip RR data (`SRRBlockFlags.RecoveryBlocksRemoved`);
-  those bytes cannot be assembled from the SRR, and produced-RAR RR bytes protect the
-  wrong container. If the target set's embedded headers contain an RR/protect block
-  (RAR4 old-style recovery `0x78`, or an `RR`-subtype service block) or a section
-  flags `RecoveryBlocksRemoved`, assembly declines. Placement: the guard lives in the
-  reconstructor as a typed decline result (it is the component that reads the SRR);
-  the Manager translates a decline into one clear log line + legacy-patch fallback
-  for that set. (Note: the current custom-packer direct path would silently mis-read
-  such SRRs — the same reconstructor-level guard protects it too, surfacing as a
-  reconstruction error there since it has no fallback.)
-- **RAR4 only**, matching `SRRReconstructor`'s existing coverage. RAR5 reconstruction
-  is out of scope exactly as it is today.
-- No RR regeneration, no wine bridging, no UI toggle.
+- Recovery-record-bearing originals (real evidence: Protected flag / `0x78` / `RR`
+  service): assembly declines via preflight; legacy is tried and will honestly fail
+  verification for such sets. RR regeneration is out of scope.
+- Stripped data-bearing blocks other than CMT (e.g. AV): decline, same mechanism.
+- Non-CAV mirror-shift candidates: inconclusive with explicit guidance (see CAV
+  split) — not a wrong answer, a logged narrower one.
+- RAR4 only, matching `SRRReconstructor`'s existing coverage.
+- No wine bridging, no UI toggle.
 
 ## Testing
 
-Lib tests (`ReScene.Tests`), all synthetic, no WinRAR dependency:
+Test-infra work this feature REQUIRES (codex B7 — the rev-1 plan was not
+implementable):
 
-1. **EXTTIME divergence (the bug):** build an "original" 3-volume set whose file
-   headers carry EXT_TIME, derive the SRR (existing `SRRTestDataBuilder` machinery),
-   then hand-build "produced" volumes containing the identical packed stream re-split
-   with 5-bytes-shorter headers. Assemble → output byte-identical to originals
-   (SHA-256 per volume).
-2. **Mirror shift:** produced headers *larger* than originals (EXT_TIME present in
-   produced, absent in originals) — exercises the read-across-volumes edge.
-3. **Multi-file archive** spanning a volume boundary (SplitBefore/SplitAfter walk
-   through the seam).
-4. **Padding blocks** (`RARPadding`) interleaved — existing writer path still emits
-   them in assembled output.
-5. **Multi-set SRR:** two sets in one SRR; assembling set B touches no set-A volume
-   and emits only set-B files.
-6. **RR guard:** SRR section with `RecoveryBlocksRemoved` → assembly declines,
-   diagnostic logged, legacy fallback signaled.
-7. **Custom-packer regression:** existing direct-reconstruction tests green through
-   the `ReleaseFilePackedSource` seam (byte-identical behavior).
-8. **Manager integration:** quick-check + full-verify flow against a fake "rar
-   producer" that drops pre-built produced volumes into the output directory
-   (no real rar binary in tests).
+- `RAR4HeaderBuilder`: emit a real 5-byte EXT_TIME field (flags word + 3-byte
+  remainder), not just the flags word — needed to build "original" fixtures.
+- `SRRTestDataBuilder`: support embedded RAR header sections with caller-controlled
+  flags (today it hardcodes section flags to 0), including the real-world
+  `RecoveryBlocksRemoved`-always-set shape.
+- `Manager` candidate-flow seam: an injected producer/attempt-runner abstraction (or
+  extracted candidate-flow component) so integration tests can drop pre-built
+  "produced" volumes without a real rar binary (`RARProcess` is internal sealed and
+  directly constructed today — Manager.cs:746).
+
+Lib tests (all synthetic, no WinRAR dependency):
+
+1. EXTTIME divergence (the bug): original 3-volume set WITH EXT_TIME, SRR built from
+   it, produced volumes carrying the identical packed stream re-split with
+   5-byte-shorter headers → assembled output byte-identical (SHA-256 per volume).
+2. Mirror shift (produced headers larger; read crosses produced-volume boundary).
+3. Multi-file archive spanning a volume boundary (SplitBefore/SplitAfter through the
+   seam).
+4. Padding blocks interleaved.
+5. Multi-set SRR with identical basenames in different directories (CD1/CD2):
+   assembling set B touches no set-A volume.
+6. Preflight eligibility: flag-only `RecoveryBlocksRemoved` (no actual RR) remains
+   ELIGIBLE — the real-world default shape must assemble.
+7. Preflight declines, each before any output file exists: Protected archive header;
+   old-style `0x78`; `RR` service block; stripped data-bearing AV service block.
+8. Delayed-volume race: volume 2 appears only "after completion" → first attempt
+   `SourceExhausted`, single retry with a fresh source succeeds.
+9. Producer lifecycle: every failure path (mismatch, inconclusive, decline,
+   exception, cancel) cancels and observes the fake producer.
+10. CAV and non-CAV flows, including the non-CAV inconclusive mirror case.
+11. No-CRC-map SRR: first-hash-only semantics preserved.
+12. Unicode archived name through the seam (LHD_UNICODE + LARGE offset).
+13. Finalization commits the ASSEMBLED paths (not carrier paths) into
+    `<workRoot>/output`; retention matrix cases (mismatch, duplicate, exception,
+    cancellation, success) for both artifact classes.
+14. Custom-packer regression: existing direct-reconstruction behavior byte-identical
+    through `ReleaseFilePackedSource`; plus the preflight now protecting it.
 
 Legacy-path regression: entire existing lib + App.Core + Manager suites stay green.
 
 Acceptance smoke (manual, user): `Golden.Age.Of.Racing-iTWINS` reconstructs on Linux
 with the `rarlinux-3.4.x` pack (`G:\WinRAR\extracted\Linux`), and still reconstructs
-on Windows (now via assembly, since the SRR is imported in that flow too).
+on Windows (now via assembly, since that flow imports the SRR too).
 
 ## Non-goals
 
-RR regeneration; RAR5 SRR support; any UI surface (the path engages automatically and
-announces itself in the Phase 2 log); performance work beyond "streams, no whole-set
-buffering" (volumes are copied once; quick-check cost is one volume copy + hash, the
-same order as today's patch+hash).
+RR regeneration; RAR5 SRR support; any UI surface (the path engages automatically
+and announces itself in the Phase 2 log); performance work beyond "streams, no
+whole-set buffering" (each assembled volume is copied once and hashed once — see
+single-hashing responsibility).
