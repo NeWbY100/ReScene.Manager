@@ -23,7 +23,7 @@ Rev 8 — codex-APPROVED (rev-7 verdict, 0B/2A folded). Review rounds: rev-1 8B/
 - Verification and finalization consume the FULL assembly result's ordered `WrittenPaths` — never the quick gate's single-volume result (codex plan B1).
 - `RenameToOriginalNames=false` naming: basename replacement preserving the COMPLETE volume suffix via `RARVolumeNaming.GetBaseName`; never `Path.GetExtension` (spec §5).
 - On Manager calls the reconstructor's verification is a no-op (empty `hashes`); `VerificationFailed` is unreachable there (spec §4).
-- Real test-support APIs (codex plan B6): `SRRTestDataBuilder()` (parameterless) / `.AddSRRHeader(appName)` / `.Build()` / `.BuildToFile(directory, fileName)`; `RAR4HeaderBuilder(BinaryWriter)` (no marker method — write `RARUtils.RAR4Marker` bytes directly); tests inherit `TempDirTestBase` (property `TempDir`); logger `new NullReSceneLogger()`.
+- Real test-support APIs (codex plan B6): `SRRTestDataBuilder()` (parameterless) / `.AddSRRHeader(appName)` / `.Build()` / `.BuildToFile(directory, fileName)`; `RAR4HeaderBuilder(BinaryWriter)` (no marker method — write `RARUtils.RAR4Marker` bytes directly); tests inherit `TempDirTestBase` (property `TempDir`); logger `NullReSceneLogger.Instance`.
 - Commit after every task, session trailer as used throughout this branch.
 
 ---
@@ -94,7 +94,7 @@ namespace ReScene.Core.IO;
 /// </summary>
 internal interface IPackedSource : IDisposable
 {
-    Stream OpenPackedStream(string archivedFileName);
+    public Stream OpenPackedStream(string archivedFileName);   // explicit modifier: IDE0040
 }
 ```
 
@@ -262,7 +262,7 @@ public async Task ReconstructAsync_UnicodeLargeName_ResolvesThroughTheSeam()
     string srr = srrBuilder.BuildToFile(TempDir, "u.srr");
 
     var recorder = new RecordingPackedSource(payload);
-    var reconstructor = new SRRReconstructor(new NullReSceneLogger());
+    var reconstructor = new SRRReconstructor(NullReSceneLogger.Instance);
     SRRReconstructionResult result = await reconstructor.ReconstructAsync(
         srr, recorder, TempDir, Path.Combine(TempDir, "out"),
         ["u.rar"], [], HashType.CRC32, CancellationToken.None);
@@ -373,7 +373,7 @@ writes `declaredDataSize` deterministic bytes (`(byte)(i % 251)`).
 ```csharp
 public class SRRPreflightTests : TempDirTestBase
 {
-    private static SRRReconstructor NewReconstructor() => new(new NullReSceneLogger());
+    private static SRRReconstructor NewReconstructor() => new(NullReSceneLogger.Instance);
 
     private string BuildSrr(ushort sectionFlags, Action<RAR4HeaderBuilder> headers) =>
         new SRRTestDataBuilder().AddSRRHeader("t")
@@ -723,7 +723,7 @@ public class SRRAssemblyTests : TempDirTestBase
         IReadOnlyList<string>? names = null)
     {
         using var source = new ProducedVolumesPackedSource(f.ProducedFirstVolumePath);
-        return await new SRRReconstructor(new NullReSceneLogger()).ReconstructAsync(
+        return await new SRRReconstructor(NullReSceneLogger.Instance).ReconstructAsync(
             f.SrrPath, source, TempDir, Path.Combine(TempDir, outSub),
             names ?? f.OriginalVolumeNames, [], HashType.CRC32, CancellationToken.None);
     }
@@ -780,7 +780,7 @@ public class SRRAssemblyTests : TempDirTestBase
         string combinedSrr = ConcatenateSrrs(cd1.SrrPath, cd2.SrrPath); // header + both section runs
 
         using var source = new ProducedVolumesPackedSource(cd2.ProducedFirstVolumePath);
-        SRRReconstructionResult r = await new SRRReconstructor(new NullReSceneLogger())
+        SRRReconstructionResult r = await new SRRReconstructor(NullReSceneLogger.Instance)
             .ReconstructAsync(combinedSrr, source, TempDir, Path.Combine(TempDir, "out"),
                 cd2.OriginalVolumeNames /* "CD2/t.rar"… */, [], HashType.CRC32, CancellationToken.None);
 
@@ -799,7 +799,7 @@ public class SRRAssemblyTests : TempDirTestBase
         string combinedSrr = ConcatenateSrrs(cd1.SrrPath, cd2.SrrPath);
 
         using var source = new ProducedVolumesPackedSource(cd2.ProducedFirstVolumePath);
-        SRRReconstructionResult r = await new SRRReconstructor(new NullReSceneLogger())
+        SRRReconstructionResult r = await new SRRReconstructor(NullReSceneLogger.Instance)
             .ReconstructAsync(combinedSrr, source, TempDir, Path.Combine(TempDir, "outq"),
                 ["t.rar"], [], HashType.CRC32, CancellationToken.None);
 
