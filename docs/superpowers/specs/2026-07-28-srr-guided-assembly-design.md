@@ -1,7 +1,7 @@
 # SRR-Guided Volume Assembly — Design
 
-Status: rev 2 — user-approved design walkthrough 2026-07-28; rev 1 codex verdict REVISE
-(7 blocking, 3 advisory — all folded in below); rev 2 codex re-review pending.
+Status: rev 3 — user-approved walkthrough 2026-07-28; codex rev-1 REVISE (7B/3A) and rev-2 REVISE (2B/3A) folded in
+Rev 3 codex re-review pending.
 Scope: ReScene.Lib (`ReScene/Core/`) + one wiring touch in `Manager`. No UI changes.
 
 ## Problem
@@ -124,9 +124,14 @@ but not stored in the SRR:
   blocks with ADD_SIZE > 0, data-bearing old-style blocks) → decline;
 - CMT service blocks (payload stored) and all pure-header blocks → eligible.
 
-The preflight is part of the reconstructor (the component that reads the SRR) and
-protects both callers. The Manager caches an `UnsupportedSrr` decline **once per
-set** — it must not re-decline for every candidate (codex A1).
+The preflight is an **explicit reconstructor API** (e.g.
+`SRRReconstructor.PreflightSet(srrPath, originalRARFileNames)`), and the Manager
+invokes it **once per set, before entering the producer/candidate loop** (codex
+rev-2 B1). On `UnsupportedSrr` the Manager selects legacy mode for the whole set
+before launching any candidate — a decline can therefore never occur mid-candidate,
+no candidate is ever cancelled because of one, and the first version/argument
+combination is evaluated through the legacy path like every other. "Decline" is NOT
+one of the running-producer lifecycle exits.
 
 ### 3. Set filtering (codex B5 — directory-qualified, not name-only)
 
@@ -142,11 +147,11 @@ identical basenames in different directories.
 
 Engagement rule — the assembly path replaces patch+hash **iff**
 `SRRFilePath` is non-empty AND `CustomPackerDetected == None` AND the per-set
-preflight did not decline. SFV-only runs (no SRR) keep the legacy patch+hash path
-untouched. On decline: one log line, cached, legacy path for that set — described
-honestly as "trying legacy reconstruction" (for an actually-Protected original the
-legacy path will also fail verification; it is a diagnostic courtesy, not an RR
-solution).
+preflight (run once, before the candidate loop) did not decline. SFV-only runs (no
+SRR) keep the legacy patch+hash path untouched. On decline: one log line, and the
+entire set runs the legacy path from candidate one — described honestly as "trying
+legacy reconstruction" (for an actually-Protected original the legacy path will also
+fail verification; it is a diagnostic courtesy, not an RR solution).
 
 **CAV split (codex B2).** The two lifecycles differ fundamentally — non-CAV mode
 kills rar as soon as volume 2 appears (Manager.cs:447/474/783), so "await completion"
@@ -161,7 +166,10 @@ does not exist there:
   producer completion, retry ONCE with an entirely fresh source (codex B3). Failure
   after that retry is a real no-match. On quick match: await completion, assemble
   the full set (fresh source again), then per-volume verification (next paragraph),
-  then finalize.
+  then finalize. Post-retry outcome mapping (codex rev-2 A3): `SourceExhausted` or
+  `VerificationFailed` after producer completion = a real no-match for this
+  candidate; a persistent parse/I-O `Error` = a failed combination, surfacing
+  through the Manager's existing error-row behavior — the two are not conflated.
 - **CompleteAllVolumes = false** (fast version hunt): first-volume-only assembly
   outcome. Assemble original volume 1 from the produced volume-1 data available at
   the kill point; on success report the match exactly as the legacy first-volume
@@ -178,14 +186,18 @@ today's first-hash-only success semantics — no silent strengthening or weakeni
 
 **Single hashing responsibility (codex A2).** The Manager owns all match hashing; the
 reconstructor's internal per-volume verify is disabled on Manager calls (hashes
-parameter empty ⇒ `VerifyAndReportVolumeAsync` no-ops, as it already does) so each
-assembled volume is copied once and hashed once.
+parameter empty ⇒ `VerifyAndReportVolumeAsync` no-ops, as it already does). Honest
+cost statement (codex rev-2 A5): in CAV mode the quick gate costs ONE EXTRA copy +
+hash of volume 1 (the full-set assembly then re-emits and re-verifies it) — accepted;
+no reuse mechanism is specified. Beyond that, each assembled volume is copied once
+and hashed once.
 
 **Producer lifecycle hygiene (codex B3).** Every non-winning exit from a candidate —
-quick mismatch, inconclusive, decline, exception, cancellation — cancels AND observes
+quick mismatch, inconclusive, exception, cancellation — cancels AND observes
 (awaits) the running rar process before cleanup or the next candidate; today's
 generic exception path only disposes the CTS (Manager.cs:968/999). This is a bug-fix
-requirement of the rewiring, tested explicitly.
+requirement of the rewiring, tested explicitly. (Preflight declines are not in this
+list — they happen before any producer exists.)
 
 ### 5. Finalization + retention (codex B4 — new finalizer, not `RenameMatchedOutput`)
 
@@ -195,9 +207,14 @@ The assembly path gets a dedicated finalizer:
 
 - input: the reconstructor's ordered `WrittenPaths`, verbatim — no volume
   rediscovery, no patching;
-- action: transactional move into `<workRoot>/output` under the original volume
-  names (satisfying the app-side `VerifiedOutputRelocator` contract, which only
-  accepts committed files there);
+- action: transactional move into `<workRoot>/output` (satisfying the app-side
+  `VerifiedOutputRelocator` contract, which only accepts committed files there);
+- naming policy (codex rev-2 B2 — `RenameToOriginalNames` is a live setting and
+  "no settings change" means honoring it): when `RenameToOriginalNames` is true,
+  the original volume names; when false, a collision-free generated convention
+  `<candidate-slug>-assembled.<ext>` per volume — carrier filenames cannot be
+  reused because success may retain the carriers (`DeleteRARFiles=false`). Tests
+  cover both toggle values × both carrier-retention values;
 - assembled artifacts live under a per-candidate work subdirectory
   (`assembled-<candidate-slug>/`) so they can never collide with rar's own outputs.
 
@@ -256,16 +273,23 @@ Lib tests (all synthetic, no WinRAR dependency):
    ELIGIBLE — the real-world default shape must assemble.
 7. Preflight declines, each before any output file exists: Protected archive header;
    old-style `0x78`; `RR` service block; stripped data-bearing AV service block.
-8. Delayed-volume race: volume 2 appears only "after completion" → first attempt
-   `SourceExhausted`, single retry with a fresh source succeeds.
-9. Producer lifecycle: every failure path (mismatch, inconclusive, decline,
-   exception, cancel) cancels and observes the fake producer.
+8. Incomplete-snapshot race (codex rev-2 A4 — the Manager's trigger waits for
+   vol-2-or-completion, so "vol 2 missing while running" cannot be the fixture):
+   volume 2 EXISTS at the trigger but its target header/data is incomplete until
+   producer completion → first attempt fails as an incomplete snapshot, the single
+   post-completion retry with a fresh source succeeds. A second case pins the
+   post-retry mapping: still-short source after completion → no-match
+   (`SourceExhausted`), persistent parse failure → error row (`Error`).
+9. Producer lifecycle: every failure path (mismatch, inconclusive, exception,
+   cancel) cancels and observes the fake producer; a preflight decline launches NO
+   producer at all and the set runs legacy from candidate one.
 10. CAV and non-CAV flows, including the non-CAV inconclusive mirror case.
 11. No-CRC-map SRR: first-hash-only semantics preserved.
 12. Unicode archived name through the seam (LHD_UNICODE + LARGE offset).
 13. Finalization commits the ASSEMBLED paths (not carrier paths) into
-    `<workRoot>/output`; retention matrix cases (mismatch, duplicate, exception,
-    cancellation, success) for both artifact classes.
+    `<workRoot>/output`; naming policy both ways (`RenameToOriginalNames` true/
+    false) x carrier retention both ways; retention matrix cases (mismatch,
+    duplicate, exception, cancellation, success) for both artifact classes.
 14. Custom-packer regression: existing direct-reconstruction behavior byte-identical
     through `ReleaseFilePackedSource`; plus the preflight now protecting it.
 
