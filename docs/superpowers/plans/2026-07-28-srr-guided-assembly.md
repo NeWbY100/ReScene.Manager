@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Rev 6 — codex plan-review rev-1 (8B/3A), rev-2 (7B/2A), rev-3 (6B/2A), rev-4 (7B/1A), rev-5 (4B/1A) folded in.
+Rev 7 — codex plan-review rev-1 (8B/3A), rev-2 (7B/2A), rev-3 (6B/2A), rev-4 (7B/1A), rev-5 (4B/1A), rev-6 (2B/1A) folded in.
 
 **Goal:** Reconstruct byte-perfect RAR sets on any host by splicing SRR-stored headers with the brute-forced rar output's packed stream, replacing in-place header patching whenever an SRR is available.
 
@@ -900,13 +900,28 @@ private async Task<int?> ObserveProducerQuietlyAsync(Task<int>? processTask,
 /// by the cancellation filter the legacy path already uses.</summary>
 ```
 
-`RARCompressDirectoryAsync`'s early-termination tail replaces
-`Task.WhenAny(processTask, Task.Delay(1000, …))` with
-`await ObserveProducerQuietlyAsync(processTask, linkedCts, cancelFirst: false)` after its
-cancel — and its XML doc's exit-code contract is UPDATED (codex plan A2): an
-early-terminated run now returns the OBSERVED cancellation exit (normally 1), never a
-synthetic 0; the call-site comment at ~788 is updated to match (both tolerate this —
-early termination implies a volume exists).
+`RARCompressDirectoryAsync`'s tail becomes an EXPLICIT two-branch flow (codex rev-6
+A1 — so an adapting engineer can neither re-await a swallowed fault nor suppress a
+natural one):
+
+```csharp
+if (monitorTask.IsCompleted && !processTask.IsCompleted)
+{
+    // Monitor-triggered INTENTIONAL early termination: cancel, then QUIET observation
+    // (a fault after our own cancel is cleanup noise, not a candidate verdict).
+    linkedCts.Cancel();
+    int? observed = await ObserveProducerQuietlyAsync(processTask, linkedCts, cancelFirst: false).ConfigureAwait(false);
+    return observed ?? 1;
+}
+// Natural completion (or fault): PLAIN await — a producer fault propagates to the
+// caller's generic catch exactly as today.
+return await processTask.ConfigureAwait(false);
+```
+
+Its XML doc's exit-code contract is UPDATED (codex plan A2): an early-terminated run
+returns the OBSERVED cancellation exit (normally 1), never a synthetic 0; the
+call-site comment at ~788 is updated to match (both tolerate this — early termination
+implies a volume exists).
 
 Wire `ObserveProducerQuietlyAsync` at the CLEANUP exits: the `actualRARFilePath == null` branch, the
 quick-mismatch branch, the generic `catch` (Manager.cs:968 — currently observes
@@ -1398,15 +1413,29 @@ if (assembled.Status != SRRReconstructionStatus.Success)
     continue;
 }
 
-VolumeMatchResult verify = VolumeMatchEvaluator.Evaluate(assembledCrcs, expectedInOrder);
-if (!verify.AllMatch)
+// Per-volume verification — COMPLETE guarded block (codex rev-6 B1): the gate is
+// EXACTLY today's (Manager.cs:906) — CAV mode AND a non-empty CRC map; with no map,
+// the quick hash was the whole gate (first-hash-only parity, spec §4) and this block
+// is skipped entirely.
+IReadOnlyList<(string Name, string Crc)> expectedInOrder = BuildExpectedInOrder(options);
+if (options.RAROptions.CompleteAllVolumes && expectedInOrder.Count > 0)
 {
-    // Full-verification mismatch: same mismatch retention on BOTH classes, then the
-    // existing mismatch logging/continue.
-    ApplyMismatchRetention(assemblyDir, actualRARFilePath, options, isDuplicateHash);
-    continue;
+    // The SRR-embedded SFV is ALWAYS CRC32, regardless of options.HashType (same
+    // rationale as the legacy block's comment).
+    var assembledCrcs = assembled.WrittenPaths
+        .Select(v => HashCalculator.Calculate(HashType.CRC32, v))
+        .ToList();
+    VolumeMatchResult verify = VolumeMatchEvaluator.Evaluate(assembledCrcs, expectedInOrder);
+    if (!verify.AllMatch)
+    {
+        // Full-verification mismatch: mismatch retention on BOTH classes, then the
+        // existing mismatch logging/continue.
+        ApplyMismatchRetention(assemblyDir, actualRARFilePath, options, isDuplicateHash);
+        continue;
+    }
 }
 
+// Finalization runs OUTSIDE the guard (it applies with or without a CRC map):
 (IReadOnlyList<string> placed, bool complete) = FinalizeAssembledSet(options, assembled.WrittenPaths, candidateSlug, rarOutputDir);
 if (!complete)
 {
@@ -1417,8 +1446,24 @@ if (!complete)
         rarFilePath, executedArguments, "finalization incomplete — destination occupied or move failed");
     continue;
 }
-// Success retention: delete carriers when DeleteRARFiles, else retain; remove the
-// now-empty assemblyDir. Then the existing match bookkeeping/summary.
+// Success cleanup — EXECUTABLE (codex rev-6 B2). NOTE: for qualified sets
+// (CD2/x.rar) the reconstructor created assemblyDir/CD2/... — after the moves the
+// tree still holds empty subdirectories, so the removal must be RECURSIVE on the
+// file-empty tree (never assume flat):
+if (options.RAROptions.DeleteRARFiles)
+{
+    DeleteRARFileAndVolumes(actualRARFilePath);   // carriers are not the reconstruction
+}
+try
+{
+    if (Directory.Exists(assemblyDir)
+        && !Directory.EnumerateFiles(assemblyDir, "*", SearchOption.AllDirectories).Any())
+    {
+        Directory.Delete(assemblyDir, recursive: true);   // empty dirs (CD2/) remain — recursive
+    }
+}
+catch (IOException) { /* best-effort; leftover empty dirs are harmless */ }
+// Then the existing match bookkeeping/summary ("SRR-guided assembly" note).
 
 // Per-volume verification: EXACTLY today's gate — CAV && BuildExpectedInOrder non-empty;
 // CRC32 regardless of options.HashType (the SRR-embedded SFV is CRC32); compares
@@ -1506,6 +1551,12 @@ skips the patch-note lines.
 
 [Fact] public async Task NoCrcMap_FirstHashOnly_ParityPreserved()
 // ExpectedVolumeCrcs empty → success on the quick hash alone; no per-volume pass.
+
+[Fact] public async Task Cav_QualifiedSetNames_FinalizeAndCleanupHandleSubdirectories()
+// Fixture built with directoryPrefix: "CD2" (qualified names CD2/t.rar...). End-to-end
+// success: finalized files land under <work>/output; the assembled tree (which held
+// assemblyDir/CD2/...) is fully removed after success cleanup (recursive on the
+// file-empty tree) — pins codex rev-6 B2 so the flow never passes only for flat sets.
 
 [Fact] public async Task NonCav_QuickMatch_FirstVolumeSuccess()
 // Non-CAV options; produced vol 1 sufficient (original headers larger case);
