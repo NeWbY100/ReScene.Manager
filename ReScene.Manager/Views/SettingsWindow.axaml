@@ -24,8 +24,8 @@
     <TabControl Grid.Row="0" Margin="{DynamicResource PageMargin}">
 
       <TabItem Header="Interface">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" Padding="4">
-          <StackPanel>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False">
+          <StackPanel Margin="4">
             <TextBlock TextWrapping="Wrap" Margin="0,0,0,6">
               <Run Text="Mode " FontWeight="SemiBold" />
               <Run Text="— Beginner shows guided wizards on the Home page; Advanced shows every tool as its own tab."
@@ -42,8 +42,8 @@
       </TabItem>
 
       <TabItem Header="General">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" Padding="4">
-          <StackPanel>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False">
+          <StackPanel Margin="4">
             <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
               <Run Text="Default app name " FontWeight="SemiBold" />
               <Run Text="— Written into SRR and SRS files you create as the creating application."
@@ -82,8 +82,8 @@
       </TabItem>
 
       <TabItem Header="Inspector &amp; Compare">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" Padding="4">
-          <StackPanel>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False">
+          <StackPanel Margin="4">
             <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
               <Run Text="MKV element limit " FontWeight="SemiBold" />
               <Run Text="— Elements parsed when opening an MKV file. Higher shows more of huge files but loads slower."
@@ -99,8 +99,8 @@
       </TabItem>
 
       <TabItem Header="RAR Reconstruction">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" Padding="4">
-          <StackPanel>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False">
+          <StackPanel Margin="4">
             <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
               <Run Text="WinRAR versions folder " FontWeight="SemiBold" />
               <Run Text="— Folder holding your WinRAR versions, each in its own subfolder. Pre-filled into the Reconstructor."
