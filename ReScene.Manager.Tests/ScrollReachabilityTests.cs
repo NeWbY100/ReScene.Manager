@@ -78,6 +78,17 @@ public class ScrollReachabilityTests
         try
         {
             TabControl subTabs = view.GetVisualDescendants().OfType<TabControl>().First();
+
+            // Executable form of the rig premise: the page ScrollViewer itself must sit fully
+            // inside the window here — below the fixed-minimums floor the grid clips instead of
+            // scrolling (the tracked structural defect) and within-viewer reachability would no
+            // longer describe what the user can see.
+            ScrollViewer firstPage = subTabs.GetVisualDescendants().OfType<ScrollViewer>()
+                .First(s => s.Name is null && s.IsEffectivelyVisible);
+            Point svBottom = firstPage.TranslatePoint(new Point(0, firstPage.Bounds.Height), window)!.Value;
+            Assert.True(svBottom.Y <= window.Bounds.Height + 0.5,
+                $"rig premise broken: page ScrollViewer bottom {svBottom.Y:F1} spills past window height {window.Bounds.Height:F1}");
+
             (List<string> scrollable, List<string> unreachable) = ProbePages(subTabs);
 
             // Rig validity: the window is sized so the reported page (Options) genuinely
