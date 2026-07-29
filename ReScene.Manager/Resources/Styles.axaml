@@ -8,6 +8,35 @@
     <Setter Property="Padding" Value="4,0,0,0" />
   </Style>
 
+  <!-- App-wide 14x14 glyph (CheckBoxGlyphSize, Density.axaml): Fluent hardcodes three 20px
+       primitives in the CheckBox template — the box border, the check-glyph Viewbox (it scales
+       its Path), and the glyph cell's wrapper Grid (which alone props the row height). Rows
+       still measure CheckBoxMinHeight: height = max(MinHeight, content), so the smaller cell
+       never pulls a labeled row under 20 — the versions tree reaches 16 only via its scoped
+       MinHeight. CheckBoxGlyphTests pins both halves of that contract.
+
+       The :not(.fullSizeGlyph) token is LOAD-BEARING twice over: (1) the template sets these
+       sizes as direct attributes (BindingPriority.Template), and a selector made only of type
+       tokens applies at Style priority, which Template BEATS — a class/pseudo token makes the
+       style activator-based (StyleTrigger priority), which beats Template. Drop the :not and
+       every setter here silently stops applying (probed live: bare/':is(Window)'/descendant
+       forms all lose; class-bearing forms win). (2) Classes="fullSizeGlyph" is the documented
+       OPT-OUT for surfaces where the glyph IS the pointer target (unlabeled DataGrid cells —
+       see SampleRestorerView): opted-out boxes keep Fluent's 20x20 by simply not matching. -->
+  <Style Selector="CheckBox:not(.fullSizeGlyph) /template/ Border#NormalRectangle">
+    <Setter Property="Width" Value="{DynamicResource CheckBoxGlyphSize}" />
+    <Setter Property="Height" Value="{DynamicResource CheckBoxGlyphSize}" />
+  </Style>
+  <Style Selector="CheckBox:not(.fullSizeGlyph) /template/ Viewbox">
+    <Setter Property="Width" Value="{DynamicResource CheckBoxGlyphSize}" />
+    <Setter Property="Height" Value="{DynamicResource CheckBoxGlyphSize}" />
+  </Style>
+  <Style Selector="CheckBox:not(.fullSizeGlyph) /template/ Grid:not(#RootGrid)">
+    <Setter Property="Height" Value="{DynamicResource CheckBoxGlyphSize}" />
+    <Setter Property="MinHeight" Value="0" />
+  </Style>
+
+
   <!-- 12px content parity (see the ControlContentThemeFontSize note in Density.axaml). Avalonia's
        DEFAULT FontSize is already 12, so this style is enforcement against default/theme drift
        plus the written contract, not the supply. MUST be :is(Window) — a plain "Window" selector
@@ -421,34 +450,16 @@
       </ControlTemplate>
     </Setter>
   </Style>
-  <!-- v1.9 leaf density (user-measured: old pitch 18px, new 22px). THREE coupled causes, all
-       scoped to this tree: (1) WPF's TabItem FontSize=12 INHERITED into all tab content, so the
-       old tree's text was 12px — the port carries 12 only into tab headers, leaving content at
-       14; (2) the app-wide CheckBoxMinHeight=20 (Density.axaml); (3) Fluent's 20x20 checkbox box
-       primitive (height = max(MinHeight, content), so MinHeight alone cannot shrink a row). Box
-       floor 14px per the a11y ruling (WPF's own box was 13x13; brushes untouched so the contrast
-       analysis carries). 2.5.8 deviation blessed + recorded in the ledger; invariants: scoped
-       here only, header toggle keeps MinHeight >= 24, every leaf stays keyboard-reachable. -->
+  <!-- v1.9 leaf density (user-measured: old pitch 18px, new 22px). The 14px GLYPH half of this
+       treatment was promoted app-wide 2026-07-29 (global CheckBox template styles above +
+       CheckBoxGlyphSize token) — what stays scoped here is the DENSITY half: MinHeight 16 rows
+       (16 + 2 margin = 18px pitch), blessed as a 2.5.8 deviation for THIS dense version list
+       only ("scoped here only" — recorded in the ledger); invariants: header toggle keeps
+       MinHeight >= 24, every leaf stays keyboard-reachable. FontSize 12 is enforcement against
+       theme drift (content is 12 app-wide; see ControlContentThemeFontSize). -->
   <Style Selector="Expander.versionGroup CheckBox">
     <Setter Property="MinHeight" Value="16" />
     <Setter Property="FontSize" Value="12" />
-  </Style>
-  <Style Selector="Expander.versionGroup CheckBox /template/ Border#NormalRectangle">
-    <Setter Property="Width" Value="14" />
-    <Setter Property="Height" Value="14" />
-  </Style>
-  <!-- The check-glyph Viewbox is a sibling 20x20 primitive that props the row height even after
-       the box shrinks (height = max of the glyph cell's children); it scales its Path content. -->
-  <Style Selector="Expander.versionGroup CheckBox /template/ Viewbox">
-    <Setter Property="Width" Value="14" />
-    <Setter Property="Height" Value="14" />
-  </Style>
-  <!-- The glyph cell's wrapper Grid hardcodes its own 20px height in the Fluent template (the
-       one unnamed Grid; RootGrid is the template root). Height only — its width rides the
-       RootGrid's fixed glyph column and is harmless to the row. -->
-  <Style Selector="Expander.versionGroup CheckBox /template/ Grid:not(#RootGrid)">
-    <Setter Property="Height" Value="14" />
-    <Setter Property="MinHeight" Value="0" />
   </Style>
   <Style Selector="Expander.versionGroup:expanded /template/ Path#ChevronGlyph">
     <Setter Property="RenderTransform">

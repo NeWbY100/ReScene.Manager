@@ -85,7 +85,20 @@
               MinHeight="100"
               MaxHeight="250">
       <DataGrid.Columns>
-        <DataGridCheckBoxColumn Header="" Binding="{Binding IsSelected}" Width="30" />
+        <!-- Authored (not DataGridCheckBoxColumn) so the cell checkbox can opt OUT of the
+             app-wide 14px glyph via Classes="fullSizeGlyph": this cell is UNLABELED, so the
+             glyph IS the pointer target — the a11y ruling keeps it at Fluent's 20x20. The
+             automation name substitutes for the missing visual label. -->
+        <DataGridTemplateColumn Header="" Width="30">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate>
+              <CheckBox Classes="fullSizeGlyph"
+                        IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                        AutomationProperties.Name="Restore this sample"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
         <DataGridTextColumn Header="SRS File" Binding="{Binding SRSFileName}" Width="200" IsReadOnly="True" />
         <DataGridTextColumn Header="Sample Name" Binding="{Binding SampleFileName}" Width="200" IsReadOnly="True" />
         <DataGridTextColumn Header="Media File" Binding="{Binding MediaFilePath}" Width="*" />

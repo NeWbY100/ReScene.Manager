@@ -78,8 +78,26 @@ public class SampleRestorerViewTests
         // 5 explicit columns: editable checkbox, two read-only text columns, an editable Media File
         // text column, and a read-only Status column.
         Assert.Equal(5, grid.Columns.Count);
-        Assert.IsType<DataGridCheckBoxColumn>(grid.Columns[0]);
-        Assert.False(grid.Columns[0].IsReadOnly);
+        // Authored template column (not DataGridCheckBoxColumn) so the cell checkbox can carry
+        // Classes="fullSizeGlyph" — the unlabeled cell's glyph IS the pointer target, so it
+        // opts out of the app-wide 14px glyph (see CheckBoxGlyphTests) — plus an automation
+        // name in place of the missing visual label.
+        Assert.IsType<DataGridTemplateColumn>(grid.Columns[0]);
+        // A template column with only a CellTemplate coerces IsReadOnly=true in the GRID's
+        // edit model — irrelevant here: the checkbox is directly interactive. Pin the real
+        // capability instead: toggling the realized cell checkbox writes through to the VM.
+        CheckBox cellCheckBox = window.GetVisualDescendants().OfType<CheckBox>()
+            .First(c => c.Classes.Contains("fullSizeGlyph"));
+        Assert.True(cellCheckBox.IsEnabled);
+        Assert.Equal("Restore this sample",
+            Avalonia.Automation.AutomationProperties.GetName(cellCheckBox));
+        Assert.True(vm.SRSEntries[0].IsSelected);
+        cellCheckBox.IsChecked = false;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(vm.SRSEntries[0].IsSelected);
+        cellCheckBox.IsChecked = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(vm.SRSEntries[0].IsSelected);
         Assert.Equal("SRS File", grid.Columns[1].Header);
         Assert.True(grid.Columns[1].IsReadOnly);
         Assert.Equal("Sample Name", grid.Columns[2].Header);

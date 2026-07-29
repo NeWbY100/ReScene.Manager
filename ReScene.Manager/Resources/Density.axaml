@@ -69,6 +69,13 @@
   <x:Double x:Key="RadioButtonMinHeight">20</x:Double>
   <x:Double x:Key="TreeViewItemMinHeight">20</x:Double>
 
+  <!-- App-wide 14x14 check glyph (2026-07-29: the versions-tree v1.9 box, promoted app-wide).
+       VISUAL size only — the pointer target stays the full labeled row at CheckBoxMinHeight;
+       the a11y ruling approving this is scoped to exactly that split (and excludes unlabeled
+       DataGrid checkbox cells, where the glyph IS the target — see Styles.axaml). One token so
+       the consumers and any future scale work share a single lever. -->
+  <x:Double x:Key="CheckBoxGlyphSize">14</x:Double>
+
   <!-- ── Tab-strip affordance (WPF App.xaml:316-394 look) ─────────────────────────────────
        Fluent's pivot-style tabs give no strip band and mark selection with accent-colored TEXT
        only, which reads poorly as a tab control. Restore the classic WPF affordance: unselected
