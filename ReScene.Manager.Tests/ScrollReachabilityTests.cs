@@ -95,7 +95,7 @@ public class ScrollReachabilityTests
             // overflows — a page that fits passes trivially and would mask the regression.
             Assert.Contains("Options", scrollable);
             Assert.True(scrollable.Count >= 3,
-                $"rig validity: only [{string.Join(", ", scrollable)}] overflowed at 1012x560");
+                $"rig validity: only [{string.Join(", ", scrollable)}] overflowed at 1012x640");
 
             Assert.True(unreachable.Count == 0, string.Join("; ", unreachable));
         }
@@ -109,10 +109,9 @@ public class ScrollReachabilityTests
     public void SettingsWindow_TabPages_ScrollToEnd_ReachesLastContent()
     {
         var vm = new SettingsViewModel(new InertAppSettingsService(), new AvaloniaFileDialogService(static () => null));
-        // The probe overrides the window's own minimums: it exercises ScrollViewer mechanics,
-        // which must hold at any viewport the pages can be given (display scaling can shrink
-        // the effective space below the design minimums).
-        var window = new SettingsWindow(vm) { Width = 560, MinHeight = 0, Height = 300 };
+        // Shipping minimum geometry (MinWidth=560, MinHeight=360): the longest page overflows
+        // right at the window's own floor, so the probe needs no minimum overrides.
+        var window = new SettingsWindow(vm) { Width = 560, Height = 360 };
         window.Show();
         Dispatcher.UIThread.RunJobs();
         try
@@ -120,8 +119,9 @@ public class ScrollReachabilityTests
             TabControl tabs = window.GetVisualDescendants().OfType<TabControl>().First();
             (List<string> scrollable, List<string> unreachable) = ProbePages(tabs);
 
-            Assert.True(scrollable.Count >= 1,
-                $"rig validity: no settings page overflowed at 560x300");
+            // The RAR Reconstruction page is the longest and must overflow at the shipping
+            // minimum — pinning it by name keeps the rig honest if pages are reordered.
+            Assert.Contains("RAR Reconstruction", scrollable);
 
             Assert.True(unreachable.Count == 0, string.Join("; ", unreachable));
         }
