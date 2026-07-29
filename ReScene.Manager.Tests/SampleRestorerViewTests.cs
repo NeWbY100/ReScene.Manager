@@ -1,5 +1,7 @@
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ReScene.App.Core.Services;
@@ -98,6 +100,16 @@ public class SampleRestorerViewTests
         cellCheckBox.IsChecked = true;
         Dispatcher.UIThread.RunJobs();
         Assert.True(vm.SRSEntries[0].IsSelected);
+
+        // The authored cell replaced the grid's edit-mode keyboard path, so keyboard actuation
+        // must work directly: focus the checkbox and toggle it with Space.
+        cellCheckBox.Focus();
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(cellCheckBox.IsFocused);
+        window.KeyPressQwerty(PhysicalKey.Space, RawInputModifiers.None);
+        window.KeyReleaseQwerty(PhysicalKey.Space, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(vm.SRSEntries[0].IsSelected);
         Assert.Equal("SRS File", grid.Columns[1].Header);
         Assert.True(grid.Columns[1].IsReadOnly);
         Assert.Equal("Sample Name", grid.Columns[2].Header);

@@ -36,7 +36,6 @@
     <Setter Property="MinHeight" Value="0" />
   </Style>
 
-
   <!-- 12px content parity (see the ControlContentThemeFontSize note in Density.axaml). Avalonia's
        DEFAULT FontSize is already 12, so this style is enforcement against default/theme drift
        plus the written contract, not the supply. MUST be :is(Window) — a plain "Window" selector
@@ -456,7 +455,8 @@
        (16 + 2 margin = 18px pitch), blessed as a 2.5.8 deviation for THIS dense version list
        only ("scoped here only" — recorded in the ledger); invariants: header toggle keeps
        MinHeight >= 24, every leaf stays keyboard-reachable. FontSize 12 is enforcement against
-       theme drift (content is 12 app-wide; see ControlContentThemeFontSize). -->
+       theme drift (content is 12 app-wide; see ControlContentThemeFontSize). Brushes remain
+       untouched throughout, so the original contrast analysis carries. -->
   <Style Selector="Expander.versionGroup CheckBox">
     <Setter Property="MinHeight" Value="16" />
     <Setter Property="FontSize" Value="12" />
