@@ -53,6 +53,50 @@ public class CheckBoxGlyphTests
     }
 
     [AvaloniaFact]
+    public void VersionsDensityRow_GlyphCentersWithOnePixelShift()
+    {
+        // The versions tree's scoped MinHeight=16 leaves (16-14)/2 = 1px of slack: centering
+        // moves those glyphs DOWN exactly 1px vs the old top alignment — assert the shift is
+        // exactly that, not "unchanged" (a11y review correction).
+        var cb = new CheckBox { Content = "3.00 b1", MinHeight = 16 };
+        var window = new Window { Width = 300, Height = 100, Content = new StackPanel { Children = { cb } } };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            Border box = GlyphBox(cb);
+            Avalonia.Point boxTop = box.TranslatePoint(default, cb)!.Value;
+            Assert.Equal(1, boxTop.Y, 1);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public void WrapLabelClass_RestoresTopAlignment()
+    {
+        // Forward-compat opt-out for a future WRAPPING label (magnification: the box must stay
+        // co-visible with the label's first line): .wrapLabel reverts the cell to top-aligned.
+        var cb = new CheckBox { Content = "future wrapping label" };
+        cb.Classes.Add("wrapLabel");
+        var window = new Window { Width = 300, Height = 100, Content = new StackPanel { Children = { cb } } };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            Border box = GlyphBox(cb);
+            Avalonia.Point boxTop = box.TranslatePoint(default, cb)!.Value;
+            Assert.Equal(0, boxTop.Y, 1);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
     public void DataGridCell_FullSizeGlyphClass_OptsOutOfShrink()
     {
         // Mirrors SampleRestorerView's authored column: unlabeled editable cell, so the glyph

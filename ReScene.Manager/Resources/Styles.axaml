@@ -36,9 +36,19 @@
     <Setter Property="MinHeight" Value="0" />
     <!-- Fluent top-aligns the glyph cell (invisible while the 20px cell filled the row); the
          14px cell must CENTER or the box beaches ~3px above the label's centerline on 20px
-         rows (user-reported, Output tab). No app checkbox label wraps, so first-line
-         alignment has nothing to preserve. -->
+         rows (user-reported, Output tab). Centering is safe by PATTERN, not luck: no app
+         checkbox label wraps — long explanations live in SIBLING caption TextBlocks
+         (SettingsWindow, ReconstructorView, wizards); keep it that way. -->
     <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <!-- Companion opt-out for a FUTURE wrapping label (none exists today): under magnification
+       a box centered against a multi-line label can sit outside the viewport while the user
+       reads line 1 — top alignment keeps the box co-visible with the label's start (a11y
+       advisory). Distinct concern from .fullSizeGlyph (glyph SIZE vs ALIGNMENT). The reflow
+       workstream (small-window backlog) must add this class the moment it gives the long
+       option labels TextWrapping. Declared after the centering style so it wins the tie. -->
+  <Style Selector="CheckBox.wrapLabel /template/ Grid:not(#RootGrid)">
+    <Setter Property="VerticalAlignment" Value="Top" />
   </Style>
 
   <!-- 12px content parity (see the ControlContentThemeFontSize note in Density.axaml). Avalonia's
