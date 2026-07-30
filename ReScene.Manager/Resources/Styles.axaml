@@ -34,6 +34,11 @@
   <Style Selector="CheckBox:not(.fullSizeGlyph) /template/ Grid:not(#RootGrid)">
     <Setter Property="Height" Value="{DynamicResource CheckBoxGlyphSize}" />
     <Setter Property="MinHeight" Value="0" />
+    <!-- Fluent top-aligns the glyph cell (invisible while the 20px cell filled the row); the
+         14px cell must CENTER or the box beaches ~3px above the label's centerline on 20px
+         rows (user-reported, Output tab). No app checkbox label wraps, so first-line
+         alignment has nothing to preserve. -->
+    <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
 
   <!-- 12px content parity (see the ControlContentThemeFontSize note in Density.axaml). Avalonia's

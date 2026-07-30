@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Headless.XUnit;
@@ -37,6 +38,13 @@ public class CheckBoxGlyphTests
             // not follow the box down — height = max(CheckBoxMinHeight, content).
             Assert.True(cb.Bounds.Height >= 19.99,
                 $"labeled row measured {cb.Bounds.Height:F1}px — the 14px glyph must not pull the target under CheckBoxMinHeight (20)");
+
+            // And the shrunken cell must CENTER in the row: Fluent top-aligns its glyph cell
+            // (fine when the 20px cell filled the row), which beaches a 14px box ~3px above
+            // the label's centerline — user-reported against the Output tab.
+            Avalonia.Point boxCenter = box.TranslatePoint(new Avalonia.Point(0, box.Bounds.Height / 2), cb)!.Value;
+            Assert.True(Math.Abs(boxCenter.Y - (cb.Bounds.Height / 2)) <= 1.0,
+                $"glyph center y={boxCenter.Y:F1} vs row center y={cb.Bounds.Height / 2:F1} — the shrunken cell must vertically center in the row");
         }
         finally
         {
