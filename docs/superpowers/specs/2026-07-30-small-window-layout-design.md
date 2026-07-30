@@ -87,8 +87,8 @@ screen. Thresholds cannot drift unsafe, and compact feasibility is proven, not a
 **Donation rule:** while the Help body is expanded in compact mode, the primary work band
 donates height — its compact minimum drops further (Reconstructor TabControl 110 → 80;
 three-band config 110 → 80), behavior-applied together with the expander state. The body's
-`MaxHeight` equals the donated budget at the minimum window (≈ 40–50 DIPs, scrolling
-internally); closing Help restores the compact minimums. Help is transient reference
+`MaxHeight` equals the donated budget at the minimum window (≈40 DIPs, test-computed,
+scrolling internally); closing Help restores the compact minimums. Help is transient reference
 content — briefly shrinking the work pane is the correct trade.
 
 Per-view figures (inner DIPs; log band floor **80** = header 28 + 2×20 rows + 12
