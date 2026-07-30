@@ -1,7 +1,8 @@
 # Small-Window Layout Degradation — Design
 
-Status: rev 3 — addresses codex rev-2 (5 still-open + 2 new blocking + 1 advisory) and a11y
-rev-2 (2 blocking + 2 advisory); pending re-review.
+Status: rev 4 — rev 3 + a11y rev-3 findings (help-body double-spend → donation model,
+one-sum invariant with 12-DIP slack, restored rendered matrix, Creator splitter scoping);
+codex rev-3 re-review timed out and reviews this revision directly.
 
 ## Coordinate space (normative for every figure in this document)
 
@@ -68,24 +69,43 @@ Attached to the inner layout root; properties: `Threshold` (inner DIPs), optiona
   non-effectively-visible, focus moves to the first focusable of the restored header
   region. No focus change otherwise in either direction.
 
-**Threshold invariant (executable):** per view,
-`Threshold >= rendered expanded-mode worst floor` (all conditional rows forced visible,
-links wrapped at 700w, computed in inner space by a unit test that renders the view).
-The same test asserts the **compact-mode worst floor ≤ 319** and the pinned band's worst
-height ≤ its headroom (§4). Thresholds cannot drift unsafe, and compact feasibility is
-proven, not assumed.
+**Threshold invariant (executable, ONE budget sum — a11y rev-3 NEW-5):** per view, a unit
+test that renders the view asserts, all in inner space with conditional rows forced
+visible and links wrapped at 700w:
+
+1. `Threshold >= rendered expanded-mode worst floor`;
+2. `compact worst floor (Help closed) <= 307`;
+3. `compact worst floor with Help OPEN — donated minimums in effect PLUS the body's
+   MaxHeight — <= 307` (a single sum, never two independent checks: the body budget and
+   the band minimums spend the same pixels);
+4. pinned-band worst height fits its headroom within the same sums.
+
+The 307 bound is 319 minus the 12-DIP jitter allowance (a11y rev-3 advisory): fractional
+DIPs at 125/150% and the warning row's 31–35 spread must fail in CI, not on a user's
+screen. Thresholds cannot drift unsafe, and compact feasibility is proven, not assumed.
+
+**Donation rule:** while the Help body is expanded in compact mode, the primary work band
+donates height — its compact minimum drops further (Reconstructor TabControl 110 → 80;
+three-band config 110 → 80), behavior-applied together with the expander state. The body's
+`MaxHeight` equals the donated budget at the minimum window (≈ 40–50 DIPs, scrolling
+internally); closing Help restores the compact minimums. Help is transient reference
+content — briefly shrinking the work pane is the correct trade.
 
 Per-view figures (inner DIPs; log band floor **80** = header 28 + 2×20 rows + 12
 horizontal-scrollbar allowance — corrected arithmetic, codex rev-2 NEW-B1; all numbers
 re-verified by the invariant test at implementation):
 
-| View | Compact worst floor (≤ 319 required) | Expanded worst floor | Threshold (floor+20) |
+Compact minimums are two-tier: the values below are the compact-mode floor; while Help is
+open the work band's minimum drops to 80 (donation rule). All floors are design targets —
+the invariant test measures the rendered truth against the 307 bound.
+
+| View | Compact worst floor, Help closed (≤ 307) | Expanded worst floor | Threshold (floor+20) |
 |---|---|---|---|
-| Reconstructor | expander hdr 24 + toolbar 26 + warning 35 + TabControl 130 + splitter 8 + log 80 + margins ~14 ≈ **317** | 73+26+35+31+130+8+80+margins ≈ 401 | **421** |
-| Creator | hdr 24 + config scroll 120 (inputs+detected+grid+output+options inside) + action ≤84 + log 80 + margins ~8 ≈ **316** | natural stack ≈ 161+96+150+6+325 with new log floor ≈ 700 | **720** |
-| SRSCreator | hdr 24 + config 120 + action ≤84 + log 80 + ~8 ≈ **316** | ≈ 330 stack + 84 + 80 ≈ 500 | **520** |
-| SRSReconstructor | same shape ≈ **316** | ≈ 265 + 84 + 80 ≈ 430 | **450** |
-| SampleRestorer | same shape (grid inside config) ≈ **316** | ≈ 350 + 84 + 80 ≈ 515 | **535** |
+| Reconstructor | expander hdr 24 + toolbar 26 + warning 35 + TabControl **110** + splitter 8 + log 80 + margins ~14 ≈ **297** | 73+26+35+31+130+8+80+margins ≈ 401 | **421** |
+| Creator | hdr 24 + config scroll **110** (inputs+detected+grid+output+options inside) + action ≤75 + log 80 + margins ~8 ≈ **297** | natural stack ≈ 161+96+150+6+325 with new log floor ≈ 700 | **720** |
+| SRSCreator | hdr 24 + config **110** + action ≤75 + log 80 + ~8 ≈ **297** | ≈ 330 stack + 84 + 80 ≈ 500 | **520** |
+| SRSReconstructor | same shape ≈ **297** | ≈ 265 + 84 + 80 ≈ 430 | **450** |
+| SampleRestorer | same shape (grid inside config) ≈ **297** | ≈ 350 + 84 + 80 ≈ 515 | **535** |
 
 (Creator's large threshold simply means Creator is compact in most real windows — correct,
 given its content volume.)
@@ -107,10 +127,11 @@ content; no second copy exists anywhere (a11y rev-2 NEW-3).
   body collapsed by default, stock ExpandCollapse peer announces state. The USER's
   expand/collapse choice is durable across compact re-entries within the session (codex
   rev-2 #8).
-- Body budget: `MaxHeight = 319 − compact floor of the view` at minimum (≈ 120 for the
-  three-band views, ≈ 100 Reconstructor — exact residual computed per view in the
-  invariant test; codex rev-2 #4), with internal scrolling (inset on the content panel).
-  Expanding can therefore never push any band below its minimum.
+- Body budget: the **donation rule** of §1 — the body's `MaxHeight` equals the height the
+  work band donates while Help is open (≈ 40–50 DIPs at the minimum window; the invariant
+  test's one-sum check #3 is the authority), with internal scrolling (inset on the content
+  panel). Expanding therefore consumes the donated space and never pushes any band below
+  its Help-open minimum.
 - Compact order: disclosure header → (body when expanded: intro → tip → links in existing
   order) → toolbar/warning → work area → … Collapsed body is `IsVisible=false` ⇒ out of
   Tab and UIA. Toolbar and the conditional warning row are content — never collapsed.
@@ -119,8 +140,9 @@ content; no second copy exists anywhere (a11y rev-2 NEW-3).
 
 ### 3. Minimum relaxation and local-value audit
 
-- Reconstructor TabControl MinHeight 220 → **130** (row + control, strip-inclusive: ~30
-  strip + ~100 page).
+- Reconstructor TabControl MinHeight 220 → **130** normal-relaxed (row + control,
+  strip-inclusive: ~30 strip + ~100 page), **110** in compact, **80** while Help is open
+  (the latter two via the behavior's RowSizes/donation application).
 - Log bands: MinHeight **80** everywhere (list is the shrinking part; header row never
   shrinks; CreatorView's log adopts the same 80 — its current 40 fails the ≥2-rows rule).
 - Splitters operate strictly between minimums; their local `Background="Transparent"`
@@ -135,8 +157,9 @@ replaced by a Grid whose rows are (codex rev-2 #3):
 
 - Normal mode: `Auto / Auto / *(min 80)` — config renders at natural height, log fills:
   today's rendering exactly (parity).
-- Compact mode (behavior-applied rows): `*(min 120) / Auto / *(min 80)` — config band
-  becomes the squeezed, scrolling region.
+- Compact mode (behavior-applied rows): `*(min 110) / Auto / *(min 80)` — config band
+  becomes the squeezed, scrolling region (min 80 while Help is open, per the donation
+  rule).
 - Band 1: an always-present ScrollViewer hosting the existing config stack unchanged
   (bindings/tooltips/validation intact — nothing reparents at runtime). At natural height
   it shows no scrollbar and renders identically.
@@ -156,7 +179,11 @@ replaced by a Grid whose rows are (codex rev-2 #3):
   the RowSizes map → 80 compact; splitter between grid and lower content lives inside
   band 1 and keeps working — pixel rows via the map), output row, options stack. Bands
   2/3 as above. Normal mode: natural Auto sizing ⇒ today's rendering (rig-verified);
-  compact: `*(120)/Auto/*(80)`. Detected-sets keeps a MaxHeight + internal scroll.
+  compact: `*(110)/Auto/*(80)`. Detected-sets keeps a MaxHeight + internal scroll.
+  The in-scroller splitter (a11y rev-3 advisory): criterion E's pane-minimum bound applies
+  to it at NORMAL size only — in compact it sits inside a scrolling region where it
+  adjusts natural heights rather than a visible split; it remains focusable and
+  keyboard-operable in both modes.
 - Any label gaining `TextWrapping` takes `Classes="wrapLabel"` (standing glyph-work rule).
 
 ### 5. Splitter polish
@@ -188,8 +215,13 @@ F. Normal size: tab order, reading order, and pixels unchanged — ordered tab-o
 
 ## Testing
 
-- Threshold-invariant test per view (§1): expanded worst floor < Threshold; compact worst
-  floor ≤ 319; pinned-band worst ≤ headroom; Expander body MaxHeight = measured residual.
+- Threshold-invariant test per view (§1): the four one-sum checks — expanded worst floor
+  < Threshold; compact floor (Help closed) ≤ 307; compact floor with Help open + body
+  MaxHeight ≤ 307 as one sum; pinned-band worst within the same sums.
+- Rendered matrix (restored from rev 2 — a11y rev-3 advisory): run criteria A/B/C as
+  RENDERED runs at 700×450 (compact) AND at each view's `Threshold+1` with expanded
+  chrome + all worst conditional rows — the expanded fit path must be verified by
+  rendering, not only by the computed floor.
 - Behavior tests: boundary (T−1/T/T+1 fresh instances — T+1 is EXPANDED), restoration at
   ≥T+12, rapid crossing, window-restore burst, reload/reattach, render scales 1.0/1.25/1.5.
 - Chrome tests: single-instance (one link set in the tree in both modes); prose+links
