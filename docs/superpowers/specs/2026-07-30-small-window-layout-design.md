@@ -1,10 +1,9 @@
 # Small-Window Layout Degradation — Design
 
-Status: rev 11 — codex round-4 folded: root-as-terminal fallback (behavior-managed
-transient focusability — TopLevel is not focusable); relocation also fires on
-captured-element-unfocusable (not only obscured); Reconstructor body carries NO helpBody
-class; result announcement via the app's always-in-tree polite pattern; helpBody
-scrollers named. Pending codex round 5.
+Status: rev 12 — codex round-5 folded: announcement re-arm (ResultSummary clears at run
+start so identical consecutive outcomes still announce); body keyboard route uses
+PageUp/PageDown/Home/End (Avalonia's ScrollViewer handles Page keys, not arrows).
+Pending codex round 6.
 
 ## Coordinate space (normative for every figure in this document)
 
@@ -248,7 +247,10 @@ replaced by a Grid whose rows are (codex rev-2 #3):
   `LiveSetting="Polite"`, empty text rendering nothing — the SaveLogStatus pattern;
   setting text on a collapsed element then showing it races/loses the announcement,
   codex round-4 — the visual banner keeps its IsVisible binding and stays
-  announcement-free);
+  announcement-free). RE-ARM (codex round-5): the VM clears `ResultSummary` at RUN
+  START, so a second identical outcome still transitions empty→text and announces —
+  live regions fire on CHANGE, and an uncleared summary would both suppress the repeat
+  announcement and show stale status;
   SampleRestorer: Restore row + ProgressBar + progress text.
   The band's worst height is asserted ≤ its headroom (319 − 24 − 120 − 80 − margins ≈ 84;
   a11y rev-2 NEW-4); the result banner gets `MaxHeight` + internal scroll/trimming.

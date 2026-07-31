@@ -4,13 +4,15 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
 > use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: rev 11 — codex rounds 1-4 + a11y riders folded. PENDING CODEX ROUND 5 — do
+**Status: rev 12 — codex rounds 1-5 + a11y riders folded. PENDING CODEX ROUND 6 — do
 not execute until codex approves (user directive: codex gates every step).**
 
 **Deferred (codex round-3 advisories — seed of the execution ledger's deferred list):**
 stale rev-number references in prose; duplicate/renumbered step references from the
 test-first reorder; criterion-E wording breadth; heading nesting; second-window and
-empty-focus transition coverage beyond the authored theft/outside tests; theft-test
+empty-focus transition coverage beyond the authored theft/outside tests; the behavior
+skeleton's older obscured-only pseudocode line (superseded by the rev-11 trigger note
+two lines below it); theft-test
 descendant-guard discrimination (the outside control is never obscured, so the guard's
 absence would also pass — a dedicated obscured-outside-focus case would pin it);
 scroller focus-visual/contrast proof; splitter high-contrast coverage; real-key link
@@ -1096,8 +1098,8 @@ ProgressMessage(conditional)) + ProgressBar(conditional).
     // 3. Tab-order snapshots both modes (normal == pre-change fixture).
     // 4. Chrome: single-instance intro; expander reset on compact re-entry; focus
     //    guard; compact body keys — Tab to the body scroller (compact-only focusable),
-    //    real Down-arrows increase its Offset; scroller absent from the NORMAL
-    //    tab-order snapshot (criterion F).
+    //    real PAGEDOWN presses increase its Offset (Page keys, not arrows); scroller
+    //    absent from the NORMAL tab-order snapshot (criterion F).
     // 5. Pinned band: with band-1 scrolled to TOP and to BOTTOM, the Create SRS button's
     //    translated bounds stay fully inside the window while ProgressBar+Cancel are
     //    forced visible (the defect this task exists to fix, asserted directly).
@@ -1216,9 +1218,14 @@ pinned band = separator + action DockPanel (Rebuild Sample) + result Border (con
     //    the ALWAYS-IN-TREE ResultStatus TextBlock (SaveLogStatus pattern) carries
     //    LiveSetting="Polite" and its text populates on completion while it was
     //    already realized — the announcement path that survives visibility races
-    //    (codex round-4).
+    //    (codex round-4). RE-ARM tests (codex round-5): starting a run CLEARS
+    //    ResultSummary (assert the VM does; add the clear if absent — no visual delta,
+    //    the banner is hidden at start); two consecutive runs with IDENTICAL outcomes
+    //    each produce an empty→text transition; a cancelled run leaves the status
+    //    empty or cancellation-text, never the previous run's stale summary.
     // 7. Compact body keys: in compact with Help open, Tab reaches the body scroller
-    //    (focusable in compact only) and real Down-arrow presses increase its Offset;
+    //    (focusable in compact only) and real PAGEDOWN presses increase its Offset
+    //    (Avalonia ScrollViewer handles Page keys, not arrows — codex round-5);
     //    at NORMAL size the scroller is NOT focusable and absent from the tab-order
     //    snapshot (criterion F).
 ```
