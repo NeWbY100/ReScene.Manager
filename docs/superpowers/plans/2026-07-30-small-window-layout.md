@@ -4,8 +4,9 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
 > use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: rev 12 — codex rounds 1-5 + a11y riders folded. PENDING CODEX ROUND 6 — do
-not execute until codex approves (user directive: codex gates every step).**
+**Status: rev 13 — SPEC APPROVED at rev 12; plan folds codex round-6 (VM re-arm files
++ full Page-key coverage). PENDING CODEX ROUND 7 (plan only) — do not execute until
+codex approves (user directive: codex gates every step).**
 
 **Deferred (codex round-3 advisories — seed of the execution ledger's deferred list):**
 stale rev-number references in prose; duplicate/renumbered step references from the
@@ -1097,9 +1098,10 @@ ProgressMessage(conditional)) + ProgressBar(conditional).
     //    action; B no-clip with all conditionals forced; C real Tab walk.
     // 3. Tab-order snapshots both modes (normal == pre-change fixture).
     // 4. Chrome: single-instance intro; expander reset on compact re-entry; focus
-    //    guard; compact body keys — Tab to the body scroller (compact-only focusable),
-    //    real PAGEDOWN presses increase its Offset (Page keys, not arrows); scroller
-    //    absent from the NORMAL tab-order snapshot (criterion F).
+    //    guard; compact body keys — Tab to the body scroller (compact-only focusable);
+    //    all four built-ins asserted with real input: PageDown/PageUp move the Offset
+    //    both ways, End reaches the extent, Home returns to 0; scroller absent from
+    //    the NORMAL tab-order snapshot (criterion F).
     // 5. Pinned band: with band-1 scrolled to TOP and to BOTTOM, the Create SRS button's
     //    translated bounds stay fully inside the window while ProgressBar+Cancel are
     //    forced visible (the defect this task exists to fix, asserted directly).
@@ -1125,6 +1127,13 @@ pinned band = separator + action DockPanel (Rebuild Sample) + result Border (con
 **Files:**
 - Modify: `ReScene.Manager/Views/SRSReconstructorView.axaml`
 - Modify: `ReScene.Manager/Views/SRSReconstructorView.axaml.cs` (behavior wiring)
+- Modify: `ReScene.App.Core/ViewModels/SRSReconstructorViewModel.cs` (re-arm: clear
+  `ResultSummary` at run start, if not already cleared — VM-level, no visual delta)
+- Test: `ReScene.App.Core.Tests/SRSReconstructorViewModelTests.cs` (extend: run-start
+  clears ResultSummary; identical consecutive outcomes each produce an empty→text
+  transition; cancel leaves empty-or-cancellation text — the VM half of the re-arm
+  contract, unit-tested where run/cancel actually live; the view-level rig rule
+  "CompactViewRig members + VM setters only" applies to VIEW tests, not these VM tests)
 - Test: `ReScene.Manager.Tests/SRSReconstructorCompactTests.cs` (new)
 
 **Interfaces:**
@@ -1218,16 +1227,16 @@ pinned band = separator + action DockPanel (Rebuild Sample) + result Border (con
     //    the ALWAYS-IN-TREE ResultStatus TextBlock (SaveLogStatus pattern) carries
     //    LiveSetting="Polite" and its text populates on completion while it was
     //    already realized — the announcement path that survives visibility races
-    //    (codex round-4). RE-ARM tests (codex round-5): starting a run CLEARS
-    //    ResultSummary (assert the VM does; add the clear if absent — no visual delta,
-    //    the banner is hidden at start); two consecutive runs with IDENTICAL outcomes
-    //    each produce an empty→text transition; a cancelled run leaves the status
-    //    empty or cancellation-text, never the previous run's stale summary.
+    //    (codex round-4). The re-arm CONTRACT (clear-at-start, identical-repeat,
+    //    cancel) is unit-tested at the VM level (see Files: the App.Core VM test —
+    //    run/cancel live there); this view case only asserts the BINDING: with the VM's
+    //    ResultSummary transitioning empty→text, the realized ResultStatus text
+    //    follows.
     // 7. Compact body keys: in compact with Help open, Tab reaches the body scroller
-    //    (focusable in compact only) and real PAGEDOWN presses increase its Offset
-    //    (Avalonia ScrollViewer handles Page keys, not arrows — codex round-5);
-    //    at NORMAL size the scroller is NOT focusable and absent from the tab-order
-    //    snapshot (criterion F).
+    //    (focusable in compact only); real key coverage for ALL FOUR built-ins —
+    //    PageDown increases Offset, PageUp decreases it, End jumps to the extent,
+    //    Home returns to 0 (codex round-6); at NORMAL size the scroller is NOT
+    //    focusable and absent from the tab-order snapshot (criterion F).
 ```
 
   Red-first: invariant + pinned-band cases against the DockPanel layout.
