@@ -1,8 +1,9 @@
 # Small-Window Layout Degradation — Design
 
-Status: rev 4 — rev 3 + a11y rev-3 findings (help-body double-spend → donation model,
-one-sum invariant with 12-DIP slack, restored rendered matrix, Creator splitter scoping);
-codex rev-3 re-review timed out and reviews this revision directly.
+Status: rev 5 — rev 4 + plan-authoring discovery: the Reconstructor tip line cannot move
+into the Help body without changing normal-mode reading order (criterion F), so it stays
+always-visible with a compact single-line trim; Reconstructor compact minimums recomputed.
+Pending a11y ruling on the trimmed-tip trade; codex reviews on reconnection.
 
 ## Coordinate space (normative for every figure in this document)
 
@@ -85,10 +86,10 @@ DIPs at 125/150% and the warning row's 31–35 spread must fail in CI, not on a 
 screen. Thresholds cannot drift unsafe, and compact feasibility is proven, not assumed.
 
 **Donation rule:** while the Help body is expanded in compact mode, the primary work band
-donates height — its compact minimum drops further (Reconstructor TabControl 110 → 80;
+donates height — its compact minimum drops further (Reconstructor TabControl 96 → 60;
 three-band config 110 → 80), behavior-applied together with the expander state. The body's
-`MaxHeight` equals the donated budget at the minimum window (≈40 DIPs, test-computed,
-scrolling internally); closing Help restores the compact minimums. Help is transient reference
+`MaxHeight` equals the donated budget at the minimum window (Reconstructor ≈38, three-band
+≈40 — test-computed, scrolling internally); closing Help restores the compact minimums. Help is transient reference
 content — briefly shrinking the work pane is the correct trade.
 
 Per-view figures (inner DIPs; log band floor **80** = header 28 + 2×20 rows + 12
@@ -101,7 +102,7 @@ the invariant test measures the rendered truth against the 307 bound.
 
 | View | Compact worst floor, Help closed (≤ 307) | Expanded worst floor | Threshold (floor+20) |
 |---|---|---|---|
-| Reconstructor | expander hdr 24 + toolbar 26 + warning 35 + TabControl **110** + splitter 8 + log 80 + margins ~14 ≈ **297** | 73+26+35+31+130+8+80+margins ≈ 401 | **421** |
+| Reconstructor | expander hdr 24 + toolbar 26 + tip (1-line) 18 + warning 35 + TabControl **96** + splitter 8 + log 80 + margins ~18 ≈ **305** | 73+26+35+31+130+8+80+margins ≈ 401 | **421** |
 | Creator | hdr 24 + config scroll **110** (inputs+detected+grid+output+options inside) + action ≤75 + log 80 + margins ~8 ≈ **297** | natural stack ≈ 161+96+150+6+325 with new log floor ≈ 700 | **720** |
 | SRSCreator | hdr 24 + config **110** + action ≤75 + log 80 + ~8 ≈ **297** | ≈ 330 stack + 84 + 80 ≈ 500 | **520** |
 | SRSReconstructor | same shape ≈ **297** | ≈ 265 + 84 + 80 ≈ 430 | **450** |
@@ -112,9 +113,15 @@ given its content volume.)
 
 ### 2. Chrome — the "Help" disclosure (always-present, single instance)
 
-One inline `Expander` per view, ALWAYS in the tree, holding the view's intro prose, tip
-line (Reconstructor), and link controls (Reconstructor) — the single instance of that
-content; no second copy exists anywhere (a11y rev-2 NEW-3).
+One inline `Expander` per view, ALWAYS in the tree, holding the view's intro prose and
+link controls (Reconstructor) — the single instance of that content; no second copy exists
+anywhere (a11y rev-2 NEW-3). The Reconstructor TIP line ("Import from SRR…") is NOT in the
+body (rev 5): it renders AFTER the toolbar today, so moving it into the body would change
+normal-mode reading order (criterion F). It stays always-present in its own row in both
+modes; under `.compactHeight` it is styled to a single line (`TextTrimming` with the full
+text as `ToolTip.Tip`) — present for screen readers and pointer users, never deleted (the
+a11y rev-1 #3 concern was deletion; trimmed-but-present is the surviving trade, flagged
+for a11y sign-off).
 
 - **Normal mode (styles):** the Expander renders "flat" — header row hidden
   (`IsVisible=false` via style), body force-expanded and unconstrained → visually today's
@@ -132,8 +139,8 @@ content; no second copy exists anywhere (a11y rev-2 NEW-3).
   test's one-sum check #3 is the authority), with internal scrolling (inset on the content
   panel). Expanding therefore consumes the donated space and never pushes any band below
   its Help-open minimum.
-- Compact order: disclosure header → (body when expanded: intro → tip → links in existing
-  order) → toolbar/warning → work area → … Collapsed body is `IsVisible=false` ⇒ out of
+- Compact order: disclosure header → (body when expanded: intro → links in existing
+  order) → toolbar → tip (single-line) / warning → work area → … Collapsed body is `IsVisible=false` ⇒ out of
   Tab and UIA. Toolbar and the conditional warning row are content — never collapsed.
 - Normal-mode order: identical to today (the hidden header contributes nothing).
   Criterion F snapshots BOTH modes (a11y rev-2 NEW-3).
@@ -141,8 +148,9 @@ content; no second copy exists anywhere (a11y rev-2 NEW-3).
 ### 3. Minimum relaxation and local-value audit
 
 - Reconstructor TabControl MinHeight 220 → **130** normal-relaxed (row + control,
-  strip-inclusive: ~30 strip + ~100 page), **110** in compact, **80** while Help is open
-  (the latter two via the behavior's RowSizes/donation application).
+  strip-inclusive: ~30 strip + ~100 page), **96** in compact, **60** while Help is open
+  (the latter two via the behavior's RowSizes/donation application; rev 5 — the
+  always-visible single-line tip is paid for by the work band, which stays scrollable).
 - Log bands: MinHeight **80** everywhere (list is the shrinking part; header row never
   shrinks; CreatorView's log adopts the same 80 — its current 40 fails the ≥2-rows rule).
 - Splitters operate strictly between minimums; their local `Background="Transparent"`
