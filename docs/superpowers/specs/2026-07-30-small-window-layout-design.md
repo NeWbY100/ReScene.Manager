@@ -81,8 +81,9 @@ Attached to the inner layout root; properties: `Threshold` (inner DIPs), optiona
   clipping ancestor's viewport (`IsEffectivelyVisible` alone is NOT sufficient — it
   ignores clipping); (5) if the captured element is obscured, first call
   `BringIntoView()` on it and re-run the check — scrollable ancestors may recover it;
-  (6) only if still obscured, focus the direction's target (entering compact →
-  CompactFocusTarget; leaving → RestoreFocusTarget). No focus change otherwise.
+  (6) only if still obscured, focus the direction's target (entering compact → the
+  DERIVED header toggle; leaving → RestoreFocusTarget), through the fallback chain
+  below. No focus change otherwise.
   Three riders (a11y rev-7 review):
   — PRECONDITION: steps 4–6 run only if the captured element was focused AND is a
     descendant of THIS view root. A resize while focus sits in the shell menu, the tab
