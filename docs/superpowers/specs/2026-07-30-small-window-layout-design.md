@@ -1,9 +1,9 @@
 # Small-Window Layout Degradation — Design
 
-Status: rev 9 — codex round-2 folded: compact target explicitly DERIVED (not attached);
-header-toggle announcement semantics stated; keyboard-scroll route for text-only Help
-bodies; banner full-text keyboard route via the log. A11y conditions unchanged. Pending
-codex round 3.
+Status: rev 10 — codex round-3 folded: body-scroller focusability is COMPACT-SCOPED
+(an always-focusable scroller added a normal-mode Tab stop — criterion F violation);
+result-banner polite announcement; guaranteed-terminal focus fallback. Pending codex
+round 4.
 
 ## Coordinate space (normative for every figure in this document)
 
@@ -92,8 +92,12 @@ Attached to the inner layout root; properties: `Threshold` (inner DIPs), optiona
   — TARGET RESOLUTION: a target can resolve null or unfocusable (the compact target is
     a TEMPLATED part — the header ToggleButton exists only after template application,
     so an early or re-attach pass can miss it). Fallback chain, in order: the resolved
-    target → the first focusable descendant of the view root → the view root itself.
-    A silent no-op is forbidden; tests assert the resolution was non-null.
+    direction target → the first FOCUSABLE descendant of the view root (the search
+    includes the header toggle and the RestoreFocusTarget) → the TopLevel itself via
+    `KeyboardNavigation` (an explicit, documented terminal — focus moves to the window,
+    which is always focusable, and the next Tab lands deterministically). A silent
+    no-op — focus left on an obscured element — is forbidden at every step; tests
+    assert which chain link resolved and that it is focusable.
   — DELIBERATE ASYMMETRY (do not "harmonize"): relocation triggers on ENTIRELY obscured
     (bounds not intersecting the clip intersection — the WCAG 2.4.11 AA line), while
     criterion C asserts the stricter FULLY WITHIN. Both are correct: C's Tab walk lets
@@ -184,11 +188,14 @@ modes; under `.compactHeight` it is styled to a single line — APPROVED with co
   its Help-open minimum.
 - **Keyboard scrolling of the capped body (codex round-2):** bodies containing only
   prose (every view but the Reconstructor) have no focusable children to chain
-  BringIntoView, so the body's ScrollViewer is `Focusable="True"` — it takes Tab focus
-  after the header toggle and scrolls with the arrow keys (Avalonia's built-in
-  focused-ScrollViewer key handling); asserted per view with real key input. The
-  Reconstructor's link buttons additionally chain BringIntoView as focus moves through
-  them.
+  BringIntoView, so the body's ScrollViewer becomes focusable IN COMPACT ONLY — a
+  class-scoped style (`.compactHeight … ScrollViewer.helpBody { Focusable: True }`;
+  base style False) so NO normal-mode Tab stop is added (criterion F — codex round-3).
+  In compact it takes Tab focus after the header toggle and scrolls with the arrow keys
+  (Avalonia's built-in focused-ScrollViewer key handling); asserted per view with real
+  key input in compact AND its absence from the normal-mode tab-order snapshot. The
+  Reconstructor's body is NEVER focusable — its link buttons are the keyboard route,
+  chaining BringIntoView as focus moves through them.
 - Compact order: disclosure header → (body when expanded: intro → links in existing
   order) → toolbar → tip (single-line) / warning → work area → … Collapsed body is `IsVisible=false` ⇒ out of
   Tab and UIA. Toolbar and the conditional warning row are content — never collapsed.
@@ -226,7 +233,10 @@ replaced by a Grid whose rows are (codex rev-2 #3):
   the outcome lands in the log; corrected inventory);
   SRSReconstructor: Reconstruct row + result Border (its capped two-line summary's
   FULL text reaches sighted keyboard users through the LOG, which always carries the
-  complete result line — asserted; ToolTip serves pointer users, HelpText serves AT);
+  complete result line — asserted; ToolTip serves pointer users, HelpText serves AT;
+  the summary TextBlock carries `AutomationProperties.LiveSetting="Polite"` so
+  completion/failure is ANNOUNCED — the existing live region covers Save-log only;
+  codex round-3);
   SampleRestorer: Restore row + ProgressBar + progress text.
   The band's worst height is asserted ≤ its headroom (319 − 24 − 120 − 80 − margins ≈ 84;
   a11y rev-2 NEW-4); the result banner gets `MaxHeight` + internal scroll/trimming.

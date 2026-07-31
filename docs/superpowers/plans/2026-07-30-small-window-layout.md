@@ -4,8 +4,13 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
 > use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: rev 9 — codex rounds 1-2 + a11y riders folded. PENDING CODEX ROUND 3 — do
+**Status: rev 10 — codex rounds 1-3 + a11y riders folded. PENDING CODEX ROUND 4 — do
 not execute until codex approves (user directive: codex gates every step).**
+
+**Deferred (codex round-3 advisories — seed of the execution ledger's deferred list):**
+stale rev-number references in prose; duplicate/renumbered step references from the
+test-first reorder; criterion-E wording breadth; heading nesting; second-window and
+empty-focus transition coverage beyond the authored theft/outside tests.
 
 (The formerly-pending SRSCreator inventory nit is folded — spec rev 7 corrected it.)
 
@@ -294,10 +299,18 @@ public class CompactHeightBehaviorTests
             root.Children.Add(restoreTarget);
             CompactHeightBehavior.SetHelpExpander(root, expander);
             CompactHeightBehavior.SetRestoreFocusTarget(root, restoreTarget);
-            // The app-level styles hide row-0 content in compact and the expander header
-            // at normal; the unit test simulates both with the class:
+            Dispatcher.UIThread.RunJobs();
+            // The app-level styles hide row-0 content in compact AND the expander header
+            // at normal (flat mode); the unit test simulates BOTH with the class
+            // (codex round-3: without the header simulation the restore leg never
+            // strands focus and the assertion is vacuous):
+            var toggle = expander.GetVisualDescendants().OfType<ToggleButton>().First();
             root.Classes.CollectionChanged += (_, _) =>
-                collapsing.IsVisible = !root.Classes.Contains("compactHeight");
+            {
+                bool compact = root.Classes.Contains("compactHeight");
+                collapsing.IsVisible = !compact;
+                toggle.IsVisible = compact;        // flat normal mode hides the header
+            };
             Dispatcher.UIThread.RunJobs();
 
             collapsing.Focus();
@@ -306,8 +319,7 @@ public class CompactHeightBehaviorTests
 
             w.Height = Threshold - 1;              // → compact; collapsing hides
             Dispatcher.UIThread.RunJobs();
-            var headerToggle = expander.GetVisualDescendants().OfType<ToggleButton>().First();
-            Assert.True(headerToggle.IsFocused,
+            Assert.True(toggle.IsFocused,
                 "focus must land on the HEADER TOGGLE (the Expander itself is not focusable)");
 
             w.Height = Threshold + 12;             // → restore; the toggle hides (flat mode)
@@ -322,15 +334,19 @@ public class CompactHeightBehaviorTests
     public void FocusOutsideTheView_IsNeverStolen_ByTransitions()
     {
         // Spec rev 8 precondition: a transition while focus sits OUTSIDE the behavior's
-        // root must not move it.
+        // root must not move it. The shell is a DockPanel with the root as FILL so the
+        // root's height stays window-driven and the transitions genuinely fire
+        // (codex round-3: a StackPanel rehost left the root content-sized and the test
+        // could pass without any mode change ever happening).
         (Window w, Grid root) = Host(Threshold + 50);
         try
         {
             var outside = new Button { Content = "shell" };
-            var shell = new StackPanel();
+            DockPanel.SetDock(outside, Dock.Top);
+            var shell = new DockPanel();
             w.Content = null;
             shell.Children.Add(outside);
-            shell.Children.Add(root);
+            shell.Children.Add(root);               // fill child: window-driven height
             w.Content = shell;
             Dispatcher.UIThread.RunJobs();
 
@@ -339,10 +355,12 @@ public class CompactHeightBehaviorTests
 
             w.Height = Threshold - 1;              // → compact
             Dispatcher.UIThread.RunJobs();
+            Assert.Contains("compactHeight", root.Classes);   // the transition REALLY ran
             Assert.True(outside.IsFocused, "transitions must never steal focus from outside the view");
 
-            w.Height = Threshold + 12;             // → restore
+            w.Height = Threshold + 40;             // → restore (past hysteresis)
             Dispatcher.UIThread.RunJobs();
+            Assert.DoesNotContain("compactHeight", root.Classes);
             Assert.True(outside.IsFocused);
         }
         finally { w.Close(); }
@@ -747,10 +765,11 @@ internal static class CompactViewRig
       <Expander.Header>
         <TextBlock Text="Help &amp; links" FontSize="{DynamicResource FontSizeCaption}" />
       </Expander.Header>
-      <!-- The BODY ScrollViewer is the HelpBodyMaxHeight target and is Focusable so
-           keyboard users can scroll a capped body (spec §2); inset on the content
-           panel per the house rule. -->
-      <ScrollViewer Focusable="True" VerticalScrollBarVisibility="Auto"
+      <!-- The BODY ScrollViewer is the HelpBodyMaxHeight target. NOT focusable —
+           the Reconstructor's links are the keyboard route (spec §2 rev 10; a
+           focusable scroller would add a normal-mode Tab stop, criterion F). Inset on
+           the content panel per the house rule. -->
+      <ScrollViewer Classes="helpBody" VerticalScrollBarVisibility="Auto"
                     ScrollViewer.AllowAutoHide="False">
         <StackPanel Margin="0,0,4,0">
           <!-- existing intro TextBlock (verbatim) -->
@@ -810,6 +829,15 @@ internal static class CompactViewRig
   </Style>
   <!-- No Expander-level MaxHeight: the behavior applies HelpBodyMaxHeight to the BODY's
        internal ScrollViewer only (a whole-control cap would squeeze the header). -->
+  <!-- Body-scroller focusability is COMPACT-SCOPED (criterion F: no new normal-mode
+       Tab stop). The Reconstructor's body never takes this class-pair — its links are
+       the route. -->
+  <Style Selector="ScrollViewer.helpBody">
+    <Setter Property="Focusable" Value="False" />
+  </Style>
+  <Style Selector="Grid.compactHeight ScrollViewer.helpBody">
+    <Setter Property="Focusable" Value="True" />
+  </Style>
 
   <!-- Compact tip (a11y conditions 1/2: trimming is VISUAL-ONLY over the full bound
        text; HelpText carries it for AT; the tip is never a budget donor). -->
@@ -923,10 +951,12 @@ ProgressMessage(conditional)) + ProgressBar(conditional).
       <Expander.Header>
         <TextBlock Text="Help" FontSize="{DynamicResource FontSizeCaption}" />
       </Expander.Header>
-      <!-- Focusable body scroller (keyboard route for the text-only body — spec §2)
-           hosting the existing intro TextBlock verbatim, minus its old
+      <!-- Body scroller, keyboard route for the text-only body (spec §2 rev 10):
+           Classes="helpBody" — focusable IN COMPACT ONLY via the class-scoped style
+           (an always-focusable scroller adds a normal-mode Tab stop, criterion F).
+           Hosts the existing intro TextBlock verbatim, minus its old
            DockPanel.Dock/margin (margin moves to the Expander). -->
-      <ScrollViewer Focusable="True" VerticalScrollBarVisibility="Auto"
+      <ScrollViewer Classes="helpBody" VerticalScrollBarVisibility="Auto"
                     ScrollViewer.AllowAutoHide="False">
         <!-- intro TextBlock -->
       </ScrollViewer>
@@ -995,7 +1025,10 @@ ProgressMessage(conditional)) + ProgressBar(conditional).
     //    criterion A for the LAST config control (App name TextBox) and the primary
     //    action; B no-clip with all conditionals forced; C real Tab walk.
     // 3. Tab-order snapshots both modes (normal == pre-change fixture).
-    // 4. Chrome: single-instance intro; expander reset on compact re-entry; focus guard.
+    // 4. Chrome: single-instance intro; expander reset on compact re-entry; focus
+    //    guard; compact body keys — Tab to the body scroller (compact-only focusable),
+    //    real Down-arrows increase its Offset; scroller absent from the NORMAL
+    //    tab-order snapshot (criterion F).
     // 5. Pinned band: with band-1 scrolled to TOP and to BOTTOM, the Create SRS button's
     //    translated bounds stay fully inside the window while ProgressBar+Cancel are
     //    forced visible (the defect this task exists to fix, asserted directly).
@@ -1045,7 +1078,7 @@ pinned band = separator + action DockPanel (Rebuild Sample) + result Border (con
       <Expander.Header>
         <TextBlock Text="Help" FontSize="{DynamicResource FontSizeCaption}" />
       </Expander.Header>
-      <ScrollViewer Focusable="True" VerticalScrollBarVisibility="Auto"
+      <ScrollViewer Classes="helpBody" VerticalScrollBarVisibility="Auto"
                     ScrollViewer.AllowAutoHide="False">
         <!-- intro TextBlock -->
       </ScrollViewer>
@@ -1102,8 +1135,15 @@ pinned band = separator + action DockPanel (Rebuild Sample) + result Border (con
     //    scrolled to both extremes and ShowResult forced (this view's measured defect:
     //    log at 74px base shrinking to 0 under conditionals).
     // 6. Result cap: with a 300-char ResultSummary, the Border's height stays <= its
-    //    cap and the FULL text is exposed (UIA Name/ToolTip) — trimming is visual-only,
-    //    same rule as the tip (a11y conditions 1/2 applied to the banner).
+    //    cap and the FULL text is exposed (UIA Name/ToolTip/HelpText) — trimming is
+    //    visual-only, same rule as the tip; the LOG contains the complete result line
+    //    (the sighted-keyboard route — assert LogEntries carries the full summary);
+    //    the summary TextBlock has LiveSetting="Polite" and its text populates on
+    //    completion (the announcement — codex round-3).
+    // 7. Compact body keys: in compact with Help open, Tab reaches the body scroller
+    //    (focusable in compact only) and real Down-arrow presses increase its Offset;
+    //    at NORMAL size the scroller is NOT focusable and absent from the tab-order
+    //    snapshot (criterion F).
 ```
 
   Red-first: invariant + pinned-band cases against the DockPanel layout.
@@ -1192,7 +1232,8 @@ ProgressBar(conditional) + separator. This is the view whose action row and log 
     //    row's checkbox and Restore All; B no-clip with all conditionals + populated
     //    grid; C real Tab walk INCLUDING through the grid (outer Tab enters/leaves it).
     // 3. Tab-order snapshots both modes.
-    // 4. Chrome: single-instance intro; reset on compact re-entry; focus guard.
+    // 4. Chrome: single-instance intro; reset on compact re-entry; focus guard;
+    //    compact body keys (as Task 3 case 4) + normal-mode snapshot absence.
     // 5. Pinned band: Restore All + ProgressBar fully inside the window with band 1
     //    scrolled to both extremes and IsRestoring+ShowProgress forced — THE base-state
     //    defect assertion (red against today's layout at 700×450 with zero conditionals).
@@ -1315,7 +1356,8 @@ ProgressMessage); the in-scroller splitter is `Height="5"` with a local
     //    control (App name TextBox) and Create SRR; B no-clip with all conditionals;
     //    C real Tab walk (through both DataGrid and the option stack).
     // 3. Tab-order snapshots both modes.
-    // 4. Chrome: single-instance description; reset on compact re-entry; focus guard.
+    // 4. Chrome: single-instance description; reset on compact re-entry; focus guard;
+    //    compact body keys (as Task 3 case 4) + normal-mode snapshot absence.
     // 5. Pinned band: Create SRR + ProgressBar inside the window with band 1 scrolled
     //    to both extremes and conditionals forced (red today: the bottom half is
     //    crushed AND clipped at 700×450).
@@ -1348,7 +1390,7 @@ ProgressMessage); the in-scroller splitter is `Height="5"` with a local
 - Create: `ReScene.Manager.Tests/SmallWindowBoardTests.cs`
 - Modify: `CHANGELOG.md` (outer repo, Unreleased)
 - Modify: `docs/superpowers/specs/2026-07-30-small-window-layout-design.md` (status →
-  implemented; fold the recorded pending nit: SRSCreator inventory has no result banner)
+  "rev 10 — implemented <commit>"; the SRSCreator inventory nit is already folded)
 
 - [ ] **Step 1: Settings audit.** SettingsWindow owns MinWidth 560 / MinHeight 360 and
   its pages scroll (stage-1 fix). Assert (extend `ScrollReachabilityTests`): at exactly
