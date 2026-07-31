@@ -1013,7 +1013,9 @@ ProgressMessage); the in-scroller splitter is `Height="5"` with a local
            row 2 Auto : Stored Files header + buttons StackPanel (verbatim)
            row 3      : Height="150" MinHeight="80" — StoredFilesGrid (verbatim, plus
                         behaviors:ScrollHandoffBehavior.Handoff="True")
-           row 4 Auto : the GridSplitter (verbatim minus its local Background;
+           row 4 Auto : the GridSplitter (verbatim minus its local Background, plus
+                        AutomationProperties.Name="Resize stored files and output" —
+                        spec §5;
                         criterion E scoped to NORMAL size for this in-scroller splitter —
                         it stays focusable/operable in both modes)
            row 5 Auto : Output section StackPanel (verbatim)
