@@ -4,8 +4,8 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
 > use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: DRAFT rev 1 — Task 1 fully authored; Tasks 2–7 pending authorship. DO NOT
-EXECUTE until this line says the plan is complete and codex-approved.**
+**Status: DRAFT rev 2 — Tasks 1–2 fully authored (against spec rev 6); Tasks 3–7 pending
+authorship. DO NOT EXECUTE until this line says the plan is complete and codex-approved.**
 
 **Goal:** Below each task view's fit floor, panes shrink and scroll instead of clipping,
 header chrome collapses behind a Help disclosure, and keyboard focus can never land
@@ -394,15 +394,218 @@ internal static class CompactInvariantRig
 
 ---
 
-### Tasks 2–7 (pending authorship — DO NOT DISPATCH)
+### Task 2: ReconstructorView conversion (template view)
+
+Numbers are spec rev 6: TabControl minimums 130 normal / 96 compact / 60 help-open;
+log 80; threshold 421; compact worst floor ≤ 305; Help body MaxHeight ≈ 38
+(test-computed); tip always-visible, compact-trimmed under the five a11y conditions.
+
+**Files:**
+- Modify: `ReScene.Manager/Views/ReconstructorView.axaml`
+- Modify: `ReScene.Manager/Views/ReconstructorView.axaml.cs` (behavior wiring in ctor)
+- Modify: `ReScene.Manager/Behaviors/CompactHeightBehavior.cs` (add HelpExpander wiring)
+- Modify: `ReScene.Manager/Resources/Styles.axaml` (helpDisclosure + tipLine + splitter styles)
+- Test: `ReScene.Manager.Tests/ReconstructorCompactTests.cs` (new)
+- Test: extend `CompactHeightBehaviorTests.cs` (HelpExpander wiring cases)
+
+**Interfaces:**
+- Consumes Task 1: Threshold/RowSizes/HelpOpen/FocusFallback, `compactHeight` class,
+  `CompactInvariantRig`.
+- Produces (Tasks 3-6 reuse): `HelpExpanderProperty` on the behavior; style classes
+  `helpDisclosure` and `tipLine`; the splitter base/focus styles; the per-view test
+  shape (invariant + rendered matrix + snapshots + chrome assertions).
+
+- [ ] **Step 1: Extend the behavior — HelpExpander wiring (test-first).**
+  Add to `CompactHeightBehaviorTests.cs`:
+
+```csharp
+    [AvaloniaFact]
+    public void HelpExpander_FlatWhenExpandedMode_ResetOnCompactEntry_TogglesHelpOpen()
+    {
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var expander = new Expander { [Grid.RowProperty] = 0 };
+            root.Children.Add(expander);
+            CompactHeightBehavior.SetHelpExpander(root, expander);
+            Dispatcher.UIThread.RunJobs();
+
+            // Expanded (normal) mode: behavior pins the flat state.
+            Assert.True(expander.IsExpanded);
+
+            w.Height = Threshold - 1;                    // enter compact
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(expander.IsExpanded);           // condition 5: starts collapsed
+            Assert.False(CompactHeightBehavior.GetHelpOpen(root));
+
+            expander.IsExpanded = true;                  // user opens Help
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(CompactHeightBehavior.GetHelpOpen(root));
+
+            w.Height = Threshold + 12;                   // restore to normal
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(expander.IsExpanded);            // flat again
+            Assert.False(CompactHeightBehavior.GetHelpOpen(root)); // donation off at normal
+
+            w.Height = Threshold - 1;                    // re-enter compact
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(expander.IsExpanded);           // durability is compact-session scoped
+        }
+        finally { w.Close(); }
+    }
+```
+
+  Implement in `CompactHeightBehavior`: attached `HelpExpanderProperty` (`Expander?`).
+  On mode transitions: entering compact → `IsExpanded = false`; entering normal →
+  `IsExpanded = true`. Subscribe the expander's `IsExpanded` changes → `SetHelpOpen(root,
+  isCompact && expander.IsExpanded)` (HelpOpen is never true at normal size). Forced
+  rebuild, red → green, full behavior suite green.
+
+- [ ] **Step 2: XAML restructure.** In `ReconstructorView.axaml`:
+
+  (a) Row 0's `StackPanel` is wrapped in the disclosure (single instance — the intro
+  TextBlock and links WrapPanel MOVE inside; authoring-time move, not runtime):
+
+```xml
+    <Expander Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
+              Margin="0,0,0,6"
+              AutomationProperties.Name="Help &amp; links">
+      <Expander.Header>
+        <TextBlock Text="Help &amp; links" FontSize="{DynamicResource FontSizeCaption}" />
+      </Expander.Header>
+      <StackPanel>
+        <!-- existing intro TextBlock (verbatim) -->
+        <!-- existing links WrapPanel (verbatim, Click+Tag untouched) -->
+      </StackPanel>
+    </Expander>
+```
+
+  The old `Margin="0,0,0,6"` moves from the StackPanel to the Expander; the inner
+  StackPanel loses it.
+
+  (b) Tip row (conditions 1/2 — full text stays the single bound source):
+
+```xml
+    <TextBlock Grid.Row="2" Classes="tipLine"
+               Text="Tip: click &#x201C;Import from SRR&#x201D; to auto-configure versions, compression, dictionary, timestamps and Host OS from the release's SRR."
+               ToolTip.Tip="{Binding $self.Text}"
+               AutomationProperties.HelpText="{Binding $self.Text}"
+               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+               TextWrapping="Wrap" Margin="0,0,0,4" />
+```
+
+  (c) Row definitions: row 4 `MinHeight="220"` → `MinHeight="130"`; row 6
+  `MinHeight="140"` → `MinHeight="80"`. TabControl `MinHeight="220"` → `MinHeight="130"`.
+
+  (d) Splitter: remove `Background="Transparent"` (moves to the style);
+  add `AutomationProperties.Name="Resize options and log"`.
+
+- [ ] **Step 3: Code-behind wiring** (`ReconstructorView.axaml.cs` ctor, after
+  `InitializeComponent`):
+
+```csharp
+        Grid root = (Grid)Content!;
+        Behaviors.CompactHeightBehavior.SetThreshold(root, 421);
+        Behaviors.CompactHeightBehavior.SetRowSizes(root,
+            [new Behaviors.CompactRowSize(RowIndex: 4, NormalHeight: double.NaN,
+                CompactMinHeight: 96, HelpOpenMinHeight: 60, HeightIsPixel: false)]);
+        Behaviors.CompactHeightBehavior.SetHelpExpander(root, HelpDisclosure);
+        Behaviors.CompactHeightBehavior.SetFocusFallback(root, HelpDisclosure);
+```
+
+- [ ] **Step 4: Styles** (`Styles.axaml`, after the checkbox-glyph block):
+
+```xml
+  <!-- Small-window chrome (spec rev 6 §2): the Help disclosure renders FLAT at normal
+       size — header hidden, body pinned expanded by CompactHeightBehavior — so the page
+       is pixel-identical to the pre-disclosure layout. Under .compactHeight the header
+       shows and the body obeys the behavior (collapsed on entry, donation while open).
+       Class tokens keep every rule at StyleTrigger priority (see the glyph comment). -->
+  <Style Selector="Expander.helpDisclosure /template/ ToggleButton">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector="Grid.compactHeight Expander.helpDisclosure /template/ ToggleButton">
+    <Setter Property="IsVisible" Value="True" />
+  </Style>
+  <Style Selector="Grid.compactHeight Expander.helpDisclosure">
+    <Setter Property="MaxHeight" Value="200" />
+    <!-- Body height is bounded by the behavior-computed budget; 200 is the style-level
+         backstop — the invariant test asserts the real bound (~38 body + header). -->
+  </Style>
+
+  <!-- Compact tip (a11y conditions 1/2: trimming is VISUAL-ONLY over the full bound
+       text; HelpText carries it for AT; the tip is never a budget donor). -->
+  <Style Selector="Grid.compactHeight TextBlock.tipLine">
+    <Setter Property="TextWrapping" Value="NoWrap" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </Style>
+
+  <!-- Splitter base + focus (base moves out of local values so :focus can win; ≥3:1 vs
+       both panes, asserted by test). -->
+  <Style Selector="GridSplitter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="GridSplitter:focus">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+  </Style>
+```
+
+  (Exact accent resource name verified against Tokens.axaml at implementation; the test
+  asserts rendered contrast, not the resource choice.)
+
+- [ ] **Step 5: The view test suite** (`ReconstructorCompactTests.cs`) — the per-view
+  shape every later view task copies. Uses `BeginnerShellTestFactory`-style inert VM
+  construction (see `ReconstructorViewTests.CreateVm`). Cases:
+
+```csharp
+    // 1. Invariant (spec §1's four checks; CompactInvariantRig):
+    //    - render view at width 676, force HasCustomPackerWarning=true, expanded mode:
+    //      MeasureFloor < 421 (threshold)
+    //    - compact class applied, Help closed: MeasureFloor <= 307
+    //    - compact + HelpOpen (donation rows applied, body expanded to MaxHeight):
+    //      MeasureFloor <= 307
+    //    - pinned/action rows within the same sums (Reconstructor: toolbar row measured)
+    // 2. Rendered matrix: MainWindow-hosted view at 700×450 (compact active) and at
+    //    inner height 422 fresh (= Threshold+1, EXPANDED — hysteresis is restore-only):
+    //    criterion A reachability for the last Options control and last Output control
+    //    (scroll to end, translated bounds inside viewport), criterion B no-clip with the
+    //    warning forced, criterion C real Tab walk (sentinel → full cycle → every focused
+    //    bounds within all clipping ancestors ∩ window).
+    // 3. Tab-order snapshots: ordered (type, automation name) at normal — equals the
+    //    pre-change snapshot committed as a fixture; compact — equals the spec §2 order.
+    // 4. Chrome: compact tip UIA Name == the FULL tip text (condition 1) and
+    //    HelpText == full text (condition 2); exactly three link Buttons in the tree in
+    //    BOTH modes (single instance); links invocable in compact (expander open →
+    //    Click raises); expander reset on compact re-entry.
+    // 5. Splitter: focusable via Tab, Up/Down moves the split, bounds clamp at 96/80,
+    //    focus visual rendered (background brush changes on focus) with ≥3:1 contrast
+    //    computed against both pane backgrounds.
+```
+
+  Each comment line becomes a real `[AvaloniaFact]`/`[AvaloniaTheory]`; the implementer
+  writes bodies to these contracts. Red-first where behavior exists to break (invariant
+  numbers against the OLD minimums are naturally red before Step 2's XAML lands — run
+  Step 5's invariant test before Step 2 to capture the red, then land Steps 2-4).
+
+- [ ] **Step 6: Frame-rig parity** — normal-size before/after captures of the full view
+  (the rig pattern from the versions-tree work: ForceRenderTimerTick + RunJobs before
+  every capture); pixel-compare. Any diff in the header region fails the task unless the
+  documented fallback (custom two-slot header) is invoked — record the decision.
+
+- [ ] **Step 7: Suites + gate** — forced rebuilds; full Manager suite; solution rebuild
+  0W/0E; runtime ava-desktop smoke at 700×450 (visual: header disclosure present, tabs
+  scroll, log ≥2 rows, no clipping).
+
+- [ ] **Step 8: Commit** `feat(ui): Reconstructor small-window degradation (template)`
+  — explicit paths only.
+
+---
+
+### Tasks 3–7 (pending authorship — DO NOT DISPATCH)
 
 Authored next, one at a time, each against the view's full markup, to the same
 no-placeholder standard:
 
-- **Task 2 — Reconstructor** (template view): Help expander (always-present, styled-flat
-  normal), chrome styles, TabControl/log minimums via RowSizes (130/110/80 + log 80),
-  splitter Background→style + focus style + AutomationProperties.Name, threshold 421,
-  invariant test, rendered A/B/C at 700×450 and 433, tab-order snapshots, frame-rig parity.
 - **Task 3 — SRSCreatorView** (first three-band conversion): band grid, pinned feedback
   band (Create/Cancel + ProgressMessage + ProgressBar + banner ≤75), config ScrollViewer,
   threshold 520, invariant + rendered matrix + snapshots.
