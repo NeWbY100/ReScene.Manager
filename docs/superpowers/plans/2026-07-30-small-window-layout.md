@@ -4,7 +4,7 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
 > use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: DRAFT rev 4 — Tasks 1–4 fully authored (against spec rev 6); Tasks 5–7 pending
+**Status: DRAFT rev 5 — Tasks 1–5 fully authored (against spec rev 6); Tasks 6–7 pending
 authorship. DO NOT EXECUTE until this line says the plan is complete and codex-approved.**
 
 **Pending spec nits (batch into the next spec touch, do not block):** §4's SRSCreator
@@ -846,13 +846,101 @@ pinned band = separator + action DockPanel (Rebuild Sample) + result Border (con
 
 ---
 
-### Tasks 5–7 (pending authorship — DO NOT DISPATCH)
+### Task 5: SampleRestorerView three-band conversion + DataGrid handoff
+
+Spec rev 6 numbers: threshold 535; compact config min 110 (help-open 80); log 80; pinned
+band ≤ 75; compact worst floor ≤ 307. Feedback inventory (measured): pinned band =
+separator + action DockPanel (Restore All / Cancel(conditional, `IsRestoring`) /
+OverallProgressText(**always visible**) / ProgressMessage(conditional, `ShowProgress`)) +
+ProgressBar(conditional) + separator. This is the view whose action row and log measure
+0px at 700×450 BASE state — the headline defect.
+
+**Files:**
+- Modify: `ReScene.Manager/Views/SampleRestorerView.axaml`
+- Modify: `ReScene.Manager/Views/SampleRestorerView.axaml.cs` (behavior wiring)
+- Create: `ReScene.Manager/Behaviors/ScrollHandoffBehavior.cs`
+- Test: `ReScene.Manager.Tests/ScrollHandoffBehaviorTests.cs` (new)
+- Test: `ReScene.Manager.Tests/SampleRestorerCompactTests.cs` (new)
+
+**Interfaces:**
+- Consumes: Task 1 behavior (`AutoToStar`), Task 2 styles, Task 3's band pattern.
+- Produces: `ScrollHandoffBehavior.HandoffProperty` (attached bool) — inner scrollable
+  hands wheel input to the outer ScrollViewer at its extents. Task 6 reuses it if
+  CreatorView's grid needs it.
+
+- [ ] **Step 1: `ScrollHandoffBehavior` (test-first).** Contract: attached to a control
+  with an internal ScrollViewer (DataGrid); a `PointerWheelChanged` that would scroll
+  past the internal extent (top at offset 0 scrolling up, bottom at max scrolling down)
+  is NOT handled by the inner control — it reaches the ancestor ScrollViewer. Tests
+  (`ScrollHandoffBehaviorTests.cs`): DataGrid with 20 rows inside an outer ScrollViewer
+  sized to clip both; wheel-down at grid-bottom moves the OUTER offset; wheel-up at
+  grid-top likewise; wheel mid-grid moves only the INNER offset. Use
+  `RaiseEvent(new PointerWheelEventArgs …)` per the headless input idiom in
+  LogListCopyTests. Implementation: handle the grid's `PointerWheelChanged` in the
+  tunnel/bubble phase; when at-extent in the wheel direction, re-raise the event on the
+  outer ScrollViewer (mark original handled to prevent double-scroll).
+
+- [ ] **Step 2: XAML restructure** — root DockPanel → 4-row Grid (Task 3's shape),
+  elements verbatim:
+
+```xml
+    <!-- 0: chrome — intro inside the disclosure; header "Help". -->
+
+    <!-- 1: config band ScrollViewer + StackPanel hosting, in today's order:
+         SRR File label / picker (SRRFileTextBox) / FieldStatusLine SRRStatus / sep /
+         Media Directory label / picker (MediaDirTextBox) / FieldStatusLine MatchStatus /
+         sep / Output Directory label / picker (OutputDirTextBox — NO status line today,
+         none added) / sep / "Embedded SRS Files" header TextBlock (gains
+         x:Name="SRSEntriesHeader") / SRSEntriesGrid (verbatim incl. MinHeight 100 /
+         MaxHeight 250 and the fullSizeGlyph template column; gains
+         AutomationProperties.LabeledBy="{Binding #SRSEntriesHeader}" — the spec's
+         LabeledBy audit — and behaviors:ScrollHandoffBehavior.Handoff="True"). -->
+
+    <!-- 2: pinned band (StackPanel): separator / action DockPanel (Restore All, Cancel,
+         OverallProgressText, ProgressMessage — verbatim) / ProgressBar (verbatim) /
+         separator. -->
+
+    <!-- 3: log band — verbatim log DockPanel. -->
+```
+
+- [ ] **Step 3: Code-behind wiring** (ctor): threshold **535**, RowSizes
+  `[new(1, double.NaN, 110, 80, AutoToStar)]`, HelpExpander + FocusFallback =
+  HelpDisclosure — identical shape to Task 3's snippet with this view's numbers.
+
+- [ ] **Step 4: Tests** (`SampleRestorerCompactTests.cs`):
+
+```csharp
+    // 1. Invariant: expanded worst floor < 535 (FieldStatusLines set, IsRestoring +
+    //    ShowProgress true, grid populated to MaxHeight with 12 rows); compact floor
+    //    <= 307; compact + HelpOpen one-sum <= 307; pinned band worst <= 75.
+    // 2. Rendered matrix at 700×450 and fresh at 536 (expanded): A for the grid's last
+    //    row's checkbox and Restore All; B no-clip with all conditionals + populated
+    //    grid; C real Tab walk INCLUDING through the grid (outer Tab enters/leaves it).
+    // 3. Tab-order snapshots both modes.
+    // 4. Chrome: single-instance intro; reset on compact re-entry; focus guard.
+    // 5. Pinned band: Restore All + ProgressBar fully inside the window with band 1
+    //    scrolled to both extremes and IsRestoring+ShowProgress forced — THE base-state
+    //    defect assertion (red against today's layout at 700×450 with zero conditionals).
+    // 6. Handoff: wheel at grid extents moves the config band's scroller; cell focus
+    //    via keyboard navigation chains BringIntoView to the outer viewer (focus a
+    //    bottom-row cell while the grid is half-clipped by the band → the cell's bounds
+    //    end fully visible); inner arrow-key navigation stays inside the grid.
+    // 7. LabeledBy: the grid's UIA name resolves to "Embedded SRS Files".
+```
+
+  Red-first: cases 1 and 5 against today's DockPanel layout (5 is red at BASE state —
+  the strongest red in the feature).
+
+- [ ] **Step 5: Frame-rig parity, suites + gate, runtime smoke** (Task 2 steps 6–7).
+- [ ] **Step 6: Commit** `feat(ui): SampleRestorer three-band degradation + scroll handoff`.
+
+---
+
+### Tasks 6–7 (pending authorship — DO NOT DISPATCH)
 
 Authored next, one at a time, each against the view's full markup, to the same
 no-placeholder standard:
 
-- **Task 5 — SampleRestorerView** (three-band + DataGrid-in-scroller handoff contracts,
-  threshold 535).
 - **Task 6 — CreatorView** (largest: three-band generalization, stored-files row via
   RowSizes 150/80 pixel mode, detected-sets MaxHeight, in-scroller splitter E-scoping,
   threshold 720).
