@@ -4,8 +4,8 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
 > use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: DRAFT rev 5 — Tasks 1–5 fully authored (against spec rev 6); Tasks 6–7 pending
-authorship. DO NOT EXECUTE until this line says the plan is complete and codex-approved.**
+**Status: rev 6 — ALL 7 TASKS AUTHORED (against spec rev 6). PENDING CODEX PLAN REVIEW —
+do not execute until codex approves (user directive: codex gates every step).**
 
 **Pending spec nits (batch into the next spec touch, do not block):** §4's SRSCreator
 feedback inventory wrongly lists a "result banner" — SRSCreatorView has none (the outcome
@@ -73,6 +73,12 @@ ReScene.Manager.Tests harness), frame rig + ava-desktop for visual verification.
     restores `Height = Auto`, `MinHeight = 0` (the three-band config rows: natural at
     normal size, squeezed star in compact).
 - Style class contract: `compactHeight` present on the attached control while compact.
+- **Descendant application (CreatorView needs it):** `RowSizesProperty` may also be
+  attached to DESCENDANT grids of the threshold-bearing root (e.g. a grid inside the
+  config band's ScrollViewer, whose own bounds never shrink and so cannot carry a
+  threshold). On mode/help changes the owning behavior applies its root's RowSizes AND
+  every descendant-attached list; descendants are found once on attach (visual-tree walk)
+  and re-collected on re-attach.
 - `CompactInvariantRig.MeasureFloor(Control innerRoot)` → double (sum of the root's
   children's desired heights + spacing at width 676, conditionals forced by the caller).
 
@@ -221,6 +227,30 @@ public class CompactHeightBehaviorTests
             Dispatcher.UIThread.RunJobs();
             Assert.True(root.RowDefinitions[1].Height.IsAuto);
             Assert.Equal(0, root.RowDefinitions[1].MinHeight);
+        }
+        finally { w.Close(); }
+    }
+
+    [AvaloniaFact]
+    public void DescendantGridRowSizes_FollowTheRootsMode()
+    {
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var inner = new Grid { RowDefinitions = new RowDefinitions("150,Auto"), [Grid.RowProperty] = 2 };
+            inner.Children.Add(new Border());
+            CompactHeightBehavior.SetRowSizes(inner,
+                [new CompactRowSize(0, 150, 80, 80, CompactRowMode.PixelRestore)]);
+            root.Children.Add(inner);
+            Dispatcher.UIThread.RunJobs();
+
+            w.Height = Threshold - 1;                          // root goes compact
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(80, inner.RowDefinitions[0].Height.Value);
+
+            w.Height = Threshold + 12;
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(150, inner.RowDefinitions[0].Height.Value);
         }
         finally { w.Close(); }
     }
@@ -936,14 +966,157 @@ ProgressBar(conditional) + separator. This is the view whose action row and log 
 
 ---
 
-### Tasks 6–7 (pending authorship — DO NOT DISPATCH)
+### Task 6: CreatorView three-band generalization
 
-Authored next, one at a time, each against the view's full markup, to the same
-no-placeholder standard:
+Spec rev 6 numbers: threshold 720 (Creator is compact in most real windows — expected);
+compact config min 110 (help-open 80); log band 80; pinned ≤ 75; compact worst floor
+≤ 307. Facts from the markup: the detected-sets region ALREADY carries MaxHeight=96 with
+its own ScrollViewer (spec's bounding exists — verify, don't add); the action StackPanel
+already unites the button row + ProgressBar (+ always-visible ActionHint, conditional
+ProgressMessage); the in-scroller splitter is `Height="5"` with a local
+`Background="Transparent"` (local moves to the Task 2 style).
 
-- **Task 6 — CreatorView** (largest: three-band generalization, stored-files row via
-  RowSizes 150/80 pixel mode, detected-sets MaxHeight, in-scroller splitter E-scoping,
-  threshold 720).
-- **Task 7 — Settings audit + whole board**: Settings compliance check, five-view parity
-  evidence, criterion C Tab-walks all views, font-enlargement test, full suites + gate,
-  CHANGELOG entry, spec → implemented.
+**Files:**
+- Modify: `ReScene.Manager/Views/CreatorView.axaml`
+- Modify: `ReScene.Manager/Views/CreatorView.axaml.cs` (behavior wiring)
+- Test: `ReScene.Manager.Tests/CreatorCompactTests.cs` (new)
+
+**Interfaces:**
+- Consumes: Task 1 behavior incl. DESCENDANT RowSizes application and
+  `CompactRowMode.PixelRestore`; Task 2 styles; Task 3's band pattern;
+  Task 5's `ScrollHandoffBehavior` (applied to StoredFilesGrid — it sits inside the
+  band-1 scroller and has its own internal scrolling).
+
+- [ ] **Step 1: XAML restructure.** Outer grid becomes the 4-band shape; the OLD outer
+  rows 1–5 and the old bottom-grid rows 0–3 all move VERBATIM into band 1's inner grid;
+  the old bottom-grid action/log rows become bands 2/3:
+
+```xml
+  <Grid Margin="{DynamicResource PageMargin}" x:Name="RootGrid">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />                 <!-- 0: Help chrome -->
+      <RowDefinition Height="Auto" />                 <!-- 1: config (AutoToStar) -->
+      <RowDefinition Height="Auto" />                 <!-- 2: pinned action band -->
+      <RowDefinition Height="*" MinHeight="80" />     <!-- 3: log band -->
+    </Grid.RowDefinitions>
+
+    <!-- 0: chrome — the description TextBlock moves inside; header "Help". -->
+    <Expander Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
+              Margin="0,0,0,6" AutomationProperties.Name="Help" />
+    <!-- (header/body per Task 3's snippet; body = the existing description TextBlock) -->
+
+    <!-- 1: config band — ScrollViewer hosting an INNER GRID (not a StackPanel: the
+         stored-files splitter needs grid rows), x:Name="ConfigGrid":
+           row 0 Auto : Input section StackPanel (verbatim — incl. the scanning
+                        ProgressBar and the detected-sets MaxHeight=96 scroller)
+           row 1 Auto : separator
+           row 2 Auto : Stored Files header + buttons StackPanel (verbatim)
+           row 3      : Height="150" MinHeight="80" — StoredFilesGrid (verbatim, plus
+                        behaviors:ScrollHandoffBehavior.Handoff="True")
+           row 4 Auto : the GridSplitter (verbatim minus its local Background;
+                        criterion E scoped to NORMAL size for this in-scroller splitter —
+                        it stays focusable/operable in both modes)
+           row 5 Auto : Output section StackPanel (verbatim)
+           row 6 Auto : separator
+           row 7 Auto : Options section StackPanel (verbatim — 7 checkboxes + app name)
+         NOTE row 3 keeps a pixel Height so the splitter drags exactly as today; the
+         compact 80 arrives via the DESCENDANT RowSizes application (PixelRestore),
+         which also preserves a user drag across the round-trip. -->
+
+    <!-- 2: pinned band (StackPanel): separator / the existing action StackPanel
+         (DockPanel with Create SRR / Cancel / ActionHint / ProgressMessage + the
+         ProgressBar) verbatim / separator. -->
+
+    <!-- 3: log band — DockPanel: the old log-header DockPanel (Dock=Top, verbatim incl.
+         SaveLogStatus) + the logList ListBox as fill. The old row-7 MinHeight=40
+         disappears with the old bottom grid; the band minimum 80 supersedes it
+         (header ~28 + ≥2 rows — the spec's log rule now uniform). -->
+  </Grid>
+```
+
+- [ ] **Step 2: Code-behind wiring** (ctor):
+
+```csharp
+        Behaviors.CompactHeightBehavior.SetThreshold(RootGrid, 720);
+        Behaviors.CompactHeightBehavior.SetRowSizes(RootGrid,
+            [new Behaviors.CompactRowSize(RowIndex: 1, NormalHeight: double.NaN,
+                CompactMinHeight: 110, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.AutoToStar)]);
+        Behaviors.CompactHeightBehavior.SetRowSizes(ConfigGrid,
+            [new Behaviors.CompactRowSize(RowIndex: 3, NormalHeight: 150,
+                CompactMinHeight: 80, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.PixelRestore)]);
+        Behaviors.CompactHeightBehavior.SetHelpExpander(RootGrid, HelpDisclosure);
+        Behaviors.CompactHeightBehavior.SetFocusFallback(RootGrid, HelpDisclosure);
+```
+
+- [ ] **Step 3: Tests** (`CreatorCompactTests.cs`):
+
+```csharp
+    // 1. Invariant: expanded worst floor < 720 (force IsScanning, HasDetectedSets with
+    //    12 sets — capped at 96 —, all statuses, IsCreating + ShowProgress, grid with
+    //    8 stored files); compact floor <= 307; compact + HelpOpen one-sum <= 307;
+    //    pinned band worst <= 75.
+    // 2. Rendered matrix at 700×450 and fresh at 721 (expanded): A for the LAST option
+    //    control (App name TextBox) and Create SRR; B no-clip with all conditionals;
+    //    C real Tab walk (through both DataGrid and the option stack).
+    // 3. Tab-order snapshots both modes.
+    // 4. Chrome: single-instance description; reset on compact re-entry; focus guard.
+    // 5. Pinned band: Create SRR + ProgressBar inside the window with band 1 scrolled
+    //    to both extremes and conditionals forced (red today: the bottom half is
+    //    crushed AND clipped at 700×450).
+    // 6. Stored-files row: splitter drag at NORMAL size still resizes row 3 and the
+    //    drag survives a compact round-trip (descendant PixelRestore capture);
+    //    in compact the row is 80 and the grid scrolls internally; wheel handoff at
+    //    the grid's extents reaches the band-1 scroller.
+    // 7. Detected-sets bounding: with 12 sets the region's height stays <= 96 in both
+    //    modes (verifying the EXISTING cap holds inside the new structure).
+```
+
+  Red-first: cases 1 and 5 against today's layout.
+
+- [ ] **Step 4: Frame-rig parity** — extra care here (largest structural move): the
+  before/after normal-size captures must be pixel-identical INCLUDING splitter drag
+  behavior; any diff fails the task.
+- [ ] **Step 5: Suites + gate + runtime smoke; Commit**
+  `feat(ui): Creator three-band small-window degradation`.
+
+---
+
+### Task 7: Settings audit + whole-board close
+
+**Files:**
+- Modify: `ReScene.Manager.Tests/ScrollReachabilityTests.cs` (extend the Settings fact
+  with a 700×450-era assertion if missing — audit only)
+- Create: `ReScene.Manager.Tests/SmallWindowBoardTests.cs`
+- Modify: `CHANGELOG.md` (outer repo, Unreleased)
+- Modify: `docs/superpowers/specs/2026-07-30-small-window-layout-design.md` (status →
+  implemented; fold the recorded pending nit: SRSCreator inventory has no result banner)
+
+- [ ] **Step 1: Settings audit.** SettingsWindow owns MinWidth 560 / MinHeight 360 and
+  its pages scroll (stage-1 fix). Assert (extend `ScrollReachabilityTests`): at exactly
+  560×360, every page's last control is reachable and a real Tab walk stays inside the
+  window (criterion C applied to Settings). No compact machinery is added — the audit
+  proves none is needed; if it FAILS, stop and report (spec change required).
+- [ ] **Step 2: Board tests** (`SmallWindowBoardTests.cs`):
+
+```csharp
+    // 1. Font-enlargement (spec Testing): with ControlContentThemeFontSize overridden
+    //    12 → 16 at 700×450, each of the five views' pinned/action band and log header
+    //    remain unclipped (text growth is absorbed by the scrolling regions).
+    // 2. RenderScaling sweep: the five compact floors hold at 1.25/1.5 scaling
+    //    (invariant rig re-measured under RenderScaling overrides) — distinct from 1.
+    // 3. Cross-view: every task view's threshold invariant test type exists and runs
+    //    (guard against a view task silently dropping its invariant — reflection over
+    //    the test assembly for the *CompactTests naming pattern, count == 5).
+```
+
+- [ ] **Step 3: Full board** — forced rebuilds; Manager suite; App.Core suite; solution
+  rebuild gate 0W/0E; counts recorded from actual output.
+- [ ] **Step 4: Runtime pass** — ava-desktop at 700×450 and at the user's VM size:
+  every view visited, compact chrome present, Help open/close exercised, screenshots
+  captured for the report.
+- [ ] **Step 5: Docs** — CHANGELOG Unreleased: "Task pages now adapt to small windows:
+  panes shrink and scroll instead of clipping, header help collapses behind a disclosure,
+  and every control stays reachable by keyboard at the minimum window size (700×450)."
+  Spec status → "rev 6 — implemented <commit>", folding the SRSCreator-inventory nit.
+- [ ] **Step 6: Commit** `docs: small-window layout complete` + report the acceptance
+  smoke for the user: VM visual pass over all five tabs at the VM's native size.
