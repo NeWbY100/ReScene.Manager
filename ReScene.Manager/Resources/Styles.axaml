@@ -51,6 +51,126 @@
     <Setter Property="VerticalAlignment" Value="Top" />
   </Style>
 
+  <!-- Small-window chrome (spec rev 12 §2): the Help disclosure renders FLAT at normal
+       size — header hidden, body pinned expanded by CompactHeightBehavior — so the page
+       is pixel-identical to the pre-disclosure layout. Under .compactHeight the header
+       shows and the body obeys the behavior (collapsed on entry, donation while open).
+
+       CUSTOM RE-TEMPLATE (brief's documented fallback, invoked): Fluent's stock Expander
+       carries several hardcoded floors that keep a COLLAPSED header well above the spec's
+       ~24-DIP budget regardless of style overrides layered on individual template parts —
+       measured: the Expander control itself defaults MinHeight 48, and its header's own
+       chevron cell reserves 32 DIPs, both independent of (and un-reachable through) the
+       Expander's own Padding/the header ToggleButton's own Padding/MinHeight. Overriding
+       template parts one at a time chases an increasingly fragile, Avalonia-version-
+       dependent target; this re-template (mirroring the EXISTING Expander.versionGroup
+       re-template's own proven structure/pattern below — same chevron Path, same TwoWay
+       IsChecked TemplateBinding, same visibility-gated content wrapper) gives deterministic
+       control instead. Zero chrome (no border/background/padding/corner radius) in either
+       mode — a plain collapsible section, never a bordered card — so normal/flat mode stays
+       pixel-identical to the pre-disclosure StackPanel (criterion F). -->
+  <Style Selector="Expander.helpDisclosure">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Margin" Value="0,0,0,6" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <StackPanel x:CompileBindings="False">
+          <!-- Header: content sized only, no theme-imposed floor. The toggle's OWN
+               accessible name mirrors whatever AutomationProperties.Name the CALLER put on
+               the Expander itself (every helpDisclosure caller sets one — "Help & links" on
+               Reconstructor, "Help" elsewhere, per spec §2) — Tab lands on THIS element, a
+               separate focusable peer from the Expander's own, so it needs its own name. -->
+          <ToggleButton IsChecked="{TemplateBinding IsExpanded, Mode=TwoWay}"
+                        AutomationProperties.Name="{TemplateBinding (AutomationProperties.Name)}"
+                        Background="Transparent" BorderThickness="0"
+                        Padding="0" MinHeight="0"
+                        Cursor="Hand"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Path Name="HelpChevron" Data="M 1 1 L 5 5 L 1 9"
+                    Stroke="{DynamicResource ForegroundSecondary}" StrokeThickness="1.3"
+                    StrokeLineCap="Round" StrokeJoin="Round"
+                    Width="10" Height="10" Stretch="Uniform"
+                    VerticalAlignment="Center" />
+              <ContentPresenter Content="{TemplateBinding Header}"
+                                ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                VerticalAlignment="Center" />
+            </StackPanel>
+          </ToggleButton>
+          <!-- Body: visibility-gated exactly like versionGroup's own content Border, so the
+               collapsed body realizes nothing and contributes zero to the floor. -->
+          <Border IsVisible="{TemplateBinding IsExpanded}">
+            <ContentPresenter Name="PART_ContentPresenter"
+                              Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}" />
+          </Border>
+        </StackPanel>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="Expander.helpDisclosure /template/ ToggleButton">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector="Grid.compactHeight Expander.helpDisclosure /template/ ToggleButton">
+    <Setter Property="IsVisible" Value="True" />
+  </Style>
+  <Style Selector="Expander.helpDisclosure:expanded /template/ Path#HelpChevron">
+    <Setter Property="RenderTransform">
+      <RotateTransform Angle="90" />
+    </Setter>
+  </Style>
+  <!-- Compact-mode-ONLY margin tightening (never touches normal mode, so criterion F's
+       pixel-parity requirement for TODAY's rendering is untouched — these rows' base margins
+       are pre-existing, unchanged markup). Recovers a few DIPs toward the 307 CI bound from
+       rows whose own content chrome (Button padding, caption line-height) runs a little over
+       the design doc's own rough per-row estimates once actually measured. -->
+  <Style Selector="DockPanel.actionBar">
+    <Setter Property="Margin" Value="0,0,0,4" />
+  </Style>
+  <Style Selector="Grid.compactHeight Expander.helpDisclosure">
+    <Setter Property="Margin" Value="0" />
+  </Style>
+  <Style Selector="Grid.compactHeight DockPanel.actionBar">
+    <Setter Property="Margin" Value="0" />
+  </Style>
+  <!-- No Expander-level MaxHeight: the behavior applies HelpBodyMaxHeight to the BODY's
+       internal ScrollViewer only (a whole-control cap would squeeze the header). -->
+  <!-- Body-scroller focusability is COMPACT-SCOPED (criterion F: no new normal-mode
+       Tab stop). The Reconstructor's body never takes this class-pair — its links are
+       the route. -->
+  <Style Selector="ScrollViewer.helpBody">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="AutomationProperties.Name" Value="Help content" />
+  </Style>
+  <Style Selector="Grid.compactHeight ScrollViewer.helpBody">
+    <Setter Property="Focusable" Value="True" />
+  </Style>
+
+  <!-- Compact tip (a11y conditions 1/2: trimming is VISUAL-ONLY over the full bound
+       text; HelpText carries it for AT; the tip is never a budget donor). Base Wrap value
+       lives HERE (not as a local XAML value) so the compact override below can win — a local
+       value on the element would outrank both style rules regardless of specificity. -->
+  <Style Selector="TextBlock.tipLine">
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+  <Style Selector="Grid.compactHeight TextBlock.tipLine">
+    <Setter Property="TextWrapping" Value="NoWrap" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </Style>
+
+  <!-- Splitter base + focus (base moves out of local values so :focus can win; >=3:1 vs
+       both panes, asserted by test). -->
+  <Style Selector="GridSplitter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="GridSplitter:focus">
+    <Setter Property="Background" Value="{DynamicResource AccentPrimary}" />
+  </Style>
+
   <!-- 12px content parity (see the ControlContentThemeFontSize note in Density.axaml). Avalonia's
        DEFAULT FontSize is already 12, so this style is enforcement against default/theme drift
        plus the written contract, not the supply. MUST be :is(Window) — a plain "Window" selector

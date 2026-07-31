@@ -187,6 +187,53 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
+    /// <summary>
+    /// Task 2 brief, Step 1: the HelpExpander per-mode/donation contract, exercised as its own
+    /// round-trip (compact entry resets to collapsed, user-opened HelpOpen tracks it, restore
+    /// re-flattens and turns donation off, re-entering compact resets again — durability is
+    /// compact-session scoped, not permanent). RED-FIRST as given: this test attaches the
+    /// expander AFTER the control has already been through its first Evaluate() (Host() shows
+    /// the window before SetHelpExpander runs) — a real gap Task 1's own tests never exercised,
+    /// since all of them attach the expander BEFORE first attachment. Fixed by
+    /// OnHelpExpanderChanged additionally synchronizing a just-attached expander to the CURRENT
+    /// mode (see CompactHeightBehavior.cs and the task report for the full analysis) — a narrow,
+    /// additive fix; no existing test's behavior changed.
+    /// </summary>
+    [AvaloniaFact]
+    public void HelpExpander_FlatWhenExpandedMode_ResetOnCompactEntry_TogglesHelpOpen()
+    {
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var expander = new Expander { [Grid.RowProperty] = 0 };
+            root.Children.Add(expander);
+            CompactHeightBehavior.SetHelpExpander(root, expander);
+            Dispatcher.UIThread.RunJobs();
+
+            // Expanded (normal) mode: behavior pins the flat state.
+            Assert.True(expander.IsExpanded);
+
+            w.Height = Threshold - 1;                    // enter compact
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(expander.IsExpanded);           // condition 5: starts collapsed
+            Assert.False(CompactHeightBehavior.GetHelpOpen(root));
+
+            expander.IsExpanded = true;                  // user opens Help
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(CompactHeightBehavior.GetHelpOpen(root));
+
+            w.Height = Threshold + 12;                   // restore to normal
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(expander.IsExpanded);            // flat again
+            Assert.False(CompactHeightBehavior.GetHelpOpen(root)); // donation off at normal
+
+            w.Height = Threshold - 1;                    // re-enter compact
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(expander.IsExpanded);           // durability is compact-session scoped
+        }
+        finally { w.Close(); }
+    }
+
     [AvaloniaFact]
     public void FocusInsideCollapsingRegion_MovesToDesignatedTarget_OnCompactOnly()
     {

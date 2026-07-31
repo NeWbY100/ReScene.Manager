@@ -132,8 +132,11 @@ public class ReconstructorViewTests
         {
             settingsTabs.SelectedIndex = i;
             Dispatcher.UIThread.RunJobs();
+            // The tab's own declared scroller — excludes TextBox internals (TemplatedParent
+            // filter) AND the small-window Help disclosure's body scroller (a sibling outside
+            // the settings TabControl, force-realized in normal/flat mode).
             ScrollViewer scroll = window.GetVisualDescendants().OfType<ScrollViewer>()
-                .Single(sv => sv.TemplatedParent is null); // the tab's declared scroller, not TextBox internals
+                .Single(sv => sv.TemplatedParent is null && settingsTabs.IsVisualAncestorOf(sv));
             Assert.Equal(ScrollBarVisibility.Auto, scroll.VerticalScrollBarVisibility);
             Assert.False(ScrollViewer.GetAllowAutoHide(scroll));
         }
@@ -166,7 +169,9 @@ public class ReconstructorViewTests
         settingsTabs.SelectedIndex = 1; // Versions
         Dispatcher.UIThread.RunJobs();
 
-        Expander group = window.GetVisualDescendants().OfType<Expander>().Single();
+        // Excludes the small-window Help disclosure's Expander (a sibling outside the settings
+        // TabControl, always in the tree since this task).
+        Expander group = window.GetVisualDescendants().OfType<Expander>().Single(e => e.Classes.Contains("versionGroup"));
         Assert.Contains("versionGroup", group.Classes);
 
         ToggleButton toggle = group.GetVisualDescendants().OfType<ToggleButton>()

@@ -465,6 +465,17 @@ internal static class CompactHeightBehavior
 
             expander.PropertyChanged += Handler;
             state.ExpanderIsExpandedHandler = Handler;
+
+            // Synchronize the JUST-ATTACHED expander to whatever mode already holds. The
+            // production wiring order (Threshold/HelpExpander both set in a view's ctor, before
+            // the control is ever attached) means the control's first real Evaluate() would
+            // normally do this anyway — but a HelpExpander attached to a control that has ALREADY
+            // been through at least one Evaluate() (state.Established) would otherwise be left at
+            // its own IsExpanded=false default forever, since nothing else re-synchronizes an
+            // already-settled mode to a newly-arriving expander. Harmless pre-attachment too:
+            // state.IsCompact's default (false) matches normal mode, and the real first Evaluate()
+            // re-applies whatever mode actually computes, superseding this early guess regardless.
+            ApplyHelpExpanderDirection(control, state, state.IsCompact);
         }
     }
 

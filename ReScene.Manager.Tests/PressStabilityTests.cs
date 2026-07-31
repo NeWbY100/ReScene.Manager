@@ -96,7 +96,9 @@ public class PressStabilityTests
         settingsTabs.SelectedIndex = 1; // Versions
         Dispatcher.UIThread.RunJobs();
 
-        Expander group = window.GetVisualDescendants().OfType<Expander>().Single();
+        // Excludes the small-window Help disclosure's Expander (a sibling outside the settings
+        // TabControl, always in the tree since this task).
+        Expander group = window.GetVisualDescendants().OfType<Expander>().Single(e => e.Classes.Contains("versionGroup"));
         group.IsExpanded = true;
         Dispatcher.UIThread.RunJobs();
         ToggleButton header = group.GetVisualDescendants().OfType<ToggleButton>().Single(t => t is not CheckBox);

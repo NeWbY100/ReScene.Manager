@@ -32,6 +32,21 @@ public partial class ReconstructorView : UserControl
     {
         AvaloniaXamlLoader.Load(this);
         DataContextChanged += OnDataContextChanged;
+
+        // Small-window layout degradation (spec rev 12 §1/§2): compact below 421 inner DIPs.
+        // x:CompileBindings="False" means x:Name elements are NOT wired to auto-generated fields
+        // here (same as every other ported view in this project — see BruteForceProgressWindow's
+        // own note); resolved once via FindControl instead.
+        Grid root = (Grid)Content!;
+        Expander helpDisclosure = this.FindControl<Expander>("HelpDisclosure")!;
+        Button windowsPackLink = this.FindControl<Button>("WindowsPackLink")!;
+        Behaviors.CompactHeightBehavior.SetThreshold(root, 421);
+        Behaviors.CompactHeightBehavior.SetRowSizes(root,
+            [new Behaviors.CompactRowSize(RowIndex: 4, NormalHeight: double.NaN,
+                CompactMinHeight: 96, HelpOpenMinHeight: 60, Mode: Behaviors.CompactRowMode.MinOnly)]);
+        Behaviors.CompactHeightBehavior.SetHelpExpander(root, helpDisclosure);
+        Behaviors.CompactHeightBehavior.SetHelpBodyMaxHeight(root, 38);
+        Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(root, windowsPackLink);
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
