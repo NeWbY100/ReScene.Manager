@@ -1,9 +1,10 @@
 # Small-Window Layout Degradation — Design
 
-Status: rev 10 — codex round-3 folded: body-scroller focusability is COMPACT-SCOPED
-(an always-focusable scroller added a normal-mode Tab stop — criterion F violation);
-result-banner polite announcement; guaranteed-terminal focus fallback. Pending codex
-round 4.
+Status: rev 11 — codex round-4 folded: root-as-terminal fallback (behavior-managed
+transient focusability — TopLevel is not focusable); relocation also fires on
+captured-element-unfocusable (not only obscured); Reconstructor body carries NO helpBody
+class; result announcement via the app's always-in-tree polite pattern; helpBody
+scrollers named. Pending codex round 5.
 
 ## Coordinate space (normative for every figure in this document)
 
@@ -86,7 +87,10 @@ Attached to the inner layout root; properties: `Threshold` (inner DIPs), optiona
   below. No focus change otherwise.
   Three riders (a11y rev-7 review):
   — PRECONDITION: steps 4–6 run only if the captured element was focused AND is a
-    descendant of THIS view root. A resize while focus sits in the shell menu, the tab
+    descendant of THIS view root. RELOCATION TRIGGER (codex round-4): steps 5–6 fire
+    when the captured element is obscured OR is no longer focusable (`Focusable` or
+    effective enablement lost — e.g. a compact-only-focusable helpBody scroller after
+    restore); an unfocusable focus-holder is stranding even when fully visible. A resize while focus sits in the shell menu, the tab
     strip, another window, or nowhere must never pull focus into the view (focus theft
     is worse than the stranding it would fix, and fires on an event the user did not
     initiate).
@@ -94,11 +98,13 @@ Attached to the inner layout root; properties: `Threshold` (inner DIPs), optiona
     a TEMPLATED part — the header ToggleButton exists only after template application,
     so an early or re-attach pass can miss it). Fallback chain, in order: the resolved
     direction target → the first FOCUSABLE descendant of the view root (the search
-    includes the header toggle and the RestoreFocusTarget) → the TopLevel itself via
-    `KeyboardNavigation` (an explicit, documented terminal — focus moves to the window,
-    which is always focusable, and the next Tab lands deterministically). A silent
-    no-op — focus left on an obscured element — is forbidden at every step; tests
-    assert which chain link resolved and that it is focusable.
+    includes the header toggle and the RestoreFocusTarget) → the VIEW ROOT as the
+    guaranteed terminal: the behavior sets `Focusable=true` on the root ONLY for the
+    hand-off (TopLevel is not focusable by default — codex round-4), focuses it, and
+    resets `Focusable=false` when the root loses focus, so no permanent Tab stop is
+    added and the next Tab lands deterministically inside the view. A silent no-op is
+    forbidden at every step; a dedicated test with a focusable-descendant-free view
+    forces the chain to the terminal and asserts the transient focusability round-trip.
   — DELIBERATE ASYMMETRY (do not "harmonize"): relocation triggers on ENTIRELY obscured
     (bounds not intersecting the clip intersection — the WCAG 2.4.11 AA line), while
     criterion C asserts the stricter FULLY WITHIN. Both are correct: C's Tab walk lets
@@ -193,10 +199,12 @@ modes; under `.compactHeight` it is styled to a single line — APPROVED with co
   class-scoped style (`.compactHeight … ScrollViewer.helpBody { Focusable: True }`;
   base style False) so NO normal-mode Tab stop is added (criterion F — codex round-3).
   In compact it takes Tab focus after the header toggle and scrolls with the arrow keys
-  (Avalonia's built-in focused-ScrollViewer key handling); asserted per view with real
-  key input in compact AND its absence from the normal-mode tab-order snapshot. The
-  Reconstructor's body is NEVER focusable — its link buttons are the keyboard route,
-  chaining BringIntoView as focus moves through them.
+  (Avalonia's built-in focused-ScrollViewer key handling); it carries
+  `AutomationProperties.Name="Help content"` (a focusable element must announce as
+  something — codex round-4); asserted per view with real key input in compact AND its
+  absence from the normal-mode tab-order snapshot. The Reconstructor's body is NEVER
+  focusable and does NOT take the `helpBody` class (its link buttons are the keyboard
+  route, chaining BringIntoView as focus moves through them).
 - Compact order: disclosure header → (body when expanded: intro → links in existing
   order) → toolbar → tip (single-line) / warning → work area → … Collapsed body is `IsVisible=false` ⇒ out of
   Tab and UIA. Toolbar and the conditional warning row are content — never collapsed.
@@ -235,9 +243,12 @@ replaced by a Grid whose rows are (codex rev-2 #3):
   SRSReconstructor: Reconstruct row + result Border (its capped two-line summary's
   FULL text reaches sighted keyboard users through the LOG, which always carries the
   complete result line — asserted; ToolTip serves pointer users, HelpText serves AT;
-  the summary TextBlock carries `AutomationProperties.LiveSetting="Polite"` so
-  completion/failure is ANNOUNCED — the existing live region covers Save-log only;
-  codex round-3);
+  completion/failure is ANNOUNCED via the app's established always-in-tree polite
+  pattern (a separate result-status TextBlock that is永ALWAYS in the tree with
+  `LiveSetting="Polite"`, empty text rendering nothing — the SaveLogStatus pattern;
+  setting text on a collapsed element then showing it races/loses the announcement,
+  codex round-4 — the visual banner keeps its IsVisible binding and stays
+  announcement-free);
   SampleRestorer: Restore row + ProgressBar + progress text.
   The band's worst height is asserted ≤ its headroom (319 − 24 − 120 − 80 − margins ≈ 84;
   a11y rev-2 NEW-4); the result banner gets `MaxHeight` + internal scroll/trimming.

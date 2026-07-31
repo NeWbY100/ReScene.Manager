@@ -4,13 +4,17 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
 > use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: rev 10 — codex rounds 1-3 + a11y riders folded. PENDING CODEX ROUND 4 — do
+**Status: rev 11 — codex rounds 1-4 + a11y riders folded. PENDING CODEX ROUND 5 — do
 not execute until codex approves (user directive: codex gates every step).**
 
 **Deferred (codex round-3 advisories — seed of the execution ledger's deferred list):**
 stale rev-number references in prose; duplicate/renumbered step references from the
 test-first reorder; criterion-E wording breadth; heading nesting; second-window and
-empty-focus transition coverage beyond the authored theft/outside tests.
+empty-focus transition coverage beyond the authored theft/outside tests; theft-test
+descendant-guard discrimination (the outside control is never obscured, so the guard's
+absence would also pass — a dedicated obscured-outside-focus case would pin it);
+scroller focus-visual/contrast proof; splitter high-contrast coverage; real-key link
+activation; rendered full-log access.
 
 (The formerly-pending SRSCreator inventory nit is folded — spec rev 7 corrected it.)
 
@@ -367,6 +371,66 @@ public class CompactHeightBehaviorTests
     }
 
     [AvaloniaFact]
+    public void ChainTerminal_RootGetsTransientFocusability()
+    {
+        // Spec rev 11: a view with NO focusable descendants forces the chain to its
+        // terminal — the root itself, made focusable only for the hand-off.
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var collapsing = new Button { Content = "only", [Grid.RowProperty] = 0 };
+            root.Children.Add(collapsing);
+            root.Classes.CollectionChanged += (_, _) =>
+                collapsing.IsVisible = !root.Classes.Contains("compactHeight");
+            Dispatcher.UIThread.RunJobs();
+            collapsing.Focus();
+            Dispatcher.UIThread.RunJobs();
+
+            w.Height = Threshold - 1;              // → compact; the ONLY focusable hides
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(root.IsFocused, "the chain must terminate at the root");
+            Assert.True(root.Focusable, "behavior grants transient focusability");
+
+            var other = new Button { Content = "x", [Grid.RowProperty] = 2 };
+            root.Children.Add(other);
+            Dispatcher.UIThread.RunJobs();
+            other.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(root.Focusable, "focusability is reset when the root loses focus");
+        }
+        finally { w.Close(); }
+    }
+
+    [AvaloniaFact]
+    public void UnfocusableAfterRestore_Relocates_EvenThoughVisible()
+    {
+        // Spec rev 11 trigger: restore leaves a compact-only-focusable element visible
+        // but unfocusable — focus must move to the RestoreFocusTarget.
+        (Window w, Grid root) = Host(Threshold - 1);
+        try
+        {
+            var scroller = new ScrollViewer { [Grid.RowProperty] = 2, Focusable = true };
+            var restoreTarget = new Button { Content = "input", [Grid.RowProperty] = 1 };
+            root.Children.Add(scroller);
+            root.Children.Add(restoreTarget);
+            CompactHeightBehavior.SetRestoreFocusTarget(root, restoreTarget);
+            root.Classes.CollectionChanged += (_, _) =>
+                scroller.Focusable = root.Classes.Contains("compactHeight");
+            Dispatcher.UIThread.RunJobs();
+
+            scroller.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(scroller.IsFocused);
+
+            w.Height = Threshold + 40;             // → restore; scroller stays visible
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(restoreTarget.IsFocused,
+                "an unfocusable focus-holder is stranding even when fully visible");
+        }
+        finally { w.Close(); }
+    }
+
+    [AvaloniaFact]
     public void ClippedButRecoverable_Focus_IsBroughtIntoView_NotRelocated()
     {
         // Spec rev 7 step (5): an element merely scrolled out of a viewport is recovered
@@ -532,7 +596,11 @@ internal static class CompactHeightBehavior
     //
     // HelpOpenProperty.Changed → if compact, re-run ApplyRows (donation swap only).
     //
-    // Staged focus (spec rev 7, both directions):
+    // Staged focus (spec rev 7/11, both directions):
+    //   RELOCATION TRIGGER: obscured OR no-longer-focusable (a compact-only-focusable
+    //     helpBody scroller after restore is VISIBLE but unfocusable — stranded).
+    //   TERMINAL: the view root with behavior-managed transient focusability
+    //     (Focusable=true for the hand-off, reset on the root's LostFocus).
     //   captured = focused element, taken BEFORE styles/rows apply;
     //   after the post-apply layout pass:
     //   IsObscured(el) = el is detached, OR any ancestor IsVisible==false, OR the
@@ -765,11 +833,11 @@ internal static class CompactViewRig
       <Expander.Header>
         <TextBlock Text="Help &amp; links" FontSize="{DynamicResource FontSizeCaption}" />
       </Expander.Header>
-      <!-- The BODY ScrollViewer is the HelpBodyMaxHeight target. NOT focusable —
-           the Reconstructor's links are the keyboard route (spec §2 rev 10; a
-           focusable scroller would add a normal-mode Tab stop, criterion F). Inset on
+      <!-- The BODY ScrollViewer is the HelpBodyMaxHeight target. NO helpBody class
+           and never focusable — the Reconstructor's links are the keyboard route
+           (spec §2 rev 11: the class-pair would make it compact-focusable). Inset on
            the content panel per the house rule. -->
-      <ScrollViewer Classes="helpBody" VerticalScrollBarVisibility="Auto"
+      <ScrollViewer VerticalScrollBarVisibility="Auto"
                     ScrollViewer.AllowAutoHide="False">
         <StackPanel Margin="0,0,4,0">
           <!-- existing intro TextBlock (verbatim) -->
@@ -834,6 +902,7 @@ internal static class CompactViewRig
        the route. -->
   <Style Selector="ScrollViewer.helpBody">
     <Setter Property="Focusable" Value="False" />
+    <Setter Property="AutomationProperties.Name" Value="Help content" />
   </Style>
   <Style Selector="Grid.compactHeight ScrollViewer.helpBody">
     <Setter Property="Focusable" Value="True" />
@@ -1097,7 +1166,13 @@ pinned band = separator + action DockPanel (Rebuild Sample) + result Border (con
          "CharacterEllipsis" + MaxLines=2 on its TextBlock so a long ResultSummary is
          bounded — a11y rev-3 NEW-4's banner cap; ToolTip.Tip AND
          AutomationProperties.HelpText both bind the full summary — the same
-         visual-only-trim rule as the tip) /
+         visual-only-trim rule as the tip. The ANNOUNCEMENT rides a separate
+         always-in-tree TextBlock beside SaveLogStatus in the log header —
+         x:Name="ResultStatus", Text="{Binding ResultSummary}",
+         AutomationProperties.LiveSetting="Polite", empty text renders nothing — the
+         established SaveLogStatus pattern; text set on a collapsed element then shown
+         races/loses the announcement, codex round-4. The visual banner keeps its
+         IsVisible binding and carries NO LiveSetting) /
          separator. -->
 
     <!-- 3: log band — verbatim log DockPanel + the LogHeader/LabeledBy pairing (as in
@@ -1138,8 +1213,10 @@ pinned band = separator + action DockPanel (Rebuild Sample) + result Border (con
     //    cap and the FULL text is exposed (UIA Name/ToolTip/HelpText) — trimming is
     //    visual-only, same rule as the tip; the LOG contains the complete result line
     //    (the sighted-keyboard route — assert LogEntries carries the full summary);
-    //    the summary TextBlock has LiveSetting="Polite" and its text populates on
-    //    completion (the announcement — codex round-3).
+    //    the ALWAYS-IN-TREE ResultStatus TextBlock (SaveLogStatus pattern) carries
+    //    LiveSetting="Polite" and its text populates on completion while it was
+    //    already realized — the announcement path that survives visibility races
+    //    (codex round-4).
     // 7. Compact body keys: in compact with Help open, Tab reaches the body scroller
     //    (focusable in compact only) and real Down-arrow presses increase its Offset;
     //    at NORMAL size the scroller is NOT focusable and absent from the tab-order
@@ -1423,6 +1500,6 @@ ProgressMessage); the in-scroller splitter is `Height="5"` with a local
 - [ ] **Step 5: Docs** — CHANGELOG Unreleased: "Task pages now adapt to small windows:
   panes shrink and scroll instead of clipping, header help collapses behind a disclosure,
   and every control stays reachable by keyboard at the minimum window size (700×450)."
-  Spec status → "rev 6 — implemented <commit>", folding the SRSCreator-inventory nit.
+  Spec status → "rev 11 — implemented <commit>".
 - [ ] **Step 6: Commit** `docs: small-window layout complete` + report the acceptance
   smoke for the user: VM visual pass over all five tabs at the VM's native size.
