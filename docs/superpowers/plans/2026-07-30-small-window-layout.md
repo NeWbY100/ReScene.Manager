@@ -4,8 +4,9 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
 > use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: rev 6 — ALL 7 TASKS AUTHORED (against spec rev 6). PENDING CODEX PLAN REVIEW —
-do not execute until codex approves (user directive: codex gates every step).**
+**Status: rev 7 — codex plan-review round 1 folded (9 blocking). PENDING CODEX
+RE-REVIEW — do not execute until codex approves (user directive: codex gates every
+step).**
 
 **Pending spec nits (batch into the next spec touch, do not block):** §4's SRSCreator
 feedback inventory wrongly lists a "result banner" — SRSCreatorView has none (the outcome
@@ -29,7 +30,7 @@ ReScene.Manager.Tests harness), frame rig + ava-desktop for visual verification.
 
 ## Global Constraints
 
-- Spec rev 4 is normative; its §1 numbers are design targets — the invariant test measures
+- Spec rev 7 is normative; its §1 numbers are design targets — the invariant test measures
   rendered truth. All heights in inner-content DIPs (view's inner layout root).
 - 307 = the hard CI bound (319 available at 700×450 minus 12 jitter slack).
 - Pixel-identical at normal sizes (criterion F: five-view frame-rig parity + both-mode
@@ -60,8 +61,15 @@ ReScene.Manager.Tests harness), frame rig + ava-desktop for visual verification.
 **Interfaces (later tasks consume):**
 - `CompactHeightBehavior.ThresholdProperty` (attached `double`, inner DIPs; NaN = off).
 - `CompactHeightBehavior.RowSizesProperty` (attached `IReadOnlyList<CompactRowSize>`).
-- `CompactHeightBehavior.HelpOpenProperty` (attached `bool`; the view binds it to the Help
-  expander's `IsExpanded`; while compact AND open, donation values apply).
+- `CompactHeightBehavior.HelpOpenProperty` (attached `bool`; managed by the HelpExpander
+  wiring; while compact AND open, donation values apply).
+- `CompactHeightBehavior.RestoreFocusTargetProperty` (attached `Control?`; the per-view
+  control focused when leaving compact strands focus — spec rev 7). The COMPACT-direction
+  target is derived: the realized header ToggleButton of the attached HelpExpander (the
+  Expander control itself is not focusable).
+- `CompactHeightBehavior.HelpBodyMaxHeightProperty` (attached `double`; the behavior
+  applies it as MaxHeight on the expander body's internal ScrollViewer — the
+  invariant-verified donated budget, per view).
 - `CompactRowSize` record + `CompactRowMode` enum (one type per file):
   `internal sealed record CompactRowSize(int RowIndex, double NormalHeight, double CompactMinHeight, double HelpOpenMinHeight, CompactRowMode Mode);`
   `internal enum CompactRowMode { MinOnly, PixelRestore, AutoToStar }`
@@ -77,8 +85,9 @@ ReScene.Manager.Tests harness), frame rig + ava-desktop for visual verification.
   attached to DESCENDANT grids of the threshold-bearing root (e.g. a grid inside the
   config band's ScrollViewer, whose own bounds never shrink and so cannot carry a
   threshold). On mode/help changes the owning behavior applies its root's RowSizes AND
-  every descendant-attached list; descendants are found once on attach (visual-tree walk)
-  and re-collected on re-attach.
+  every descendant-attached list; descendants are COLLECTED AT EACH APPLY (a cheap
+  visual-tree walk on mode/help changes only) — no cached discovery, so attachment order
+  and late tree construction cannot produce stale row sets.
 - `CompactInvariantRig.MeasureFloor(Control innerRoot)` → double (sum of the root's
   children's desired heights + spacing at width 676, conditionals forced by the caller).
 
@@ -279,13 +288,18 @@ public class CompactHeightBehaviorTests
         (Window w, Grid root) = Host(Threshold + 50);
         try
         {
+            // Direction-specific targets (spec rev 7): compact target = the expander's
+            // realized header toggle; restore target = a named normal-mode control.
+            var expander = new Expander { [Grid.RowProperty] = 2 };
             var collapsing = new Button { Content = "link", [Grid.RowProperty] = 0 };
-            var target = new Button { Content = "helpHeader", [Grid.RowProperty] = 2 };
+            var restoreTarget = new Button { Content = "firstInput", [Grid.RowProperty] = 1 };
+            root.Children.Add(expander);
             root.Children.Add(collapsing);
-            root.Children.Add(target);
-            CompactHeightBehavior.SetFocusFallback(root, target);
-            // The style that hides row-0 content in compact is app-level; the unit test
-            // simulates it: collapsing region hides when the class lands.
+            root.Children.Add(restoreTarget);
+            CompactHeightBehavior.SetHelpExpander(root, expander);
+            CompactHeightBehavior.SetRestoreFocusTarget(root, restoreTarget);
+            // The app-level styles hide row-0 content in compact and the expander header
+            // at normal; the unit test simulates both with the class:
             root.Classes.CollectionChanged += (_, _) =>
                 collapsing.IsVisible = !root.Classes.Contains("compactHeight");
             Dispatcher.UIThread.RunJobs();
@@ -296,12 +310,42 @@ public class CompactHeightBehaviorTests
 
             w.Height = Threshold - 1;              // → compact; collapsing hides
             Dispatcher.UIThread.RunJobs();
-            Assert.True(target.IsFocused,
-                "focus must relocate to the designated fallback when its element collapses");
+            var headerToggle = expander.GetVisualDescendants().OfType<ToggleButton>().First();
+            Assert.True(headerToggle.IsFocused,
+                "focus must land on the HEADER TOGGLE (the Expander itself is not focusable)");
 
-            w.Height = Threshold + 12;             // → restore; no focus change expected
+            w.Height = Threshold + 12;             // → restore; the toggle hides (flat mode)
             Dispatcher.UIThread.RunJobs();
-            Assert.True(target.IsFocused);
+            Assert.True(restoreTarget.IsFocused,
+                "restore-direction stranding must land on the RestoreFocusTarget");
+        }
+        finally { w.Close(); }
+    }
+
+    [AvaloniaFact]
+    public void ClippedButRecoverable_Focus_IsBroughtIntoView_NotRelocated()
+    {
+        // Spec rev 7 step (5): an element merely scrolled out of a viewport is recovered
+        // via BringIntoView, never relocated.
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var scroller = new ScrollViewer { [Grid.RowProperty] = 2, Height = 60 };
+            var stack = new StackPanel();
+            for (int i = 0; i < 10; i++) stack.Children.Add(new Button { Content = $"b{i}", Height = 30 });
+            scroller.Content = stack;
+            root.Children.Add(scroller);
+            Dispatcher.UIThread.RunJobs();
+
+            Button last = (Button)stack.Children[^1];
+            last.Focus();
+            scroller.Offset = default;             // scroll the focused button out of view
+            Dispatcher.UIThread.RunJobs();
+
+            w.Height = Threshold - 1;              // transition runs the obscurement check
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(last.IsFocused, "recoverable focus must be brought into view, not relocated");
+            Assert.True(scroller.Offset.Y > 0, "BringIntoView must have scrolled the viewer");
         }
         finally { w.Close(); }
     }
@@ -330,23 +374,46 @@ public class CompactHeightBehaviorTests
   `dotnet test --no-build --filter FullyQualifiedName~CompactHeightBehavior`.
   Expected: compile error (`CompactHeightBehavior` missing) — that is the red.
 
-- [ ] **Step 3: Implement `CompactRowSize.cs`** (one type per file):
+- [ ] **Step 3: Implement `CompactRowMode.cs` and `CompactRowSize.cs`** (one type per
+  file, both verbatim):
 
 ```csharp
 namespace ReScene.Manager.Behaviors;
 
 /// <summary>
-/// One RowDefinition's per-mode sizing for <see cref="CompactHeightBehavior"/> (spec §1):
-/// RowDefinitions are not styleable (no Classes), so the behavior owns their mode values.
-/// <see cref="HeightIsPixel"/> rows restore <c>Height = NormalHeight</c> pixels on expand
-/// — unless the user dragged a splitter, in which case the captured drag height wins.
+/// How <see cref="CompactHeightBehavior"/> treats one RowDefinition across modes
+/// (RowDefinitions are not styleable, so the behavior owns their values — spec §1).
+/// </summary>
+internal enum CompactRowMode
+{
+    /// <summary>Height untouched; only MinHeight swaps per mode (star work rows).</summary>
+    MinOnly,
+
+    /// <summary>Compact sets Height = CompactMinHeight px; expand restores
+    /// Height = NormalHeight px unless a splitter drag was captured (fixed pixel rows
+    /// such as CreatorView's stored-files row).</summary>
+    PixelRestore,
+
+    /// <summary>Compact sets Height = 1* with MinHeight = CompactMinHeight; expand
+    /// restores Height = Auto, MinHeight = 0 (three-band config rows).</summary>
+    AutoToStar,
+}
+```
+
+```csharp
+namespace ReScene.Manager.Behaviors;
+
+/// <summary>
+/// One RowDefinition's per-mode sizing for <see cref="CompactHeightBehavior"/> (spec §1).
+/// While compact AND the Help body is open, <see cref="HelpOpenMinHeight"/> replaces
+/// <see cref="CompactMinHeight"/> (the donation rule).
 /// </summary>
 internal sealed record CompactRowSize(
     int RowIndex,
     double NormalHeight,
     double CompactMinHeight,
     double HelpOpenMinHeight,
-    bool HeightIsPixel);
+    CompactRowMode Mode);
 ```
 
 - [ ] **Step 4: Implement `CompactHeightBehavior.cs`** — attached-property static class in
@@ -365,20 +432,29 @@ namespace ReScene.Manager.Behaviors;
 /// Toggles the <c>compactHeight</c> style class on a view's inner layout root from its own
 /// bounds height (spec §1): compact when height &lt; Threshold, restore at ≥ Threshold+12
 /// (restore-only hysteresis — a fresh instance at Threshold+1 starts expanded). Applies
-/// per-view <see cref="CompactRowSize"/> values (RowDefinitions cannot be styled), applies
-/// help-open donation minimums, and relocates focus to <c>FocusFallback</c> when the
-/// focused element is inside a region the compact styles collapse.
+/// per-view <see cref="CompactRowSize"/> values on the root AND on descendant grids
+/// carrying their own RowSizes attachment (collected at each apply), applies help-open
+/// donation, manages the Help expander's per-mode state, and runs the spec rev-7 staged
+/// focus algorithm across transitions.
 /// </summary>
 internal static class CompactHeightBehavior
 {
     private const string ClassName = "compactHeight";
     private const double RestoreSlack = 12;
 
-    public static readonly AttachedProperty<double> ThresholdProperty = /* RegisterAttached, default double.NaN */;
-    public static readonly AttachedProperty<IReadOnlyList<CompactRowSize>?> RowSizesProperty = /* … */;
-    public static readonly AttachedProperty<bool> HelpOpenProperty = /* … */;
-    public static readonly AttachedProperty<Control?> FocusFallbackProperty = /* … */;
-    // + Get/Set statics for each, per house pattern.
+    public static readonly AttachedProperty<double> ThresholdProperty =
+        AvaloniaProperty.RegisterAttached<Control, double>("Threshold", typeof(CompactHeightBehavior), double.NaN);
+    public static readonly AttachedProperty<IReadOnlyList<CompactRowSize>?> RowSizesProperty =
+        AvaloniaProperty.RegisterAttached<Control, IReadOnlyList<CompactRowSize>?>("RowSizes", typeof(CompactHeightBehavior));
+    public static readonly AttachedProperty<bool> HelpOpenProperty =
+        AvaloniaProperty.RegisterAttached<Control, bool>("HelpOpen", typeof(CompactHeightBehavior));
+    public static readonly AttachedProperty<Expander?> HelpExpanderProperty =
+        AvaloniaProperty.RegisterAttached<Control, Expander?>("HelpExpander", typeof(CompactHeightBehavior));
+    public static readonly AttachedProperty<Control?> RestoreFocusTargetProperty =
+        AvaloniaProperty.RegisterAttached<Control, Control?>("RestoreFocusTarget", typeof(CompactHeightBehavior));
+    public static readonly AttachedProperty<double> HelpBodyMaxHeightProperty =
+        AvaloniaProperty.RegisterAttached<Control, double>("HelpBodyMaxHeight", typeof(CompactHeightBehavior), double.NaN);
+    // + Get/Set statics for each, per the ListBoxAutoScroll house pattern.
 
     // Per-instance state via ConditionalWeakTable<Control, State>:
     //   bool isCompact; bool updateQueued; double? capturedDragHeight[row].
@@ -411,10 +487,21 @@ internal static class CompactHeightBehavior
     //
     // HelpOpenProperty.Changed → if compact, re-run ApplyRows (donation swap only).
     //
-    // RelocateFocusIfHidden: focused = TopLevel.GetTopLevel(control)?.FocusManager?
-    //   .GetFocusedElement() as Visual; if focused is a descendant of control and
-    //   !focused.IsEffectivelyVisible → (GetFocusFallback(control) ?? control).Focus().
-    //   Runs in BOTH directions (spec §1: expanding can hide the expander header).
+    // Staged focus (spec rev 7, both directions):
+    //   captured = focused element, taken BEFORE styles/rows apply;
+    //   after the post-apply layout pass:
+    //   IsObscured(el) = el is detached, OR any ancestor IsVisible==false, OR the
+    //     element's rendered bounds do not intersect the INTERSECTION of every clipping
+    //     ancestor's viewport (IsEffectivelyVisible alone is insufficient — it ignores
+    //     clipping);
+    //   if IsObscured(captured): captured.BringIntoView(); re-run layout; re-check;
+    //   if STILL obscured: (entering compact → the HelpExpander's realized header
+    //     ToggleButton; leaving → GetRestoreFocusTarget(root)).Focus().
+    //
+    // HelpExpander wiring: entering compact → IsExpanded = false (condition-5 reset);
+    //   entering normal → IsExpanded = true (flat mode). Subscribe IsExpanded →
+    //   SetHelpOpen(root, isCompact && IsExpanded). While compact && open, apply
+    //   HelpBodyMaxHeight to the body ScrollViewer (found in the expander content).
 }
 ```
 
@@ -441,14 +528,51 @@ internal static class CompactInvariantRig
     public const double InnerWidth = 676;
 
     /// <summary>
-    /// The rendered floor of an inner root: measure with infinite height at InnerWidth and
-    /// return the desired height. Callers force conditional rows visible and set the mode
-    /// class BEFORE measuring; this helper only measures.
+    /// The ROW-AWARE floor of an inner Grid (codex round-1 #5: a naive
+    /// Measure(∞) reports CONTENT height for star and scrolling rows, not their
+    /// minimums): Σ per RowDefinition — star rows contribute MinHeight; pixel rows their
+    /// Height; Auto rows the max desired height of their children measured at
+    /// InnerWidth×∞ — plus inter-row margins. Callers force conditional rows visible and
+    /// set the mode class BEFORE calling.
     /// </summary>
-    public static double MeasureFloor(Control innerRoot)
+    public static double MeasureFloor(Grid innerRoot)
     {
         innerRoot.Measure(new Size(InnerWidth, double.PositiveInfinity));
-        return innerRoot.DesiredSize.Height;
+        double total = 0;
+        for (int i = 0; i < innerRoot.RowDefinitions.Count; i++)
+        {
+            RowDefinition row = innerRoot.RowDefinitions[i];
+            if (row.Height.IsAbsolute) { total += row.Height.Value; continue; }
+            if (row.Height.IsStar) { total += row.MinHeight; continue; }
+            double rowDesired = 0;
+            foreach (Control child in innerRoot.Children.OfType<Control>())
+            {
+                if (Grid.GetRow(child) != i) continue;
+                rowDesired = Math.Max(rowDesired,
+                    child.DesiredSize.Height + child.Margin.Top + child.Margin.Bottom);
+            }
+            total += rowDesired;
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// Arrangement assertion: arrange the root at InnerWidth × the given height and
+    /// verify NO child's rendered bounds extend past the bottom edge (the rendered form
+    /// of "the floor fits"). Complements MeasureFloor — the invariant tests run both.
+    /// </summary>
+    public static void AssertArrangesWithin(Grid innerRoot, double height)
+    {
+        innerRoot.Measure(new Size(InnerWidth, height));
+        innerRoot.Arrange(new Rect(0, 0, InnerWidth, height));
+        foreach (Control child in innerRoot.Children.OfType<Control>())
+        {
+            if (!child.IsVisible) continue;
+            double bottom = child.Bounds.Y + child.Bounds.Height;
+            if (bottom > height + 0.5)
+                throw new Xunit.Sdk.XunitException(
+                    $"{child.GetType().Name} bottom {bottom:F1} exceeds {height}");
+        }
     }
 }
 ```
