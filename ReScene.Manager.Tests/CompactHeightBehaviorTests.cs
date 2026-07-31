@@ -576,22 +576,21 @@ public class CompactHeightBehaviorTests
     /// 110..115, with a 100..110 gap between them), so no single point of target is ever
     /// actually visible through both at once: the true combined region (their intersection,
     /// empty here) excludes it entirely.
-    /// PROVABLY, this exact shape of counter-example cannot ALSO be "fully recovered by a single
-    /// BringIntoView call, with the outer viewer specifically visibly moving": for the
+    /// It remains true that a SINGLE BringIntoView call cannot recover this shape: for the
     /// discriminating case to exist at all, target must extend beyond the INNER scroller's own
     /// range (if target were wholly within inner's own range, "vs outer independently passes"
     /// would force the combined intersection to include it too — algebraically, X⊆A and X∩B≠∅
-    /// together imply X∩(A∩B)≠∅). Since BringIntoView bubbles from target outward, inner —
-    /// always the first ancestor in that path — is the one that must, and does, adjust
-    /// (confirmed empirically: inner.Offset moves to bring target within its OWN view), and it
-    /// does not propagate a further request once it has acted (confirmed empirically: outer's
-    /// offset is left untouched). Outer's own clip therefore still excludes target after the
-    /// recovery attempt, so relocation correctly proceeds — this is the honest, verified
-    /// end-state, not "final focus stays on target" (which held for the REPLACED test's
-    /// different geometry, where outer alone needed to move and did).
-    /// Fix-round-3 correction: this also fixes the fix-round-2 version's reversed RED/GREEN
-    /// docstring wording and replaces its non-committal "either offset changed" assertion with
-    /// the concrete, provable one below.
+    /// together imply X∩(A∩B)≠∅), so inner — always the first ancestor in the bubble path — is
+    /// the one that adjusts, and having adjusted it sets e.Handled and the outer never sees
+    /// request 1.
+    /// FIX-ROUND-5 CORRECTION: rounds 3 and 4 stopped there and concluded relocation was the
+    /// only available end-state. That was an artifact of the implementation's one-attempt-per-
+    /// target rule, not of Avalonia. A SECOND request finds inner already satisfied (it returns
+    /// false, leaving e.Handled false) and therefore reaches the outer, which completes the
+    /// recovery — so the correct end-state is that target KEEPS focus. The retry-on-progress
+    /// rule is covered directly by
+    /// <see cref="PartialInnerProgress_SecondRequestReachesOuter_TargetRecovered"/>; what THIS
+    /// test still owns, and asserts below, is the DETECTION half.
     /// RED/GREEN proof (re-verified for this exact test): with IsObscured temporarily reverted
     /// to the pre-fix, per-clipper-independent implementation, this test FAILS (both
     /// independent checks pass, so IsObscured never even calls BringIntoView and neither offset
@@ -638,13 +637,11 @@ public class CompactHeightBehaviorTests
                 "inner attempted to bring target into its OWN view — proves BringIntoView ran, " +
                 "which only happens if IsObscured's initial verdict was true (the old per-clipper " +
                 "check would see no obscurement and never call it at all)");
-            Assert.True(outer.Offset.Y == 110,
-                "outer's own clip is untouched by inner's recovery attempt, so target remains " +
-                "genuinely obscured through it — proving the combined check, not just inner's, governs");
-            Assert.False(target.IsFocused,
-                "target is still obscured (by outer) after the recovery attempt, so it must relocate");
-            Assert.True(fallbackTarget.IsFocused,
-                "detection correctly triggered full relocation through the fallback chain");
+            Assert.True(target.IsFocused,
+                "detection triggered recovery, and recovery completes here (fix round 5): inner " +
+                "consumed request 1, the retry reached outer, and target is visible through both");
+            Assert.False(fallbackTarget.IsFocused,
+                "recoverable focus is never relocated");
         }
         finally { w.Close(); }
     }
@@ -985,6 +982,174 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
+    /// <summary>
+    /// Fix round 5, item #1: one BringIntoView request per target is not enough. A scroller
+    /// that PARTIALLY satisfies a request still consumes it — <c>ScrollContentPresenter</c>
+    /// sets <c>e.Handled = BringDescendantIntoView(...)</c>, true whenever it moved — so the
+    /// next scroller outward never sees request 1. Round 4's one-attempt-per-target rule
+    /// therefore relocated focus that a second request would have recovered.
+    /// Geometry (the disjoint-overlap shape, whose target straddles the two clippers' gap):
+    /// target at inner-content [95,115], inner viewport 100 at offset 0, outer viewport 100 at
+    /// offset 110. Request 1: inner scrolls to 15 (bringing target into its OWN view) and
+    /// consumes it — target is still cumulatively obscured, since outer's clip excludes it.
+    /// Request 2: inner is now satisfied and returns false, so the request bubbles ON and outer
+    /// scrolls 110 -> 80, putting target at root [190,210] inside the cumulative region
+    /// [190,290] ∩ [110,210]. The loop must issue BOTH — asserted by counting the requests the
+    /// target actually receives — and target must keep focus.
+    /// </summary>
+    [AvaloniaFact]
+    public void PartialInnerProgress_SecondRequestReachesOuter_TargetRecovered()
+    {
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var inner = new ScrollViewer { Height = 100 };
+            var innerStack = new StackPanel();
+            innerStack.Children.Add(new Border { Height = 95 });
+            var target = new Button { Content = "target", Height = 20 };
+            innerStack.Children.Add(target);
+            inner.Content = innerStack;
+
+            var outer = new ScrollViewer { [Grid.RowProperty] = 2, Height = 100 };
+            var outerStack = new StackPanel();
+            outerStack.Children.Add(inner);
+            outerStack.Children.Add(new Border { Height = 200 });
+            outer.Content = outerStack;
+
+            var fallbackTarget = new Button { Content = "fallback", [Grid.RowProperty] = 1 };
+            root.Children.Add(fallbackTarget);
+            root.Children.Add(outer);
+            Dispatcher.UIThread.RunJobs();
+
+            target.Focus();
+            inner.Offset = default;
+            outer.Offset = new Vector(0, 110);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(0, inner.Offset.Y);
+            Assert.Equal(110, outer.Offset.Y);
+
+            // Attached only after the setup Focus(), which raises a request of its own.
+            int requests = 0;
+            target.AddHandler(Control.RequestBringIntoViewEvent, (_, _) => requests++);
+
+            w.Height = Threshold - 1;
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(2, requests);
+            Assert.True(inner.Offset.Y != 0, "request 1 was partially consumed by inner");
+            Assert.True(outer.Offset.Y < 110, "request 2 reached outer, which completed the recovery");
+            Assert.True(target.IsFocused, "recoverable focus is brought into view across BOTH clippers, never relocated");
+            Assert.False(fallbackTarget.IsFocused);
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 5, item #2: the boundary of <c>MaxBringIntoViewAttempts</c>. With retry gated
+    /// on progress, a well-behaved tree terminates on its own — every request either moves a
+    /// scroller (and the next one starts from a strictly better position) or moves nothing and
+    /// exhausts that target. The cap exists only for the pathological case this rig builds: a
+    /// handler that fakes progress forever, nudging an ancestor scroller on every request while
+    /// the target stays permanently obscured. Target sits at [25,55] inside a 20-tall
+    /// ClipToBounds Border, so it is clipped away no matter what — yet it is within the outer
+    /// ScrollViewer's own viewport, so the real BringIntoView never moves that scroller and the
+    /// handler's 1px nudge is the sole (and monotone) source of "progress". The loop must stop
+    /// at exactly the cap and fall through to relocation.
+    /// </summary>
+    [AvaloniaFact]
+    public void FakedProgressForever_StopsAtTheCap_AndRelocates()
+    {
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var clipper = new Border { Height = 20, ClipToBounds = true };
+            var clippedHost = new StackPanel();
+            var target = new Button { Content = "target", Height = 30, Margin = new Thickness(0, 25, 0, 0) };
+            clippedHost.Children.Add(target);
+            clipper.Child = clippedHost;
+
+            var scroller = new ScrollViewer { [Grid.RowProperty] = 2, Height = 100 };
+            var scrollerStack = new StackPanel();
+            scrollerStack.Children.Add(clipper);
+            scrollerStack.Children.Add(new Border { Height = 500 });   // genuine scroll room
+            scroller.Content = scrollerStack;
+
+            var fallbackTarget = new Button { Content = "fallback", [Grid.RowProperty] = 1 };
+            root.Children.Add(fallbackTarget);
+            root.Children.Add(scroller);
+            Dispatcher.UIThread.RunJobs();
+
+            target.Focus();
+            scroller.Offset = default;
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(0, scroller.Offset.Y);
+
+            int requests = 0;
+            target.AddHandler(Control.RequestBringIntoViewEvent, (_, _) =>
+            {
+                requests++;
+                scroller.Offset = new Vector(0, scroller.Offset.Y + 1);   // faked progress
+            });
+
+            w.Height = Threshold - 1;
+            Dispatcher.UIThread.RunJobs();
+
+            int cap = GetMaxBringIntoViewAttempts();
+            Assert.Equal(8, cap);
+            Assert.Equal(cap, requests);
+            Assert.False(target.IsFocused, "the target never becomes visible, so it cannot keep focus");
+            Assert.True(fallbackTarget.IsFocused, "hitting the cap falls through to relocation, never to a silent stop");
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 5, item #3: a synchronous BringIntoView handler can CLEAR focus outright.
+    /// The captured element is then recovered and looks perfectly settled — attached, visible,
+    /// focusable — while NOTHING at all is focused, and the recovery would return leaving the
+    /// window with empty focus (keyboard and screen-reader users stranded with no focus ring
+    /// and no reachable starting point). A relocation this behavior initiated must never end
+    /// that way: settled-but-nothing-focused hands off through the fallback chain, so the
+    /// direction target — here the RestoreFocusTarget — ends focused.
+    /// </summary>
+    [AvaloniaFact]
+    public void BringIntoViewHandlerClearedFocus_SettledButEmpty_HandsOffToDirectionTarget()
+    {
+        (Window w, Grid root) = Host(Threshold - 1);
+        try
+        {
+            var restoreTarget = new Button { Content = "restoreTarget", [Grid.RowProperty] = 1 };
+            var scroller = new ScrollViewer { [Grid.RowProperty] = 2, Height = 60 };
+            var stack = new StackPanel();
+            for (int i = 0; i < 10; i++) stack.Children.Add(new Button { Content = $"b{i}", Height = 30 });
+            scroller.Content = stack;
+            root.Children.Add(restoreTarget);
+            root.Children.Add(scroller);
+            CompactHeightBehavior.SetRestoreFocusTarget(root, restoreTarget);
+            Dispatcher.UIThread.RunJobs();
+
+            var captured = (Button)stack.Children[^1];
+            captured.Focus();
+            scroller.Offset = default;             // scroll captured out of view
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(captured.IsFocused);
+
+            // Attached after the setup Focus() (which raises a request of its own). Fires
+            // synchronously inside captured.BringIntoView(), before the scroller recovers it.
+            captured.AddHandler(Control.RequestBringIntoViewEvent,
+                (_, _) => TopLevel.GetTopLevel(root)!.FocusManager!.ClearFocus());
+
+            w.Height = Threshold + 40;             // -> restore; runs the staged recovery
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(scroller.Offset.Y > 0,
+                "setup precondition: BringIntoView DID recover captured, so it reads as settled");
+            Assert.True(restoreTarget.IsFocused,
+                "settled with nothing focused must hand off through the chain to the direction target");
+        }
+        finally { w.Close(); }
+    }
+
     private static object GetPrivateState(Control control)
     {
         FieldInfo statesField = typeof(CompactHeightBehavior).GetField("_states", BindingFlags.NonPublic | BindingFlags.Static)!;
@@ -998,6 +1163,11 @@ public class CompactHeightBehaviorTests
 
     private static int GetGeneration(object state) =>
         (int)state.GetType().GetProperty("Generation")!.GetValue(state)!;
+
+    private static int GetMaxBringIntoViewAttempts() =>
+        (int)typeof(CompactHeightBehavior)
+            .GetField("MaxBringIntoViewAttempts", BindingFlags.NonPublic | BindingFlags.Static)!
+            .GetValue(null)!;
 
     private static void SetGeneration(object state, int value) =>
         state.GetType().GetProperty("Generation")!.SetValue(state, value);

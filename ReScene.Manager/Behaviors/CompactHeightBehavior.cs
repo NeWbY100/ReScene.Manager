@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
@@ -21,7 +22,19 @@ internal static class CompactHeightBehavior
 {
     private const string ClassName = "compactHeight";
     private const double RestoreSlack = 12;
-    private const int MaxBringIntoViewAttempts = 3;
+
+    /// <summary>
+    /// Backstop on the recovery loop's BringIntoView requests. It is NOT the mechanism that
+    /// normally ends recovery: the progress rule is (see
+    /// <see cref="RelocateFocusIfNeeded"/>) — each request either moves a scroller, in which
+    /// case the next one starts strictly closer, or moves nothing, in which case that target
+    /// is exhausted immediately. A well-formed tree therefore terminates after at most one
+    /// request per nested scroller, comfortably under this number. The cap only catches the
+    /// pathological case where a handler fakes progress on every request while the target
+    /// stays obscured; reaching it is not a silent stop — recovery falls through to the
+    /// fallback chain.
+    /// </summary>
+    private const int MaxBringIntoViewAttempts = 8;
 
     public static readonly AttachedProperty<double> ThresholdProperty =
         AvaloniaProperty.RegisterAttached<Control, double>("Threshold", typeof(CompactHeightBehavior), double.NaN);
@@ -526,7 +539,8 @@ internal static class CompactHeightBehavior
     private static void RelocateFocusIfNeeded(Control root, Control captured, bool enteringCompact, int generation, State state)
     {
         Control candidate = captured;
-        HashSet<Control> attempted = [];
+        HashSet<Control> exhausted = [];
+        int attempts = 0;
 
         while (true)
         {
@@ -543,19 +557,40 @@ internal static class CompactHeightBehavior
             bool obscured = IsObscured(target);
             if (IsSettled(target, obscured))
             {
+                // A synchronous BringIntoView handler can CLEAR focus outright. The target then
+                // reads as perfectly settled — attached, visible, focusable — while NOTHING is
+                // focused at all, and returning here would leave the window with no focus ring
+                // and no reachable starting point. A relocation this behavior initiated never
+                // ends in empty focus: hand off through the chain instead.
+                if (CurrentFocusedElement(root) is null)
+                {
+                    FocusFallbackChain(root, target, enteringCompact);
+                }
+
                 return;
             }
 
             // Scrollable ancestors may recover it — merely-clipped focus is never relocated
             // without giving them their chance first, and that holds for an element retargeted
-            // mid-recovery just as much as for the originally captured one. One attempt per
-            // distinct element (a second pass over the same one means BringIntoView could not
-            // help it), hard-capped as well so a handler that keeps moving focus onto fresh
-            // elements can never spin here.
-            if (obscured && attempted.Count < MaxBringIntoViewAttempts && attempted.Add(target))
+            // mid-recovery just as much as for the originally captured one.
+            if (obscured && attempts < MaxBringIntoViewAttempts && !exhausted.Contains(target))
             {
+                Vector[] before = CaptureScrollOffsets(target);
                 target.BringIntoView();
                 target.UpdateLayout();
+                ++attempts;
+
+                // A scroller that only PARTIALLY satisfies a request still CONSUMES it
+                // (ScrollContentPresenter sets e.Handled to "I moved"), so the next scroller
+                // outward never saw this one. As long as something moved, a fresh request
+                // starts from a strictly better position and can carry the recovery one
+                // clipper further out; only an attempt that moved nothing at all proves this
+                // target is beyond BringIntoView's reach and may be given up on.
+                if (CaptureScrollOffsets(target).SequenceEqual(before))
+                {
+                    exhausted.Add(target);
+                }
+
                 candidate = target;
                 continue;
             }
@@ -564,6 +599,18 @@ internal static class CompactHeightBehavior
             return;
         }
     }
+
+    /// <summary>
+    /// The scroll offsets of every scrollable ancestor of <paramref name="element"/> — the
+    /// fingerprint that tells a BringIntoView attempt which ACHIEVED something from one that
+    /// could not, so the loop above knows whether another request is worth issuing.
+    /// <see cref="ScrollContentPresenter"/> rather than <see cref="ScrollViewer"/> because the
+    /// presenter is where the offset actually lives (a ScrollViewer merely mirrors its own),
+    /// and it is the same element whose bounds <see cref="IsObscured"/> already treats as the
+    /// clipping viewport.
+    /// </summary>
+    private static Vector[] CaptureScrollOffsets(Control element) =>
+        [.. element.GetVisualAncestors().OfType<ScrollContentPresenter>().Select(static presenter => presenter.Offset)];
 
     private static bool IsSuperseded(bool enteringCompact, int generation, State state) =>
         state.Generation != generation || state.IsCompact != enteringCompact;
