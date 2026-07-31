@@ -4,13 +4,18 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
 > use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: DRAFT rev 2 — Tasks 1–2 fully authored (against spec rev 6); Tasks 3–7 pending
+**Status: DRAFT rev 3 — Tasks 1–3 fully authored (against spec rev 6); Tasks 4–7 pending
 authorship. DO NOT EXECUTE until this line says the plan is complete and codex-approved.**
+
+**Pending spec nits (batch into the next spec touch, do not block):** §4's SRSCreator
+feedback inventory wrongly lists a "result banner" — SRSCreatorView has none (the outcome
+lands in the log; the result Border belongs to SRSReconstructorView). The plan's Task 3
+carries the true inventory.
 
 **Goal:** Below each task view's fit floor, panes shrink and scroll instead of clipping,
 header chrome collapses behind a Help disclosure, and keyboard focus can never land
 outside the window — per spec `docs/superpowers/specs/2026-07-30-small-window-layout-design.md`
-(rev 4, a11y-APPROVED; codex gate moves to this plan).
+(rev 6, a11y-APPROVED with conditions folded; codex gate moves to this plan).
 
 **Architecture:** One attached behavior (`CompactHeightBehavior`) toggles a `compactHeight`
 style class on each view's inner layout root from its measured height, applies per-view
@@ -47,6 +52,7 @@ ReScene.Manager.Tests harness), frame rig + ava-desktop for visual verification.
 **Files:**
 - Create: `ReScene.Manager/Behaviors/CompactHeightBehavior.cs`
 - Create: `ReScene.Manager/Behaviors/CompactRowSize.cs`
+- Create: `ReScene.Manager/Behaviors/CompactRowMode.cs`
 - Create: `ReScene.Manager.Tests/CompactHeightBehaviorTests.cs`
 - Create: `ReScene.Manager.Tests/CompactInvariantRig.cs` (shared helper, used by every
   view task's invariant test)
@@ -56,10 +62,16 @@ ReScene.Manager.Tests harness), frame rig + ava-desktop for visual verification.
 - `CompactHeightBehavior.RowSizesProperty` (attached `IReadOnlyList<CompactRowSize>`).
 - `CompactHeightBehavior.HelpOpenProperty` (attached `bool`; the view binds it to the Help
   expander's `IsExpanded`; while compact AND open, donation values apply).
-- `CompactRowSize` record:
-  `internal sealed record CompactRowSize(int RowIndex, double NormalHeight, double CompactMinHeight, double HelpOpenMinHeight, bool HeightIsPixel);`
-  (`HeightIsPixel=true` restores `Height = NormalHeight` px on expand — CreatorView's
-  stored-files row; `false` leaves Height alone and only swaps MinHeight.)
+- `CompactRowSize` record + `CompactRowMode` enum (one type per file):
+  `internal sealed record CompactRowSize(int RowIndex, double NormalHeight, double CompactMinHeight, double HelpOpenMinHeight, CompactRowMode Mode);`
+  `internal enum CompactRowMode { MinOnly, PixelRestore, AutoToStar }`
+  — `MinOnly`: Height untouched, MinHeight swaps per mode (Reconstructor's star rows).
+  — `PixelRestore`: compact sets `Height = CompactMinHeight` px; expand restores
+    `Height = NormalHeight` px unless a splitter drag was captured (CreatorView's
+    stored-files row).
+  — `AutoToStar`: compact sets `Height = 1*` + `MinHeight = CompactMinHeight`; expand
+    restores `Height = Auto`, `MinHeight = 0` (the three-band config rows: natural at
+    normal size, squeezed star in compact).
 - Style class contract: `compactHeight` present on the attached control while compact.
 - `CompactInvariantRig.MeasureFloor(Control innerRoot)` → double (sum of the root's
   children's desired heights + spacing at width 676, conditionals forced by the caller).
@@ -170,7 +182,7 @@ public class CompactHeightBehaviorTests
     [AvaloniaFact]
     public void RowSizes_ApplyOnCompact_RestorePreservingSplitterDrag()
     {
-        CompactRowSize[] rows = [new(RowIndex: 1, NormalHeight: 150, CompactMinHeight: 80, HelpOpenMinHeight: 60, HeightIsPixel: true)];
+        CompactRowSize[] rows = [new(RowIndex: 1, NormalHeight: 150, CompactMinHeight: 80, HelpOpenMinHeight: 60, Mode: CompactRowMode.PixelRestore)];
         (Window w, Grid root) = Host(Threshold + 50, rows);
         try
         {
@@ -191,9 +203,32 @@ public class CompactHeightBehaviorTests
     }
 
     [AvaloniaFact]
+    public void AutoToStar_SwapsRowHeightKind_PerMode()
+    {
+        CompactRowSize[] rows = [new(1, double.NaN, 110, 80, CompactRowMode.AutoToStar)];
+        (Window w, Grid root) = Host(Threshold + 50, rows);
+        try
+        {
+            root.RowDefinitions[1].Height = GridLength.Auto;   // three-band normal shape
+            Dispatcher.UIThread.RunJobs();
+
+            w.Height = Threshold - 1;                          // → compact
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(root.RowDefinitions[1].Height.IsStar);
+            Assert.Equal(110, root.RowDefinitions[1].MinHeight);
+
+            w.Height = Threshold + 12;                         // → restore
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(root.RowDefinitions[1].Height.IsAuto);
+            Assert.Equal(0, root.RowDefinitions[1].MinHeight);
+        }
+        finally { w.Close(); }
+    }
+
+    [AvaloniaFact]
     public void HelpOpen_WhileCompact_AppliesDonationMinimums()
     {
-        CompactRowSize[] rows = [new(1, 150, 80, 60, HeightIsPixel: false)];
+        CompactRowSize[] rows = [new(1, 150, 80, 60, CompactRowMode.MinOnly)];
         (Window w, Grid root) = Host(Threshold - 1, rows);
         try
         {
@@ -332,16 +367,17 @@ internal static class CompactHeightBehavior
     //   Dispatcher.UIThread.Post(() => RelocateFocusIfHidden(control), DispatcherPriority.Loaded);
     //     // staged: class/rows applied → layout runs → focus checked (spec §1)
     //
-    // ApplyRows: for each CompactRowSize r on a Grid root:
-    //   compact: if (r.HeightIsPixel && row.Height.IsAbsolute) capture row.Height as drag
-    //            height once; row.MinHeight = HelpOpen ? r.HelpOpenMinHeight
-    //                                                  : r.CompactMinHeight;
-    //            if (r.HeightIsPixel) row.Height = new GridLength(row-min, Pixel? →
-    //              spec: compact uses star for band rows / pixel for stored-files; the
-    //              rule: HeightIsPixel rows get Height = MinHeight px in compact;
-    //              star rows keep their star Height and only MinHeight changes)
-    //   expand:  row.MinHeight = normal minimum (the XAML value captured at first hook);
-    //            if (r.HeightIsPixel) row.Height = captured drag ?? NormalHeight px.
+    // ApplyRows: for each CompactRowSize r on a Grid root, per r.Mode:
+    //   MinOnly     — compact: MinHeight = HelpOpen ? HelpOpenMinHeight : CompactMinHeight;
+    //                 expand: MinHeight = the XAML value captured at first hook. Height
+    //                 never touched.
+    //   PixelRestore — compact: capture row.Height (if Absolute) as drag height once,
+    //                 then Height = CompactMinHeight px, MinHeight likewise (HelpOpen
+    //                 variant applies); expand: Height = captured drag ?? NormalHeight px,
+    //                 MinHeight = captured XAML minimum.
+    //   AutoToStar  — compact: Height = new GridLength(1, Star), MinHeight =
+    //                 CompactMinHeight (HelpOpen variant applies); expand: Height =
+    //                 GridLength.Auto, MinHeight = 0.
     //
     // HelpOpenProperty.Changed → if compact, re-run ApplyRows (donation swap only).
     //
@@ -508,7 +544,7 @@ log 80; threshold 421; compact worst floor ≤ 305; Help body MaxHeight ≈ 38
         Behaviors.CompactHeightBehavior.SetThreshold(root, 421);
         Behaviors.CompactHeightBehavior.SetRowSizes(root,
             [new Behaviors.CompactRowSize(RowIndex: 4, NormalHeight: double.NaN,
-                CompactMinHeight: 96, HelpOpenMinHeight: 60, HeightIsPixel: false)]);
+                CompactMinHeight: 96, HelpOpenMinHeight: 60, Mode: Behaviors.CompactRowMode.MinOnly)]);
         Behaviors.CompactHeightBehavior.SetHelpExpander(root, HelpDisclosure);
         Behaviors.CompactHeightBehavior.SetFocusFallback(root, HelpDisclosure);
 ```
@@ -601,14 +637,126 @@ log 80; threshold 421; compact worst floor ≤ 305; Help body MaxHeight ≈ 38
 
 ---
 
-### Tasks 3–7 (pending authorship — DO NOT DISPATCH)
+### Task 3: SRSCreatorView three-band conversion
+
+Spec rev 6 numbers: threshold 520; compact config min 110 (help-open 80); log 80; pinned
+band ≤ 75; compact worst floor ≤ 307. **Corrected feedback inventory** (measured against
+the markup — the spec's "result banner" does not exist in this view; outcome lands in the
+log): pinned band = separator + action DockPanel (Create SRS / Cancel(conditional) /
+ProgressMessage(conditional)) + ProgressBar(conditional).
+
+**Files:**
+- Modify: `ReScene.Manager/Views/SRSCreatorView.axaml`
+- Modify: `ReScene.Manager/Views/SRSCreatorView.axaml.cs` (behavior wiring)
+- Test: `ReScene.Manager.Tests/SRSCreatorCompactTests.cs` (new; copies Task 2's shape)
+
+**Interfaces:**
+- Consumes: Task 1 behavior (Threshold/RowSizes/HelpExpander/FocusFallback,
+  `CompactRowMode.AutoToStar`), Task 2's `helpDisclosure` styles and test shape.
+- Produces: the three-band XAML pattern Tasks 4–5 replicate.
+
+- [ ] **Step 1: XAML restructure.** The root DockPanel becomes a 4-row Grid; every
+  existing element moves VERBATIM (bindings, names, margins untouched) into its band:
+
+```xml
+  <Grid Margin="{DynamicResource PageMargin}" x:Name="RootGrid">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />                 <!-- 0: Help chrome -->
+      <RowDefinition Height="Auto" />                 <!-- 1: config (AutoToStar) -->
+      <RowDefinition Height="Auto" />                 <!-- 2: pinned action band -->
+      <RowDefinition Height="*" MinHeight="80" />     <!-- 3: log band -->
+    </Grid.RowDefinitions>
+
+    <!-- 0: chrome — intro moves inside the disclosure (single instance; this view has
+         no links, header text "Help" per spec §2). -->
+    <Expander Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
+              Margin="0,0,0,6" AutomationProperties.Name="Help">
+      <Expander.Header>
+        <TextBlock Text="Help" FontSize="{DynamicResource FontSizeCaption}" />
+      </Expander.Header>
+      <!-- the existing intro TextBlock, verbatim, minus its old DockPanel.Dock/margin
+           (margin moves to the Expander) -->
+    </Expander>
+
+    <!-- 1: config band — always-present ScrollViewer; content renders at natural height
+         at normal size (row is Auto), squeezes and scrolls in compact (AutoToStar). -->
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                  ScrollViewer.AllowAutoHide="False">
+      <StackPanel Margin="0,0,4,0">
+        <!-- VERBATIM moves, in today's order, DockPanel.Dock attributes dropped:
+             Sample File label TextBlock
+             Sample File picker DockPanel (Browse + InputTextBox)
+             FieldStatusLine SampleStatus
+             ISO DockPanel (IsVisible=ShowISOSelection)
+             separator Border
+             Main file label / picker DockPanel / FieldStatusLine MainFileStatus
+             separator Border
+             Output label / picker DockPanel / FieldStatusLine OutputStatus
+             separator Border
+             Options header TextBlock + App name DockPanel -->
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- 2: pinned action band — ALWAYS visible (the a11y survey's core defect: this row
+         clipped off-screen mid-run). Overlay/adorner implementations forbidden. -->
+    <StackPanel Grid.Row="2">
+      <Border Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+      <!-- action DockPanel (Create SRS / Cancel / ProgressMessage) — verbatim -->
+      <!-- ProgressBar — verbatim -->
+      <Border Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+    </StackPanel>
+
+    <!-- 3: log band — verbatim log DockPanel (header + logList). -->
+  </Grid>
+```
+
+  Inset rule: the ScrollViewer carries no Padding — the content StackPanel carries the
+  right-margin for the scrollbar gutter (house rule from the scroll-extent fix).
+
+- [ ] **Step 2: Code-behind wiring** (ctor):
+
+```csharp
+        Grid root = RootGrid;
+        Behaviors.CompactHeightBehavior.SetThreshold(root, 520);
+        Behaviors.CompactHeightBehavior.SetRowSizes(root,
+            [new Behaviors.CompactRowSize(RowIndex: 1, NormalHeight: double.NaN,
+                CompactMinHeight: 110, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.AutoToStar)]);
+        Behaviors.CompactHeightBehavior.SetHelpExpander(root, HelpDisclosure);
+        Behaviors.CompactHeightBehavior.SetFocusFallback(root, HelpDisclosure);
+```
+
+- [ ] **Step 3: Tests** (`SRSCreatorCompactTests.cs`, Task 2's five-part shape adapted):
+
+```csharp
+    // 1. Invariant: expanded worst floor < 520 (force ShowISOSelection, all three
+    //    FieldStatusLines set, ShowProgress+IsCreating true); compact floor (Help
+    //    closed) <= 307; compact + HelpOpen + body MaxHeight <= 307 one-sum; pinned
+    //    band worst (Cancel visible + ProgressMessage + ProgressBar) <= 75.
+    // 2. Rendered matrix at 700×450 and fresh at threshold+1 (=521, expanded):
+    //    criterion A for the LAST config control (App name TextBox) and the primary
+    //    action; B no-clip with all conditionals forced; C real Tab walk.
+    // 3. Tab-order snapshots both modes (normal == pre-change fixture).
+    // 4. Chrome: single-instance intro; expander reset on compact re-entry; focus guard.
+    // 5. Pinned band: with band-1 scrolled to TOP and to BOTTOM, the Create SRS button's
+    //    translated bounds stay fully inside the window while ProgressBar+Cancel are
+    //    forced visible (the defect this task exists to fix, asserted directly).
+```
+
+  Red-first: run the invariant + pinned-band tests before Step 1's XAML lands — the
+  pinned-band case is red against the DockPanel layout (measured: action row at 0px at
+  700×450 with conditionals). Capture the red, land Steps 1–2, re-run green.
+
+- [ ] **Step 4: Frame-rig parity** (normal size before/after), suites + gate + runtime
+  smoke at 700×450, per Task 2's steps 6–7.
+- [ ] **Step 5: Commit** `feat(ui): SRSCreator three-band small-window degradation`.
+
+---
+
+### Tasks 4–7 (pending authorship — DO NOT DISPATCH)
 
 Authored next, one at a time, each against the view's full markup, to the same
 no-placeholder standard:
 
-- **Task 3 — SRSCreatorView** (first three-band conversion): band grid, pinned feedback
-  band (Create/Cancel + ProgressMessage + ProgressBar + banner ≤75), config ScrollViewer,
-  threshold 520, invariant + rendered matrix + snapshots.
 - **Task 4 — SRSReconstructorView** (three-band, threshold 450).
 - **Task 5 — SampleRestorerView** (three-band + DataGrid-in-scroller handoff contracts,
   threshold 535).
