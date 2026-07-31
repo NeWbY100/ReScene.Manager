@@ -1,8 +1,9 @@
 # Small-Window Layout Degradation — Design
 
-Status: rev 8 — rev 7 + a11y focus-contract gaps folded (target-resolution fallback
-chain, no-focus-theft precondition, documented obscured-vs-fully-within asymmetry).
-A11y conditions from rev 6 unchanged; A–F gate stands. Pending codex re-review.
+Status: rev 9 — codex round-2 folded: compact target explicitly DERIVED (not attached);
+header-toggle announcement semantics stated; keyboard-scroll route for text-only Help
+bodies; banner full-text keyboard route via the log. A11y conditions unchanged. Pending
+codex round 3.
 
 ## Coordinate space (normative for every figure in this document)
 
@@ -64,11 +65,15 @@ Attached to the inner layout root; properties: `Threshold` (inner DIPs), optiona
   selectors cannot reach RowDefinitions); a splitter-modified height is captured before
   compact and restored on expand.
 - **Staged focus transition (rev 7 — executable form; replaces the rev-3 wording):**
-  the behavior carries TWO named, direction-specific attached targets:
-  `CompactFocusTarget` (the Help expander's realized header ToggleButton — the Expander
-  control itself is not focusable) and `RestoreFocusTarget` (a per-view named control
-  that exists and is focusable at normal size: Reconstructor = the first link Button;
-  the three-band views and Creator = the view's first input TextBox).
+  the behavior uses TWO named, direction-specific targets:
+  the COMPACT-direction target is DERIVED — the Help expander's realized header
+  ToggleButton (the Expander control itself is not focusable; the toggle announces its
+  expanded/collapsed state through its own Toggle pattern, while the Expander's stock
+  ExpanderAutomationPeer continues to expose ExpandCollapse to the UIA tree — the two
+  are complementary, not duplicated); the RESTORE-direction target is the attached
+  `RestoreFocusTarget` (a per-view named control that exists and is focusable at normal
+  size: Reconstructor = the first link Button; the three-band views and Creator = the
+  view's first input TextBox).
   Transition algorithm, both directions: (1) CAPTURE the currently-focused element
   BEFORE any change; (2) apply styles/rows; (3) run a layout pass; (4) decide
   obscurement — an element is obscured iff it is detached, `IsVisible==false` anywhere
@@ -177,6 +182,13 @@ modes; under `.compactHeight` it is styled to a single line — APPROVED with co
   test's one-sum check #3 is the authority), with internal scrolling (inset on the content
   panel). Expanding therefore consumes the donated space and never pushes any band below
   its Help-open minimum.
+- **Keyboard scrolling of the capped body (codex round-2):** bodies containing only
+  prose (every view but the Reconstructor) have no focusable children to chain
+  BringIntoView, so the body's ScrollViewer is `Focusable="True"` — it takes Tab focus
+  after the header toggle and scrolls with the arrow keys (Avalonia's built-in
+  focused-ScrollViewer key handling); asserted per view with real key input. The
+  Reconstructor's link buttons additionally chain BringIntoView as focus moves through
+  them.
 - Compact order: disclosure header → (body when expanded: intro → links in existing
   order) → toolbar → tip (single-line) / warning → work area → … Collapsed body is `IsVisible=false` ⇒ out of
   Tab and UIA. Toolbar and the conditional warning row are content — never collapsed.
@@ -212,7 +224,9 @@ replaced by a Grid whose rows are (codex rev-2 #3):
 - Band 2 (pinned, Auto): per-view feedback inventory (codex rev-2 advisory) —
   SRSCreator: Create/Cancel row + ProgressMessage + ProgressBar (NO result banner —
   the outcome lands in the log; corrected inventory);
-  SRSReconstructor: Reconstruct row + result Border;
+  SRSReconstructor: Reconstruct row + result Border (its capped two-line summary's
+  FULL text reaches sighted keyboard users through the LOG, which always carries the
+  complete result line — asserted; ToolTip serves pointer users, HelpText serves AT);
   SampleRestorer: Restore row + ProgressBar + progress text.
   The band's worst height is asserted ≤ its headroom (319 − 24 − 120 − 80 − margins ≈ 84;
   a11y rev-2 NEW-4); the result banner gets `MaxHeight` + internal scroll/trimming.
