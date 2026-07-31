@@ -782,12 +782,205 @@ public class CompactHeightBehaviorTests
 
             object state = GetPrivateState(root);
             int liveGeneration = GetGeneration(state);
-            InvokeRelocateFocusIfNeeded(root, collapsing, enteringCompact: false, liveGeneration + 1, state);
+            // enteringCompact must MATCH state.IsCompact (the root was hosted below the
+            // threshold, so it is compact): fix round 4 found this argument was `false` here,
+            // which tripped IsSuperseded's MODE check first and made the generation argument
+            // irrelevant — the test no-opped for the wrong reason. Matching the mode leaves the
+            // deliberately-mismatched generation as the only thing that can reject the callback.
+            InvokeRelocateFocusIfNeeded(root, collapsing, enteringCompact: true, liveGeneration + 1, state);
             Dispatcher.UIThread.RunJobs();
 
             Assert.False(restoreTarget.IsFocused,
                 "a generation that does not match state.Generation must reject the callback " +
                 "outright — the fallback chain must never run, so it must never reach the direction target");
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 4, item #1: after the BringIntoView attempt, the recovery must re-run the
+    /// FULL resolution — re-resolve what is focused NOW (yielding to a newer VALID focus,
+    /// RETARGETING a newer in-scope-but-unusable one) and only THEN evaluate settledness.
+    /// Round 3 checked settledness FIRST, so the one case where BringIntoView actually
+    /// succeeds — the captured element ends up perfectly visible — returned before any
+    /// re-resolution, stranding a control that the very same recovery attempt had just
+    /// left focused and unusable. Here <c>captured</c> sits in a real ScrollViewer (so
+    /// BringIntoView genuinely recovers it, asserted below) and its own
+    /// RequestBringIntoView handler focuses <c>strandedNew</c>, permanently clipped by a
+    /// plain ClipToBounds Border. Settled-first sees "captured is fine" and returns;
+    /// resolve-first sees that focus now sits on a broken element and recovers THAT.
+    /// </summary>
+    [AvaloniaFact]
+    public void PostBringIntoView_FocusMovedToUnusableElement_IsRecovered_NotStranded()
+    {
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            // First in tree order, so the fallback walk has a deterministic landing spot.
+            var fallbackTarget = new Button { Content = "fallback", [Grid.RowProperty] = 0 };
+
+            var clipper = new Border { [Grid.RowProperty] = 1, Height = 20, ClipToBounds = true };
+            var clippedHost = new StackPanel();
+            var strandedNew = new Button { Content = "strandedNew", Height = 30, Margin = new Thickness(0, 50, 0, 0) };
+            clippedHost.Children.Add(strandedNew);
+            clipper.Child = clippedHost;
+
+            var scroller = new ScrollViewer { [Grid.RowProperty] = 2, Height = 60 };
+            var stack = new StackPanel();
+            for (int i = 0; i < 10; i++) stack.Children.Add(new Button { Content = $"b{i}", Height = 30 });
+            scroller.Content = stack;
+
+            root.Children.Add(fallbackTarget);
+            root.Children.Add(clipper);
+            root.Children.Add(scroller);
+            Dispatcher.UIThread.RunJobs();
+
+            var captured = (Button)stack.Children[^1];
+            captured.Focus();
+            scroller.Offset = default;             // scroll captured out of view
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(captured.IsFocused);
+            Assert.Equal(0, scroller.Offset.Y);
+
+            // Registered only now: Focus() itself raises a bring-into-view request
+            // (ScrollViewer.BringIntoViewOnFocusChange), which would fire this during setup.
+            // Fires synchronously inside captured.BringIntoView(), BEFORE the scroller
+            // handles the bubbling request and recovers captured.
+            captured.AddHandler(Control.RequestBringIntoViewEvent, (_, _) => strandedNew.Focus());
+
+            w.Height = Threshold - 1;              // transition runs the staged recovery
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(scroller.Offset.Y > 0,
+                "setup precondition: BringIntoView really did recover `captured`, so a " +
+                "settledness-first ordering short-circuits right here");
+            Assert.False(strandedNew.IsFocused,
+                "the element focused DURING the recovery attempt is itself unusable — it must " +
+                "not be left stranded just because the originally-captured element got settled");
+            Assert.True(fallbackTarget.IsFocused,
+                "re-resolution must retarget onto the newly-focused unusable element and relocate it");
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 4, item #2: the OUTER-scroller recovery guarantee. Rounds 1-3 kept
+    /// dropping it, the last round claiming it was impossible for nested clippers; it is
+    /// not. The geometry that makes it real is an OVERSIZED inner viewport: the inner
+    /// scroller already shows the target in full, so it cannot improve anything —
+    /// <c>ScrollContentPresenter.BringIntoViewRequested</c> sets
+    /// <c>e.Handled = BringDescendantIntoView(...)</c>, and that returns false when no
+    /// offset change is needed, so the request bubbles ON to the outer scroller, which is
+    /// the only clipper that can clear the cumulative obscurity.
+    /// Numbers (root space, after layout; row 2 starts at y=190): outer viewport
+    /// [190,290]; outer scrolled to 160 puts inner's 200-tall viewport at [30,230] and the
+    /// target at [80,180]. Cumulative visible region = [190,290] ∩ [30,230] = [190,230],
+    /// which the target misses entirely → obscured. BringIntoView: inner sees the target
+    /// at inner-content [50,150] inside its own [0,200] viewport → no change, unhandled;
+    /// outer sees it at outer-content [50,150] against a [160,260] window → scrolls to 50.
+    /// The target then lands at root [190,290], fully inside the cumulative region, so it
+    /// is recovered and KEEPS focus rather than being relocated.
+    /// </summary>
+    [AvaloniaFact]
+    public void NestedClippers_OnlyOuterCanRecover_BringIntoViewMovesOuter_TargetKeepsFocus()
+    {
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var inner = new ScrollViewer { Height = 200 };
+            var innerStack = new StackPanel();
+            innerStack.Children.Add(new Border { Height = 50 });
+            var target = new Button { Content = "target", Height = 100 };
+            innerStack.Children.Add(target);
+            inner.Content = innerStack;            // extent 150 < viewport 200: inner CANNOT scroll
+
+            var outer = new ScrollViewer { [Grid.RowProperty] = 2, Height = 100 };
+            var outerStack = new StackPanel();
+            outerStack.Children.Add(inner);        // inner is outer's first content: outer-content Y 0
+            outerStack.Children.Add(new Border { Height = 300 });   // scroll room for outer
+            outer.Content = outerStack;
+            root.Children.Add(outer);
+            Dispatcher.UIThread.RunJobs();
+
+            target.Focus();
+            inner.Offset = default;
+            outer.Offset = new Vector(0, 160);     // pushes target above outer's viewport
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(0, inner.Offset.Y);
+            Assert.Equal(160, outer.Offset.Y);
+
+            w.Height = Threshold - 1;              // any transition runs the obscurement check
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(0, inner.Offset.Y);
+            Assert.True(outer.Offset.Y < 160,
+                "only the OUTER clipper can clear the cumulative obscurity here, so BringIntoView " +
+                "must have moved the OUTER offset (the inner one already showed the target in full)");
+            Assert.True(target.IsFocused,
+                "outer-scroller recovery succeeded, so the target keeps focus and is never relocated");
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 4, item #3: <see cref="StaleGeneration_DirectlyInjected_CausesTheDeferredJobToNoOp"/>
+    /// only exercises the mismatch guard itself — it passes just as well against the live-capture
+    /// form that round 3 replaced, so it never discriminated frozen from live lambda capture.
+    /// This one does. It reaches the private callback FACTORY (which freezes state.Generation
+    /// into a local at creation time), builds a callback, THEN bumps state.Generation behind its
+    /// back — the "later transitions landed between post time and run time" window the freeze
+    /// exists for — and only then runs it:
+    /// <list type="bullet">
+    /// <item>frozen capture: the callback still holds the pre-bump generation, sees the
+    /// mismatch, and no-ops (GREEN);</item>
+    /// <item>live capture (<c>() =&gt; Relocate(..., state.Generation, state)</c>): the field is
+    /// read at RUN time, so it equals itself no matter how many transitions intervened, the
+    /// guard can never fire, and the callback relocates focus (RED).</item>
+    /// </list>
+    /// The positive control at the end — the same scenario with a freshly built callback, whose
+    /// frozen generation IS current, relocating exactly as expected — proves the no-op above
+    /// came from the guard and not from a scenario that could never have relocated anything.
+    /// </summary>
+    [AvaloniaFact]
+    public void FrozenGeneration_CallbackBuiltBeforeLaterTransitions_NoOps()
+    {
+        (Window w, Grid root) = Host(Threshold - 1);
+        try
+        {
+            var collapsing = new Button { Content = "link", [Grid.RowProperty] = 0 };
+            var fallbackCandidate = new Button { Content = "fallback", [Grid.RowProperty] = 1 };
+            root.Children.Add(collapsing);
+            root.Children.Add(fallbackCandidate);
+            Dispatcher.UIThread.RunJobs();
+
+            collapsing.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(collapsing.IsFocused);
+
+            object state = GetPrivateState(root);
+            // Built BEFORE the generation moves on — exactly what Evaluate does at post time.
+            // enteringCompact matches state.IsCompact (hosted below the threshold), so the mode
+            // half of IsSuperseded can never be what rejects this: only the generation can.
+            Action callback = InvokeCreateRecoveryCallback(root, collapsing, enteringCompact: true, state);
+
+            // Three later transitions' worth of bumps, landing strictly between the callback's
+            // creation and its execution.
+            SetGeneration(state, GetGeneration(state) + 3);
+
+            collapsing.IsVisible = false;   // what such a later transition would do to it
+            Dispatcher.UIThread.RunJobs();
+
+            callback();
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(fallbackCandidate.IsFocused,
+                "the callback froze the pre-bump generation, so it must reject itself; a LIVE " +
+                "read of state.Generation would equal itself here and relocate focus instead");
+
+            InvokeCreateRecoveryCallback(root, collapsing, enteringCompact: true, state)();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(fallbackCandidate.IsFocused,
+                "positive control: with a matching generation the very same scenario DOES " +
+                "relocate — so the no-op above came from the guard, not from an inert scenario");
         }
         finally { w.Close(); }
     }
@@ -805,6 +998,15 @@ public class CompactHeightBehaviorTests
 
     private static int GetGeneration(object state) =>
         (int)state.GetType().GetProperty("Generation")!.GetValue(state)!;
+
+    private static void SetGeneration(object state, int value) =>
+        state.GetType().GetProperty("Generation")!.SetValue(state, value);
+
+    private static Action InvokeCreateRecoveryCallback(Control root, Control captured, bool enteringCompact, object state)
+    {
+        MethodInfo method = typeof(CompactHeightBehavior).GetMethod("CreateRecoveryCallback", BindingFlags.NonPublic | BindingFlags.Static)!;
+        return (Action)method.Invoke(null, [root, captured, enteringCompact, state])!;
+    }
 
     private static void InvokeRelocateFocusIfNeeded(Control root, Control captured, bool enteringCompact, int generation, object state)
     {
