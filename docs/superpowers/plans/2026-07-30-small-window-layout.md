@@ -4,9 +4,9 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
 > use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: rev 13 — SPEC APPROVED at rev 12; plan folds codex round-6 (VM re-arm files
-+ full Page-key coverage). PENDING CODEX ROUND 7 (plan only) — do not execute until
-codex approves (user directive: codex gates every step).**
+**Status: rev 13 — APPROVED FOR EXECUTION. Spec APPROVED (codex, rev 12); plan APPROVED
+(codex round 7, 2026-07-31); a11y approved with all conditions folded, final A–F gate at
+completion. Execution: subagent-driven, codex diff review per task.**
 
 **Deferred (codex round-3 advisories — seed of the execution ledger's deferred list):**
 stale rev-number references in prose; duplicate/renumbered step references from the
