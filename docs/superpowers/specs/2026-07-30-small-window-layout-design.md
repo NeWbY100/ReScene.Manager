@@ -1,9 +1,10 @@
 # Small-Window Layout Degradation — Design
 
-Status: rev 5 — rev 4 + plan-authoring discovery: the Reconstructor tip line cannot move
-into the Help body without changing normal-mode reading order (criterion F), so it stays
-always-visible with a compact single-line trim; Reconstructor compact minimums recomputed.
-Pending a11y ruling on the trimmed-tip trade; codex reviews on reconnection.
+Status: rev 6 — a11y APPROVED the rev-5 trimmed-tip trade with five conditions, folded
+in below (visual-only trimming with UIA-name assertion; HelpText; residue recorded;
+tip-never-donor; Help durability scoped to a continuous compact session). No further a11y
+re-review before implementation; final A–F review at the gate. Codex reviews on
+reconnection.
 
 ## Coordinate space (normative for every figure in this document)
 
@@ -118,10 +119,20 @@ link controls (Reconstructor) — the single instance of that content; no second
 anywhere (a11y rev-2 NEW-3). The Reconstructor TIP line ("Import from SRR…") is NOT in the
 body (rev 5): it renders AFTER the toolbar today, so moving it into the body would change
 normal-mode reading order (criterion F). It stays always-present in its own row in both
-modes; under `.compactHeight` it is styled to a single line (`TextTrimming` with the full
-text as `ToolTip.Tip`) — present for screen readers and pointer users, never deleted (the
-a11y rev-1 #3 concern was deletion; trimmed-but-present is the surviving trade, flagged
-for a11y sign-off).
+modes; under `.compactHeight` it is styled to a single line — APPROVED with conditions
+(a11y rev-5 ruling), all binding:
+
+1. Trimming is VISUAL-ONLY: `TextTrimming` over the full bound text — never a shortened
+   string in VM or XAML. Asserted: in compact, the rendered tip's UIA Name equals the
+   full tip text (a pre-truncated binding would silently reinstate the deletion defect).
+2. `ToolTip.Tip` (pointer users) AND `AutomationProperties.HelpText` (AT description) both
+   carry the full text — tooltips are not a keyboard/AT path.
+3. Accepted residue, recorded: keyboard-only sighted users at compact size see one trimmed
+   line with no route to the remainder; mitigation — the same guidance already lives on
+   the Import-from-SRR button's own tooltip.
+4. The tip is never the budget donor: if its measured one-line height exceeds 18 DIPs, the
+   TabControl minimum gives way; the tip never becomes `IsVisible=false` under budget
+   pressure.
 
 - **Normal mode (styles):** the Expander renders "flat" — header row hidden
   (`IsVisible=false` via style), body force-expanded and unconstrained → visually today's
@@ -132,8 +143,11 @@ for a11y sign-off).
 - **Compact mode:** header visible ("Help & links" on Reconstructor, "Help" on the other
   views — codex rev-2 advisory; AutomationProperties.Name = the same text, no glyph),
   body collapsed by default, stock ExpandCollapse peer announces state. The USER's
-  expand/collapse choice is durable across compact re-entries within the session (codex
-  rev-2 #8).
+  expand/collapse choice is durable within a CONTINUOUS compact session only — re-entering
+  compact starts with Help collapsed (a11y rev-5 condition 5: with the 60-DIP help-open
+  work band, session-durable expansion would turn one transient Help click into a
+  permanent ~30px work pane on every later small window; codex rev-2 #8's durability is
+  narrowed accordingly).
 - Body budget: the **donation rule** of §1 — the body's `MaxHeight` equals the height the
   work band donates while Help is open (≈ 40–50 DIPs at the minimum window; the invariant
   test's one-sum check #3 is the authority), with internal scrolling (inset on the content
@@ -233,9 +247,10 @@ F. Normal size: tab order, reading order, and pixels unchanged — ordered tab-o
 - Behavior tests: boundary (T−1/T/T+1 fresh instances — T+1 is EXPANDED), restoration at
   ≥T+12, rapid crossing, window-restore burst, reload/reattach, render scales 1.0/1.25/1.5.
 - Chrome tests: single-instance (one link set in the tree in both modes); prose+links
-  invocable in compact via the expander; durable user expand state across compact
-  re-entries; staged focus both directions (collapse: focus → header; expand: focus →
-  restored header region when the header hides).
+  invocable in compact via the expander; expand state durable within a continuous compact
+  session AND reset on compact re-entry; compact tip UIA Name == full tip text (condition
+  1) + HelpText present (condition 2); staged focus both directions (collapse: focus →
+  header; expand: focus → restored header region when the header hides).
 - Criterion C Tab-walk; F snapshots (both modes) + five-view pixel parity;
   splitter floor/focus tests; three-band views: pinned band visible with all feedback
   forced while band 1 is scrolled to both extremes; SampleRestorer inner/outer hand-off.
