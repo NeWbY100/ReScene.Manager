@@ -323,6 +323,36 @@ public class CompactHeightBehaviorTests
     }
 
     [AvaloniaFact]
+    public void FocusOutsideTheView_IsNeverStolen_ByTransitions()
+    {
+        // Spec rev 8 precondition: a transition while focus sits OUTSIDE the behavior's
+        // root must not move it.
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var outside = new Button { Content = "shell" };
+            var shell = new StackPanel();
+            w.Content = null;
+            shell.Children.Add(outside);
+            shell.Children.Add(root);
+            w.Content = shell;
+            Dispatcher.UIThread.RunJobs();
+
+            outside.Focus();
+            Dispatcher.UIThread.RunJobs();
+
+            w.Height = Threshold - 1;              // → compact
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(outside.IsFocused, "transitions must never steal focus from outside the view");
+
+            w.Height = Threshold + 12;             // → restore
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(outside.IsFocused);
+        }
+        finally { w.Close(); }
+    }
+
+    [AvaloniaFact]
     public void ClippedButRecoverable_Focus_IsBroughtIntoView_NotRelocated()
     {
         // Spec rev 7 step (5): an element merely scrolled out of a viewport is recovered
@@ -494,9 +524,16 @@ internal static class CompactHeightBehavior
     //     element's rendered bounds do not intersect the INTERSECTION of every clipping
     //     ancestor's viewport (IsEffectivelyVisible alone is insufficient — it ignores
     //     clipping);
+    //   PRECONDITION (spec rev 8): the captured element was focused AND is a
+    //     descendant of this root — otherwise do NOTHING (no focus theft from the
+    //     shell menu/tab strip/other windows/empty focus).
     //   if IsObscured(captured): captured.BringIntoView(); re-run layout; re-check;
-    //   if STILL obscured: (entering compact → the HelpExpander's realized header
-    //     ToggleButton; leaving → GetRestoreFocusTarget(root)).Focus().
+    //   if STILL obscured: focus the direction's target through the FALLBACK CHAIN
+    //     (spec rev 8): resolved target (entering compact → the HelpExpander's realized
+    //     header ToggleButton, which is TEMPLATED and may be null on an early pass;
+    //     leaving → GetRestoreFocusTarget(root)) → first focusable descendant of the
+    //     root → the root itself. Never a silent no-op; the tests assert non-null
+    //     resolution.
     //
     // HelpExpander wiring: entering compact → IsExpanded = false (condition-5 reset);
     //   entering normal → IsExpanded = true (flat mode). Subscribe IsExpanded →

@@ -1,9 +1,8 @@
 # Small-Window Layout Degradation — Design
 
-Status: rev 7 — codex spec review (post-reconnection) folded: executable staged-focus
-contract with named direction-specific targets and clipping-aware obscurement checks;
-one strict boundary convention; SRSCreator inventory corrected. A11y conditions from
-rev 6 unchanged. Pending codex re-review.
+Status: rev 8 — rev 7 + a11y focus-contract gaps folded (target-resolution fallback
+chain, no-focus-theft precondition, documented obscured-vs-fully-within asymmetry).
+A11y conditions from rev 6 unchanged; A–F gate stands. Pending codex re-review.
 
 ## Coordinate space (normative for every figure in this document)
 
@@ -79,6 +78,22 @@ Attached to the inner layout root; properties: `Threshold` (inner DIPs), optiona
   `BringIntoView()` on it and re-run the check — scrollable ancestors may recover it;
   (6) only if still obscured, focus the direction's target (entering compact →
   CompactFocusTarget; leaving → RestoreFocusTarget). No focus change otherwise.
+  Three riders (a11y rev-7 review):
+  — PRECONDITION: steps 4–6 run only if the captured element was focused AND is a
+    descendant of THIS view root. A resize while focus sits in the shell menu, the tab
+    strip, another window, or nowhere must never pull focus into the view (focus theft
+    is worse than the stranding it would fix, and fires on an event the user did not
+    initiate).
+  — TARGET RESOLUTION: a target can resolve null or unfocusable (the compact target is
+    a TEMPLATED part — the header ToggleButton exists only after template application,
+    so an early or re-attach pass can miss it). Fallback chain, in order: the resolved
+    target → the first focusable descendant of the view root → the view root itself.
+    A silent no-op is forbidden; tests assert the resolution was non-null.
+  — DELIBERATE ASYMMETRY (do not "harmonize"): relocation triggers on ENTIRELY obscured
+    (bounds not intersecting the clip intersection — the WCAG 2.4.11 AA line), while
+    criterion C asserts the stricter FULLY WITHIN. Both are correct: C's Tab walk lets
+    BringIntoView resolve partial clipping first; the relocation threshold only catches
+    what scrolling cannot recover.
 
 **Threshold invariant (executable, ONE budget sum — a11y rev-3 NEW-5):** per view, a unit
 test that renders the view asserts, all in inner space with conditional rows forced
