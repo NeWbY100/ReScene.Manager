@@ -596,14 +596,43 @@ log 80; threshold 421; compact worst floor ≤ 305; Help body MaxHeight ≈ 38
 - Modify: `ReScene.Manager/Behaviors/CompactHeightBehavior.cs` (add HelpExpander wiring)
 - Modify: `ReScene.Manager/Resources/Styles.axaml` (helpDisclosure + tipLine + splitter styles)
 - Test: `ReScene.Manager.Tests/ReconstructorCompactTests.cs` (new)
+- Test: `ReScene.Manager.Tests/CompactViewRig.cs` (new — the shared per-view test rig,
+  produced here, consumed by Tasks 3–6)
 - Test: extend `CompactHeightBehaviorTests.cs` (HelpExpander wiring cases)
 
 **Interfaces:**
 - Consumes Task 1: Threshold/RowSizes/HelpOpen/FocusFallback, `compactHeight` class,
   `CompactInvariantRig`.
 - Produces (Tasks 3-6 reuse): `HelpExpanderProperty` on the behavior; style classes
-  `helpDisclosure` and `tipLine`; the splitter base/focus styles; the per-view test
-  shape (invariant + rendered matrix + snapshots + chrome assertions).
+  `helpDisclosure` and `tipLine`; the splitter base/focus styles; and `CompactViewRig`
+  (the shared test rig) with these exact members (bodies authored in this task — the
+  executable forms of criteria A/C; per-view tests of Tasks 2-6 call ONLY these members
+  plus per-view VM property setters, no other undefined helpers):
+
+```csharp
+internal static class CompactViewRig
+{
+    /// Hosts the view in a real MainWindow shell sized so the view's inner root gets
+    /// exactly innerHeight DIPs; returns the window and the inner root grid.
+    public static (Window Window, Grid InnerRoot) HostAt(Control view, double innerHeight);
+
+    /// Criterion C: focuses sentinel, sends genuine Tab keystrokes
+    /// (window.KeyPressQwerty(PhysicalKey.Tab, ...)) until focus returns to it; after
+    /// EVERY step asserts the focused control's rendered bounds lie within the
+    /// intersection of every clipping ancestor's viewport and the window; throws with
+    /// the offending control's name.
+    public static void AssertTabWalkStaysVisible(Window window, Control sentinel);
+
+    /// Ordered (control type, automation name) snapshot of the Tab cycle.
+    public static IReadOnlyList<string> SnapshotTabOrder(Window window, Control root);
+
+    /// Criterion A: BringIntoView on target, then asserts it is fully inside the window.
+    public static void AssertReachable(Window window, Control target);
+
+    /// Genuine wheel input (headless window.MouseWheel(point, delta)).
+    public static void Wheel(Window window, Avalonia.Point at, double dy);
+}
+```
 
 - [ ] **Step 1: Extend the behavior — HelpExpander wiring (test-first).**
   Add to `CompactHeightBehaviorTests.cs`:
@@ -651,10 +680,19 @@ log 80; threshold 421; compact worst floor ≤ 305; Help body MaxHeight ≈ 38
   isCompact && expander.IsExpanded)` (HelpOpen is never true at normal size). Forced
   rebuild, red → green, full behavior suite green.
 
-- [ ] **Step 2: XAML restructure.** In `ReconstructorView.axaml`:
+- [ ] **Step 2: Author the test suite RED-FIRST** — write `CompactViewRig.cs` (bodies
+  included) and `ReconstructorCompactTests.cs` per Step 6's case list, then run them
+  against TODAY's view (forced rebuild): the invariant cases are red (the old 220/140
+  minimums exceed every bound) and the reachability cases are red at 700×450. Capture
+  the red output. Only then proceed.
+
+- [ ] **Step 3: XAML restructure.** In `ReconstructorView.axaml`:
 
   (a) Row 0's `StackPanel` is wrapped in the disclosure (single instance — the intro
-  TextBlock and links WrapPanel MOVE inside; authoring-time move, not runtime):
+  TextBlock and links WrapPanel MOVE inside; authoring-time move, not runtime). The FIRST
+  link Button gains `x:Name="WindowsPackLink"` (the RestoreFocusTarget). The expander
+  CONTENT is wrapped in a `ScrollViewer` (inset on the content panel) so the behavior's
+  `HelpBodyMaxHeight` bounds the BODY alone — never the header:
 
 ```xml
     <Expander Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
@@ -700,7 +738,8 @@ log 80; threshold 421; compact worst floor ≤ 305; Help body MaxHeight ≈ 38
             [new Behaviors.CompactRowSize(RowIndex: 4, NormalHeight: double.NaN,
                 CompactMinHeight: 96, HelpOpenMinHeight: 60, Mode: Behaviors.CompactRowMode.MinOnly)]);
         Behaviors.CompactHeightBehavior.SetHelpExpander(root, HelpDisclosure);
-        Behaviors.CompactHeightBehavior.SetFocusFallback(root, HelpDisclosure);
+        Behaviors.CompactHeightBehavior.SetHelpBodyMaxHeight(root, 38);
+        Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(root, WindowsPackLink);
 ```
 
 - [ ] **Step 4: Styles** (`Styles.axaml`, after the checkbox-glyph block):
@@ -717,11 +756,8 @@ log 80; threshold 421; compact worst floor ≤ 305; Help body MaxHeight ≈ 38
   <Style Selector="Grid.compactHeight Expander.helpDisclosure /template/ ToggleButton">
     <Setter Property="IsVisible" Value="True" />
   </Style>
-  <Style Selector="Grid.compactHeight Expander.helpDisclosure">
-    <Setter Property="MaxHeight" Value="200" />
-    <!-- Body height is bounded by the behavior-computed budget; 200 is the style-level
-         backstop — the invariant test asserts the real bound (~38 body + header). -->
-  </Style>
+  <!-- No Expander-level MaxHeight: the behavior applies HelpBodyMaxHeight to the BODY's
+       internal ScrollViewer only (a whole-control cap would squeeze the header). -->
 
   <!-- Compact tip (a11y conditions 1/2: trimming is VISUAL-ONLY over the full bound
        text; HelpText carries it for AT; the tip is never a budget donor). -->
@@ -736,16 +772,17 @@ log 80; threshold 421; compact worst floor ≤ 305; Help body MaxHeight ≈ 38
     <Setter Property="Background" Value="Transparent" />
   </Style>
   <Style Selector="GridSplitter:focus">
-    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Background" Value="{DynamicResource AccentPrimary}" />
   </Style>
 ```
 
-  (Exact accent resource name verified against Tokens.axaml at implementation; the test
-  asserts rendered contrast, not the resource choice.)
+  (`AccentPrimary` is the existing Tokens.axaml brush; the test asserts rendered
+  contrast, not the resource choice.)
 
-- [ ] **Step 5: The view test suite** (`ReconstructorCompactTests.cs`) — the per-view
-  shape every later view task copies. Uses `BeginnerShellTestFactory`-style inert VM
-  construction (see `ReconstructorViewTests.CreateVm`). Cases:
+- [ ] **Step 6 (authored in Step 2, verified GREEN here): the view test suite**
+  (`ReconstructorCompactTests.cs`) — the per-view shape every later view task copies.
+  Inert VM construction per `ReconstructorViewTests.CreateVm`; CompactViewRig members +
+  VM setters only. Cases:
 
 ```csharp
     // 1. Invariant (spec §1's four checks; CompactInvariantRig):
@@ -766,7 +803,11 @@ log 80; threshold 421; compact worst floor ≤ 305; Help body MaxHeight ≈ 38
     // 4. Chrome: compact tip UIA Name == the FULL tip text (condition 1) and
     //    HelpText == full text (condition 2); exactly three link Buttons in the tree in
     //    BOTH modes (single instance); links invocable in compact (expander open →
-    //    Click raises); expander reset on compact re-entry.
+    //    Click raises); expander reset on compact re-entry; Help-open DONATION — with
+    //    Help open at inner height 319, the tab row's MinHeight is 60, the body
+    //    ScrollViewer's MaxHeight is 38, and the body's LAST link is keyboard-reachable
+    //    (Tab + BringIntoView inside the body scroller); the TIP row never donates
+    //    (identical height with Help open and closed — condition 4).
     // 5. Splitter: focusable via Tab, Up/Down moves the split, bounds clamp at 96/80,
     //    focus visual rendered (background brush changes on focus) with ≥3:1 contrast
     //    computed against both pane backgrounds.
@@ -860,7 +901,10 @@ ProgressMessage(conditional)) + ProgressBar(conditional).
       <Border Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
     </StackPanel>
 
-    <!-- 3: log band — verbatim log DockPanel (header + logList). -->
+    <!-- 3: log band — verbatim log DockPanel (header + logList); the "Log" header
+         TextBlock gains x:Name="LogHeader" and the logList ListBox gains
+         AutomationProperties.LabeledBy="{Binding #LogHeader}" (the Reconstructor already
+         has this pairing — the audit extends it to every touched log). -->
   </Grid>
 ```
 
@@ -876,10 +920,12 @@ ProgressMessage(conditional)) + ProgressBar(conditional).
             [new Behaviors.CompactRowSize(RowIndex: 1, NormalHeight: double.NaN,
                 CompactMinHeight: 110, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.AutoToStar)]);
         Behaviors.CompactHeightBehavior.SetHelpExpander(root, HelpDisclosure);
-        Behaviors.CompactHeightBehavior.SetFocusFallback(root, HelpDisclosure);
+        Behaviors.CompactHeightBehavior.SetHelpBodyMaxHeight(root, 40);
+        Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(root, InputTextBox);
 ```
 
-- [ ] **Step 3: Tests** (`SRSCreatorCompactTests.cs`, Task 2's five-part shape adapted):
+- [ ] **Step 3: Tests** (`SRSCreatorCompactTests.cs`, Task 2's five-part shape adapted —
+  CompactViewRig members + VM setters only):
 
 ```csharp
     // 1. Invariant: expanded worst floor < 520 (force ShowISOSelection, all three
@@ -953,7 +999,9 @@ pinned band = separator + action DockPanel (Rebuild Sample) + result Border (con
          verbatim incl. its 0,0,0,4 margin) / result Border (verbatim — IsVisible=
          ShowResult, ResultSuccessToBrush background; ADD TextTrimming=
          "CharacterEllipsis" + MaxLines=2 on its TextBlock so a long ResultSummary is
-         bounded — a11y rev-3 NEW-4's banner cap; ToolTip.Tip binds the full summary) /
+         bounded — a11y rev-3 NEW-4's banner cap; ToolTip.Tip AND
+         AutomationProperties.HelpText both bind the full summary — the same
+         visual-only-trim rule as the tip) /
          separator. -->
 
     <!-- 3: log band — verbatim log DockPanel. -->
@@ -969,11 +1017,12 @@ pinned band = separator + action DockPanel (Rebuild Sample) + result Border (con
             [new Behaviors.CompactRowSize(RowIndex: 1, NormalHeight: double.NaN,
                 CompactMinHeight: 110, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.AutoToStar)]);
         Behaviors.CompactHeightBehavior.SetHelpExpander(root, HelpDisclosure);
-        Behaviors.CompactHeightBehavior.SetFocusFallback(root, HelpDisclosure);
+        Behaviors.CompactHeightBehavior.SetHelpBodyMaxHeight(root, 40);
+        Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(root, SRSFileTextBox);
 ```
 
 - [ ] **Step 3: Tests** (`SRSReconstructorCompactTests.cs`, the established five-part
-  shape):
+  shape — CompactViewRig members + VM setters only):
 
 ```csharp
     // 1. Invariant: expanded worst floor < 450 (force all three FieldStatusLines set +
@@ -1022,17 +1071,23 @@ ProgressBar(conditional) + separator. This is the view whose action row and log 
   hands wheel input to the outer ScrollViewer at its extents. Task 6 reuses it if
   CreatorView's grid needs it.
 
-- [ ] **Step 1: `ScrollHandoffBehavior` (test-first).** Contract: attached to a control
-  with an internal ScrollViewer (DataGrid); a `PointerWheelChanged` that would scroll
-  past the internal extent (top at offset 0 scrolling up, bottom at max scrolling down)
-  is NOT handled by the inner control — it reaches the ancestor ScrollViewer. Tests
-  (`ScrollHandoffBehaviorTests.cs`): DataGrid with 20 rows inside an outer ScrollViewer
-  sized to clip both; wheel-down at grid-bottom moves the OUTER offset; wheel-up at
-  grid-top likewise; wheel mid-grid moves only the INNER offset. Use
-  `RaiseEvent(new PointerWheelEventArgs …)` per the headless input idiom in
-  LogListCopyTests. Implementation: handle the grid's `PointerWheelChanged` in the
-  tunnel/bubble phase; when at-extent in the wheel direction, re-raise the event on the
-  outer ScrollViewer (mark original handled to prevent double-scroll).
+- [ ] **Step 1: `ScrollHandoffBehavior` (test-first).** TWO mechanisms (codex round-1
+  #8):
+  (a) WHEEL — a gesture that would scroll past the internal extent (top at offset 0
+  scrolling up; bottom at max scrolling down) must reach the ancestor: handle the grid's
+  `PointerWheelChanged`; when at-extent in the wheel direction, adjust the OUTER
+  ScrollViewer's `Offset` directly and mark the event handled (no synthetic re-raise —
+  Avalonia wheel args are not re-raisable).
+  (b) KEYBOARD/FOCUS — handle `RequestBringIntoView` bubbling from cells: when the
+  requested rect lies outside the OUTER viewer's viewport, scroll the outer viewer to
+  reveal it (the DataGrid brings the cell into ITS viewport; the behavior chains the
+  remainder).
+  Tests (`ScrollHandoffBehaviorTests.cs`) — GENUINE INPUT ONLY: DataGrid with 20 rows
+  inside an outer ScrollViewer sized to clip both; wheel via the Avalonia.Headless
+  `window.MouseWheel(point, delta)` API over the grid (down at grid-bottom moves the
+  OUTER offset; up at grid-top likewise; mid-grid moves only the INNER offset);
+  keyboard via real Down-arrow presses walking cell focus past the outer viewport — the
+  focused cell must end fully visible (the chained BringIntoView).
 
 - [ ] **Step 2: XAML restructure** — root DockPanel → 4-row Grid (Task 3's shape),
   elements verbatim:
@@ -1054,12 +1109,14 @@ ProgressBar(conditional) + separator. This is the view whose action row and log 
          OverallProgressText, ProgressMessage — verbatim) / ProgressBar (verbatim) /
          separator. -->
 
-    <!-- 3: log band — verbatim log DockPanel. -->
+    <!-- 3: log band — verbatim log DockPanel + the LogHeader/LabeledBy pairing (as in
+         Task 3). -->
 ```
 
 - [ ] **Step 3: Code-behind wiring** (ctor): threshold **535**, RowSizes
-  `[new(1, double.NaN, 110, 80, AutoToStar)]`, HelpExpander + FocusFallback =
-  HelpDisclosure — identical shape to Task 3's snippet with this view's numbers.
+  `[new(1, double.NaN, 110, 80, AutoToStar)]`, HelpExpander = HelpDisclosure,
+  HelpBodyMaxHeight = 40, RestoreFocusTarget = SRRFileTextBox — Task 3's snippet with
+  this view's numbers.
 
 - [ ] **Step 4: Tests** (`SampleRestorerCompactTests.cs`):
 
@@ -1135,8 +1192,15 @@ ProgressMessage); the in-scroller splitter is `Height="5"` with a local
                         ProgressBar and the detected-sets MaxHeight=96 scroller)
            row 1 Auto : separator
            row 2 Auto : Stored Files header + buttons StackPanel (verbatim)
-           row 3      : Height="150" MinHeight="80" — StoredFilesGrid (verbatim, plus
-                        behaviors:ScrollHandoffBehavior.Handoff="True")
+           row 3      : Height="150" MinHeight="150" — IDENTICAL minimums to today
+                        (normal-mode parity incl. the splitter's drag floor — codex
+                        round-1 #10); the compact 80 arrives ONLY via the descendant
+                        PixelRestore entry, which lowers Height AND MinHeight together.
+                        StoredFilesGrid verbatim, plus
+                        behaviors:ScrollHandoffBehavior.Handoff="True" and a
+                        "Stored Files" LabeledBy pairing (header gains
+                        x:Name="StoredFilesHeader"; grid gains
+                        AutomationProperties.LabeledBy="{Binding #StoredFilesHeader}")
            row 4 Auto : the GridSplitter (verbatim minus its local Background, plus
                         AutomationProperties.Name="Resize stored files and output" —
                         spec §5;
@@ -1154,9 +1218,10 @@ ProgressMessage); the in-scroller splitter is `Height="5"` with a local
          ProgressBar) verbatim / separator. -->
 
     <!-- 3: log band — DockPanel: the old log-header DockPanel (Dock=Top, verbatim incl.
-         SaveLogStatus) + the logList ListBox as fill. The old row-7 MinHeight=40
-         disappears with the old bottom grid; the band minimum 80 supersedes it
-         (header ~28 + ≥2 rows — the spec's log rule now uniform). -->
+         SaveLogStatus, its "Log" TextBlock gaining x:Name="LogHeader") + the logList
+         ListBox as fill with AutomationProperties.LabeledBy="{Binding #LogHeader}". The
+         old row-7 MinHeight=40 disappears with the old bottom grid; the band minimum 80
+         supersedes it (header ~28 + ≥2 rows — the spec's log rule now uniform). -->
   </Grid>
 ```
 
@@ -1171,7 +1236,8 @@ ProgressMessage); the in-scroller splitter is `Height="5"` with a local
             [new Behaviors.CompactRowSize(RowIndex: 3, NormalHeight: 150,
                 CompactMinHeight: 80, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.PixelRestore)]);
         Behaviors.CompactHeightBehavior.SetHelpExpander(RootGrid, HelpDisclosure);
-        Behaviors.CompactHeightBehavior.SetFocusFallback(RootGrid, HelpDisclosure);
+        Behaviors.CompactHeightBehavior.SetHelpBodyMaxHeight(RootGrid, 40);
+        Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(RootGrid, InputTextBox);
 ```
 
 - [ ] **Step 3: Tests** (`CreatorCompactTests.cs`):
@@ -1225,9 +1291,12 @@ ProgressMessage); the in-scroller splitter is `Height="5"` with a local
 - [ ] **Step 2: Board tests** (`SmallWindowBoardTests.cs`):
 
 ```csharp
-    // 1. Font-enlargement (spec Testing): with ControlContentThemeFontSize overridden
-    //    12 → 16 at 700×450, each of the five views' pinned/action band and log header
-    //    remain unclipped (text growth is absorbed by the scrolling regions).
+    // 1. Font-enlargement (spec Testing): override EVERY inherited font source at once
+    //    (codex round-1 #11) — ControlContentThemeFontSize 12→16, the :is(Window)
+    //    style's 12px via a higher-priority class-token style on the hosting window
+    //    (StyleTrigger rule), and FontSizeCaption 13→17 — then at 700×450 each view's
+    //    pinned/action band and log header remain unclipped AND the per-view tip and
+    //    reachability assertions still hold (growth absorbed by scrolling regions).
     // 2. RenderScaling sweep: the five compact floors hold at 1.25/1.5 scaling
     //    (invariant rig re-measured under RenderScaling overrides) — distinct from 1.
     // 3. Cross-view: every task view's threshold invariant test type exists and runs
