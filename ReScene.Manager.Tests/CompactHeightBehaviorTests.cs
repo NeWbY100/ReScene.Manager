@@ -459,50 +459,116 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Finding #3: obscurement must test the CUMULATIVE intersection of every clipping
-    /// ancestor's viewport, not each independently. Checked independently, "vs inner" and
-    /// "vs outer" can each individually see SOME overlap while their true combined visible
-    /// region has none. This is the realistic instance of that gap: target sits within the
-    /// inner ScrollViewer's own 0..100 viewport (so an independent "vs inner" check alone would
-    /// call it visible), but the inner ScrollViewer itself is scrolled out of the outer
-    /// ScrollViewer's viewport. The obscurement must still be detected — proven here by the
-    /// fact that BringIntoView has to scroll the OUTER viewer too (never touched if the nested
-    /// clip were never recognized as obscuring in the first place).
+    /// Fix round 2, item #1 (regression in the above fix): the current-focus guard must yield
+    /// ONLY to a USABLE different focus. Here, focus moves from A to B synchronously within
+    /// the same transition that captured A — but B is (already) permanently clipped by a plain
+    /// ClipToBounds Border, not a ScrollViewer, so nothing ever answers BringIntoView and B stays
+    /// obscured. B does NOT auto-clear from FocusManager the way an IsVisible=false element does
+    /// (clipping is purely visual), so it is genuinely still "the current focus" when the
+    /// deferred job runs — and unlike <see cref="StaleDeferredRecovery_FocusMovedAwayFromCaptured_IsNeverOverwritten"/>'s
+    /// `elsewhere` (fully valid), B is itself broken. The recovery must not yield to it — it
+    /// must relocate FROM B (not from the originally-captured A) to the direction target.
     /// </summary>
     [AvaloniaFact]
-    public void NestedClippers_ScrolledOutOfOuterViewport_IsDetectedObscured_AndRecovered()
+    public void CurrentFocusGuard_YieldsOnlyToUsableFocus_RecoversWhenNewFocusIsAlsoStranded()
+    {
+        (Window w, Grid root) = Host(Threshold - 1);
+        try
+        {
+            var a = new Button { Content = "A", [Grid.RowProperty] = 0 };
+            var clipper = new Border { [Grid.RowProperty] = 1, Height = 20, ClipToBounds = true };
+            var bHost = new StackPanel();
+            var b = new Button { Content = "B", Height = 30, Margin = new Thickness(0, 50, 0, 0) }; // permanently clipped
+            bHost.Children.Add(b);
+            clipper.Child = bHost;
+            var restoreTarget = new Button { Content = "direction target", [Grid.RowProperty] = 2 };
+            root.Children.Add(a);
+            root.Children.Add(clipper);
+            root.Children.Add(restoreTarget);
+            CompactHeightBehavior.SetRestoreFocusTarget(root, restoreTarget);
+            root.Classes.CollectionChanged += (_, _) =>
+            {
+                if (!root.Classes.Contains("compactHeight"))
+                {
+                    b.Focus();   // "user"/some code moves focus to the ALREADY-clipped B,
+                                  // synchronously, within the same transition that captured A
+                }
+            };
+            Dispatcher.UIThread.RunJobs();
+
+            a.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(a.IsFocused);
+
+            w.Height = Threshold + 40;   // -> restore; captures A; the handler above moves
+                                          // focus to the obscured B before the deferred job runs
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(restoreTarget.IsFocused,
+                "B is a DIFFERENT, in-scope focus target, but it is itself obscured — the guard " +
+                "must not yield to it, and recovery must still relocate to the direction target");
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Finding #3 (fix round 2 refinement — the original version of this test was not
+    /// discriminating: target sat wholly outside the outer viewport, which even the OLD,
+    /// per-clipper-independent check already caught via its "vs outer" test alone, since that
+    /// uses the fully-composed transform). THIS geometry is genuinely discriminating: target is
+    /// tall enough (150px) to extend past inner's own 100px viewport. Concretely, in
+    /// inner-rendered coordinates: target spans 50..200; inner's own viewport is [0,100]
+    /// (independently overlaps target at 50..100); outer's raw window, mapped into
+    /// inner-rendered space, is [150,250] (independently overlaps target at 150..200). Each
+    /// clipper independently finds SOME overlap with target — but in DISJOINT sub-ranges that
+    /// share no point (50..100 vs 150..200), so no single point of target is ever actually
+    /// visible through both at once: the true combined region (their intersection, empty here)
+    /// excludes it entirely. Proven both ways in the fix-round-2 report: the per-clipper
+    /// independent implementation was temporarily restored and confirmed to pass this test (a
+    /// false negative — a silent, undetected obscurement) before the cumulative-intersection fix
+    /// was reapplied and confirmed to fail it correctly (BringIntoView is only ever invoked, and
+    /// only ever moves either offset, when IsObscured's initial verdict is true).
+    /// </summary>
+    [AvaloniaFact]
+    public void NestedClippers_DisjointIndependentOverlaps_AreObscuredOnlyByTheCombinedCheck()
     {
         (Window w, Grid root) = Host(Threshold + 50);
         try
         {
             var outer = new ScrollViewer { [Grid.RowProperty] = 2, Height = 100 };
-            var outerStack = new StackPanel();
-            outerStack.Children.Add(new Border { Height = 300 }); // pushes inner below outer's 100px viewport
             var inner = new ScrollViewer { Height = 100 };
             var innerStack = new StackPanel();
-            var target = new Button { Content = "target", Height = 30 };
+            innerStack.Children.Add(new Border { Height = 50 });     // pushes target to inner-content-Y 50
+            var target = new Button { Content = "target", Height = 150 };
             innerStack.Children.Add(target);
-            for (int i = 0; i < 5; i++) innerStack.Children.Add(new Border { Height = 30 });
             inner.Content = innerStack;
-            outerStack.Children.Add(inner);
+            var outerStack = new StackPanel();
+            outerStack.Children.Add(inner);                  // inner is outer's FIRST content: P=0
+            outerStack.Children.Add(new Border { Height = 200 }); // gives outer room to scroll to 150
             outer.Content = outerStack;
             root.Children.Add(outer);
             Dispatcher.UIThread.RunJobs();
 
             target.Focus();
-            outer.Offset = default;            // undo Avalonia's own auto-scroll-into-view on focus
-            inner.Offset = default;
+            inner.Offset = default;                 // inner unscrolled: shows inner-rendered [0,100]
+            outer.Offset = new Vector(0, 150);       // outer's raw window becomes inner-rendered
+                                                      // [150,250] — independently overlaps target's
+                                                      // [50,200] at [150,200], disjoint from inner's
+                                                      // own overlap at [50,100]
             Dispatcher.UIThread.RunJobs();
-            Assert.True(target.IsFocused);
-            Assert.Equal(0, outer.Offset.Y);   // inner (and target within it) sits below outer's own viewport
+            Assert.Equal(0, inner.Offset.Y);
+            Assert.Equal(150, outer.Offset.Y);
 
-            w.Height = Threshold - 1;          // any transition runs the post-layout obscurement check
+            double innerBefore = inner.Offset.Y;
+            double outerBefore = outer.Offset.Y;
+
+            w.Height = Threshold - 1;   // any transition runs the post-layout obscurement check
             Dispatcher.UIThread.RunJobs();
 
-            Assert.True(target.IsFocused,
-                "recoverable by scrolling BOTH viewers, so focus stays on target");
-            Assert.True(outer.Offset.Y > 0,
-                "the OUTER viewport had to scroll too — proves the nested clip was detected as obscuring, not just the inner one");
+            Assert.True(inner.Offset.Y != innerBefore || outer.Offset.Y != outerBefore,
+                "BringIntoView must have been attempted — proving IsObscured classified target as " +
+                "obscured despite both clippers independently showing SOME (disjoint) overlap with it; " +
+                "the old per-clipper-independent check would see no obscurement and touch neither offset");
         }
         finally { w.Close(); }
     }

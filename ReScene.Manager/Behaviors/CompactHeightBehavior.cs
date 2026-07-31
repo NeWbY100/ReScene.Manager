@@ -218,6 +218,14 @@ internal static class CompactHeightBehavior
             CaptureDragHeights(control, state);
         }
 
+        // Every real transition bumps the generation — regardless of whether anything was
+        // focused to capture — so "a newer transition has happened since" is detectable even
+        // when the transition that made it stale had nothing of its own to relocate.
+        if (isTransition)
+        {
+            ++state.Generation;
+        }
+
         // (2) apply styles/rows.
         state.IsCompact = wantCompact;
         ApplyHelpExpanderDirection(control, state, wantCompact);
@@ -229,15 +237,11 @@ internal static class CompactHeightBehavior
             return;
         }
 
-        // A real transition: bump the generation so a deferred recovery job for THIS
-        // transition can detect whether a later transition has since superseded it.
-        int generation = ++state.Generation;
-
         // (3)-(6) staged: run only after a layout pass reflects the just-applied class/row/
         // visibility changes (Loaded is lower priority than the layout-driving priorities,
         // so the dispatcher services any pending layout before this posted job runs).
         Dispatcher.UIThread.Post(
-            () => RelocateFocusIfNeeded(control, captured, wantCompact, generation, state),
+            () => RelocateFocusIfNeeded(control, captured, wantCompact, state.Generation, state),
             DispatcherPriority.Loaded);
     }
 
@@ -490,23 +494,26 @@ internal static class CompactHeightBehavior
 
     /// <summary>
     /// Runs the post-layout obscurement check and, if needed, the fallback chain — but only if
-    /// this job is still current. Three independent guards reject a stale callback: a NEWER
-    /// transition has since superseded this one (generation), the mode has since changed away
-    /// from the direction this job was queued for, or focus has already moved (by any means —
-    /// programmatic or user-driven) away from the element this job was queued to recover.
-    /// Any one of these means recovering <paramref name="captured"/> is no longer this job's
-    /// business, and touching focus now would overwrite something that has nothing to do with
-    /// the transition that queued this job.
+    /// this job is still current, and on whatever element actually still needs recovering.
+    /// Rejected outright if a NEWER transition has superseded this one (generation) or the mode
+    /// has since changed away from the direction this job was queued for. Otherwise,
+    /// <see cref="ResolveRecoveryTarget"/> decides what (if anything) to act on: it can differ
+    /// from <paramref name="captured"/> — see its own doc for why.
     /// </summary>
     private static void RelocateFocusIfNeeded(Control root, Control captured, bool enteringCompact, int generation, State state)
     {
-        if (IsStale(root, captured, enteringCompact, generation, state))
+        if (IsSuperseded(enteringCompact, generation, state))
         {
             return;
         }
 
-        bool obscured = IsObscured(captured);
-        if (IsSettled(captured, obscured))
+        if (ResolveRecoveryTarget(root, captured) is not { } target)
+        {
+            return;
+        }
+
+        bool obscured = IsObscured(target);
+        if (IsSettled(target, obscured))
         {
             return;
         }
@@ -514,10 +521,10 @@ internal static class CompactHeightBehavior
         if (obscured)
         {
             // Scrollable ancestors may recover it — never relocate merely-clipped focus.
-            captured.BringIntoView();
-            captured.UpdateLayout();
-            obscured = IsObscured(captured);
-            if (IsSettled(captured, obscured))
+            target.BringIntoView();
+            target.UpdateLayout();
+            obscured = IsObscured(target);
+            if (IsSettled(target, obscured))
             {
                 return;
             }
@@ -525,34 +532,49 @@ internal static class CompactHeightBehavior
             // Re-check staleness: BringIntoView/UpdateLayout can themselves cascade into
             // further layout and, in principle, another transition — the same rejection
             // applies to acting on the fallback chain below.
-            if (IsStale(root, captured, enteringCompact, generation, state))
+            if (IsSuperseded(enteringCompact, generation, state))
             {
                 return;
             }
         }
 
-        FocusFallbackChain(root, captured, enteringCompact);
+        FocusFallbackChain(root, target, enteringCompact);
     }
 
+    private static bool IsSuperseded(bool enteringCompact, int generation, State state) =>
+        state.Generation != generation || state.IsCompact != enteringCompact;
+
     /// <summary>
-    /// True if a newer transition has superseded this one, the mode no longer matches the
-    /// direction this job was queued for, or focus has moved to some OTHER, still-focused
-    /// element since capture. Nothing being focused at all does NOT count as "moved away":
-    /// that is the ordinary, expected transient state the instant <paramref name="captured"/>
-    /// itself becomes invisible/unfocusable — precisely the situation this job exists to
-    /// recover from — not evidence that some unrelated action has taken over. Only a
-    /// DIFFERENT, non-null current focus means somebody else already decided where focus
-    /// belongs, and this job must not overwrite that.
+    /// What this job should actually recover, if anything — not necessarily
+    /// <paramref name="captured"/> itself. Nothing currently focused is the ordinary,
+    /// expected transient state the instant <paramref name="captured"/> becomes invisible or
+    /// unfocusable (precisely what this job exists to recover from, not evidence that some
+    /// unrelated action has taken over), so that case, and the "still the same element" case,
+    /// both mean: recover <paramref name="captured"/>. Focus that moved to something OUTSIDE
+    /// this root entirely is never this job's business (the rev-8 precondition, re-checked
+    /// here since scope can change between capture and this job running) — return null. Focus
+    /// that moved to a DIFFERENT, USABLE element still inside this root means somebody else
+    /// already decided where focus belongs — respect it, return null. Focus that moved to a
+    /// DIFFERENT element inside this root that is ITSELF unusable means the same transition (or
+    /// something concurrent with it) stranded THAT element instead of the one originally
+    /// captured — recovery must now target it, or this job would report `captured` as
+    /// "settled" while the REAL, currently-focused element sits broken.
     /// </summary>
-    private static bool IsStale(Control root, Control captured, bool enteringCompact, int generation, State state)
+    private static Control? ResolveRecoveryTarget(Control root, Control captured)
     {
-        if (state.Generation != generation || state.IsCompact != enteringCompact)
+        Control? current = CurrentFocusedElement(root);
+        if (current is null || ReferenceEquals(current, captured))
         {
-            return true;
+            return captured;
         }
 
-        Control? currentlyFocused = CurrentFocusedElement(root);
-        return currentlyFocused is not null && !ReferenceEquals(currentlyFocused, captured);
+        bool inScope = ReferenceEquals(current, root) || root.IsVisualAncestorOf(current);
+        if (!inScope)
+        {
+            return null;
+        }
+
+        return IsUsable(current) ? null : current;
     }
 
     private static bool IsSettled(Control captured, bool obscured) =>
