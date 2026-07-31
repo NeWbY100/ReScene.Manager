@@ -244,7 +244,7 @@ replaced by a Grid whose rows are (codex rev-2 #3):
   FULL text reaches sighted keyboard users through the LOG, which always carries the
   complete result line — asserted; ToolTip serves pointer users, HelpText serves AT;
   completion/failure is ANNOUNCED via the app's established always-in-tree polite
-  pattern (a separate result-status TextBlock that is永ALWAYS in the tree with
+  pattern (a separate result-status TextBlock that is ALWAYS in the tree with
   `LiveSetting="Polite"`, empty text rendering nothing — the SaveLogStatus pattern;
   setting text on a collapsed element then showing it races/loses the announcement,
   codex round-4 — the visual banner keeps its IsVisible binding and stays
