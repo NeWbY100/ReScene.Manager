@@ -197,8 +197,9 @@ modes; under `.compactHeight` it is styled to a single line — APPROVED with co
   BringIntoView, so the body's ScrollViewer becomes focusable IN COMPACT ONLY — a
   class-scoped style (`.compactHeight … ScrollViewer.helpBody { Focusable: True }`;
   base style False) so NO normal-mode Tab stop is added (criterion F — codex round-3).
-  In compact it takes Tab focus after the header toggle and scrolls with the arrow keys
-  (Avalonia's built-in focused-ScrollViewer key handling); it carries
+  In compact it takes Tab focus after the header toggle and scrolls with
+  PageUp/PageDown (plus Home/End) — Avalonia's ScrollViewer handles PAGE keys, not
+  arrows (codex round-5); it carries
   `AutomationProperties.Name="Help content"` (a focusable element must announce as
   something — codex round-4); asserted per view with real key input in compact AND its
   absence from the normal-mode tab-order snapshot. The Reconstructor's body is NEVER
