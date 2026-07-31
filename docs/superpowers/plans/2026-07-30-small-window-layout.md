@@ -4,7 +4,7 @@
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
 > use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: DRAFT rev 3 — Tasks 1–3 fully authored (against spec rev 6); Tasks 4–7 pending
+**Status: DRAFT rev 4 — Tasks 1–4 fully authored (against spec rev 6); Tasks 5–7 pending
 authorship. DO NOT EXECUTE until this line says the plan is complete and codex-approved.**
 
 **Pending spec nits (batch into the next spec touch, do not block):** §4's SRSCreator
@@ -752,12 +752,105 @@ ProgressMessage(conditional)) + ProgressBar(conditional).
 
 ---
 
-### Tasks 4–7 (pending authorship — DO NOT DISPATCH)
+### Task 4: SRSReconstructorView three-band conversion
+
+Spec rev 6 numbers: threshold 450; compact config min 110 (help-open 80); log 80; pinned
+band ≤ 75; compact worst floor ≤ 307. Feedback inventory (spec-correct for this view):
+pinned band = separator + action DockPanel (Rebuild Sample) + result Border (conditional,
+`ShowResult`) + separator. This view has NO progress controls.
+
+**Files:**
+- Modify: `ReScene.Manager/Views/SRSReconstructorView.axaml`
+- Modify: `ReScene.Manager/Views/SRSReconstructorView.axaml.cs` (behavior wiring)
+- Test: `ReScene.Manager.Tests/SRSReconstructorCompactTests.cs` (new)
+
+**Interfaces:**
+- Consumes: Task 1 behavior (`CompactRowMode.AutoToStar`), Task 2's `helpDisclosure`
+  styles, Task 3's band pattern.
+
+- [ ] **Step 1: XAML restructure** — root DockPanel → the 4-row Grid, elements verbatim:
+
+```xml
+  <Grid Margin="{DynamicResource PageMargin}" x:Name="RootGrid">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />                 <!-- 0: Help chrome -->
+      <RowDefinition Height="Auto" />                 <!-- 1: config (AutoToStar) -->
+      <RowDefinition Height="Auto" />                 <!-- 2: pinned action band -->
+      <RowDefinition Height="*" MinHeight="80" />     <!-- 3: log band -->
+    </Grid.RowDefinitions>
+
+    <!-- 0: chrome — the intro TextBlock moves inside; header "Help". -->
+    <Expander Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
+              Margin="0,0,0,6" AutomationProperties.Name="Help">
+      <Expander.Header>
+        <TextBlock Text="Help" FontSize="{DynamicResource FontSizeCaption}" />
+      </Expander.Header>
+      <!-- existing intro TextBlock, verbatim -->
+    </Expander>
+
+    <!-- 1: config band — ScrollViewer + StackPanel (inset on content panel), hosting in
+         today's order: SRS File label / picker DockPanel (Browse + SRSFileTextBox) /
+         FieldStatusLine SRSStatus / separator / Media File label / picker DockPanel
+         (MediaFileTextBox, IsReadOnly binding intact) / FieldStatusLine MediaStatus /
+         separator / Output label / picker DockPanel (OutputTextBox) / FieldStatusLine
+         OutputStatus — all verbatim, Dock attributes dropped. -->
+
+    <!-- 2: pinned band (StackPanel): separator / action DockPanel (Rebuild Sample,
+         verbatim incl. its 0,0,0,4 margin) / result Border (verbatim — IsVisible=
+         ShowResult, ResultSuccessToBrush background; ADD TextTrimming=
+         "CharacterEllipsis" + MaxLines=2 on its TextBlock so a long ResultSummary is
+         bounded — a11y rev-3 NEW-4's banner cap; ToolTip.Tip binds the full summary) /
+         separator. -->
+
+    <!-- 3: log band — verbatim log DockPanel. -->
+  </Grid>
+```
+
+- [ ] **Step 2: Code-behind wiring** (ctor):
+
+```csharp
+        Grid root = RootGrid;
+        Behaviors.CompactHeightBehavior.SetThreshold(root, 450);
+        Behaviors.CompactHeightBehavior.SetRowSizes(root,
+            [new Behaviors.CompactRowSize(RowIndex: 1, NormalHeight: double.NaN,
+                CompactMinHeight: 110, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.AutoToStar)]);
+        Behaviors.CompactHeightBehavior.SetHelpExpander(root, HelpDisclosure);
+        Behaviors.CompactHeightBehavior.SetFocusFallback(root, HelpDisclosure);
+```
+
+- [ ] **Step 3: Tests** (`SRSReconstructorCompactTests.cs`, the established five-part
+  shape):
+
+```csharp
+    // 1. Invariant: expanded worst floor < 450 (force all three FieldStatusLines set +
+    //    ShowResult with a two-line ResultSummary); compact floor <= 307; compact +
+    //    HelpOpen one-sum <= 307; pinned band worst (result visible, 2-line summary
+    //    capped) <= 75.
+    // 2. Rendered matrix at 700×450 and fresh at 451 (expanded): A for the last config
+    //    control (Output Browse) and Rebuild Sample; B no-clip all conditionals; C real
+    //    Tab walk.
+    // 3. Tab-order snapshots both modes.
+    // 4. Chrome: single-instance intro; reset on compact re-entry; focus guard.
+    // 5. Pinned band: Rebuild Sample + result Border fully inside the window with band 1
+    //    scrolled to both extremes and ShowResult forced (this view's measured defect:
+    //    log at 74px base shrinking to 0 under conditionals).
+    // 6. Result cap: with a 300-char ResultSummary, the Border's height stays <= its
+    //    cap and the FULL text is exposed (UIA Name/ToolTip) — trimming is visual-only,
+    //    same rule as the tip (a11y conditions 1/2 applied to the banner).
+```
+
+  Red-first: invariant + pinned-band cases against the DockPanel layout.
+
+- [ ] **Step 4: Frame-rig parity, suites + gate, runtime smoke** (Task 2 steps 6–7).
+- [ ] **Step 5: Commit** `feat(ui): SRSReconstructor three-band small-window degradation`.
+
+---
+
+### Tasks 5–7 (pending authorship — DO NOT DISPATCH)
 
 Authored next, one at a time, each against the view's full markup, to the same
 no-placeholder standard:
 
-- **Task 4 — SRSReconstructorView** (three-band, threshold 450).
 - **Task 5 — SampleRestorerView** (three-band + DataGrid-in-scroller handoff contracts,
   threshold 535).
 - **Task 6 — CreatorView** (largest: three-band generalization, stored-files row via
