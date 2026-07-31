@@ -237,11 +237,18 @@ internal static class CompactHeightBehavior
             return;
         }
 
+        // Captured into a LOCAL now, not read from state.Generation inside the lambda below:
+        // the lambda only executes later, and by then state.Generation could already reflect
+        // a NEWER transition — reading the live field at that point would always equal
+        // itself and never detect staleness. The local freezes what "current" meant at post
+        // time, which is the whole point of the comparison inside IsSuperseded.
+        int generation = state.Generation;
+
         // (3)-(6) staged: run only after a layout pass reflects the just-applied class/row/
         // visibility changes (Loaded is lower priority than the layout-driving priorities,
         // so the dispatcher services any pending layout before this posted job runs).
         Dispatcher.UIThread.Post(
-            () => RelocateFocusIfNeeded(control, captured, wantCompact, state.Generation, state),
+            () => RelocateFocusIfNeeded(control, captured, wantCompact, generation, state),
             DispatcherPriority.Loaded);
     }
 
@@ -529,13 +536,25 @@ internal static class CompactHeightBehavior
                 return;
             }
 
-            // Re-check staleness: BringIntoView/UpdateLayout can themselves cascade into
-            // further layout and, in principle, another transition — the same rejection
-            // applies to acting on the fallback chain below.
+            // Re-check EVERYTHING, not just generation/mode: BringIntoView/UpdateLayout can
+            // themselves cascade into further layout and, in principle, another transition —
+            // AND take long enough for focus to move again in the meantime. Re-resolving
+            // (rather than only re-checking generation/mode) is what catches a NEW, valid
+            // focus landing during that window — without it, the fallback chain below would
+            // silently overwrite a focus change that has nothing to do with this job, exactly
+            // the guarantee the entry-time check already provides for the window before
+            // BringIntoView runs.
             if (IsSuperseded(enteringCompact, generation, state))
             {
                 return;
             }
+
+            if (ResolveRecoveryTarget(root, target) is not { } stillTarget)
+            {
+                return;
+            }
+
+            target = stillTarget;
         }
 
         FocusFallbackChain(root, target, enteringCompact);
@@ -580,6 +599,18 @@ internal static class CompactHeightBehavior
     private static bool IsSettled(Control captured, bool obscured) =>
         !obscured && captured.Focusable && captured.IsEffectivelyEnabled;
 
+    /// <summary>
+    /// True if <paramref name="element"/> is detached, invisible anywhere in its ancestor
+    /// chain, or clipped out by the CUMULATIVE intersection of every clipping ancestor's
+    /// viewport — <c>IsEffectivelyVisible</c> alone does not see the clipping case (a
+    /// scrolled-away row stays "visible"), and testing each clipper INDEPENDENTLY is not
+    /// equivalent to testing against their intersection: an element can overlap clipper A in
+    /// one part of itself and clipper B in a disjoint part, passing both checks separately,
+    /// while A∩B (what is actually visible through both at once) doesn't overlap it at all.
+    /// So every clipper's own viewport is transformed into ONE common space (the visual root)
+    /// and progressively intersected together FIRST, and the element is tested against that
+    /// single combined rect.
+    /// </summary>
     /// <summary>
     /// True if <paramref name="element"/> is detached, invisible anywhere in its ancestor
     /// chain, or clipped out by the CUMULATIVE intersection of every clipping ancestor's

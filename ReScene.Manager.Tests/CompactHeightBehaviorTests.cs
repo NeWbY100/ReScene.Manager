@@ -1,3 +1,4 @@
+using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -512,22 +513,90 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
+    /// Fix round 3, item #1 (regression in round 2's ResolveRecoveryTarget refactor): the
+    /// ENTRY-time current-focus check (before BringIntoView) was restored correctly in round 2,
+    /// but the POST-BringIntoView recheck regressed to generation/mode only, dropping the
+    /// "did focus move to something else valid in the meantime" half of the fix-round-1
+    /// guarantee. Here, captured is permanently clipped (nothing answers BringIntoView), so the
+    /// obscured branch runs; a handler on captured's OWN RequestBringIntoViewEvent — which
+    /// fires synchronously, DURING the BringIntoView() call itself — moves focus to a valid,
+    /// unrelated element, simulating a user action racing the recovery attempt. The fallback
+    /// chain must yield to it rather than overwrite it — proven discriminating by placing an
+    /// EARLIER-in-tree-order, otherwise-eligible fallback candidate that the chain would have
+    /// landed on instead, had it run at all.
+    /// </summary>
+    [AvaloniaFact]
+    public void PostBringIntoView_FocusMovedToValidElement_FallbackChainYields()
+    {
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var otherFallbackTarget = new Button { Content = "otherFallback", [Grid.RowProperty] = 0 };
+            var validElsewhere = new Button { Content = "validElsewhere", [Grid.RowProperty] = 1 };
+            var clipper = new Border { [Grid.RowProperty] = 2, Height = 20, ClipToBounds = true };
+            var innerStack = new StackPanel();
+            var captured = new Button { Content = "captured", Height = 30, Margin = new Thickness(0, 50, 0, 0) };
+            innerStack.Children.Add(captured);
+            clipper.Child = innerStack;
+            root.Children.Add(otherFallbackTarget);
+            root.Children.Add(validElsewhere);
+            root.Children.Add(clipper);
+
+            // Fires synchronously inside captured.BringIntoView(), simulating focus moving to
+            // a valid element WHILE the staged recovery is in progress.
+            captured.AddHandler(Control.RequestBringIntoViewEvent, (_, _) => validElsewhere.Focus());
+            Dispatcher.UIThread.RunJobs();
+
+            captured.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(captured.IsFocused);
+
+            w.Height = Threshold - 1;   // no HelpExpander set: resolved target is null, so the
+                                          // fallback chain (if it ran) would try otherFallbackTarget first
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(validElsewhere.IsFocused,
+                "focus that moved to a valid element during BringIntoView must not be overwritten");
+            Assert.False(otherFallbackTarget.IsFocused,
+                "the fallback chain must never even run once focus has already moved to something valid");
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
     /// Finding #3 (fix round 2 refinement — the original version of this test was not
     /// discriminating: target sat wholly outside the outer viewport, which even the OLD,
     /// per-clipper-independent check already caught via its "vs outer" test alone, since that
-    /// uses the fully-composed transform). THIS geometry is genuinely discriminating: target is
-    /// tall enough (150px) to extend past inner's own 100px viewport. Concretely, in
-    /// inner-rendered coordinates: target spans 50..200; inner's own viewport is [0,100]
-    /// (independently overlaps target at 50..100); outer's raw window, mapped into
-    /// inner-rendered space, is [150,250] (independently overlaps target at 150..200). Each
-    /// clipper independently finds SOME overlap with target — but in DISJOINT sub-ranges that
-    /// share no point (50..100 vs 150..200), so no single point of target is ever actually
-    /// visible through both at once: the true combined region (their intersection, empty here)
-    /// excludes it entirely. Proven both ways in the fix-round-2 report: the per-clipper
-    /// independent implementation was temporarily restored and confirmed to pass this test (a
-    /// false negative — a silent, undetected obscurement) before the cumulative-intersection fix
-    /// was reapplied and confirmed to fail it correctly (BringIntoView is only ever invoked, and
-    /// only ever moves either offset, when IsObscured's initial verdict is true).
+    /// uses the fully-composed transform). THIS geometry is genuinely discriminating: target
+    /// straddles the GAP between the two clippers' own ranges. Concretely, in inner-rendered
+    /// coordinates: target spans 95..115; inner's own viewport is [0,100] (independently
+    /// overlaps target at 95..100); outer's raw window, mapped into inner-rendered space, is
+    /// [110,210] (independently overlaps target at 110..115). Each clipper independently finds
+    /// SOME overlap with target — but in DISJOINT sub-ranges that share no point (95..100 vs
+    /// 110..115, with a 100..110 gap between them), so no single point of target is ever
+    /// actually visible through both at once: the true combined region (their intersection,
+    /// empty here) excludes it entirely.
+    /// PROVABLY, this exact shape of counter-example cannot ALSO be "fully recovered by a single
+    /// BringIntoView call, with the outer viewer specifically visibly moving": for the
+    /// discriminating case to exist at all, target must extend beyond the INNER scroller's own
+    /// range (if target were wholly within inner's own range, "vs outer independently passes"
+    /// would force the combined intersection to include it too — algebraically, X⊆A and X∩B≠∅
+    /// together imply X∩(A∩B)≠∅). Since BringIntoView bubbles from target outward, inner —
+    /// always the first ancestor in that path — is the one that must, and does, adjust
+    /// (confirmed empirically: inner.Offset moves to bring target within its OWN view), and it
+    /// does not propagate a further request once it has acted (confirmed empirically: outer's
+    /// offset is left untouched). Outer's own clip therefore still excludes target after the
+    /// recovery attempt, so relocation correctly proceeds — this is the honest, verified
+    /// end-state, not "final focus stays on target" (which held for the REPLACED test's
+    /// different geometry, where outer alone needed to move and did).
+    /// Fix-round-3 correction: this also fixes the fix-round-2 version's reversed RED/GREEN
+    /// docstring wording and replaces its non-committal "either offset changed" assertion with
+    /// the concrete, provable one below.
+    /// RED/GREEN proof (re-verified for this exact test): with IsObscured temporarily reverted
+    /// to the pre-fix, per-clipper-independent implementation, this test FAILS (both
+    /// independent checks pass, so IsObscured never even calls BringIntoView and neither offset
+    /// nor focus ever changes) — RED. With the cumulative-intersection implementation restored,
+    /// this test PASSES — GREEN.
     /// </summary>
     [AvaloniaFact]
     public void NestedClippers_DisjointIndependentOverlaps_AreObscuredOnlyByTheCombinedCheck()
@@ -538,37 +607,44 @@ public class CompactHeightBehaviorTests
             var outer = new ScrollViewer { [Grid.RowProperty] = 2, Height = 100 };
             var inner = new ScrollViewer { Height = 100 };
             var innerStack = new StackPanel();
-            innerStack.Children.Add(new Border { Height = 50 });     // pushes target to inner-content-Y 50
-            var target = new Button { Content = "target", Height = 150 };
+            innerStack.Children.Add(new Border { Height = 95 });   // pushes target to inner-content-Y 95
+            var target = new Button { Content = "target", Height = 20 };
             innerStack.Children.Add(target);
             inner.Content = innerStack;
             var outerStack = new StackPanel();
-            outerStack.Children.Add(inner);                  // inner is outer's FIRST content: P=0
-            outerStack.Children.Add(new Border { Height = 200 }); // gives outer room to scroll to 150
+            outerStack.Children.Add(inner);                        // inner is outer's FIRST content: P=0
+            outerStack.Children.Add(new Border { Height = 200 });   // gives outer room to scroll to 110
             outer.Content = outerStack;
+            var fallbackTarget = new Button { Content = "fallback", [Grid.RowProperty] = 1 };
+            root.Children.Add(fallbackTarget);
             root.Children.Add(outer);
             Dispatcher.UIThread.RunJobs();
 
             target.Focus();
             inner.Offset = default;                 // inner unscrolled: shows inner-rendered [0,100]
-            outer.Offset = new Vector(0, 150);       // outer's raw window becomes inner-rendered
-                                                      // [150,250] — independently overlaps target's
-                                                      // [50,200] at [150,200], disjoint from inner's
-                                                      // own overlap at [50,100]
+            outer.Offset = new Vector(0, 110);       // outer's raw window becomes inner-rendered
+                                                      // [110,210] — independently overlaps target's
+                                                      // [95,115] at [110,115], disjoint from inner's
+                                                      // own overlap at [95,100] (a 100..110 gap
+                                                      // separates the two independent overlaps)
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(0, inner.Offset.Y);
-            Assert.Equal(150, outer.Offset.Y);
-
-            double innerBefore = inner.Offset.Y;
-            double outerBefore = outer.Offset.Y;
+            Assert.Equal(110, outer.Offset.Y);
 
             w.Height = Threshold - 1;   // any transition runs the post-layout obscurement check
             Dispatcher.UIThread.RunJobs();
 
-            Assert.True(inner.Offset.Y != innerBefore || outer.Offset.Y != outerBefore,
-                "BringIntoView must have been attempted — proving IsObscured classified target as " +
-                "obscured despite both clippers independently showing SOME (disjoint) overlap with it; " +
-                "the old per-clipper-independent check would see no obscurement and touch neither offset");
+            Assert.True(inner.Offset.Y != 0,
+                "inner attempted to bring target into its OWN view — proves BringIntoView ran, " +
+                "which only happens if IsObscured's initial verdict was true (the old per-clipper " +
+                "check would see no obscurement and never call it at all)");
+            Assert.True(outer.Offset.Y == 110,
+                "outer's own clip is untouched by inner's recovery attempt, so target remains " +
+                "genuinely obscured through it — proving the combined check, not just inner's, governs");
+            Assert.False(target.IsFocused,
+                "target is still obscured (by outer) after the recovery attempt, so it must relocate");
+            Assert.True(fallbackTarget.IsFocused,
+                "detection correctly triggered full relocation through the fallback chain");
         }
         finally { w.Close(); }
     }
@@ -652,5 +728,87 @@ public class CompactHeightBehaviorTests
             Assert.True(root.Focusable);
         }
         finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 3, item #3: <c>Generation++</c>'s placement (before the captured-null return)
+    /// is correct, but the deferred job's lambda originally read <c>state.Generation</c> LIVE
+    /// at run time instead of a value captured at post time — always comparing the live field
+    /// to itself, never detecting staleness. Fixed by freezing it into a local before posting.
+    /// A genuine two-real-transitions ABA race — where a second transition bumps the
+    /// generation strictly BETWEEN the first transition's job being posted and that job
+    /// running — is not constructible through the public API. Proven three independent ways:
+    /// (1) QueueEvaluate's own coalescing (the updateQueued guard) allows at most one pending
+    /// Evaluate at a time, so a second transition's Evaluate cannot even be queued while the
+    /// first transition's Evaluate has not yet run.
+    /// (2) Once posted, the deferred recovery job runs at Loaded priority (1) — HIGHER than
+    /// the Default priority (0) that Evaluate itself (and thus any subsequent transition's
+    /// Evaluate) runs at — so within one dispatcher drain, transition A's OWN recovery job is
+    /// always serviced before a newly-queued transition B's Evaluate could run.
+    /// (3) <c>Dispatcher.RunJobs(priority)</c> is an INCLUSIVE (>=) threshold over discrete,
+    /// adjacent priority values (confirmed empirically in fix round 2: Default=0, Loaded=1,
+    /// nothing between them), so there is no partial-drain call that lets Default-priority
+    /// work run while withholding Loaded-priority work newly posted as a result of it.
+    /// This test instead verifies the guarantee the fix actually provides, directly: the
+    /// (reflection-reached) private <c>RelocateFocusIfNeeded</c> is invoked with a generation
+    /// value that deliberately does not match the live <c>state.Generation</c> — exactly what
+    /// a stale, frozen-at-post-time local would look like after a later transition bumped the
+    /// live field — and must no-op, never reaching the fallback chain.
+    /// </summary>
+    [AvaloniaFact]
+    public void StaleGeneration_DirectlyInjected_CausesTheDeferredJobToNoOp()
+    {
+        (Window w, Grid root) = Host(Threshold - 1);
+        try
+        {
+            var collapsing = new Button { Content = "link", [Grid.RowProperty] = 0 };
+            var restoreTarget = new Button { Content = "target", [Grid.RowProperty] = 1 };
+            root.Children.Add(collapsing);
+            root.Children.Add(restoreTarget);
+            CompactHeightBehavior.SetRestoreFocusTarget(root, restoreTarget);
+            root.Classes.CollectionChanged += (_, _) =>
+                collapsing.IsVisible = !root.Classes.Contains("compactHeight");
+            Dispatcher.UIThread.RunJobs();
+
+            collapsing.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(collapsing.IsFocused);
+
+            // Hide collapsing directly (what a real restore transition would do to it),
+            // without going through a real transition, so RelocateFocusIfNeeded can be
+            // invoked afterward with full control over its generation argument.
+            collapsing.IsVisible = false;
+            Dispatcher.UIThread.RunJobs();
+
+            object state = GetPrivateState(root);
+            int liveGeneration = GetGeneration(state);
+            InvokeRelocateFocusIfNeeded(root, collapsing, enteringCompact: false, liveGeneration + 1, state);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(restoreTarget.IsFocused,
+                "a generation that does not match state.Generation must reject the callback " +
+                "outright — the fallback chain must never run, so it must never reach the direction target");
+        }
+        finally { w.Close(); }
+    }
+
+    private static object GetPrivateState(Control control)
+    {
+        FieldInfo statesField = typeof(CompactHeightBehavior).GetField("_states", BindingFlags.NonPublic | BindingFlags.Static)!;
+        object statesTable = statesField.GetValue(null)!;
+        MethodInfo tryGetValue = statesTable.GetType().GetMethod("TryGetValue")!;
+        object?[] args = [control, null];
+        bool found = (bool)tryGetValue.Invoke(statesTable, args)!;
+        Assert.True(found, "state must already exist for a control with Threshold set");
+        return args[1]!;
+    }
+
+    private static int GetGeneration(object state) =>
+        (int)state.GetType().GetProperty("Generation")!.GetValue(state)!;
+
+    private static void InvokeRelocateFocusIfNeeded(Control root, Control captured, bool enteringCompact, int generation, object state)
+    {
+        MethodInfo method = typeof(CompactHeightBehavior).GetMethod("RelocateFocusIfNeeded", BindingFlags.NonPublic | BindingFlags.Static)!;
+        method.Invoke(null, [root, captured, enteringCompact, generation, state]);
     }
 }
