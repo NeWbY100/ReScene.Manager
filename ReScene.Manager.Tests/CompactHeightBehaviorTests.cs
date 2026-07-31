@@ -373,4 +373,218 @@ public class CompactHeightBehaviorTests
         }
         finally { w.Close(); }
     }
+
+    // ── Fix round 1 (code review): covering tests for the four blocking findings ─────
+
+    /// <summary>
+    /// Finding #1: a fresh instance that starts (and stays) at normal height must still
+    /// synchronize its Help expander to the "flat mode, force-expanded" state on its very
+    /// first evaluation — even though that evaluation crosses no threshold (state.IsCompact's
+    /// false default already matches the computed mode, so nothing "transitions"). Before the
+    /// fix, Evaluate's early-return for "no mode change" fired before ApplyHelpExpanderDirection
+    /// ever ran, leaving a fresh Expander at its own IsExpanded=false default — hiding the
+    /// content in both modes (header hidden by normal-mode styles, body collapsed by default).
+    /// </summary>
+    [AvaloniaFact]
+    public void FreshNormalInstance_SynchronizesExpanderToFlatMode()
+    {
+        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,150,*") };
+        var expander = new Expander { [Grid.RowProperty] = 0 };
+        root.Children.Add(expander);
+        root.Children.Add(new Border { [Grid.RowProperty] = 1 });
+        root.Children.Add(new Border { [Grid.RowProperty] = 2 });
+        CompactHeightBehavior.SetThreshold(root, Threshold);
+        CompactHeightBehavior.SetHelpExpander(root, expander);
+
+        var window = new Window { Width = 700, Height = Threshold + 50, Content = root };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            Assert.DoesNotContain("compactHeight", root.Classes);   // confirms this never transitions
+            Assert.True(expander.IsExpanded,
+                "flat/normal mode must force the Help body expanded, even on a fresh instance that never crosses the threshold");
+            Assert.False(CompactHeightBehavior.GetHelpOpen(root), "HelpOpen only applies while compact");
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// Finding #2: the deferred (Loaded-priority) recovery job must reject itself once its
+    /// premise is stale. This exercises the current-focus guard the most naturally
+    /// constructible way: a "user" focus move happens SYNCHRONOUSLY within the very same
+    /// transition that captured focus (via the compactHeight class-changed side effect, before
+    /// the deferred job is even posted) — simulating focus moving on before the staged recovery
+    /// gets its turn. The deferred job must never overwrite that later choice, and — proving it
+    /// backed off before even resolving a target, not just coincidentally agreed with it — the
+    /// fallback chain's own candidate must never end up focused either.
+    /// </summary>
+    [AvaloniaFact]
+    public void StaleDeferredRecovery_FocusMovedAwayFromCaptured_IsNeverOverwritten()
+    {
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var collapsing = new Button { Content = "link", [Grid.RowProperty] = 0 };
+            var otherFallbackTarget = new Button { Content = "otherFallback", [Grid.RowProperty] = 1 };
+            var elsewhere = new Button { Content = "elsewhere", [Grid.RowProperty] = 2 };
+            root.Children.Add(collapsing);
+            root.Children.Add(otherFallbackTarget);
+            root.Children.Add(elsewhere);
+            root.Classes.CollectionChanged += (_, _) =>
+            {
+                bool compact = root.Classes.Contains("compactHeight");
+                collapsing.IsVisible = !compact;
+                if (compact)
+                {
+                    elsewhere.Focus();   // simulated user focus move, synchronous with the transition
+                }
+            };
+            Dispatcher.UIThread.RunJobs();
+
+            collapsing.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(collapsing.IsFocused);
+
+            w.Height = Threshold - 1;   // -> compact; collapsing hides AND focus moves to `elsewhere`
+                                          // synchronously, before the deferred recovery job is posted
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(elsewhere.IsFocused,
+                "a focus change that happened before the deferred recovery runs must win");
+            Assert.False(otherFallbackTarget.IsFocused,
+                "the fallback chain must never even run once focus has already moved away from the captured element");
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Finding #3: obscurement must test the CUMULATIVE intersection of every clipping
+    /// ancestor's viewport, not each independently. Checked independently, "vs inner" and
+    /// "vs outer" can each individually see SOME overlap while their true combined visible
+    /// region has none. This is the realistic instance of that gap: target sits within the
+    /// inner ScrollViewer's own 0..100 viewport (so an independent "vs inner" check alone would
+    /// call it visible), but the inner ScrollViewer itself is scrolled out of the outer
+    /// ScrollViewer's viewport. The obscurement must still be detected — proven here by the
+    /// fact that BringIntoView has to scroll the OUTER viewer too (never touched if the nested
+    /// clip were never recognized as obscuring in the first place).
+    /// </summary>
+    [AvaloniaFact]
+    public void NestedClippers_ScrolledOutOfOuterViewport_IsDetectedObscured_AndRecovered()
+    {
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var outer = new ScrollViewer { [Grid.RowProperty] = 2, Height = 100 };
+            var outerStack = new StackPanel();
+            outerStack.Children.Add(new Border { Height = 300 }); // pushes inner below outer's 100px viewport
+            var inner = new ScrollViewer { Height = 100 };
+            var innerStack = new StackPanel();
+            var target = new Button { Content = "target", Height = 30 };
+            innerStack.Children.Add(target);
+            for (int i = 0; i < 5; i++) innerStack.Children.Add(new Border { Height = 30 });
+            inner.Content = innerStack;
+            outerStack.Children.Add(inner);
+            outer.Content = outerStack;
+            root.Children.Add(outer);
+            Dispatcher.UIThread.RunJobs();
+
+            target.Focus();
+            outer.Offset = default;            // undo Avalonia's own auto-scroll-into-view on focus
+            inner.Offset = default;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(target.IsFocused);
+            Assert.Equal(0, outer.Offset.Y);   // inner (and target within it) sits below outer's own viewport
+
+            w.Height = Threshold - 1;          // any transition runs the post-layout obscurement check
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(target.IsFocused,
+                "recoverable by scrolling BOTH viewers, so focus stays on target");
+            Assert.True(outer.Offset.Y > 0,
+                "the OUTER viewport had to scroll too — proves the nested clip was detected as obscuring, not just the inner one");
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Finding #4a (entering direction): fallback candidates must be validated, not merely
+    /// assumed usable. A Focusable=false descendant, an IsVisible=false descendant, and the
+    /// captured element itself (clipped but otherwise Focusable/Enabled, so ONLY the explicit
+    /// exclusion keeps it out) are all in the tree; none may be selected, and the chain must
+    /// still reach the guaranteed root terminal rather than silently stopping.
+    /// </summary>
+    [AvaloniaFact]
+    public void FallbackChain_EnteringDirection_NeverReselectsClippedCapture_ReachesRootTerminal()
+    {
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var clipper = new Border { [Grid.RowProperty] = 2, Height = 20, ClipToBounds = true };
+            var innerStack = new StackPanel();
+            var captured = new Button { Content = "captured", Height = 30, Margin = new Thickness(0, 50, 0, 0) };
+            innerStack.Children.Add(captured);
+            clipper.Child = innerStack;
+
+            var unfocusableDescendant = new Button { Content = "unfocusable", Focusable = false, [Grid.RowProperty] = 0 };
+            var invisibleDescendant = new Button { Content = "invisible", IsVisible = false, [Grid.RowProperty] = 1 };
+            root.Children.Add(unfocusableDescendant);
+            root.Children.Add(invisibleDescendant);
+            root.Children.Add(clipper);
+            Dispatcher.UIThread.RunJobs();
+
+            captured.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(captured.IsFocused);
+
+            w.Height = Threshold - 1;   // no HelpExpander set: resolved target is null, walk begins immediately
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(captured.IsFocused,
+                "captured stays clipped (nothing answers BringIntoView here) and must never be reselected");
+            Assert.False(unfocusableDescendant.IsFocused);
+            Assert.False(invisibleDescendant.IsFocused);
+            Assert.True(root.IsFocused, "every real candidate is unusable: the chain must reach the root terminal");
+            Assert.True(root.Focusable, "behavior grants transient focusability at the terminal");
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Finding #4b (restore direction): the resolved direction target itself can be unusable —
+    /// here, a RestoreFocusTarget that is referenced but was never attached to any tree at all.
+    /// The chain must skip it (not silently end there) and still reach the root terminal, since
+    /// every other real candidate is also unusable.
+    /// </summary>
+    [AvaloniaFact]
+    public void FallbackChain_RestoreDirection_SkipsDetachedRestoreTarget_ReachesRootTerminal()
+    {
+        (Window w, Grid root) = Host(Threshold - 1);
+        try
+        {
+            var scroller = new ScrollViewer { [Grid.RowProperty] = 2, Focusable = true };
+            var unfocusableDescendant = new Button { Content = "unfocusable", Focusable = false, [Grid.RowProperty] = 1 };
+            var detachedRestoreTarget = new Button { Content = "detached" }; // referenced but never attached
+            root.Children.Add(unfocusableDescendant);
+            root.Children.Add(scroller);
+            CompactHeightBehavior.SetRestoreFocusTarget(root, detachedRestoreTarget);
+            root.Classes.CollectionChanged += (_, _) =>
+                scroller.Focusable = root.Classes.Contains("compactHeight");
+            Dispatcher.UIThread.RunJobs();
+
+            scroller.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(scroller.IsFocused);
+
+            w.Height = Threshold + 40;   // -> restore: scroller becomes unfocusable (compact-only);
+                                          // RestoreFocusTarget resolves to a DETACHED control
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(unfocusableDescendant.IsFocused);
+            Assert.True(root.IsFocused,
+                "a detached RestoreFocusTarget must be skipped rather than silently ending the chain there");
+            Assert.True(root.Focusable);
+        }
+        finally { w.Close(); }
+    }
 }

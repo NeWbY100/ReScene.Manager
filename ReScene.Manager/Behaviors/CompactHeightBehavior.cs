@@ -114,8 +114,20 @@ internal static class CompactHeightBehavior
         }
     }
 
-    private static void OnControlLostFocus(object? sender, RoutedEventArgs e) =>
-        ((Control)sender!).Focusable = false;
+    // LostFocus bubbles: a descendant losing focus (e.g. because the root terminal is about to
+    // steal it away via Focus()) raises the SAME event, which arrives here with sender=root
+    // just like root's own direct loss of focus does. Resetting on every bubbled occurrence
+    // would clear the just-granted transient Focusable mid-hand-off (root.Focus() stealing
+    // focus from a still-focused captured element fires the captured element's OWN LostFocus,
+    // which bubbles through root before the grant even settles). Only e.Source == root — the
+    // event genuinely originating on root itself — means root is the one that lost focus.
+    private static void OnControlLostFocus(object? sender, RoutedEventArgs e)
+    {
+        if (ReferenceEquals(sender, e.Source))
+        {
+            ((Control)sender!).Focusable = false;
+        }
+    }
 
     // Re-subscribing (rather than subscribing once for the control's lifetime), plus the
     // explicit QueueEvaluate below, means every (re)hook forces one evaluation attempt against
@@ -174,22 +186,34 @@ internal static class CompactHeightBehavior
         }
 
         bool wantCompact = state.IsCompact ? height < threshold + RestoreSlack : height < threshold;
-        if (wantCompact == state.IsCompact)
+        bool isTransition = wantCompact != state.IsCompact;
+
+        // A fresh control's very first evaluation must establish the expander/HelpOpen state
+        // for whatever mode it starts in even when that mode matches state.IsCompact's false
+        // default (so isTransition is false) — otherwise a view that starts, and stays, at
+        // normal height never runs ApplyHelpExpanderDirection at all, and its Help expander
+        // just keeps its OWN IsExpanded=false default forever instead of the required
+        // flat-mode force-expanded state.
+        if (!isTransition && state.Established)
         {
             return;
         }
 
+        state.Established = true;
+
         // (1) CAPTURE before any change — both directions, since restoring can just as
         // easily strand focus on a hiding compact-only control (e.g. the header toggle).
-        Control? captured = CaptureFocusedElement(control);
+        // Only meaningful for an actual transition: a first-touch establishment pass with no
+        // mode change has nothing to relocate focus away from.
+        Control? captured = isTransition ? CaptureFocusedElement(control) : null;
 
         // Entering compact captures each PixelRestore row's CURRENT (possibly user-dragged)
         // Height before it gets overwritten below. This must happen strictly before
-        // state.IsCompact flips and before ApplyRowsEverywhere runs, and only on this one
-        // edge — a later HelpOpen-triggered reapplication while already compact must never
-        // recapture (it would capture the just-applied compact pixel value instead of the
-        // user's drag).
-        if (wantCompact)
+        // state.IsCompact flips and before ApplyRowsEverywhere runs, and only on the actual
+        // normal-to-compact transition edge — a later HelpOpen-triggered reapplication while
+        // already compact must never recapture (it would capture the just-applied compact
+        // pixel value instead of the user's drag).
+        if (isTransition && wantCompact)
         {
             CaptureDragHeights(control, state);
         }
@@ -200,13 +224,21 @@ internal static class CompactHeightBehavior
         ApplyRowsEverywhere(control, state);
         ToggleClass(control, wantCompact);
 
+        if (captured is null)
+        {
+            return;
+        }
+
+        // A real transition: bump the generation so a deferred recovery job for THIS
+        // transition can detect whether a later transition has since superseded it.
+        int generation = ++state.Generation;
+
         // (3)-(6) staged: run only after a layout pass reflects the just-applied class/row/
         // visibility changes (Loaded is lower priority than the layout-driving priorities,
         // so the dispatcher services any pending layout before this posted job runs).
-        if (captured is not null)
-        {
-            Dispatcher.UIThread.Post(() => RelocateFocusIfNeeded(control, captured, wantCompact), DispatcherPriority.Loaded);
-        }
+        Dispatcher.UIThread.Post(
+            () => RelocateFocusIfNeeded(control, captured, wantCompact, generation, state),
+            DispatcherPriority.Loaded);
     }
 
     private static void ToggleClass(Control control, bool compact)
@@ -437,6 +469,9 @@ internal static class CompactHeightBehavior
 
     // ── Staged focus (spec rev 7/8/11) ───────────────────────────────
 
+    private static Control? CurrentFocusedElement(Control root) =>
+        TopLevel.GetTopLevel(root)?.FocusManager?.GetFocusedElement() as Control;
+
     /// <summary>
     /// The currently-focused element, but ONLY if it is focused AND a descendant of
     /// <paramref name="root"/> (spec rev 8 precondition) — otherwise null, so a resize while
@@ -445,7 +480,7 @@ internal static class CompactHeightBehavior
     /// </summary>
     private static Control? CaptureFocusedElement(Control root)
     {
-        if (TopLevel.GetTopLevel(root)?.FocusManager?.GetFocusedElement() is not Control focused)
+        if (CurrentFocusedElement(root) is not { } focused)
         {
             return null;
         }
@@ -453,8 +488,23 @@ internal static class CompactHeightBehavior
         return ReferenceEquals(focused, root) || root.IsVisualAncestorOf(focused) ? focused : null;
     }
 
-    private static void RelocateFocusIfNeeded(Control root, Control captured, bool enteringCompact)
+    /// <summary>
+    /// Runs the post-layout obscurement check and, if needed, the fallback chain — but only if
+    /// this job is still current. Three independent guards reject a stale callback: a NEWER
+    /// transition has since superseded this one (generation), the mode has since changed away
+    /// from the direction this job was queued for, or focus has already moved (by any means —
+    /// programmatic or user-driven) away from the element this job was queued to recover.
+    /// Any one of these means recovering <paramref name="captured"/> is no longer this job's
+    /// business, and touching focus now would overwrite something that has nothing to do with
+    /// the transition that queued this job.
+    /// </summary>
+    private static void RelocateFocusIfNeeded(Control root, Control captured, bool enteringCompact, int generation, State state)
     {
+        if (IsStale(root, captured, enteringCompact, generation, state))
+        {
+            return;
+        }
+
         bool obscured = IsObscured(captured);
         if (IsSettled(captured, obscured))
         {
@@ -471,10 +521,38 @@ internal static class CompactHeightBehavior
             {
                 return;
             }
+
+            // Re-check staleness: BringIntoView/UpdateLayout can themselves cascade into
+            // further layout and, in principle, another transition — the same rejection
+            // applies to acting on the fallback chain below.
+            if (IsStale(root, captured, enteringCompact, generation, state))
+            {
+                return;
+            }
         }
 
-        Control target = ResolveFallbackTarget(root, enteringCompact);
-        target.Focus();
+        FocusFallbackChain(root, captured, enteringCompact);
+    }
+
+    /// <summary>
+    /// True if a newer transition has superseded this one, the mode no longer matches the
+    /// direction this job was queued for, or focus has moved to some OTHER, still-focused
+    /// element since capture. Nothing being focused at all does NOT count as "moved away":
+    /// that is the ordinary, expected transient state the instant <paramref name="captured"/>
+    /// itself becomes invisible/unfocusable — precisely the situation this job exists to
+    /// recover from — not evidence that some unrelated action has taken over. Only a
+    /// DIFFERENT, non-null current focus means somebody else already decided where focus
+    /// belongs, and this job must not overwrite that.
+    /// </summary>
+    private static bool IsStale(Control root, Control captured, bool enteringCompact, int generation, State state)
+    {
+        if (state.Generation != generation || state.IsCompact != enteringCompact)
+        {
+            return true;
+        }
+
+        Control? currentlyFocused = CurrentFocusedElement(root);
+        return currentlyFocused is not null && !ReferenceEquals(currentlyFocused, captured);
     }
 
     private static bool IsSettled(Control captured, bool obscured) =>
@@ -482,8 +560,15 @@ internal static class CompactHeightBehavior
 
     /// <summary>
     /// True if <paramref name="element"/> is detached, invisible anywhere in its ancestor
-    /// chain, or clipped out by any ancestor that clips its content — <c>IsEffectivelyVisible</c>
-    /// alone does not see the clipping case (a scrolled-away row stays "visible").
+    /// chain, or clipped out by the CUMULATIVE intersection of every clipping ancestor's
+    /// viewport — <c>IsEffectivelyVisible</c> alone does not see the clipping case (a
+    /// scrolled-away row stays "visible"), and testing each clipper INDEPENDENTLY is not
+    /// equivalent to testing against their intersection: an element can overlap clipper A in
+    /// one part of itself and clipper B in a disjoint part, passing both checks separately,
+    /// while A∩B (what is actually visible through both at once) doesn't overlap it at all.
+    /// So every clipper's own viewport is transformed into ONE common space (the visual root)
+    /// and progressively intersected together FIRST, and the element is tested against that
+    /// single combined rect.
     /// </summary>
     private static bool IsObscured(Control element)
     {
@@ -492,6 +577,17 @@ internal static class CompactHeightBehavior
             return true;
         }
 
+        if (element.GetVisualRoot() is not Visual root)
+        {
+            return true;
+        }
+
+        if (TransformRect(element, new Rect(element.Bounds.Size), root) is not { } elementInRoot)
+        {
+            return true; // no common coordinate space with its own root
+        }
+
+        Rect? visible = null;
         foreach (Visual ancestor in element.GetVisualAncestors())
         {
             if (ancestor is not Control clipper || !clipper.ClipToBounds)
@@ -499,52 +595,66 @@ internal static class CompactHeightBehavior
                 continue;
             }
 
-            Point? topLeft = element.TranslatePoint(new Point(0, 0), clipper);
-            Point? bottomRight = element.TranslatePoint(new Point(element.Bounds.Width, element.Bounds.Height), clipper);
-            if (topLeft is not { } tl || bottomRight is not { } br)
+            if (TransformRect(clipper, new Rect(clipper.Bounds.Size), root) is not { } clipperInRoot)
             {
-                return true; // no common ancestor with the clipper: effectively detached from it
+                return true; // no common coordinate space with the clipper
             }
 
-            if (!new Rect(tl, br).Intersects(new Rect(clipper.Bounds.Size)))
-            {
-                return true;
-            }
+            visible = visible is { } current ? current.Intersect(clipperInRoot) : clipperInRoot;
         }
 
-        return false;
+        return visible is { } combined && !elementInRoot.Intersects(combined);
+    }
+
+    private static Rect? TransformRect(Visual from, Rect localRect, Visual to)
+    {
+        Point? topLeft = from.TranslatePoint(new Point(localRect.X, localRect.Y), to);
+        Point? bottomRight = from.TranslatePoint(new Point(localRect.Right, localRect.Bottom), to);
+        return topLeft is { } tl && bottomRight is { } br ? new Rect(tl, br) : null;
     }
 
     /// <summary>
-    /// Fallback chain (spec rev 8): the resolved direction target → the first focusable
-    /// descendant of the root → the root itself, granted transient focusability for the
-    /// hand-off. Never returns null — a silent no-op is forbidden at every step.
+    /// Attempts, in order, the resolved direction target, then every other usable descendant
+    /// in tree order, then the root itself (granted transient focusability) — the guaranteed
+    /// terminal. Every intermediate candidate is validated (attached, unobscured, focusable,
+    /// enabled) AND excludes <paramref name="captured"/> itself before <c>Focus()</c> is even
+    /// attempted; a candidate whose own <c>Focus()</c> call returns false (it became unusable
+    /// in the instant between validation and the call, or the framework refused it for some
+    /// other reason) is skipped rather than silently ending the chain there. The terminal step
+    /// is never gated behind the same usability check — it is the guaranteed last resort,
+    /// spec rev 8's requirement that a silent no-op is forbidden at every step.
     /// </summary>
-    private static Control ResolveFallbackTarget(Control root, bool enteringCompact)
+    private static void FocusFallbackChain(Control root, Control captured, bool enteringCompact)
     {
         Control? resolved = enteringCompact
             ? GetHelpExpander(root)?.GetVisualDescendants().OfType<ToggleButton>().FirstOrDefault()
             : GetRestoreFocusTarget(root);
-        if (IsUsable(resolved))
+
+        if (TryFocus(resolved, captured))
         {
-            return resolved!;
+            return;
         }
 
-        Control? firstFocusable = root.GetVisualDescendants().OfType<Control>().FirstOrDefault(IsUsable);
-        if (firstFocusable is not null)
+        foreach (Control candidate in root.GetVisualDescendants().OfType<Control>())
         {
-            return firstFocusable;
+            if (TryFocus(candidate, captured))
+            {
+                return;
+            }
         }
 
-        // TopLevel is not focusable by default: grant it here, only for the hand-off.
-        // OnControlLostFocus resets it the moment focus moves on, so no permanent Tab stop
-        // is added.
+        // Terminal: TopLevel is not focusable by default, so Focusable is granted here ONLY
+        // for the hand-off; OnControlLostFocus resets it the moment focus moves on, so no
+        // permanent Tab stop is added. Unconditional — never gated behind IsUsable.
         root.Focusable = true;
-        return root;
+        root.Focus();
     }
 
+    private static bool TryFocus(Control? candidate, Control captured) =>
+        candidate is not null && !ReferenceEquals(candidate, captured) && IsUsable(candidate) && candidate.Focus();
+
     private static bool IsUsable(Control? control) =>
-        control is not null && control.Focusable && control.IsEffectivelyVisible && control.IsEffectivelyEnabled;
+        control is not null && control.Focusable && control.IsEffectivelyEnabled && !IsObscured(control);
 
     /// <summary>
     /// Per-control state: mode flag, the coalescing guard, the Bounds subscription, captured
@@ -554,6 +664,24 @@ internal static class CompactHeightBehavior
     private sealed class State
     {
         public bool IsCompact { get; set; }
+
+        /// <summary>
+        /// Set the first time <see cref="Evaluate"/> ever runs to completion for this control
+        /// (transition or not). Distinguishes "nothing to do, already evaluated" from "nothing
+        /// to do YET — this is the very first look at a fresh instance", so a fresh instance
+        /// that starts (and stays) at normal height still gets one establishing pass instead of
+        /// being short-circuited by the "no mode change" early-return before anything (e.g. the
+        /// Help expander) is ever synchronized to that mode.
+        /// </summary>
+        public bool Established { get; set; }
+
+        /// <summary>
+        /// Bumped on every actual transition. A deferred focus-recovery job captures the
+        /// generation at post time and rejects itself if this no longer matches when it
+        /// finally runs — defense against a later transition (or, checked separately, a mode
+        /// flip or an intervening focus move) invalidating the job's premise before it runs.
+        /// </summary>
+        public int Generation { get; set; }
 
         public bool UpdateQueued { get; set; }
 
