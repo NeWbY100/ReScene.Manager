@@ -1,10 +1,9 @@
 # Small-Window Layout Degradation — Design
 
-Status: rev 6 — a11y APPROVED the rev-5 trimmed-tip trade with five conditions, folded
-in below (visual-only trimming with UIA-name assertion; HelpText; residue recorded;
-tip-never-donor; Help durability scoped to a continuous compact session). No further a11y
-re-review before implementation; final A–F review at the gate. Codex reviews on
-reconnection.
+Status: rev 7 — codex spec review (post-reconnection) folded: executable staged-focus
+contract with named direction-specific targets and clipping-aware obscurement checks;
+one strict boundary convention; SRSCreator inventory corrected. A11y conditions from
+rev 6 unchanged. Pending codex re-review.
 
 ## Coordinate space (normative for every figure in this document)
 
@@ -52,7 +51,8 @@ user-dragged splitter height across a compact round-trip.
 Attached to the inner layout root; properties: `Threshold` (inner DIPs), optional
 `RowSizes` map (`rowIndex → (normalHeight, compactHeight, compactMinHeight)`).
 
-- Compact iff `height < Threshold`; restore iff `height >= Threshold + 12` (hysteresis —
+- **Boundary convention (used verbatim everywhere in this spec and its tests):** compact
+  iff `height < Threshold`; restore iff `height >= Threshold + 12` (hysteresis —
   restore-only, the safe direction; swallows fractional-DIP jitter at 125/150%).
   A FRESH view whose first real measure lands anywhere `>= Threshold` starts expanded —
   hysteresis applies only to an instance already compact (codex rev-2 NEW-B2: the matrix
@@ -64,12 +64,21 @@ Attached to the inner layout root; properties: `Threshold` (inner DIPs), optiona
 - Row application: on mode change, applies the `RowSizes` map (behavior-owned because
   selectors cannot reach RowDefinitions); a splitter-modified height is captured before
   compact and restored on expand.
-- **Staged focus transition (codex rev-2 #5):** entering compact — (1) apply compact
-  styles/rows, (2) run a layout pass, (3) if the previously-focused element is now
-  non-effectively-visible, focus the Help expander header. Leaving compact — same staging;
-  if the focused element (e.g. the expander header, hidden at normal size) becomes
-  non-effectively-visible, focus moves to the first focusable of the restored header
-  region. No focus change otherwise in either direction.
+- **Staged focus transition (rev 7 — executable form; replaces the rev-3 wording):**
+  the behavior carries TWO named, direction-specific attached targets:
+  `CompactFocusTarget` (the Help expander's realized header ToggleButton — the Expander
+  control itself is not focusable) and `RestoreFocusTarget` (a per-view named control
+  that exists and is focusable at normal size: Reconstructor = the first link Button;
+  the three-band views and Creator = the view's first input TextBox).
+  Transition algorithm, both directions: (1) CAPTURE the currently-focused element
+  BEFORE any change; (2) apply styles/rows; (3) run a layout pass; (4) decide
+  obscurement — an element is obscured iff it is detached, `IsVisible==false` anywhere
+  in its chain, OR its rendered bounds do not intersect the intersection of every
+  clipping ancestor's viewport (`IsEffectivelyVisible` alone is NOT sufficient — it
+  ignores clipping); (5) if the captured element is obscured, first call
+  `BringIntoView()` on it and re-run the check — scrollable ancestors may recover it;
+  (6) only if still obscured, focus the direction's target (entering compact →
+  CompactFocusTarget; leaving → RestoreFocusTarget). No focus change otherwise.
 
 **Threshold invariant (executable, ONE budget sum — a11y rev-3 NEW-5):** per view, a unit
 test that renders the view asserts, all in inner space with conditional rows forced
@@ -186,7 +195,8 @@ replaced by a Grid whose rows are (codex rev-2 #3):
   (bindings/tooltips/validation intact — nothing reparents at runtime). At natural height
   it shows no scrollbar and renders identically.
 - Band 2 (pinned, Auto): per-view feedback inventory (codex rev-2 advisory) —
-  SRSCreator: Create/Cancel row + ProgressMessage + ProgressBar + result banner;
+  SRSCreator: Create/Cancel row + ProgressMessage + ProgressBar (NO result banner —
+  the outcome lands in the log; corrected inventory);
   SRSReconstructor: Reconstruct row + result Border;
   SampleRestorer: Restore row + ProgressBar + progress text.
   The band's worst height is asserted ≤ its headroom (319 − 24 − 120 − 80 − margins ≈ 84;
