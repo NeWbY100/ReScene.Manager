@@ -261,18 +261,32 @@ public class SRSCreatorCompactTests
     }
 
     /// <summary>
-    /// Codex finding (post-fix-1 review): the fix-1 version force-focused a PRESUMED first
-    /// control and walked forward from it — that presumption was never actually verified. This
-    /// version adopts the now-hardened <see cref="CompactViewRig"/> idioms directly: a forward
-    /// walk with an INDEPENDENTLY-resolved completeness set (so an unreached control, including
-    /// one that would only be reachable BEFORE the presumed sentinel, fails loudly rather than
-    /// being silently absorbed), plus a REVERSE walk anchored at the forward walk's own LAST
-    /// stop (the unambiguous "boundary" — the log's Save button, not a presumed starting point)
-    /// that must retrace the ENTIRE forward order and land back on the forward walk's FIRST
-    /// stop — the actual, empirical proof that the presumed-first control really is first,
-    /// rather than an assumption. SRSCreatorView is a single keyboard-navigation scope (no
-    /// nested TabControl like Reconstructor's), so this is one forward walk plus one reverse
-    /// walk — no per-scope machinery.
+    /// Codex finding (round 3, BLOCKING): fix round 2's reverse check derived its expectation
+    /// FROM the forward walk's own observation (<c>forwardOrder.Reverse()</c>) — a self-
+    /// referential, non-discriminating oracle. This view has THREE identically-described
+    /// "Browse" buttons and TWO identically-described unnamed TextBoxes (MainFilePath, AppName);
+    /// if any two same-described siblings were genuinely swapped in the tree, the forward walk
+    /// would observe them in the swapped order, the derived reverse expectation would inherit
+    /// that SAME swap, and the reverse walk (which also observes the same swapped tree) would
+    /// match it — a real regression would pass. Fixed by resolving an INDEPENDENT ground-truth
+    /// order up front (<see cref="ResolveIndependentExpectedOrder"/>, one unique identifier per
+    /// stop — bound command for Buttons, x:Name or a distinguishing attribute for TextBoxes —
+    /// never the walk's own output) and checking BOTH the forward walk and the reverse walk
+    /// against THAT SAME list (forward as-is; reverse as its independent reversal) — proven to
+    /// genuinely discriminate by
+    /// <see cref="AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch"/>
+    /// below.
+    /// <para>
+    /// Also adopts the now-hardened <see cref="CompactViewRig"/> idioms directly: a forward walk
+    /// with a completeness check (so an unreached control, including one that would only be
+    /// reachable BEFORE the presumed sentinel, fails loudly rather than being silently absorbed),
+    /// plus a REVERSE walk anchored at the forward walk's own LAST stop (the unambiguous
+    /// "boundary" — the log's Save button, not a presumed starting point) that must retrace the
+    /// ENTIRE forward order and land back on the forward walk's FIRST stop — the actual,
+    /// empirical proof that the presumed-first control really is first. SRSCreatorView is a
+    /// single keyboard-navigation scope (no nested TabControl like Reconstructor's), so this is
+    /// one forward walk plus one reverse walk — no per-scope machinery.
+    /// </para>
     /// </summary>
     private static void AssertTabWalk(double innerHeight)
     {
@@ -285,25 +299,24 @@ public class SRSCreatorCompactTests
         {
             bool compact = root.Classes.Contains("compactHeight");
 
-            // In compact mode Help starts collapsed (condition 5): the body's own prose is not a
-            // tab stop while collapsed, so the header toggle is the walk's genuine entry point.
-            // In expanded/flat mode the disclosure contributes NOTHING to tab order at all (its
-            // header is hidden by style and its body is plain, non-focusable prose) — Sample
-            // File's own Browse button is the presumed first stop there, PROVEN (not merely
-            // assumed) by the reverse walk's own boundary-landing assertion below.
-            Control sentinel = compact
-                ? root.GetVisualDescendants().OfType<Expander>().Single(e => e.Name == "HelpDisclosure")
-                    .GetVisualDescendants().OfType<ToggleButton>().Single()
-                : window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputCommand));
+            // Independent ground truth, resolved BEFORE any walk runs — never derived from a
+            // walk's own output. In compact mode Help starts collapsed (condition 5): the body's
+            // own prose is not a tab stop while collapsed, so the header toggle is the walk's
+            // genuine entry point. In expanded/flat mode the disclosure contributes NOTHING to
+            // tab order at all (header hidden by style, body plain non-focusable prose) — Sample
+            // File's own Browse button is the first stop there, PROVEN (not merely presumed) by
+            // the reverse walk's own boundary-landing assertion below.
+            List<Control> independentOrder = ResolveIndependentExpectedOrder(window, vm, compact);
+            Control sentinel = independentOrder[0];
 
             IReadOnlyList<string> fixture = compact ? CompactModeTabOrderFixture : NormalModeTabOrderFixture;
-            List<Control> expectedStops = ResolveExpectedStops(window, fixture);
 
             sentinel.Focus();
             Dispatcher.UIThread.RunJobs();
-            CompactViewRig.TabOrderCapture forwardCapture = CompactViewRig.CaptureTabOrderControls(window, root, expectedStops);
+            CompactViewRig.TabOrderCapture forwardCapture = CompactViewRig.CaptureTabOrderControls(window, root, independentOrder);
             IReadOnlyList<Control> forwardOrder = forwardCapture.Order;
-            Assert.Equal(fixture, forwardOrder.Select(CompactViewRig.Describe));
+            Assert.Equal(fixture, forwardOrder.Select(CompactViewRig.Describe)); // human-readable regression net (renames, additions, removals)
+            AssertSameControlSequence(independentOrder, forwardOrder, "forward"); // the actual discriminating check (same-described-sibling swaps)
 
             // The forward walk's terminal external target must be the SPECIFIC, expected
             // shell-chrome boundary — the rig's own fake shell (CompactViewRig's BuildShell)
@@ -321,66 +334,108 @@ public class SRSCreatorCompactTests
                 $"not {CompactViewRig.Describe(forwardCapture.FirstExternalTarget!)} — same description does not mean same control instance.");
 
             // REVERSE: anchored at the forward walk's own LAST stop (the unambiguous boundary),
-            // never a presumed starting point. Confirmed by a real run: a single scope means the
-            // reverse walk genuinely retraces the WHOLE forward order and lands back on the
-            // forward walk's FIRST stop — the actual, empirical proof that the presumed forward
-            // sentinel is genuinely first, not an assumption.
-            CompactViewRig.TabWalkResult reverse = CompactViewRig.RunTabPass(window, forwardOrder[^1], forward: false, expectedStops);
+            // never a presumed starting point. Checked against the INDEPENDENT order's own
+            // reversal — NOT forwardOrder.Reverse() (round 3's fixed finding) — so a genuine
+            // same-described-sibling swap cannot hide behind a self-referential oracle. Confirmed
+            // by a real run: a single scope means the reverse walk genuinely retraces the whole
+            // independent order and lands back on its first stop — the actual, empirical proof
+            // that the presumed forward sentinel is genuinely first, not an assumption.
+            CompactViewRig.TabWalkResult reverse = CompactViewRig.RunTabPass(window, forwardOrder[^1], forward: false, independentOrder);
 
-            List<Control> expectedReverseOrder = [.. forwardOrder.Reverse()];
+            List<Control> expectedReverseOrder = [.. Enumerable.Reverse(independentOrder)];
             AssertSameControlSequence(expectedReverseOrder, reverse.Order, "reverse");
 
-            Assert.True(ReferenceEquals(reverse.LoopedBackTo, forwardOrder[0]),
-                $"the reverse walk should land back on {CompactViewRig.Describe(forwardOrder[0])} (the forward walk's own first " +
-                $"stop), not {CompactViewRig.Describe(reverse.LoopedBackTo)} — this is the actual proof that the forward " +
+            Assert.True(ReferenceEquals(reverse.LoopedBackTo, independentOrder[0]),
+                $"the reverse walk should land back on {CompactViewRig.Describe(independentOrder[0])} (the independently-resolved " +
+                $"first stop), not {CompactViewRig.Describe(reverse.LoopedBackTo)} — this is the actual proof that the forward " +
                 "sentinel is genuinely first, not a presumption.");
         }
         finally { window.Close(); }
     }
 
     /// <summary>
-    /// Resolves a committed, description-based fixture (see <see cref="CompactViewRig.Describe"/>)
-    /// back into the REAL <see cref="Control"/> references it names, for THIS SPECIFIC window —
-    /// completeness-checking is reference-based, and a fixture committed to source can only ever
-    /// be strings across separate test runs. Reimplemented locally (mirroring
-    /// <c>ReconstructorCompactTests</c>' own private helper of the same shape) rather than
-    /// extending the shared rig, so Tasks 4-6's own use of the unmodified rig is never put at
-    /// risk by a change scoped to this view's own need. Matching is a COUNTED MULTISET, not a
-    /// set — this view's three identically-described "Browse" buttons need three real, distinct
-    /// matches, not merely "at least one" — so a regression that removed one of them (leaving
-    /// two) is still caught here rather than silently resolving successfully.
+    /// Independent ground truth for this view's tab order — each entry resolved by a UNIQUE
+    /// identifier (bound <c>RelayCommand</c> reference for Buttons, x:Name or a distinguishing
+    /// attribute for TextBoxes), NEVER by re-deriving from a walk's own observed output. This is
+    /// what makes <see cref="AssertTabWalk"/>'s forward/reverse checks genuinely discriminating
+    /// against a same-described-sibling swap (three "Browse" buttons and two unnamed TextBoxes
+    /// in this view all describe identically via <see cref="CompactViewRig.Describe"/>) — proven
+    /// directly by
+    /// <see cref="AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch"/>.
     /// </summary>
-    private static List<Control> ResolveExpectedStops(Window window, IReadOnlyCollection<string> fixture)
+    private static List<Control> ResolveIndependentExpectedOrder(Window window, SRSCreatorViewModel vm, bool compact)
     {
-        Dictionary<string, int> expectedCounts = fixture
-            .GroupBy(description => description)
-            .ToDictionary(g => g.Key, g => g.Count());
+        Button sampleBrowse = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputCommand));
+        TextBox inputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "InputTextBox");
+        Button mainBrowse = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseMainFileCommand));
+        Button mainClear = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.ClearMainFileCommand));
+        TextBox appName = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Width == 400);
+        TextBox mainFilePath = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name is null && !ReferenceEquals(t, appName));
+        Button outputBrowse = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseOutputCommand));
+        TextBox outputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "OutputTextBox");
+        Button createSrs = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.CreateSRSCommand));
+        Button saveLog = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.SaveLogCommand));
 
-        ILookup<string, Control> byDescription = window.GetVisualDescendants().OfType<Control>()
-            .ToLookup(CompactViewRig.Describe);
+        List<Control> order = [sampleBrowse, inputTextBox, mainBrowse, mainClear, mainFilePath, outputBrowse, outputTextBox, appName, createSrs, saveLog];
 
-        List<Control> resolved = [];
-        List<string> shortfalls = [];
-        foreach ((string description, int expectedCount) in expectedCounts)
+        if (compact)
         {
-            List<Control> matches = [.. byDescription[description]];
-            if (matches.Count < expectedCount)
-            {
-                shortfalls.Add($"\"{description}\" expects {expectedCount}, this window has {matches.Count}");
-                continue;
-            }
-
-            resolved.AddRange(matches.Take(expectedCount));
+            ToggleButton helpToggle = window.GetVisualDescendants().OfType<Expander>().Single(e => e.Name == "HelpDisclosure")
+                .GetVisualDescendants().OfType<ToggleButton>().Single();
+            order.Insert(0, helpToggle);
         }
 
-        if (shortfalls.Count > 0)
-        {
-            throw new Xunit.Sdk.XunitException(
-                $"{shortfalls.Count} fixture descriptions do not have enough matching controls in " +
-                $"this window (counted, not merely present): {string.Join("; ", shortfalls)}");
-        }
+        return order;
+    }
 
-        return resolved;
+    /// <summary>
+    /// Proves <see cref="AssertSameControlSequence"/> — and therefore <see cref="AssertTabWalk"/>'s
+    /// own forward/reverse checks, which rely on it — is genuinely sensitive to a PERMUTATION of
+    /// identically-described controls, not just to controls going missing. Captures the REAL
+    /// forward walk against the real, independent expected order, then deliberately swaps two of
+    /// the three identically-described "Browse" positions WITHIN THAT INDEPENDENT EXPECTATION
+    /// (never within the observed walk) — simulating a hypothetical regression that reordered
+    /// them in the tree while every description stayed the same, which a description-based
+    /// comparison (or fix round 2's forward-derived reverse oracle) could never catch. Asserts
+    /// the mismatch fails, naming the specific position, then confirms the UNTAMPERED
+    /// expectation still passes against the same real walk (the failure above was caused by the
+    /// tampering, not a real defect).
+    /// </summary>
+    [AvaloniaFact]
+    public void AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch()
+    {
+        SRSCreatorViewModel vm = CreateVm();
+        vm.InputPath = @"C:\release\sample.mkv";
+        vm.OutputPath = @"C:\release\sample.srs";
+        var view = new SRSCreatorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        try
+        {
+            List<Control> independentOrder = ResolveIndependentExpectedOrder(window, vm, compact: false);
+            Control sentinel = independentOrder[0];
+            sentinel.Focus();
+            Dispatcher.UIThread.RunJobs();
+
+            IReadOnlyList<Control> forwardOrder = CompactViewRig.CaptureTabOrderControls(window, root, independentOrder).Order;
+
+            List<int> browseIndexes = [.. Enumerable.Range(0, independentOrder.Count)
+                .Where(i => CompactViewRig.Describe(independentOrder[i]) == "Button name=\"Browse\" id=\"\"")];
+            Assert.True(browseIndexes.Count >= 2, "this covering test requires at least 2 identically-described Browse buttons to swap");
+
+            List<Control> tampered = [.. independentOrder];
+            (tampered[browseIndexes[0]], tampered[browseIndexes[1]]) = (tampered[browseIndexes[1]], tampered[browseIndexes[0]]);
+
+            Xunit.Sdk.FailException ex = Assert.Throws<Xunit.Sdk.FailException>(
+                () => AssertSameControlSequence(tampered, forwardOrder, "forward"));
+
+            Assert.Contains($"position {browseIndexes[0]}", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("same description does not mean same control instance", ex.Message, StringComparison.Ordinal);
+
+            // The untampered, genuinely independent expectation still passes against the SAME
+            // real walk — the failure above was the tampering, not an actual defect.
+            AssertSameControlSequence(independentOrder, forwardOrder, "forward (untampered, sanity check)");
+        }
+        finally { window.Close(); }
     }
 
     /// <summary>
@@ -700,27 +755,25 @@ public class SRSCreatorCompactTests
 
     /// <summary>
     /// RECAPTURED after the hug-bug fix (HorizontalAlignment/HorizontalContentAlignment=
-    /// "Stretch" on the Expander — see the view's own XAML comment): comparing at TRUE ORIGINAL
-    /// geometries — old at its own natural, unconstrained width
-    /// (<see cref="CompactInvariantRig.InnerWidth"/>); new at its own real width, measured from
-    /// the intro TextBlock itself (this view's row 0 has no intermediate content StackPanel
-    /// unlike Reconstructor's — the Margin="0,0,4,0" inset sits directly on the TextBlock) —
-    /// plus a REAL pixel comparison (RenderTargetBitmap + CopyPixels, same technique as
-    /// Reconstructor's own retro-hardened version and HexViewControlTests), not merely a
-    /// geometry check: geometry alone cannot catch a shifted glyph, a recolored brush, or a
-    /// reflowed line inside the surviving region.
+    /// "Stretch" on the Expander — see the view's own XAML comment). Two figures, kept distinct:
+    /// (1) the intro TextBlock's OWN inset — measured from the TextBlock itself, 4 DIPs, the
+    /// documented "per house rule" margin; (2) the PIXEL comparison, which captures the FULL
+    /// HOSTED ROW (<c>newRow0</c>, the Expander) rather than the narrower TextBlock — round-3
+    /// codex finding: comparing only the cropped-to-672 inner TextBlock silently excluded the
+    /// 4-DIP trailing strip INSIDE the Expander's own bounds from any scrutiny ("full-row
+    /// reference parity remains unproven"). With the hug-bug fixed, <c>newRow0</c> itself is the
+    /// SAME 676 width as old's own natural width (asserted below, not assumed), so the full row —
+    /// including that trailing strip — is genuinely compared byte-for-byte, no width-based crop.
+    /// Uses <c>RenderTargetBitmap</c> + <c>CopyPixels</c>, the same technique as Reconstructor's
+    /// own retro-hardened version and HexViewControlTests — geometry alone cannot catch a shifted
+    /// glyph, a recolored brush, or a stray border inside the surviving region.
     /// <para>
-    /// MEASURED, no mask needed: with the hug-bug fixed, newRow0 (the Expander) itself now
-    /// matches newRoot's full 676 width exactly (confirmed: 0.0 narrowing when comparing
-    /// newRow0 directly, which is what originally exposed this test as stale — see the task
-    /// report). The TRUE remaining delta is the TextBlock's own 4-DIP right margin (672 vs
-    /// 676) — the SAME minimal, fully-explained inset Reconstructor's own retro-review arrived
-    /// at. Unlike Reconstructor's own text, this view's shorter intro (no WrapPanel/links row
-    /// below it to also check) does NOT push any word across a line-break boundary at the
-    /// narrower 672-DIP measure — confirmed by the byte-for-byte comparison below requiring NO
-    /// excluded band beyond the mandatory trailing-width strip (present only in old's wider
-    /// render, with no counterpart in new at all). If a future content change ever needs one,
-    /// name and document it explicitly here — never broaden this mask blindly.
+    /// MEASURED, no mask needed beyond the mandatory word-wrap parameter (0 here): unlike
+    /// Reconstructor's own longer text (no WrapPanel/links row exists below this view's intro to
+    /// also check), this view's shorter intro does NOT push any word across a line-break boundary
+    /// at the narrower 672-DIP TextBlock measure — confirmed by the full-row byte-for-byte
+    /// comparison passing with ZERO excluded rows. If a future content change ever needs one, name
+    /// and document it explicitly here — never broaden this mask blindly.
     /// </para>
     /// </summary>
     [AvaloniaFact]
@@ -736,13 +789,18 @@ public class SRSCreatorCompactTests
             Dispatcher.UIThread.RunJobs();
 
             Control newRow0 = newRoot.Children.OfType<Control>().Single(c => Grid.GetRow(c) == 0);
+            Size newRowSize = newRow0.Bounds.Size;
 
-            // NEW's true comparison partner: the intro TextBlock itself (this view's row 0 has
-            // no intermediate content StackPanel, unlike Reconstructor's) — NOT newRow0 (the
-            // outer Expander), which the hug-bug fix now stretches to the full 676 with no
-            // narrowing of its own at all.
+            // The intro TextBlock's own inset is still measured separately (for the documented
+            // 4-DIP figure below), but the PIXEL comparison captures the FULL HOSTED ROW
+            // (newRow0, the Expander) — not the cropped-to-672 descendant TextBlock. Capturing
+            // only the inner TextBlock would silently exclude the 4-DIP trailing strip inside
+            // the Expander's own bounds from ANY scrutiny (round-3 codex finding: "the old-only
+            // strip is cropped... full-row reference parity remains unproven") — that strip IS
+            // part of what a user sees, and a real defect confined to it (a stray border, wrong
+            // background) would never be caught by comparing only the narrower inner control.
             TextBlock newCaption = newRow0.GetVisualDescendants().OfType<TextBlock>().Single();
-            Size newSize = newCaption.Bounds.Size;
+            Size newCaptionSize = newCaption.Bounds.Size;
 
             Window oldWindow = BuildPreDisclosureRow0Window();
             try
@@ -757,19 +815,23 @@ public class SRSCreatorCompactTests
                 // taller/shorter header block would shift every row below it). Confirmed exact:
                 // nothing about the width narrowing below causes the TextBlock to wrap onto an
                 // extra line.
-                Assert.Equal(oldSize.Height, newSize.Height, precision: 0);
+                Assert.Equal(oldSize.Height, newRowSize.Height, precision: 0);
 
                 // The intro TextBlock's own documented, intentional inset (Margin="0,0,4,0",
                 // "per house rule") — MEASURED, not the pre-hug-bug-fix figure this test
                 // originally carried (which conflated the inset with the hug bug itself).
-                double widthNarrowing = oldSize.Width - newSize.Width;
+                double widthNarrowing = oldSize.Width - newCaptionSize.Width;
                 Assert.Equal(4.0, widthNarrowing, precision: 0);
 
-                // TRUE pixel comparison at each side's own real geometry — no mask needed
-                // (MEASURED, see this test's own doc comment) beyond the mandatory trailing
-                // strip AssertPixelIdenticalOutsideHeaderMask itself always excludes (present
-                // only in old's wider render).
-                AssertPixelIdenticalOutsideHeaderMask(oldRow0, oldSize, newCaption, newSize, wordWrapExcludedHeight: 0);
+                // The hosted ROW itself (the Expander, post-hug-bug-fix) is now the SAME 676
+                // width as old's own natural width — MEASURED, not assumed: this is exactly what
+                // the earlier "0.0 narrowing when comparing newRow0 directly" finding already
+                // established. Comparing at matching widths means NO width-based crop is needed
+                // at all — the full row, including the 4-DIP trailing strip the TextBlock's own
+                // inset leaves inside the Expander, is genuinely compared byte-for-byte.
+                Assert.Equal(oldSize.Width, newRowSize.Width, precision: 0);
+
+                AssertPixelIdenticalOutsideHeaderMask(oldRow0, oldSize, newRow0, newRowSize, wordWrapExcludedHeight: 0);
             }
             finally { oldWindow.Close(); }
         }
@@ -794,20 +856,22 @@ public class SRSCreatorCompactTests
     /// <summary>
     /// Renders both controls to their own <see cref="RenderTargetBitmap"/> at their OWN true
     /// geometry (each sized to its own full bounds, independent of whatever window each is
-    /// actually hosted in), then excludes only the trailing rectangle that exists solely in
-    /// <paramref name="oldControl"/>'s wider render (x from <paramref name="newSize"/>'s width
-    /// to <paramref name="oldSize"/>'s width, full height) plus, if non-zero,
-    /// <paramref name="wordWrapExcludedHeight"/> rows from the top — and requires true
-    /// byte-for-byte pixel identity everywhere else. Mirrors
+    /// actually hosted in) and requires true byte-for-byte pixel identity across the FULL,
+    /// matching-width region — no width-based crop. Round-3 codex finding: an earlier version
+    /// compared the OLD side's full natural width against the NEW side's narrower, cropped-to-
+    /// the-inner-TextBlock width, silently excluding the trailing strip inside the Expander's own
+    /// bounds from any scrutiny ("the old-only strip is cropped... full-row reference parity
+    /// remains unproven"). Callers must now supply FULL-ROW geometry on both sides (verified
+    /// equal by the caller before this runs) so that strip is genuinely compared, not skipped.
+    /// Only <paramref name="wordWrapExcludedHeight"/> rows from the top (if non-zero — a
+    /// word-wrap-sensitive caption band, content-justified) are ever excluded. Mirrors
     /// <c>ReconstructorCompactTests</c>' own helper of the same shape and rationale.
     /// </summary>
     private static void AssertPixelIdenticalOutsideHeaderMask(Control oldControl, Size oldSize, Control newControl, Size newSize, double wordWrapExcludedHeight)
     {
         const int BytesPerPixel = 4;
 
-        Assert.True(oldSize.Width > newSize.Width,
-            $"the header mask assumes old is the WIDER render, since old's bare TextBlock never " +
-            $"had new's content-inset narrowing (old {oldSize.Width:F2}, new {newSize.Width:F2}).");
+        Assert.Equal(oldSize.Width, newSize.Width, precision: 0);
 
         var oldPixelSize = new PixelSize((int)Math.Ceiling(oldSize.Width), (int)Math.Ceiling(oldSize.Height));
         var newPixelSize = new PixelSize((int)Math.Ceiling(newSize.Width), (int)Math.Ceiling(newSize.Height));
@@ -815,15 +879,18 @@ public class SRSCreatorCompactTests
         byte[] oldPixels = RenderToPixelBuffer(oldControl, oldPixelSize);
         byte[] newPixels = RenderToPixelBuffer(newControl, newPixelSize);
 
-        int maskedCompareWidth = (int)Math.Floor(newSize.Width);
+        // Math.Min here is a defensive guard against sub-DIP rounding drift between two
+        // independent layout passes (both sides were just asserted equal to 0 decimals above) —
+        // not a deliberate "crop the wider one" mechanism; there is no wider one.
+        int compareWidth = (int)Math.Floor(Math.Min(oldSize.Width, newSize.Width));
         int compareHeight = (int)Math.Floor(Math.Min(oldSize.Height, newSize.Height));
         int wordWrapExcludedRows = (int)Math.Ceiling(wordWrapExcludedHeight);
-        Assert.True(maskedCompareWidth > 0 && compareHeight > wordWrapExcludedRows,
+        Assert.True(compareWidth > 0 && compareHeight > wordWrapExcludedRows,
             $"comparison region must be non-empty (old {oldSize}, new {newSize}, excluded band {wordWrapExcludedHeight:F1})");
 
         int oldStride = oldPixelSize.Width * BytesPerPixel;
         int newStride = newPixelSize.Width * BytesPerPixel;
-        int rowBytes = maskedCompareWidth * BytesPerPixel;
+        int rowBytes = compareWidth * BytesPerPixel;
 
         for (int y = wordWrapExcludedRows; y < compareHeight; y++)
         {
@@ -840,10 +907,9 @@ public class SRSCreatorCompactTests
                 int pixelX = x / BytesPerPixel;
                 Assert.Fail(
                     $"header region pixel mismatch at ({pixelX}, {y}) — old byte 0x{oldPixels[oldRowStart + x]:X2} " +
-                    $"vs new byte 0x{newPixels[newRowStart + x]:X2}. Compared region was " +
-                    $"{maskedCompareWidth}x{compareHeight} DIPs, rows {wordWrapExcludedRows}-{compareHeight - 1} " +
-                    $"(old render {oldPixelSize}, new render {newPixelSize}); excluded: the trailing " +
-                    $"strip (x from {maskedCompareWidth} to {oldPixelSize.Width - 1}, old-only).");
+                    $"vs new byte 0x{newPixels[newRowStart + x]:X2}. Compared the FULL matching-width region " +
+                    $"{compareWidth}x{compareHeight} DIPs, rows {wordWrapExcludedRows}-{compareHeight - 1} " +
+                    $"(old render {oldPixelSize}, new render {newPixelSize}); no width-based crop.");
             }
         }
     }
@@ -870,12 +936,14 @@ public class SRSCreatorCompactTests
     // ── Fixtures (captured from real, green CompactViewRig.CaptureTabOrderControls runs against
     // this task's finished implementation, WITH Create SRS enabled — see task report for the
     // capture method). Each entry is CompactViewRig.Describe's own format (real automation peer
-    // name plus x:Name, reported separately — see its own doc). Same-typed siblings that
-    // describe identically (this view's three "Browse" buttons) are still disambiguated where
-    // it matters: AssertTabWalk's completeness check is a counted multiset (ResolveExpectedStops)
-    // and its reverse-order check is OBJECT-REFERENCE-exact (AssertSameControlSequence), so a
-    // swap between two identically-described siblings is still caught even though the fixture
-    // STRING itself could not tell them apart on its own. ──
+    // name plus x:Name, reported separately — see its own doc) — a human-readable regression net
+    // (catches renames, additions, removals), NOT the discriminating check itself. Same-typed
+    // siblings that describe identically (this view's three "Browse" buttons, two unnamed
+    // TextBoxes) are disambiguated by AssertTabWalk's OWN independent, reference-based checks
+    // (ResolveIndependentExpectedOrder + AssertSameControlSequence, both forward and reverse —
+    // see AssertTabWalk's own doc for why the fixture strings alone cannot do this), proven to
+    // genuinely discriminate by
+    // AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch. ──
 
     /// <summary>
     /// Normal mode, starting at Sample File's own Browse button — PROVEN first (not presumed):
