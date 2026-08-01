@@ -23,8 +23,18 @@
          pre-disclosure layout; compact mode shows the header and starts collapsed. -->
     <!-- Margin is NOT a local value here (house rule: local values beat unconditional styles,
          so a local "0,0,0,6" would defeat the compact-mode margin-tightening override) — the
-         base value lives in the helpDisclosure style instead. -->
+         base value lives in the helpDisclosure style instead. HorizontalAlignment/
+         HorizontalContentAlignment ARE local values (retro-review finding #5, round 2): Fluent's
+         Expander defaults to Left, so without this it hugs its own content's width instead of
+         filling the Grid column — the root cause of an ~19-DIP gap this task's own frame-rig
+         pixel comparison exposed, previously mis-attributed entirely to "scrollbar track
+         reservation" (see the test's own round-2 note). Deliberately scoped to Reconstructor's
+         OWN Expander instance rather than the shared helpDisclosure style, since a shared-style
+         change would also alter SRSCreator's (Task 3's) Expander and its own already-approved
+         frame-rig numbers — no compact-mode override ever touches these two properties, so a
+         local value here carries no house-rule risk. -->
     <Expander Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
+              HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
               AutomationProperties.Name="Help &amp; links">
       <Expander.Header>
         <TextBlock Text="Help &amp; links" FontSize="{DynamicResource FontSizeCaption}" />

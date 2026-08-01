@@ -179,6 +179,17 @@ internal static class CompactViewRig
     /// name. Runs the cycle FORWARD (Tab) and then REVERSE (Shift+Tab), asserting at every step
     /// in both passes.
     /// </summary>
+    /// <param name="window">The hosting window.</param>
+    /// <param name="sentinel">The control to start (and hope to return) the walk at.</param>
+    /// <param name="expectedStops">
+    /// Optional, round-2 retro-review completeness check: the full, exhaustive set of controls
+    /// this walk is expected to reach. When supplied, a stable terminal loop (or a true return to
+    /// the sentinel) is no longer accepted unconditionally — every control in this set must have
+    /// actually been visited first, or the walk fails loudly naming exactly which ones were not.
+    /// Without it (the default), completeness is unchecked, matching every pre-round-2 caller's
+    /// behavior exactly (source- and behavior-compatible with Task 3's existing calls). See
+    /// <see cref="AssertCompleteness"/>.
+    /// </param>
     /// <remarks>
     /// Avalonia's default top-level <c>KeyboardNavigation.TabNavigation</c> ("Continue") does
     /// NOT wrap a whole Window back to its first focusable element — confirmed empirically here,
@@ -197,14 +208,20 @@ internal static class CompactViewRig
     /// <see cref="ConfirmStableLoop"/>) before the walk is accepted as done. A genuine steady
     /// state reproduces trivially; an early trap diverges and fails loudly instead of silently
     /// passing.
+    /// <para>
+    /// Round-2 retro-review: lap-reproduction alone proves a loop is STABLE, not that it is
+    /// COMPLETE — a genuinely stable early A→B→A trap (e.g. something hijacking Tab between two
+    /// controls) reproduces perfectly and would otherwise pass even though later, real
+    /// focusables were never reached. <paramref name="expectedStops"/> closes that gap.
+    /// </para>
     /// </remarks>
-    public static void AssertTabWalkStaysVisible(Window window, Control sentinel)
+    public static void AssertTabWalkStaysVisible(Window window, Control sentinel, IReadOnlyCollection<Control>? expectedStops = null)
     {
-        RunTabPass(window, sentinel, forward: true);
-        RunTabPass(window, sentinel, forward: false);
+        RunTabPass(window, sentinel, forward: true, expectedStops);
+        RunTabPass(window, sentinel, forward: false, expectedStops);
     }
 
-    private static void RunTabPass(Window window, Control sentinel, bool forward)
+    private static void RunTabPass(Window window, Control sentinel, bool forward, IReadOnlyCollection<Control>? expectedStops = null)
     {
         sentinel.Focus();
         Dispatcher.UIThread.RunJobs();
@@ -222,13 +239,17 @@ internal static class CompactViewRig
 
             if (ReferenceEquals(focused, sentinel))
             {
-                return; // a true cycle back to the sentinel is unambiguous — no confirmation needed
+                // a true cycle back to the sentinel is unambiguous stability — no lap-confirmation
+                // needed — but completeness still must hold.
+                AssertCompleteness(order, expectedStops, PassName(forward));
+                return;
             }
 
             int firstSeenAt = order.FindIndex(c => ReferenceEquals(c, focused));
             if (firstSeenAt >= 0)
             {
                 ConfirmStableLoop(window, forward, order, firstSeenAt, order.Count - firstSeenAt);
+                AssertCompleteness(order, expectedStops, PassName(forward));
                 return;
             }
 
@@ -238,6 +259,33 @@ internal static class CompactViewRig
         throw new Xunit.Sdk.XunitException(
             $"Tab walk ({PassName(forward)}) neither cycled back to the sentinel nor reached a " +
             $"stable terminal loop within {MaxSteps} steps.");
+    }
+
+    /// <summary>
+    /// Round-2 retro-review: the completeness half a stability check alone cannot provide. When
+    /// <paramref name="expectedStops"/> is supplied, every one of its controls must be present
+    /// (by reference) in <paramref name="visited"/> — the distinct controls actually seen before
+    /// the walk concluded (this already includes every member of a confirmed stable loop, since
+    /// loop members are recorded into <paramref name="visited"/> the first time each is seen,
+    /// before the repeat that closes the loop is ever detected). A stable-but-early trap that
+    /// never reaches some expected controls fails here, loudly, naming exactly which ones.
+    /// </summary>
+    private static void AssertCompleteness(List<Control> visited, IReadOnlyCollection<Control>? expectedStops, string passName)
+    {
+        if (expectedStops is null)
+        {
+            return;
+        }
+
+        List<Control> unvisited = [.. expectedStops.Where(e => !visited.Any(v => ReferenceEquals(v, e)))];
+        if (unvisited.Count > 0)
+        {
+            throw new Xunit.Sdk.XunitException(
+                $"Tab walk ({passName}) settled into a stable, reproducible terminal state, but " +
+                $"{unvisited.Count} of {expectedStops.Count} expected stops are UNVISITED (the " +
+                $"exhaustive fixture is the ground truth — a stable loop is not automatically a " +
+                $"complete one): {string.Join(", ", unvisited.Select(Describe))}");
+        }
     }
 
     /// <summary>
@@ -271,6 +319,14 @@ internal static class CompactViewRig
     private static string PassName(bool forward) => forward ? "forward" : "reverse";
 
     /// <summary>Ordered (control type, effective automation name) snapshot of the Tab cycle.</summary>
+    /// <param name="window">The hosting window.</param>
+    /// <param name="root">The scope to record steps within.</param>
+    /// <param name="expectedStops">
+    /// Optional, round-2 retro-review completeness check — see
+    /// <see cref="AssertTabWalkStaysVisible"/>'s parameter of the same name and
+    /// <see cref="AssertCompleteness"/>. Defaults to null (unchecked), matching every
+    /// pre-round-2 caller's behavior exactly.
+    /// </param>
     /// <remarks>
     /// Requires focus to already sit inside <paramref name="root"/> (focus its intended starting
     /// control before calling — mirrors <see cref="AssertTabWalkStaysVisible"/>'s explicit
@@ -279,9 +335,10 @@ internal static class CompactViewRig
     /// reached the surrounding shell chrome — unambiguous, no confirmation needed) or repeats an
     /// already-recorded control — CONFIRMED via the same one-more-lap check
     /// <see cref="RunTabPass"/> uses, for the identical reason (an early trap must not be
-    /// mistaken for the view's own genuine internal cycle).
+    /// mistaken for the view's own genuine internal cycle). Either ending is now also checked for
+    /// completeness when <paramref name="expectedStops"/> is supplied.
     /// </remarks>
-    public static IReadOnlyList<string> SnapshotTabOrder(Window window, Control root)
+    public static IReadOnlyList<string> SnapshotTabOrder(Window window, Control root, IReadOnlyCollection<Control>? expectedStops = null)
     {
         Control focused = window.FocusManager?.GetFocusedElement() as Control
             ?? throw new Xunit.Sdk.XunitException(
@@ -299,6 +356,7 @@ internal static class CompactViewRig
         {
             if (!IsWithin(root, focused))
             {
+                AssertCompleteness(order, expectedStops, "forward");
                 return [.. order.Select(Describe)];
             }
 
@@ -306,6 +364,7 @@ internal static class CompactViewRig
             if (firstSeenAt >= 0)
             {
                 ConfirmStableLoopWithinRoot(window, root, order, firstSeenAt, order.Count - firstSeenAt);
+                AssertCompleteness(order, expectedStops, "forward");
                 return [.. order.Select(Describe)];
             }
 
@@ -560,18 +619,26 @@ internal static class CompactViewRig
     /// AT actually announces: for a ContentControl (Button/ToggleButton/CheckBox/...) with no
     /// explicit Name, <c>ContentControlAutomationPeer.GetNameCore()</c> falls through to the
     /// realized content's own text — see the peer's own decompiled source, confirmed empirically
-    /// below. <c>control.Name</c> (the x:Name) is a SECOND, generic fallback for controls whose
-    /// peer name is ALSO empty (e.g. this app's path TextBoxes, which carry an x:Name but no
-    /// AutomationProperties.Name/LabeledBy) — deliberately NOT VM/command-based (unlike a
-    /// per-view local reimplementation would need), so this stays usable by every future view
-    /// task without any view-specific knowledge.
+    /// below.
+    /// <para>
+    /// Round-2 retro-review (NEW finding): the first fix ALSO fell back to <c>control.Name</c>
+    /// (x:Name) whenever the peer name was empty. That conflates two different channels — a
+    /// TEST-ID (this rig's own need for a stable, reorder-detecting fixture key) and an
+    /// ACCESSIBLE NAME (what AT actually announces) — and doing so silently PAPERED OVER a real
+    /// gap: this view's four path-picker TextBoxes (carrying only an x:Name, no
+    /// AutomationProperties.Name/LabeledBy) would render as e.g. "TextBox:WinRARTextBox" as if
+    /// that were a meaningful accessible name, when the TRUE peer name is empty — a screen reader
+    /// announces nothing for them. Fixed by reporting BOTH channels, always, separately: the
+    /// peer's real name verbatim (empty stays empty — the honest accessible-name record) and the
+    /// x:Name as its own labeled field (this rig's stable test-id, never treated as an accessible
+    /// name). The four TextBoxes' empty <c>name=""</c> is deliberately left visible in every
+    /// fixture rather than fixed here — see the retro-fix report's a11y-debt note.
+    /// </para>
     /// </summary>
     private static string Describe(Control control)
     {
-        string peerName = ControlAutomationPeer.CreatePeerForElement(control).GetName();
-        string identity = !string.IsNullOrEmpty(peerName) ? peerName
-            : !string.IsNullOrEmpty(control.Name) ? control.Name!
-            : string.Empty;
-        return $"{control.GetType().Name}:{identity}";
+        string peerName = ControlAutomationPeer.CreatePeerForElement(control).GetName() ?? string.Empty;
+        string testId = control.Name ?? string.Empty;
+        return $"{control.GetType().Name} name=\"{peerName}\" id=\"{testId}\"";
     }
 }
