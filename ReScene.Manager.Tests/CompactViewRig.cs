@@ -181,14 +181,21 @@ internal static class CompactViewRig
     /// </summary>
     /// <param name="window">The hosting window.</param>
     /// <param name="sentinel">The control to start (and hope to return) the walk at.</param>
-    /// <param name="expectedStops">
+    /// <param name="expectedForwardStops">
     /// Optional, round-2 retro-review completeness check: the full, exhaustive set of controls
-    /// this walk is expected to reach. When supplied, a stable terminal loop (or a true return to
-    /// the sentinel) is no longer accepted unconditionally — every control in this set must have
-    /// actually been visited first, or the walk fails loudly naming exactly which ones were not.
-    /// Without it (the default), completeness is unchecked, matching every pre-round-2 caller's
-    /// behavior exactly (source- and behavior-compatible with Task 3's existing calls). See
-    /// <see cref="AssertCompleteness"/>.
+    /// the FORWARD (Tab) pass is expected to reach. When supplied, a stable terminal loop (or a
+    /// true return to the sentinel) is no longer accepted unconditionally — every control in this
+    /// set must have actually been visited first, or the walk fails loudly naming exactly which
+    /// ones were not. Without it (the default), completeness is unchecked, matching every
+    /// pre-round-2 caller's behavior exactly (source- and behavior-compatible with Task 3's
+    /// existing calls). See <see cref="AssertCompleteness"/>.
+    /// </param>
+    /// <param name="expectedReverseStops">
+    /// Round-3 retro-review: the SAME completeness check, but for the REVERSE (Shift+Tab) pass,
+    /// checked independently against its own set rather than reusing
+    /// <paramref name="expectedForwardStops"/> — Shift+Tab order is not guaranteed to be the exact
+    /// mirror of Tab order (a trap could plausibly affect only one direction), so a genuine
+    /// per-direction regression needs a per-direction expectation to be caught.
     /// </param>
     /// <remarks>
     /// Avalonia's default top-level <c>KeyboardNavigation.TabNavigation</c> ("Continue") does
@@ -212,13 +219,17 @@ internal static class CompactViewRig
     /// Round-2 retro-review: lap-reproduction alone proves a loop is STABLE, not that it is
     /// COMPLETE — a genuinely stable early A→B→A trap (e.g. something hijacking Tab between two
     /// controls) reproduces perfectly and would otherwise pass even though later, real
-    /// focusables were never reached. <paramref name="expectedStops"/> closes that gap.
+    /// focusables were never reached. <paramref name="expectedForwardStops"/>/
+    /// <paramref name="expectedReverseStops"/> close that gap.
     /// </para>
     /// </remarks>
-    public static void AssertTabWalkStaysVisible(Window window, Control sentinel, IReadOnlyCollection<Control>? expectedStops = null)
+    public static void AssertTabWalkStaysVisible(
+        Window window, Control sentinel,
+        IReadOnlyCollection<Control>? expectedForwardStops = null,
+        IReadOnlyCollection<Control>? expectedReverseStops = null)
     {
-        RunTabPass(window, sentinel, forward: true, expectedStops);
-        RunTabPass(window, sentinel, forward: false, expectedStops);
+        RunTabPass(window, sentinel, forward: true, expectedForwardStops);
+        RunTabPass(window, sentinel, forward: false, expectedReverseStops);
     }
 
     private static void RunTabPass(Window window, Control sentinel, bool forward, IReadOnlyCollection<Control>? expectedStops = null)
@@ -634,8 +645,16 @@ internal static class CompactViewRig
     /// name). The four TextBoxes' empty <c>name=""</c> is deliberately left visible in every
     /// fixture rather than fixed here — see the retro-fix report's a11y-debt note.
     /// </para>
+    /// <para>
+    /// Round-3 retro-review: widened from <c>private</c> to <c>internal</c> so a per-view test
+    /// (Reconstructor's own) can resolve its committed, description-based fixtures back into REAL
+    /// <see cref="Control"/> references for a given live window (matching every control whose
+    /// <see cref="Describe"/> output is one of the fixture's strings) — the completeness
+    /// parameters this file's walk methods take are reference-based, and a hardcoded fixture can
+    /// only ever be strings, never live object references, across separate test runs.
+    /// </para>
     /// </summary>
-    private static string Describe(Control control)
+    internal static string Describe(Control control)
     {
         string peerName = ControlAutomationPeer.CreatePeerForElement(control).GetName() ?? string.Empty;
         string testId = control.Name ?? string.Empty;

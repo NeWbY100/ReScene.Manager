@@ -71,7 +71,7 @@ public class CompactViewRigTests
         Dispatcher.UIThread.RunJobs();
 
         Xunit.Sdk.XunitException ex = Assert.Throws<Xunit.Sdk.XunitException>(() =>
-            CompactViewRig.AssertTabWalkStaysVisible(window, a, expectedStops: [a, b, c, d]));
+            CompactViewRig.AssertTabWalkStaysVisible(window, a, expectedForwardStops: [a, b, c, d], expectedReverseStops: [a, b, c, d]));
 
         Assert.Contains("unvisited", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Real1", ex.Message, StringComparison.Ordinal);

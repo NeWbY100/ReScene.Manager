@@ -212,6 +212,36 @@ public class ReconstructorCompactTests
         finally { window.Close(); }
     }
 
+    /// <summary>
+    /// Round-3 retro-review finding #1: completeness was opt-in but never actually wired into
+    /// this, the REAL Reconstructor walk — so a genuine, present-day regression in either
+    /// direction would have gone uncaught by the walk's own stability check alone. Wires
+    /// direction-specific expected-stop sets, resolved from committed, description-based fixtures
+    /// back into real <see cref="Control"/> references for THIS window
+    /// (<see cref="ResolveExpectedStops"/>) — completeness is reference-based, and a hardcoded
+    /// fixture can only ever be strings across separate test runs.
+    /// <para>
+    /// FORWARD reuses the existing, already-captured, already-asserted-elsewhere
+    /// <see cref="NormalModeTabOrderFixture"/>/<see cref="CompactModeTabOrderFixture"/> directly —
+    /// no new fixture needed; they are already the exhaustive forward set.
+    /// </para>
+    /// <para>
+    /// REVERSE needed a genuinely new capture, and it surfaced something worth recording rather
+    /// than assuming: Shift+Tab from EITHER sentinel does not explore backward through the
+    /// window at all — confirmed two independent ways (a direct, key-press-free query,
+    /// <c>KeyboardNavigationHandler.GetNext(sentinel, NavigationDirection.Previous)</c>, and a
+    /// real Shift+Tab key-press simulation) that both agree: "previous" from either sentinel
+    /// resolves to the sentinel itself. This is consistent with Avalonia's TabControl scoping
+    /// keyboard navigation to the SELECTED tab's own content (a conventional, almost certainly
+    /// deliberate framework behavior — Tab/Shift+Tab staying inside the active tab rather than
+    /// leaking into the tab strip or shell chrome mid-navigation), and both sentinels happen to be
+    /// the first focusable element within that scope. The reverse fixtures below are therefore
+    /// deliberately single-entry (the sentinel itself) — an honest reflection of this VERIFIED
+    /// reality, not an oversight — see the retro-fix report for the full finding and why this
+    /// weakens (without invalidating) the reverse completeness check specifically for these two
+    /// entry points.
+    /// </para>
+    /// </summary>
     private static void AssertTabWalk(double innerHeight)
     {
         ReconstructorViewModel vm = CreateVm();
@@ -229,9 +259,51 @@ public class ReconstructorCompactTests
                 ? window.GetVisualDescendants().OfType<Expander>().Single(e => e.Name == "HelpDisclosure")
                     .GetVisualDescendants().OfType<ToggleButton>().Single()
                 : window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "WindowsPackLink");
-            CompactViewRig.AssertTabWalkStaysVisible(window, sentinel);
+
+            IReadOnlyCollection<string> forwardFixture = compact ? CompactModeTabOrderFixture : NormalModeTabOrderFixture;
+            IReadOnlyCollection<string> reverseFixture = compact ? CompactModeReverseTabOrderFixture : NormalModeReverseTabOrderFixture;
+            List<Control> expectedForwardStops = ResolveExpectedStops(window, forwardFixture);
+            List<Control> expectedReverseStops = ResolveExpectedStops(window, reverseFixture);
+
+            CompactViewRig.AssertTabWalkStaysVisible(window, sentinel, expectedForwardStops, expectedReverseStops);
         }
         finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// Resolves a committed, description-based fixture (see <see cref="CompactViewRig.Describe"/>)
+    /// back into the REAL <see cref="Control"/> references it names, for THIS SPECIFIC window —
+    /// completeness-checking is reference-based, and a fixture committed to source can only ever
+    /// be strings across separate test runs. Matches every control in the window whose own
+    /// description is IN the fixture set — deliberately a set-membership test, not a 1:1 pairing,
+    /// so entries that describe identically (the four "Browse" buttons all read the same, having
+    /// no distinguishing content or x:Name) still resolve to ALL of their real, distinct
+    /// instances, not just one arbitrarily "matched" one.
+    /// <para>
+    /// A fixture entry with NO matching control at all throws here, loudly, rather than being
+    /// silently dropped: if resolution just filtered the window's own controls down to matches,
+    /// a future regression that REMOVED an expected control from the tree would silently vanish
+    /// from <c>expectedStops</c> along with it — the completeness check downstream would never
+    /// even learn that entry was supposed to exist, defeating the entire point of a hardcoded,
+    /// protective fixture. Confirming every fixture string resolves to at least one real control
+    /// closes that hole.
+    /// </para>
+    /// </summary>
+    private static List<Control> ResolveExpectedStops(Window window, IReadOnlyCollection<string> fixture)
+    {
+        var expected = new HashSet<string>(fixture);
+        List<Control> resolved = [.. window.GetVisualDescendants().OfType<Control>().Where(c => expected.Contains(CompactViewRig.Describe(c)))];
+
+        HashSet<string> resolvedDescriptions = [.. resolved.Select(CompactViewRig.Describe)];
+        List<string> unresolved = [.. expected.Where(e => !resolvedDescriptions.Contains(e))];
+        if (unresolved.Count > 0)
+        {
+            throw new Xunit.Sdk.XunitException(
+                $"{unresolved.Count} fixture entries have no matching control in this window at all " +
+                $"(not merely unvisited by the walk — genuinely absent from the tree): {string.Join(", ", unresolved)}");
+        }
+
+        return resolved;
     }
 
     /// <summary>
@@ -662,15 +734,20 @@ public class ReconstructorCompactTests
                 // its Grid column — 676→653 of that gap was this unrelated, unintended bug, not
                 // "scrollbar track reservation" as originally (wrongly) attributed; only the
                 // remaining 4 DIPs were ever the content StackPanel's own documented, intentional
-                // inset (Margin="0,0,4,0", "per house rule"). Fixed in Styles.axaml
-                // (HorizontalAlignment/HorizontalContentAlignment="Stretch" on
-                // Expander.helpDisclosure) — confirmed by measurement: newRow0 (the Expander) now
-                // matches newRoot's full 676 exactly; only the inner content StackPanel's own
-                // 4-DIP margin remains. So the number both this assert AND the report must carry is
-                // 4, not 27 — flagged prominently for the team lead, since this both deviates from
-                // and supersedes the literal "27" instruction with a corrected, smaller, more
-                // fully-explained one, discovered only by chasing why the mask-based comparison
-                // below wasn't actually clean.
+                // inset (Margin="0,0,4,0", "per house rule"). Fixed as a LOCAL value
+                // (HorizontalAlignment/HorizontalContentAlignment="Stretch") directly on
+                // Reconstructor's own <Expander x:Name="HelpDisclosure"> element in
+                // ReconstructorView.axaml — NOT the shared Expander.helpDisclosure STYLE: a first
+                // attempt there was caught, by a full-suite run, breaking SRSCreator's (Task 3's)
+                // own already-approved frame-rig test the instant its Expander ALSO started
+                // stretching, so it was reverted (Styles.axaml carries no diff from round 1) and
+                // re-applied scoped to only this view. Confirmed by measurement: newRow0 (the
+                // Expander) now matches newRoot's full 676 exactly; only the inner content
+                // StackPanel's own 4-DIP margin remains. So the number both this assert AND the
+                // report must carry is 4, not 27 — flagged prominently for the team lead, since
+                // this both deviates from and supersedes the literal "27" instruction with a
+                // corrected, smaller, more fully-explained one, discovered only by chasing why the
+                // mask-based comparison below wasn't actually clean.
                 double widthNarrowing = oldSize.Width - newSize.Width;
                 Assert.Equal(4.0, widthNarrowing, precision: 0);
 
@@ -914,5 +991,33 @@ public class ReconstructorCompactTests
         "GridSplitter name=\"Resize options and log\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
         "CheckBox name=\"Auto-scroll\" id=\"\"",
+    ];
+
+    /// <summary>
+    /// Round-3 retro-review finding #1: the REVERSE (Shift+Tab) counterpart to
+    /// <see cref="NormalModeTabOrderFixture"/> — captured, not assumed, and deliberately
+    /// single-entry. Two independent checks (a direct <c>KeyboardNavigationHandler.GetNext(...,
+    /// NavigationDirection.Previous)</c> query and a real Shift+Tab key-press simulation) both
+    /// confirm Shift+Tab from WindowsPackLink resolves back to WindowsPackLink itself — Avalonia's
+    /// TabControl scopes keyboard navigation to the selected tab's own content (Tab/Shift+Tab stay
+    /// inside the active tab rather than escaping to the tab strip or shell chrome), and
+    /// WindowsPackLink is the first focusable element within that scope. See
+    /// <see cref="AssertTabWalk"/>'s own doc comment and the retro-fix report for the full finding.
+    /// </summary>
+    private static readonly IReadOnlyList<string> NormalModeReverseTabOrderFixture =
+    [
+        "Button name=\"Extracted files for Windows (ready to use)\" id=\"WindowsPackLink\"",
+    ];
+
+    /// <summary>
+    /// Round-3 retro-review finding #1: the REVERSE (Shift+Tab) counterpart to
+    /// <see cref="CompactModeTabOrderFixture"/> — same finding, same verification, as
+    /// <see cref="NormalModeReverseTabOrderFixture"/>: Shift+Tab from the disclosure's header
+    /// toggle resolves back to the toggle itself (the first focusable element within the
+    /// selected tab's own keyboard-navigation scope).
+    /// </summary>
+    private static readonly IReadOnlyList<string> CompactModeReverseTabOrderFixture =
+    [
+        "ToggleButton name=\"Help & links\" id=\"\"",
     ];
 }
