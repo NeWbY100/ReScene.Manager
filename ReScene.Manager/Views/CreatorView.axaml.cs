@@ -19,6 +19,26 @@ public partial class CreatorView : UserControl
     // The "Stored As" value before an inline edit, so a duplicate edit can be reverted.
     private string? _storedNameBeforeEdit;
 
+    // The trailing log row's own XAML MinHeight (RootGrid row 3) — kept as a literal constant here
+    // (not read back from the RowDefinition) because in COMPACT mode CompactHeightBehavior's own
+    // AutoToStar handling for row 1 doesn't touch row 3 at all, so RowDefinitions[3].MinHeight is
+    // always this authored value regardless of mode. Mirrors SampleRestorerView's own identical
+    // constant/rationale.
+    private const double LogRowMinHeight = 80;
+
+    // MEASURED slack (same mechanism, same rationale as SampleRestorerView's own
+    // ArrangeRoundingSlack): CompactInvariantRig.MeasureFloor's bare Measure(Infinity) call
+    // reports each Auto row's UNCONSTRAINED desired height, while a REAL Grid arrange pass
+    // additionally shrinks Auto rows when the total genuinely exceeds available space. Reserving
+    // this extra margin keeps MeasureFloor's own stricter, static figure additionally covered on
+    // top of the real-arrange safety this mechanism already guarantees on its own.
+    private const double ArrangeRoundingSlack = 10;
+
+    private readonly Grid _root;
+    private readonly Control _chromeRow;
+    private readonly ScrollViewer _configScroller;
+    private readonly Control _pinnedRow;
+
     public CreatorView()
     {
         AvaloniaXamlLoader.Load(this);
@@ -29,6 +49,79 @@ public partial class CreatorView : UserControl
         DragDrop.SetAllowDrop(grid, true);
         grid.AddHandler(DragDrop.DragOverEvent, OnStoredFilesDragOver);
         grid.AddHandler(DragDrop.DropEvent, OnStoredFilesDrop);
+
+        // Small-window layout degradation (task-6 brief): compact below 720 inner DIPs — the
+        // largest converted view. x:CompileBindings="False" means x:Name elements are NOT wired
+        // to auto-generated fields (same as every other ported view in this project) — resolved
+        // once via FindControl instead.
+        Grid root = (Grid)Content!;
+        Grid configGrid = this.FindControl<Grid>("ConfigGrid")!;
+        Expander helpDisclosure = this.FindControl<Expander>("HelpDisclosure")!;
+        TextBox inputTextBox = this.FindControl<TextBox>("InputTextBox")!;
+        Behaviors.CompactHeightBehavior.SetThreshold(root, 720);
+        Behaviors.CompactHeightBehavior.SetRowSizes(root,
+            [new Behaviors.CompactRowSize(RowIndex: 1, NormalHeight: double.NaN,
+                CompactMinHeight: 110, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.AutoToStar)]);
+        // DESCENDANT row: the Stored Files grid row lives on ConfigGrid, not root — a fixed-pixel
+        // row (150 normal) so the splitter drags exactly as today, restoring to a user's dragged
+        // height (not just back to 150) across a compact round-trip via PixelRestore's own capture.
+        Behaviors.CompactHeightBehavior.SetRowSizes(configGrid,
+            [new Behaviors.CompactRowSize(RowIndex: 3, NormalHeight: 150,
+                CompactMinHeight: 80, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.PixelRestore)]);
+        Behaviors.CompactHeightBehavior.SetHelpExpander(root, helpDisclosure);
+        Behaviors.CompactHeightBehavior.SetHelpBodyMaxHeight(root, 40);
+        Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(root, inputTextBox);
+
+        // EXPANDED-mode safety cap (the same categorical issue SampleRestorerView's own ctor
+        // remarks flagged as the most likely SECOND consumer: "Task 6's CreatorView, whose own
+        // StoredFilesGrid could face the identical problem"). MEASURED directly: with the brief's
+        // own worst case forced (12 detected sets capped at 96, 8 stored files, both
+        // FieldStatusLines non-None, Cancel+ProgressMessage+ProgressBar visible), this view's
+        // config content — Input, Stored Files header/grid/splitter, Output, and all 7 Options
+        // checkboxes plus the App name row, none of which scroll independently in EXPANDED mode —
+        // sums to ~883 DIPs of natural height (CompactInvariantRig.MeasureFloor), far exceeding the
+        // 721-DIP window this view is expanded at (Threshold+1). EXPANDED mode's row 1 is plain
+        // Auto (only CompactRowMode.AutoToStar's own COMPACT branch bounds it) and nothing else in
+        // this view scrolls at the page level, so — exactly as SampleRestorerView found — a plain
+        // Auto row here would push the pinned action band and the entire log translated fully below
+        // the window's own bottom edge across a wide expanded-height range.
+        //
+        // Mechanism identical to SampleRestorerView's own (not promoted to the shared behavior —
+        // that promotion is a decision for a THIRD consumer): on every layout pass, cap the config
+        // ScrollViewer's own MaxHeight to whatever remains of the root's actual available height
+        // after the chrome row (0) and the pinned band (2) take their own current, real space,
+        // minus the log row's (3) own reserved MinHeight floor. Never binds for small/typical
+        // content (pixel parity holds); once content genuinely exceeds it, the ScrollViewer's own
+        // existing VerticalScrollBarVisibility="Auto" engages exactly like compact mode's own
+        // scrolling story, just triggered by content overflow instead of a window-height threshold.
+        // Reset to unconstrained (PositiveInfinity) while compact: that mode's own Star-sized row 1
+        // (CompactHeightBehavior's AutoToStar) must not be second-guessed by this unrelated cap.
+        _root = root;
+        _chromeRow = root.Children.OfType<Control>().Single(c => Grid.GetRow(c) == 0);
+        _configScroller = root.Children.OfType<ScrollViewer>().Single(c => Grid.GetRow(c) == 1);
+        _pinnedRow = root.Children.OfType<Control>().Single(c => Grid.GetRow(c) == 2);
+        root.LayoutUpdated += OnRootLayoutUpdated;
+    }
+
+    private void OnRootLayoutUpdated(object? sender, EventArgs e)
+    {
+        double safeMax = _root.Classes.Contains("compactHeight")
+            ? double.PositiveInfinity
+            : Math.Max(0, _root.Bounds.Height - _chromeRow.DesiredSize.Height - _pinnedRow.DesiredSize.Height - LogRowMinHeight - ArrangeRoundingSlack);
+
+        // Guard against re-triggering LayoutUpdated with a value it would already report next time
+        // (both the "already converged" case and the "both sides are infinity" case, which
+        // Math.Abs(inf - inf) evaluates to NaN, always > any epsilon, and would otherwise reapply
+        // forever).
+        if (double.IsPositiveInfinity(_configScroller.MaxHeight) && double.IsPositiveInfinity(safeMax))
+        {
+            return;
+        }
+
+        if (Math.Abs(_configScroller.MaxHeight - safeMax) > 0.5)
+        {
+            _configScroller.MaxHeight = safeMax;
+        }
     }
 
     private void OnStoredFilesDragOver(object? sender, DragEventArgs e)

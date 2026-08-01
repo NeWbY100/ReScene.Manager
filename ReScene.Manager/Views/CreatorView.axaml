@@ -5,240 +5,287 @@
              x:Class="ReScene.Manager.Views.CreatorView"
              x:CompileBindings="False">
 
-  <Grid Margin="{DynamicResource PageMargin}">
+  <Grid Margin="{DynamicResource PageMargin}" x:Name="RootGrid">
     <Grid.RowDefinitions>
-      <RowDefinition Height="Auto" />  <!-- Description -->
-      <RowDefinition Height="Auto" />  <!-- Input section -->
-      <RowDefinition Height="Auto" />  <!-- separator -->
-      <RowDefinition Height="Auto" />  <!-- Stored Files header + buttons -->
-      <RowDefinition Height="150" MinHeight="150" />  <!-- Stored Files list (resizable) -->
-      <RowDefinition Height="Auto" />  <!-- GridSplitter -->
-      <RowDefinition Height="*" MinHeight="100" />  <!-- Bottom half (Output + Options + Action + Log) -->
+      <RowDefinition Height="Auto" />                 <!-- 0: Help chrome -->
+      <RowDefinition Height="Auto" />                 <!-- 1: config (AutoToStar) -->
+      <RowDefinition Height="Auto" />                 <!-- 2: pinned action band -->
+      <RowDefinition Height="*" MinHeight="80" />     <!-- 3: log band -->
     </Grid.RowDefinitions>
 
-    <!-- ── Tab description ─────────────────────────────────── -->
-    <TextBlock Grid.Row="0"
-               Text="Create an SRR (Scene Release Rescue) file from a RAR archive set. The SRR captures RAR headers and metadata needed to reconstruct the original archives later."
-               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
-               TextWrapping="Wrap" Margin="0,0,0,6" />
-
-    <!-- ── Input ─────────────────────────────────────────────── -->
-    <StackPanel Grid.Row="1">
-      <!-- Explains the two Browse buttons: a single-set FILE vs a release FOLDER (searched, with its
-           subfolders, for RAR sets — not an exhaustive guarantee; see the scanner's SFV gating and
-           skip-unreadable rules). Bold Runs match the button labels exactly (incl. "…"); the same
-           guidance rides on each button's HelpText below for screen-reader users, since this caption
-           isn't in the tab path. -->
-      <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
-        <Run Text="Input " FontWeight="SemiBold" />
-        <Run Text="— use " Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-        <Run Text="Browse" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-        <Run Text=" for a single set's .sfv or first .rar, or " Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-        <Run Text="Browse folder…" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-        <Run Text=" to search a release folder and its subfolders for RAR sets (e.g. multi-disc releases)." Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-      </TextBlock>
-      <!-- Docked right in declaration order (rightmost first): folder Browse sits to the right of the
-           file Browse. Explicit TabIndex keeps keyboard order = visual order = TextBox → Browse file
-           → Browse folder (§4a accessibility review P3#8). -->
-      <DockPanel Margin="0,0,0,2">
-        <Button DockPanel.Dock="Right" Content="Browse folder…"
-                Command="{Binding BrowseInputFolderCommand}"
-                Classes="ghost"
-                TabIndex="2"
-                AutomationProperties.Name="Browse folder for release input"
-                AutomationProperties.HelpText="Pick a release folder to search it and its subfolders for RAR sets."
-                Margin="4,0,0,0" MinWidth="75" />
-        <Button DockPanel.Dock="Right" Content="Browse"
-                Command="{Binding BrowseInputCommand}"
-                Classes="ghost"
-                TabIndex="1"
-                AutomationProperties.Name="Browse input file"
-                AutomationProperties.HelpText="Pick a single set's .sfv or first .rar file."
-                Margin="4,0,0,0" MinWidth="75" />
-        <TextBox x:Name="InputTextBox" Text="{Binding InputPath}"
-                 TabIndex="0"
-                 AutomationProperties.Name="Input path"
-                 AutomationProperties.HelpText="Accepts a release .sfv/.rar file path or a release folder path"
-                 behaviors:TextBoxDropBehavior.DropMode="File" />
-      </DockPanel>
-      <!-- Busy reinforcement while the release scan runs; the announced signal is the FieldStatusLine
-           live region below (this bar is not focusable). -->
-      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsScanning}" Height="4"
-                   Margin="0,0,0,2"
-                   AutomationProperties.Name="Scanning release folder" />
-      <!-- Informational (non-focusable) list of the detected RAR sets; collapses when there are none.
-           Its automation Name is the grammatically-correct summary; each item surfaces its RelativeName. -->
-      <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" MaxHeight="96" IsVisible="{Binding HasDetectedSets}">
-        <ItemsControl ItemsSource="{Binding DetectedSets}"
-                      AutomationProperties.Name="{Binding DetectedSetsSummary}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate>
-              <TextBlock Text="{Binding RelativeName}" />
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
+    <!-- ── Help disclosure (small-window degradation, spec §2) ── Single instance, always in
+         the tree: normal mode renders FLAT (header hidden, body force-expanded by
+         CompactHeightBehavior) so the page is pixel-identical to the pre-disclosure layout;
+         compact mode shows the header and starts collapsed. This view has no links (like
+         SRSCreator/SampleRestorer, unlike Reconstructor) — the old tab-description TextBlock is
+         the whole body, moved in verbatim. Margin is NOT a local value here (house rule: local
+         values beat unconditional styles, so a local "0,0,0,6" would defeat the compact-mode
+         margin-tightening override) — the base value lives in the helpDisclosure style instead.
+         HorizontalAlignment/HorizontalContentAlignment ARE local values (the hug-bug fix):
+         Fluent's Expander defaults to Left, so without this it hugs its own content's width
+         instead of filling the Grid column. -->
+    <Expander Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
+              HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+              AutomationProperties.Name="Help">
+      <Expander.Header>
+        <TextBlock Text="Help" FontSize="{DynamicResource FontSizeCaption}" />
+      </Expander.Header>
+      <!-- Body scroller: keyboard route for the text-only body (spec §2 rev 10) —
+           Classes="helpBody" is focusable IN COMPACT ONLY via the class-scoped style. -->
+      <ScrollViewer Classes="helpBody" VerticalScrollBarVisibility="Auto"
+                    ScrollViewer.AllowAutoHide="False">
+        <TextBlock Text="Create an SRR (Scene Release Rescue) file from a RAR archive set. The SRR captures RAR headers and metadata needed to reconstruct the original archives later."
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                   TextWrapping="Wrap" Margin="0,0,4,0" />
       </ScrollViewer>
-      <controls:FieldStatusLine Status="{Binding InputStatus}" />
-    </StackPanel>
+    </Expander>
 
-    <!-- separator -->
-    <Border Grid.Row="2" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+    <!-- ── Config band (always-present; squeezes + scrolls in compact via AutoToStar) ──
+         Content renders at natural height at normal size (row is Auto), no scrollbar shown.
+         Hosts an INNER GRID (not a StackPanel): the Stored Files section needs a resizable
+         splitter row, which only a Grid can express. x:Name="ConfigGrid" carries its OWN
+         RowSizes attachment (row 3, PixelRestore) — CompactHeightBehavior collects and applies
+         descendant grids' RowSizes on every mode/help transition (see the behavior's own doc). -->
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                  ScrollViewer.AllowAutoHide="False">
+      <Grid x:Name="ConfigGrid">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />                  <!-- 0: Input section -->
+          <RowDefinition Height="Auto" />                  <!-- 1: separator -->
+          <RowDefinition Height="Auto" />                  <!-- 2: Stored Files header + buttons -->
+          <RowDefinition Height="150" MinHeight="150" />    <!-- 3: Stored Files list (resizable) -->
+          <RowDefinition Height="Auto" />                  <!-- 4: GridSplitter -->
+          <RowDefinition Height="Auto" />                  <!-- 5: Output section -->
+          <RowDefinition Height="Auto" />                  <!-- 6: separator -->
+          <RowDefinition Height="Auto" />                  <!-- 7: Options section -->
+        </Grid.RowDefinitions>
 
-    <!-- ── Stored Files header + buttons ─────────────────────── -->
-    <StackPanel Grid.Row="3">
-      <TextBlock Text="Stored Files" FontWeight="SemiBold" Margin="0,0,0,2" />
-      <DockPanel Margin="0,0,0,2">
-        <StackPanel Orientation="Horizontal">
-          <Button Content="Add..." Command="{Binding AddStoredFileCommand}" Classes="ghost" Margin="0,0,4,0" />
-          <Button Content="Remove" Command="{Binding RemoveStoredFileCommand}" Classes="ghost" Margin="0,0,4,0" />
-          <Button Content="Remove All" Command="{Binding RemoveAllStoredFilesCommand}" Classes="ghost" Margin="0,0,4,0" />
-          <Button Content="Move Up" Command="{Binding MoveStoredFileUpCommand}" Classes="ghost" Margin="0,0,4,0" />
-          <Button Content="Move Down" Command="{Binding MoveStoredFileDownCommand}" Classes="ghost" />
+        <!-- ── Input ─────────────────────────────────────────────── -->
+        <StackPanel Grid.Row="0">
+          <!-- Explains the two Browse buttons: a single-set FILE vs a release FOLDER (searched, with its
+               subfolders, for RAR sets — not an exhaustive guarantee; see the scanner's SFV gating and
+               skip-unreadable rules). Bold Runs match the button labels exactly (incl. "…"); the same
+               guidance rides on each button's HelpText below for screen-reader users, since this caption
+               isn't in the tab path. -->
+          <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+            <Run Text="Input " FontWeight="SemiBold" />
+            <Run Text="— use " Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+            <Run Text="Browse" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+            <Run Text=" for a single set's .sfv or first .rar, or " Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+            <Run Text="Browse folder…" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+            <Run Text=" to search a release folder and its subfolders for RAR sets (e.g. multi-disc releases)." Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+          </TextBlock>
+          <!-- Docked right in declaration order (rightmost first): folder Browse sits to the right of the
+               file Browse. Explicit TabIndex keeps keyboard order = visual order = TextBox → Browse file
+               → Browse folder (§4a accessibility review P3#8). -->
+          <DockPanel Margin="0,0,0,2">
+            <Button DockPanel.Dock="Right" Content="Browse folder…"
+                    Command="{Binding BrowseInputFolderCommand}"
+                    Classes="ghost"
+                    TabIndex="2"
+                    AutomationProperties.Name="Browse folder for release input"
+                    AutomationProperties.HelpText="Pick a release folder to search it and its subfolders for RAR sets."
+                    Margin="4,0,0,0" MinWidth="75" />
+            <Button DockPanel.Dock="Right" Content="Browse"
+                    Command="{Binding BrowseInputCommand}"
+                    Classes="ghost"
+                    TabIndex="1"
+                    AutomationProperties.Name="Browse input file"
+                    AutomationProperties.HelpText="Pick a single set's .sfv or first .rar file."
+                    Margin="4,0,0,0" MinWidth="75" />
+            <TextBox x:Name="InputTextBox" Text="{Binding InputPath}"
+                     TabIndex="0"
+                     AutomationProperties.Name="Input path"
+                     AutomationProperties.HelpText="Accepts a release .sfv/.rar file path or a release folder path"
+                     behaviors:TextBoxDropBehavior.DropMode="File" />
+          </DockPanel>
+          <!-- Busy reinforcement while the release scan runs; the announced signal is the FieldStatusLine
+               live region below (this bar is not focusable). -->
+          <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsScanning}" Height="4"
+                       Margin="0,0,0,2"
+                       AutomationProperties.Name="Scanning release folder" />
+          <!-- Informational (non-focusable) list of the detected RAR sets; collapses when there are none.
+               Its automation Name is the grammatically-correct summary; each item surfaces its RelativeName. -->
+          <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" MaxHeight="96" IsVisible="{Binding HasDetectedSets}">
+            <ItemsControl ItemsSource="{Binding DetectedSets}"
+                          AutomationProperties.Name="{Binding DetectedSetsSummary}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding RelativeName}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+          <controls:FieldStatusLine Status="{Binding InputStatus}" />
         </StackPanel>
-        <TextBlock Text="Double-click the Stored As column to edit the name used in the SRR."
-                   VerticalAlignment="Center" Margin="8,0,0,0"
-                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+
+        <!-- separator -->
+        <Border Grid.Row="1" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+        <!-- ── Stored Files header + buttons ─────────────────────── -->
+        <StackPanel Grid.Row="2">
+          <TextBlock x:Name="StoredFilesHeader" Text="Stored Files" FontWeight="SemiBold" Margin="0,0,0,2" />
+          <DockPanel Margin="0,0,0,2">
+            <StackPanel Orientation="Horizontal">
+              <Button Content="Add..." Command="{Binding AddStoredFileCommand}" Classes="ghost" Margin="0,0,4,0" />
+              <Button Content="Remove" Command="{Binding RemoveStoredFileCommand}" Classes="ghost" Margin="0,0,4,0" />
+              <Button Content="Remove All" Command="{Binding RemoveAllStoredFilesCommand}" Classes="ghost" Margin="0,0,4,0" />
+              <Button Content="Move Up" Command="{Binding MoveStoredFileUpCommand}" Classes="ghost" Margin="0,0,4,0" />
+              <Button Content="Move Down" Command="{Binding MoveStoredFileDownCommand}" Classes="ghost" />
+            </StackPanel>
+            <TextBlock Text="Double-click the Stored As column to edit the name used in the SRR."
+                       VerticalAlignment="Center" Margin="8,0,0,0"
+                       Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+          </DockPanel>
+        </StackPanel>
+
+        <!-- ── Stored Files list (resizable) ─────────────────────── -->
+        <!-- behaviors:ScrollHandoffBehavior.Handoff: this Grid row (fixed 150px normal / 80px
+             compact via the descendant PixelRestore entry) can clip the grid's own rows —
+             keyboard navigation past the grid's own realized rows hands off to the OUTER (this
+             ScrollViewer, band 1) rather than dead-ending at the grid's own edge.
+             AutomationProperties.LabeledBy pairs the grid to its own header TextBlock above (the
+             spec's LabeledBy audit). -->
+        <DataGrid x:Name="StoredFilesGrid"
+                  Grid.Row="3"
+                  ItemsSource="{Binding StoredFiles}"
+                  SelectedItem="{Binding SelectedStoredFile}"
+                  AutoGenerateColumns="False"
+                  CanUserReorderColumns="False"
+                  CanUserSortColumns="False"
+                  GridLinesVisibility="Horizontal"
+                  HeadersVisibility="Column"
+                  SelectionMode="Single"
+                  BorderThickness="0"
+                  BeginningEdit="OnStoredNameBeginningEdit"
+                  CellEditEnding="OnStoredNameCellEditEnding"
+                  AutomationProperties.LabeledBy="{Binding #StoredFilesHeader}"
+                  behaviors:ScrollHandoffBehavior.Handoff="True">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="File Path" Binding="{Binding FullPath}" IsReadOnly="True" Width="*" />
+            <DataGridTextColumn Header="Stored As" Binding="{Binding StoredName}" Width="450" />
+          </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- GridSplitter between Stored Files and Output. NO local Background (fix: a local value
+             here would SHADOW the GridSplitter:focus style override — moved to the Task 2 shared
+             style, which supplies both the rest-state Transparent and the :focus accent). -->
+        <GridSplitter Grid.Row="4" Height="5" HorizontalAlignment="Stretch"
+                      VerticalAlignment="Center"
+                      ResizeDirection="Rows"
+                      ResizeBehavior="PreviousAndNext"
+                      AutomationProperties.Name="Resize stored files and output" />
+
+        <!-- ── Output ────────────────────────────────────────────── -->
+        <StackPanel Grid.Row="5">
+          <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+            <Run Text="Output " FontWeight="SemiBold" />
+            <Run Text="— Where the .srr file will be written."
+                 Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+          </TextBlock>
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Content="Browse"
+                    Command="{Binding BrowseOutputCommand}"
+                    Classes="ghost"
+                    Margin="4,0,0,0" MinWidth="75" />
+            <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}"
+                     behaviors:TextBoxDropBehavior.DropMode="File" />
+          </DockPanel>
+          <controls:FieldStatusLine Status="{Binding OutputStatus}" />
+        </StackPanel>
+
+        <!-- separator -->
+        <Border Grid.Row="6" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+        <!-- ── Options ───────────────────────────────────────────── -->
+        <StackPanel Grid.Row="7">
+          <TextBlock Text="Options" FontWeight="SemiBold" Margin="0,0,0,2" />
+          <CheckBox Content="Auto-include files — Scan release directory for .nfo, .sfv, proof images, .m3u, .cue, .log files."
+                    IsChecked="{Binding AutoIncludeFiles}" Margin="0,1" />
+          <CheckBox Content="Auto-create SRS — Create .srs files for samples found in Sample/ subdirectory."
+                    IsChecked="{Binding AutoCreateSRS}" Margin="0,1" />
+          <CheckBox Content="Vobsub SRR — Create nested SRR files for subtitle archives found in Subs/ directories."
+                    IsChecked="{Binding CreateVobsubSRR}" Margin="0,1" />
+          <!-- B3 (pyrescene parity): folder mode always stores a fix release's RAR automatically (the
+               release scan provides it), so this toggle is inert there — disable it and tell a screen
+               reader WHY via HelpText (Avalonia announces the disabled state itself via UIA). -->
+          <CheckBox Content="Store fix RAR — For fix/patch releases, store the main RAR file as proof."
+                    IsChecked="{Binding StoreFixRAR}"
+                    IsEnabled="{Binding IsFolderMode, Converter={StaticResource InverseBoolConverter}}"
+                    AutomationProperties.HelpText="Automatic in folder mode — the release scan decides this"
+                    Margin="0,1" />
+          <CheckBox Content="Allow compressed — Accept RAR volumes that use compression (method != Store)."
+                    IsChecked="{Binding AllowCompressed}" Margin="0,1" />
+          <CheckBox Content="OSO hashes — Compute and store OpenSubtitles OSO hashes for archived files."
+                    IsChecked="{Binding ComputeOSOHashes}" Margin="0,1" />
+          <CheckBox Content="Languages.diz — Extract language metadata from VobSub .idx files and store in the SRR."
+                    IsChecked="{Binding GenerateLanguagesDiz}" Margin="0,1,0,4" />
+          <DockPanel Margin="0,0,0,2">
+            <TextBlock Text="App name:" VerticalAlignment="Center"
+                       Margin="0,0,8,0" />
+            <TextBox Text="{Binding AppName}" Width="400"
+                     HorizontalAlignment="Left" />
+            <TextBlock Text="Embedded in the SRR header to identify the creating application."
+                       VerticalAlignment="Center" Margin="8,0,0,0"
+                       Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+          </DockPanel>
+        </StackPanel>
+      </Grid>
+    </ScrollViewer>
+
+    <!-- ── Pinned action band — ALWAYS visible (the a11y survey's headline defect: this row and
+         the log measured off-window at 700×450 BASE state under today's plain Grid). Overlay/
+         adorner implementations forbidden. The two separators bracketing it are the SAME two
+         pre-existing Border elements from today's markup (relocated together, not duplicated),
+         now Classes="pinnedSeparator" (today's own verbatim Margin="0,4" matches that class's own
+         base value exactly — a zero-deviation, compact-only tightening with no normal-mode
+         change). The action DockPanel and ProgressBar below keep their margins as LOCAL, verbatim
+         values (0,0,0,2 / 0,0,0,4, unchanged from today) rather than the shared actionBar class —
+         that class's own base margin (0,0,0,4) does not match this view's own pre-existing
+         action-row margin (0,0,0,2), the same mismatch Task 4/5 both hit and resolved the same
+         way. -->
+    <StackPanel Grid.Row="2">
+      <Border Classes="pinnedSeparator" Height="1" Background="{DynamicResource BorderSeparator}" />
+
+      <!-- ── Action row ────────────────────────────────────────── -->
+      <DockPanel Margin="0,0,0,2">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+          <Button Content="Create SRR"
+                  Command="{Binding CreateSRRCommand}"
+                  Classes="primary"
+                  Padding="16,4" Margin="0,0,4,0" />
+          <Button Content="Cancel"
+                  Command="{Binding CancelCreationCommand}"
+                  Classes="cancel"
+                  IsVisible="{Binding IsCreating}"
+                  Padding="16,4" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <TextBlock Text="{Binding ActionHint}"
+                     Foreground="{DynamicResource ForegroundSecondary}"
+                     FontSize="{DynamicResource FontSizeCaption}"
+                     VerticalAlignment="Center" />
+          <TextBlock Text="{Binding ProgressMessage}"
+                     IsVisible="{Binding ShowProgress}"
+                     VerticalAlignment="Center" />
+        </StackPanel>
       </DockPanel>
+      <ProgressBar Value="{Binding ProgressPercent}"
+                   Maximum="100" Height="18"
+                   Margin="0,0,0,4"
+                   IsVisible="{Binding ShowProgress}" />
+
+      <Border Classes="pinnedSeparator" Height="1" Background="{DynamicResource BorderSeparator}" />
     </StackPanel>
 
-    <!-- ── Stored Files list (resizable) ─────────────────────── -->
-    <DataGrid x:Name="StoredFilesGrid"
-              Grid.Row="4"
-              ItemsSource="{Binding StoredFiles}"
-              SelectedItem="{Binding SelectedStoredFile}"
-              AutoGenerateColumns="False"
-              CanUserReorderColumns="False"
-              CanUserSortColumns="False"
-              GridLinesVisibility="Horizontal"
-              HeadersVisibility="Column"
-              SelectionMode="Single"
-              BorderThickness="0"
-              BeginningEdit="OnStoredNameBeginningEdit"
-              CellEditEnding="OnStoredNameCellEditEnding">
-      <DataGrid.Columns>
-        <DataGridTextColumn Header="File Path" Binding="{Binding FullPath}" IsReadOnly="True" Width="*" />
-        <DataGridTextColumn Header="Stored As" Binding="{Binding StoredName}" Width="450" />
-      </DataGrid.Columns>
-    </DataGrid>
-
-    <!-- GridSplitter between Stored Files and bottom half -->
-    <GridSplitter Grid.Row="5" Height="5" HorizontalAlignment="Stretch"
-                  VerticalAlignment="Center"
-                  ResizeDirection="Rows"
-                  ResizeBehavior="PreviousAndNext"
-                  Background="Transparent" />
-
-    <!-- ── Bottom half: Output + Options + Action + Log ──────── -->
-    <Grid Grid.Row="6">
-      <Grid.RowDefinitions>
-        <RowDefinition Height="Auto" />  <!-- Output section -->
-        <RowDefinition Height="Auto" />  <!-- separator -->
-        <RowDefinition Height="Auto" />  <!-- Options section -->
-        <RowDefinition Height="Auto" />  <!-- separator -->
-        <RowDefinition Height="Auto" />  <!-- Action row + progress -->
-        <RowDefinition Height="Auto" />  <!-- separator -->
-        <RowDefinition Height="Auto" />  <!-- Log header -->
-        <RowDefinition Height="*" MinHeight="40" />  <!-- Log list (resizable, fills remaining) -->
-      </Grid.RowDefinitions>
-
-      <!-- ── Output ────────────────────────────────────────────── -->
-      <StackPanel Grid.Row="0">
-        <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
-          <Run Text="Output " FontWeight="SemiBold" />
-          <Run Text="— Where the .srr file will be written."
-               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-        </TextBlock>
-        <DockPanel>
-          <Button DockPanel.Dock="Right" Content="Browse"
-                  Command="{Binding BrowseOutputCommand}"
-                  Classes="ghost"
-                  Margin="4,0,0,0" MinWidth="75" />
-          <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}"
-                   behaviors:TextBoxDropBehavior.DropMode="File" />
-        </DockPanel>
-        <controls:FieldStatusLine Status="{Binding OutputStatus}" />
-      </StackPanel>
-
-      <!-- separator -->
-      <Border Grid.Row="1" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
-
-      <!-- ── Options ───────────────────────────────────────────── -->
-      <StackPanel Grid.Row="2">
-        <TextBlock Text="Options" FontWeight="SemiBold" Margin="0,0,0,2" />
-        <CheckBox Content="Auto-include files — Scan release directory for .nfo, .sfv, proof images, .m3u, .cue, .log files."
-                  IsChecked="{Binding AutoIncludeFiles}" Margin="0,1" />
-        <CheckBox Content="Auto-create SRS — Create .srs files for samples found in Sample/ subdirectory."
-                  IsChecked="{Binding AutoCreateSRS}" Margin="0,1" />
-        <CheckBox Content="Vobsub SRR — Create nested SRR files for subtitle archives found in Subs/ directories."
-                  IsChecked="{Binding CreateVobsubSRR}" Margin="0,1" />
-        <!-- B3 (pyrescene parity): folder mode always stores a fix release's RAR automatically (the
-             release scan provides it), so this toggle is inert there — disable it and tell a screen
-             reader WHY via HelpText (Avalonia announces the disabled state itself via UIA). -->
-        <CheckBox Content="Store fix RAR — For fix/patch releases, store the main RAR file as proof."
-                  IsChecked="{Binding StoreFixRAR}"
-                  IsEnabled="{Binding IsFolderMode, Converter={StaticResource InverseBoolConverter}}"
-                  AutomationProperties.HelpText="Automatic in folder mode — the release scan decides this"
-                  Margin="0,1" />
-        <CheckBox Content="Allow compressed — Accept RAR volumes that use compression (method != Store)."
-                  IsChecked="{Binding AllowCompressed}" Margin="0,1" />
-        <CheckBox Content="OSO hashes — Compute and store OpenSubtitles OSO hashes for archived files."
-                  IsChecked="{Binding ComputeOSOHashes}" Margin="0,1" />
-        <CheckBox Content="Languages.diz — Extract language metadata from VobSub .idx files and store in the SRR."
-                  IsChecked="{Binding GenerateLanguagesDiz}" Margin="0,1,0,4" />
-        <DockPanel Margin="0,0,0,2">
-          <TextBlock Text="App name:" VerticalAlignment="Center"
-                     Margin="0,0,8,0" />
-          <TextBox Text="{Binding AppName}" Width="400"
-                   HorizontalAlignment="Left" />
-          <TextBlock Text="Embedded in the SRR header to identify the creating application."
-                     VerticalAlignment="Center" Margin="8,0,0,0"
-                     Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-        </DockPanel>
-      </StackPanel>
-
-      <!-- separator -->
-      <Border Grid.Row="3" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
-
-      <!-- ── Action row + progress ── -->
-      <StackPanel Grid.Row="4">
-        <DockPanel Margin="0,0,0,2">
-          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-            <Button Content="Create SRR"
-                    Command="{Binding CreateSRRCommand}"
-                    Classes="primary"
-                    Padding="16,4" Margin="0,0,4,0" />
-            <Button Content="Cancel"
-                    Command="{Binding CancelCreationCommand}"
-                    Classes="cancel"
-                    IsVisible="{Binding IsCreating}"
-                    Padding="16,4" />
-          </StackPanel>
-          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-            <TextBlock Text="{Binding ActionHint}"
-                       Foreground="{DynamicResource ForegroundSecondary}"
-                       FontSize="{DynamicResource FontSizeCaption}"
-                       VerticalAlignment="Center" />
-            <TextBlock Text="{Binding ProgressMessage}"
-                       IsVisible="{Binding ShowProgress}"
-                       VerticalAlignment="Center" />
-          </StackPanel>
-        </DockPanel>
-        <ProgressBar Value="{Binding ProgressPercent}"
-                     Maximum="100" Height="18"
-                     Margin="0,0,0,4"
-                     IsVisible="{Binding ShowProgress}" />
-      </StackPanel>
-
-      <!-- separator -->
-      <Border Grid.Row="5" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
-
-      <!-- ── Log header ── -->
-      <DockPanel Grid.Row="6" Margin="0,0,0,2">
+    <!-- ── Log (fills remaining space) ───────────────────────── -->
+    <DockPanel Grid.Row="3">
+      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
         <Button DockPanel.Dock="Right" Content="Save log..."
                 Command="{Binding SaveLogCommand}"
                 Classes="ghost"
                 Padding="8,2" />
-        <TextBlock DockPanel.Dock="Left" Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock x:Name="LogHeader" DockPanel.Dock="Left" Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
         <!-- Live save-outcome line (4.1.3): always in the tree — visibility-toggling would race
              the announcement; empty text renders nothing. No AutomationProperties.Name: the
              announced name IS the text. -->
@@ -247,14 +294,12 @@
                    Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
       </DockPanel>
-
-      <!-- ── Log list (fills remaining space) ───────────────── -->
-      <ListBox Grid.Row="7"
-               ItemsSource="{Binding LogEntries}"
+      <ListBox ItemsSource="{Binding LogEntries}"
                Classes="logList"
+               AutomationProperties.LabeledBy="{Binding #LogHeader}"
                FontFamily="{DynamicResource MonoFontFamily}"
                FontSize="{DynamicResource MonoFontSize}" />
-    </Grid>
+    </DockPanel>
 
   </Grid>
 
