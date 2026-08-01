@@ -472,7 +472,15 @@ internal static class CompactViewRig
             $"SnapshotTabOrder did not leave root or loop back within {MaxSteps} steps.");
     }
 
-    /// <summary>See <see cref="ConfirmStableLoop"/> — the same confirmation, scoped to "still inside root" instead of visibility.</summary>
+    /// <summary>
+    /// See <see cref="ConfirmStableLoop"/> — the same confirmation, scoped to "still inside root"
+    /// as an ADDITIONAL boundary check alongside visibility, not instead of it. Round-7
+    /// retro-review: this confirmation lap previously never asserted visibility at all (unlike
+    /// <see cref="ConfirmStableLoop"/>'s own confirmation lap, which always has) — a control that
+    /// goes invisible BETWEEN the main lap (round 6 restored its own per-step visibility check)
+    /// and this confirmation lap would have been silently absorbed as "the loop reproduced
+    /// stably," when it is actually a real defect. Fixed to match.
+    /// </summary>
     private static void ConfirmStableLoopWithinRoot(Window window, Control root, List<Control> order, int cycleStart, int cycleLength)
     {
         for (int i = 0; i < cycleLength; i++)
@@ -484,6 +492,8 @@ internal static class CompactViewRig
                     $"SnapshotTabOrder's terminal loop did not reproduce: step {i} left root's scope " +
                     "or lost focus entirely — this looks like an early trap, not a genuine stable cycle.");
             }
+
+            AssertFullyVisible(focused, window, $"forward capture, terminal-loop confirmation step {i}");
 
             Control expected = order[cycleStart + (i + 1) % cycleLength];
             if (!ReferenceEquals(focused, expected))

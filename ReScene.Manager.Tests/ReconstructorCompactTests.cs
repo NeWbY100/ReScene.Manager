@@ -301,10 +301,19 @@ public class ReconstructorCompactTests
             // consistently): the rig's own fake shell (CompactViewRig.BuildShell) puts a "_File"
             // MenuItem right after the TabControl in Z-order, so that is the first control the
             // walk reaches once it exhausts this view's own root.
-            const string ExpectedForwardExternalBoundary = "MenuItem name=\"File\" id=\"\"";
+            //
+            // Round-7 retro-review: OBJECT-IDENTITY, not description — consistent with round 6's
+            // reference-exact ordering standard. The expected boundary is captured directly from
+            // the shell (window.GetVisualDescendants(), independent of the walk itself, matched
+            // on the "_File" MenuItem's own Header) and compared via ReferenceEquals; the
+            // description is used only in the failure message.
+            MenuItem expectedForwardExternalBoundary = window.GetVisualDescendants().OfType<MenuItem>()
+                .Single(m => m.Header as string == "_File");
             Assert.True(forwardCapture.FirstExternalTarget is not null,
                 "forward capture should have left root's scope onto an external control, not ended via a stable loop within root");
-            Assert.Equal(ExpectedForwardExternalBoundary, CompactViewRig.Describe(forwardCapture.FirstExternalTarget!));
+            Assert.True(ReferenceEquals(expectedForwardExternalBoundary, forwardCapture.FirstExternalTarget),
+                $"forward capture's terminal external target should be {CompactViewRig.Describe(expectedForwardExternalBoundary)}, " +
+                $"not {CompactViewRig.Describe(forwardCapture.FirstExternalTarget!)} — same description does not mean same control instance.");
 
             // Scope split: scope A is everything up to and including the Paths TabItem header;
             // scope B is everything after (the Paths sub-tab's own content). Resolved by POSITION
