@@ -174,21 +174,24 @@
              own arrange bookkeeping unpredictable under long text in both (observed: the FIRST
              one measured its own full unclipped width, starving the panel's remaining-rect
              tracking so the SECOND rendered at literal zero width).
-             FIXED-PROPORTION STAR COLUMNS, not Auto+MaxWidth: measured (see task-4 fix-round-1
-             report) that an Auto column's width silently stops tracking its child's DesiredSize
-             specifically when ResultSummary/ShowResult change in the SAME tick that also
-             resizes row 2 (the pinned band, a sibling of this row-3 Star row) — i.e. on every
-             real rebuild completion, the exact production sequence. Reproduced down to a
-             minimal case; a plain direct .Text poke or changing these two TextBlocks' text
-             WITHOUT ShowResult also changing both measured correctly — only the combination
-             leaves the Auto column stuck at its pre-change (empty) width, silently starving
-             ResultStatus to zero. Star columns don't re-derive their width from a child's
-             DesiredSize at all (purely proportional to the Grid's own, correctly-updating,
-             total width), which sidesteps the defect entirely — verified against the exact
-             failing repro. Trade-off, accepted: SaveLogStatus's share is now a fixed 2/3 of the
-             row (was ~100% when ResultStatus was empty) rather than adapting to content; a
-             guaranteed non-zero floor for BOTH beats an adaptive split that can silently render
-             one of them invisible. -->
+             FIXED-PROPORTION STAR COLUMNS, not Auto+MaxWidth (fix round 1's first attempt):
+             measured (see task-4 fix-round-1/2/3 report sections) that an Auto column's width
+             can silently stop tracking its child's DesiredSize when ResultSummary/ShowResult
+             change in the SAME tick that also resizes row 2 (the pinned band, a sibling of this
+             row-3 Star row) — reproduced down to a minimal case. Fix round 2/3 correction: this
+             requires ResultSummary changing strictly AFTER ShowResult in the same tick, an order
+             verified (by grep) to NOT be production's real completion sequence — every
+             RebuildAsync completion branch sets ResultSummary before ShowResult — so this is NOT
+             "every real rebuild completion" as an earlier version of this comment claimed. The
+             Star-Star choice is justified on its own structural merits instead: Star columns
+             don't re-derive their width from a child's DesiredSize at all (purely proportional
+             to the Grid's own, correctly-updating, total width), so the mechanism is immune to
+             this order-sensitivity regardless of whether today's code happens to avoid triggering
+             it — a future reordering of RebuildAsync's three lines (or a similar view) cannot
+             reintroduce the original starvation finding. Trade-off, accepted: SaveLogStatus's
+             share is now a fixed 2/3 of the row (was ~100% when ResultStatus was empty) rather
+             than adapting to content; a guaranteed non-zero floor for BOTH, immune to property-
+             set order, beats an adaptive split that can silently render one of them invisible. -->
         <Grid ColumnDefinitions="1*,2*">
           <!-- Result announcement (a11y rev-3 NEW-4): always in the tree, mirrors
                SaveLogStatus's own established pattern exactly — empty text renders nothing, no

@@ -911,14 +911,20 @@ public class SRSReconstructorCompactTests
     /// 1's original Auto+MaxWidth defect exactly (RED against a restored copy of that layout,
     /// GREEN against the current Star-Star columns), using the SPECIFIC order that triggers it:
     /// <c>ResultSummary</c> changing strictly AFTER <c>ShowResult</c> in the same synchronous
-    /// tick. This is NOT a real <c>RebuildAsync</c> code path — verified by grep against every
-    /// assignment site in <c>SRSReconstructorViewModel.cs</c>: all three completion branches, and
-    /// the constructor/run-start resets, always set <c>ResultSummary</c> before <c>ShowResult</c>
-    /// (see the report's fix-round-2 section for the full verification and the three realistic
-    /// orderings that did NOT reproduce it). This test exists as deliberate hardening: it proves
-    /// the Star-Star mechanism is immune to a real, reproducible Avalonia Grid Auto-column
-    /// order-sensitivity regardless of property-set order, guarding against a plausible FUTURE
-    /// refactor of <c>RebuildAsync</c> (or a similar view) reintroducing it.
+    /// tick. Fix round 3 (codex): narrowed to the claim this test actually needs — this exact
+    /// order is not a real <c>RebuildAsync</c> COMPLETION/SHOWING transition. Verified by grep
+    /// against every assignment site in <c>SRSReconstructorViewModel.cs</c>: all three completion
+    /// branches (success, failure, exception — the paths that grow ResultStatus's content while
+    /// making the banner VISIBLE) always set <c>ResultSummary</c> before <c>ShowResult</c>. The
+    /// constructor's and <c>RebuildAsync</c>'s own run-start RESET paths do set
+    /// <c>ShowResult = false</c> before clearing <c>ResultSummary</c> — the opposite order — but
+    /// that is a HIDING transition (collapsing row 2, not growing it), not the showing/growing
+    /// scenario this fragility and this test concern themselves with (see the report's
+    /// fix-round-2 section for the full verification and the three realistic orderings that did
+    /// NOT reproduce it). This test exists as deliberate hardening: it proves the Star-Star
+    /// mechanism is immune to a real, reproducible Avalonia Grid Auto-column order-sensitivity
+    /// regardless of property-set order, guarding against a plausible FUTURE refactor of
+    /// <c>RebuildAsync</c> (or a similar view) reintroducing it.
     /// </summary>
     [AvaloniaFact]
     public void LogHeaderStatusLines_ResultSummaryAfterShowResult_OrderSensitiveAutoColumnFragility_StarColumnsAreImmune()
