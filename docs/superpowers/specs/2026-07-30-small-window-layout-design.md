@@ -199,7 +199,9 @@ modes; under `.compactHeight` it is styled to a single line — APPROVED with co
   base style False) so NO normal-mode Tab stop is added (criterion F — codex round-3).
   In compact it takes Tab focus after the header toggle and scrolls with
   PageUp/PageDown (plus Home/End) — Avalonia's ScrollViewer handles PAGE keys, not
-  arrows (codex round-5); it carries
+  arrows (codex round-5). ERRATUM (Task 3, decompile-confirmed): Avalonia 11.3 handles
+  PageUp/PageDown ONLY — Home/End are NOT stock; the shared `ScrollViewerHomeEndKeys`
+  behavior supplies them via the helpBody compact style. It carries
   `AutomationProperties.Name="Help content"` (a focusable element must announce as
   something — codex round-4); asserted per view with real key input in compact AND its
   absence from the normal-mode tab-order snapshot. The Reconstructor's body is NEVER
