@@ -2581,8 +2581,11 @@ public class CreatorCompactTests
     /// form permitted focus theft — it only measured contrast <c>if</c> focus happened to still be
     /// on the splitter, so a run that MOVED focus away scored as a pass. Every assertion below is
     /// now UNCONDITIONAL: at each step the splitter must STILL be the focus-holder (focus moving is
-    /// a theft failure, reported as such), must be clip-aware fully visible, and must clear 3:1
-    /// rendered-pixel focus contrast.
+    /// a theft failure, reported as such), must be clip-aware fully visible, and its focus
+    /// indication must clear 3:1 against the RENDERED PIXELS the helper actually samples — its own
+    /// centre versus the points 3 DIPs above and below it, which is a claim about the surfaces
+    /// immediately adjacent along that centre line, not a survey of either pane as a whole
+    /// (wording tightened per codex, fix round 5).
     /// </para>
     /// <para>
     /// MEASURED (reproduced three times, isolating the exact trigger): the brief's OWN worst case
@@ -2656,9 +2659,16 @@ public class CreatorCompactTests
                     $"{(focused is null ? "NOTHING" : focused.GetType().Name)})");
                 AssertFullyWithinWindow(splitter, window);
 
+                // Scope of this claim, stated exactly (codex, fix round 5): the helper samples THREE
+                // rendered pixels — the splitter's own centre, and the points 3 DIPs directly above
+                // and below it. It therefore proves the focus indication is distinguishable from the
+                // surfaces immediately adjacent to it along that centre line; it does not survey
+                // either neighbouring pane as a whole.
                 (double contrastVsAbove, double contrastVsBelow) = MeasureSplitterFocusContrast(splitter, window);
                 Assert.True(contrastVsAbove >= 3.0 && contrastVsBelow >= 3.0,
-                    $"at inner height {targetInner}, the splitter still holds focus but its rendered focus indication no longer clears 3:1 contrast ({contrastVsAbove:F2}:1 / {contrastVsBelow:F2}:1)");
+                    $"at inner height {targetInner}, the splitter still holds focus but its rendered focus indication " +
+                    $"no longer clears 3:1 against the pixels sampled 3 DIPs above and below its own centre " +
+                    $"({contrastVsAbove:F2}:1 above / {contrastVsBelow:F2}:1 below)");
             }
         }
         finally { window.Close(); }

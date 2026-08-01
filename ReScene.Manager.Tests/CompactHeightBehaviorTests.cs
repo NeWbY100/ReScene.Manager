@@ -1471,6 +1471,278 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
+    // ── Shared-behavior fix round 5: races inside the new path ───────────────────────────
+
+    /// <summary>
+    /// Fix round 5, MAJOR #1 (WCAG 2.4.7/2.4.11): the partial-clip leg took an ACTION —
+    /// <c>BringIntoView</c>, which runs handlers SYNCHRONOUSLY and can re-enter layout and focus —
+    /// and then re-checked only GEOMETRY before acting again. The staged transaction's discipline
+    /// (revalidate after every action, not just before the first) applies to any action this
+    /// behavior takes. Here a handler moves focus to a DIFFERENT in-root element during request 1;
+    /// the leg must abandon immediately rather than keep scrolling an ancestor on behalf of an
+    /// element that no longer holds focus — which can scroll the NEW focus-holder out of view.
+    /// <para>
+    /// Discriminating by CONSTRUCTION, not timing: the target is permanently clipped by a plain
+    /// <c>ClipToBounds</c> Border (nothing can ever recover it) while the handler FAKES progress by
+    /// nudging the enclosing scroller 1 DIP per request — the same rig
+    /// <see cref="FakedProgressForever_StopsAtTheCap_AndRelocates"/> uses. Round 4's leg therefore
+    /// spun to the full <c>MaxBringIntoViewAttempts</c> cap (8 requests) after focus had already
+    /// moved; the fixed leg issues exactly ONE.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void PartialRecovery_FocusMovedInsideBringIntoView_AbandonsInsteadOfActingStale()
+    {
+        (Window w, Grid root) = Host(Threshold + 100);
+        try
+        {
+            (ScrollViewer scroller, Button target) = BuildPermanentlyPartialTarget(root);
+            var elsewhere = new Button { Content = "elsewhere", [Grid.RowProperty] = 1 };
+            root.Children.Add(elsewhere);
+            Dispatcher.UIThread.RunJobs();
+
+            target.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(target.IsFocused);
+            Assert.Equal("PartiallyClipped", DescribeClipVisibility(target));
+
+            // Attached only after the setup Focus(), which raises a request of its own.
+            int requests = 0;
+            target.AddHandler(Control.RequestBringIntoViewEvent, (_, _) =>
+            {
+                ++requests;
+                elsewhere.Focus();                                          // the race: focus moves mid-call
+                scroller.Offset = new Vector(0, scroller.Offset.Y + 1);      // faked progress
+            });
+
+            ShrinkTo(w, root, Threshold + 60);
+
+            Assert.Equal(1, requests);
+            Assert.True(elsewhere.IsFocused,
+                "the focus move that happened during the call must stand — the leg must not fight it");
+            Assert.True(target.Bounds.Height > 0);   // the target still exists; it simply stopped being recovered
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 5, MAJOR #1, the generation half: a real transition landing during the leg's own
+    /// synchronous <c>BringIntoView</c> must abandon it, exactly as <see cref="IsSuperseded"/>
+    /// rejects a stale deferred job. Same faked-progress rig as above, so round 4's leg spun to the
+    /// cap while superseded and the fixed one issues exactly ONE request.
+    /// <para>
+    /// The bump is injected directly (the established technique in this file — see
+    /// <see cref="FrozenGeneration_CallbackBuiltBeforeLaterTransitions_NoOps"/>'s own three-way
+    /// proof that a genuine in-window transition is not constructible through the public API: a
+    /// transition's <c>Evaluate</c> runs at Default priority, so it cannot possibly execute inside
+    /// a synchronous call made from an already-running Loaded-priority job).
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void PartialRecovery_GenerationBumpedInsideBringIntoView_AbandonsInsteadOfActingStale()
+    {
+        (Window w, Grid root) = Host(Threshold + 100);
+        try
+        {
+            (ScrollViewer scroller, Button target) = BuildPermanentlyPartialTarget(root);
+            Dispatcher.UIThread.RunJobs();
+
+            target.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(target.IsFocused);
+            Assert.Equal("PartiallyClipped", DescribeClipVisibility(target));
+
+            object state = GetPrivateState(root);
+            int requests = 0;
+            target.AddHandler(Control.RequestBringIntoViewEvent, (_, _) =>
+            {
+                ++requests;
+                SetGeneration(state, GetGeneration(state) + 1);              // the race: a transition lands mid-call
+                scroller.Offset = new Vector(0, scroller.Offset.Y + 1);      // faked progress
+            });
+
+            ShrinkTo(w, root, Threshold + 60);
+
+            Assert.Equal(1, requests);
+            Assert.True(target.IsFocused, "abandoning must not move focus either — it stops, it does not act");
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 5, MAJOR #2 (WCAG 2.4.3): when the posted pass runs and the FocusManager reports
+    /// NOTHING focused, that is not the pass's business. Empty focus means the user (or a close, or
+    /// a detach) cleared it; reviving the element that happened to be focused when the pass was
+    /// SCHEDULED is focus theft, and the fallback chain's root terminal can leave a phantom Tab
+    /// stop behind. Round 4 inherited <see cref="ResolveRecoveryTarget"/>'s "nothing focused means
+    /// recover the capture" rule — correct for a TRANSITION, which cleared focus itself by hiding
+    /// the element, and wrong for a resize, which did no such thing.
+    /// <para>
+    /// The pass is invoked through its own factory rather than through a real resize because the
+    /// interleave cannot be constructed through the dispatcher: the pass is posted at Loaded from
+    /// an Evaluate running at Default, and Loaded drains ahead of Default, so no job of any
+    /// priority can be made to run between the two (the same structural finding
+    /// <see cref="StaleGeneration_DirectlyInjected_CausesTheDeferredJobToNoOp"/> documents for the
+    /// transition path's ABA race).
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ResizeRecheck_FocusClearedBeforeThePassRuns_NeverRevivesTheStaleCapture()
+    {
+        (Window w, Grid root) = Host(Threshold + 100);
+        try
+        {
+            var scroller = new ScrollViewer { [Grid.RowProperty] = 2 };
+            var stack = new StackPanel();
+            for (int i = 0; i < 10; i++) stack.Children.Add(new Button { Content = $"b{i}", Height = 30 });
+            scroller.Content = stack;
+            root.Children.Add(scroller);
+            Dispatcher.UIThread.RunJobs();
+
+            var captured = (Button)stack.Children[^1];
+            captured.Focus();
+            scroller.Offset = default;             // scroll it entirely out of view: recoverable IF acted on
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(captured.IsFocused);
+            Assert.True(InvokeIsObscured(captured), "setup precondition: acting on this capture would visibly scroll");
+
+            object state = GetPrivateState(root);
+            Action pass = InvokeCreateResizeRecheckCallback(root, captured, state);
+
+            // The user clears focus (clicked the desktop, closed a popup, tabbed to another window).
+            TopLevel.GetTopLevel(root)!.FocusManager!.ClearFocus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Null(w.FocusManager?.GetFocusedElement());
+
+            pass();
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(w.FocusManager?.GetFocusedElement() is null,
+                "focus the user cleared must stay cleared — reviving the scheduling-time capture is theft");
+            Assert.Equal(0, scroller.Offset.Y);
+            Assert.False(root.Focusable,
+                "and the chain's root terminal must never have run, so no phantom Tab stop is left behind");
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 5, coverage gap: the no-theft precondition end-to-end, not merely at scheduling.
+    /// <see cref="NonTransitionalResize_FocusOutsideTheRoot_IsNeverPulledIn"/> covers focus that was
+    /// ALREADY outside when the pass was scheduled (so nothing is ever posted); this covers focus
+    /// that was legitimately IN-ROOT at scheduling and left before the pass ran. A guard rather
+    /// than a gap test — round 4 already declined this case, via a different route
+    /// (<see cref="ResolveRecoveryTarget"/>'s own out-of-scope null) than the live-holder rule that
+    /// replaced it — so it is here to keep BOTH routes honest, and it is reported as passing
+    /// before and after rather than dressed up as a fix.
+    /// </summary>
+    [AvaloniaFact]
+    public void ResizeRecheck_FocusMovedOutsideBeforeThePassRuns_NeverRecovers()
+    {
+        (Window w, Grid root) = Host(Threshold + 100);
+        try
+        {
+            var outside = new Button { Content = "shell" };
+            DockPanel.SetDock(outside, Dock.Top);
+
+            var scroller = new ScrollViewer { [Grid.RowProperty] = 2 };
+            var stack = new StackPanel();
+            for (int i = 0; i < 10; i++) stack.Children.Add(new Button { Content = $"b{i}", Height = 30 });
+            scroller.Content = stack;
+            root.Children.Add(scroller);
+
+            var shell = new DockPanel();
+            w.Content = null;
+            shell.Children.Add(outside);
+            shell.Children.Add(root);              // fill child: the root's height stays window-driven
+            w.Content = shell;
+            Dispatcher.UIThread.RunJobs();
+
+            var captured = (Button)stack.Children[^1];
+            captured.Focus();
+            scroller.Offset = default;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(captured.IsFocused);
+            Assert.True(InvokeIsObscured(captured));
+
+            object state = GetPrivateState(root);
+            Action pass = InvokeCreateResizeRecheckCallback(root, captured, state);
+
+            outside.Focus();                       // focus leaves the view before the pass runs
+            Dispatcher.UIThread.RunJobs();
+
+            pass();
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(outside.IsFocused, "focus that left the view is never pulled back in");
+            Assert.Equal(0, scroller.Offset.Y);
+            Assert.False(root.Focusable);
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 5, MAJOR #2's second half: the root's TRANSIENT focusability — granted only for
+    /// the fallback chain's hand-off — must not survive the root leaving the tree, or the view
+    /// carries a phantom Tab stop into its next attachment.
+    /// <see cref="ChainTerminal_RootGetsTransientFocusability"/> proves the LostFocus reset covers
+    /// the ordinary path (focus moves on to another control); this covers the DETACHMENT path,
+    /// where there may be no such focus move to observe at all.
+    /// </summary>
+    [AvaloniaFact]
+    public void RootTransientFocusability_IsRevertedOnDetach()
+    {
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var collapsing = new Button { Content = "only", [Grid.RowProperty] = 0 };
+            root.Children.Add(collapsing);
+            root.Classes.CollectionChanged += (_, _) =>
+                collapsing.IsVisible = !root.Classes.Contains("compactHeight");
+            Dispatcher.UIThread.RunJobs();
+            collapsing.Focus();
+            Dispatcher.UIThread.RunJobs();
+
+            w.Height = Threshold - 1;              // → compact; the ONLY focusable hides
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(root.IsFocused, "setup precondition: the chain must have reached its root terminal");
+            Assert.True(root.Focusable);
+
+            w.Content = null;                      // detach while the root still holds the transient grant
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(root.Focusable,
+                "a detached root must not keep the transient focusability the hand-off granted it — " +
+                "reattaching would add a permanent Tab stop the view never authored");
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// A target PERMANENTLY partially clipped: a plain <c>ClipToBounds</c> Border 20 DIPs tall
+    /// hosting a 30-DIP button offset 10 down, so the button spans [10,40] against a [0,20] band —
+    /// it overlaps, so it is not "obscured" by the AA line, and nothing can ever scroll a plain
+    /// Border, so no genuine progress is possible. Wrapped in a real ScrollViewer (filling row 2,
+    /// so its viewport shrinks with the window) purely so a handler has something whose offset it
+    /// can nudge to FAKE progress.
+    /// </summary>
+    private static (ScrollViewer Scroller, Button Target) BuildPermanentlyPartialTarget(Grid root)
+    {
+        var clipper = new Border { Height = 20, ClipToBounds = true };
+        var clippedHost = new StackPanel();
+        var target = new Button { Content = "target", Height = 30, Margin = new Thickness(0, 10, 0, 0) };
+        clippedHost.Children.Add(target);
+        clipper.Child = clippedHost;
+
+        var scroller = new ScrollViewer { [Grid.RowProperty] = 2 };
+        var scrollerStack = new StackPanel();
+        scrollerStack.Children.Add(clipper);
+        scrollerStack.Children.Add(new Border { Height = 500 });   // genuine scroll room to fake progress into
+        scroller.Content = scrollerStack;
+        root.Children.Add(scroller);
+        return (scroller, target);
+    }
+
     /// <summary>Resizes the window so the behavior's own root lands at <paramref name="inner"/>
     /// DIPs, then drains layout AND the Loaded-priority staged jobs the behavior defers to.</summary>
     private static void ShrinkTo(Window w, Control root, double inner)
@@ -1533,6 +1805,14 @@ public class CompactHeightBehaviorTests
         (bool)typeof(CompactHeightBehavior)
             .GetMethod("IsObscured", BindingFlags.NonPublic | BindingFlags.Static)!
             .Invoke(null, [element])!;
+
+    /// <summary>The behavior's own three-way clip verdict, by name — so a test can state which
+    /// leg of the recheck its geometry actually exercises instead of assuming it.</summary>
+    private static string DescribeClipVisibility(Control element) =>
+        typeof(CompactHeightBehavior)
+            .GetMethod("GetClipVisibility", BindingFlags.NonPublic | BindingFlags.Static)!
+            .Invoke(null, [element])!
+            .ToString()!;
 
     private static Action InvokeCreateResizeRecheckCallback(Control root, Control captured, object state)
     {

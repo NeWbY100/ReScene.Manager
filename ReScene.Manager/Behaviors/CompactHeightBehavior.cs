@@ -349,9 +349,16 @@ internal static class CompactHeightBehavior
 
     /// <summary>
     /// The within-mode half of the staged-focus contract: keep a still-focused element visible as
-    /// the layout keeps changing size around it. Splits strictly along the spec's own DELIBERATE
-    /// ASYMMETRY rider ("BringIntoView resolve[s] partial clipping first; the relocation threshold
-    /// only catches what scrolling cannot recover"):
+    /// the layout keeps changing size around it.
+    /// <para>
+    /// Runs at all only while <see cref="IsPassStillValid"/> holds — the element this pass was
+    /// scheduled for must STILL be the live focus-holder in this root. That is what makes the
+    /// verdict below safe to read off <c>captured</c> directly: it has just been confirmed to be
+    /// the focused element, so there is nothing else the pass could be talking about.
+    /// </para>
+    /// Splits strictly along the spec's own DELIBERATE ASYMMETRY rider ("BringIntoView resolve[s]
+    /// partial clipping first; the relocation threshold only catches what scrolling cannot
+    /// recover"):
     /// <list type="bullet">
     /// <item>FULLY VISIBLE — nothing to do, and nothing is touched. Note this pass judges GEOMETRY
     /// only: an element that is fully visible but has lost <c>Focusable</c>/enablement is stranded
@@ -369,23 +376,18 @@ internal static class CompactHeightBehavior
     /// </summary>
     private static void RecheckFocusAfterResize(Control root, Control captured, bool compact, int generation, State state)
     {
-        if (IsSuperseded(compact, generation, state))
+        if (!IsPassStillValid(root, captured, compact, generation, state))
         {
             return;
         }
 
-        if (ResolveRecoveryTarget(root, captured) is not { } target)
-        {
-            return;
-        }
-
-        switch (GetClipVisibility(target))
+        switch (GetClipVisibility(captured))
         {
             case ClipVisibility.FullyVisible:
                 return;
 
             case ClipVisibility.PartiallyClipped:
-                ScrollFullyIntoView(target);
+                ScrollFullyIntoView(root, captured, compact, generation, state);
                 return;
 
             case ClipVisibility.Obscured:
@@ -395,6 +397,25 @@ internal static class CompactHeightBehavior
     }
 
     /// <summary>
+    /// The resize pass's own precondition — asserted before its first action and again after every
+    /// action it takes: not superseded, AND the element it was scheduled for is STILL the live
+    /// focus-holder inside this root.
+    /// <para>
+    /// Deliberately stricter than <see cref="ResolveRecoveryTarget"/>, and NOT a substitute for it:
+    /// that resolver treats "nothing focused" as meaning recover the capture, which is right for a
+    /// TRANSITION (the transition itself cleared focus, by hiding the very element it captured —
+    /// that is the situation it exists to repair) and wrong for a resize, which hides nothing. On
+    /// this path, empty focus means something else entirely — the user clicked away, a popup
+    /// closed, the view detached — and reviving the scheduling-time capture would take focus the
+    /// user had let go of, with the fallback chain's root terminal able to leave a Tab stop behind
+    /// on a view nobody is looking at. No live in-root holder, no pass.
+    /// </para>
+    /// </summary>
+    private static bool IsPassStillValid(Control root, Control captured, bool compact, int generation, State state) =>
+        !IsSuperseded(compact, generation, state) &&
+        ReferenceEquals(CaptureFocusedElement(root), captured);
+
+    /// <summary>
     /// Scroll-only recovery for a partially clipped target, under the SAME retry-on-progress rule
     /// and attempt budget as <see cref="RelocateFocusIfNeeded"/>'s own loop: a scroller that only
     /// partially satisfies a request still consumes it, so another request may be needed to carry
@@ -402,14 +423,30 @@ internal static class CompactHeightBehavior
     /// target is beyond BringIntoView's reach, and there is nothing further to try. Unlike that
     /// loop, exhausting the attempts here is simply the end: a partially clipped element is never
     /// relocated.
+    /// <para>
+    /// AND, like that loop, it revalidates after EVERY request rather than only before the first.
+    /// <c>BringIntoView</c> is not a passive measurement: it raises an event whose handlers run
+    /// SYNCHRONOUSLY and can re-enter layout, move focus, or let a whole transition land before it
+    /// returns. Judging only the geometry afterwards — which is what this leg did when it was
+    /// introduced — keeps scrolling an ancestor on behalf of an element that may no longer hold
+    /// focus at all, which can drag the element that DOES hold it out of view: the exact
+    /// stranding this behavior exists to prevent, self-inflicted. So the pass's own precondition
+    /// (<see cref="IsPassStillValid"/>) is re-asserted between attempts, and a failed one abandons
+    /// silently — no further request, and emphatically no relocation.
+    /// </para>
     /// </summary>
-    private static void ScrollFullyIntoView(Control target)
+    private static void ScrollFullyIntoView(Control root, Control target, bool compact, int generation, State state)
     {
         for (int attempts = 0; attempts < MaxBringIntoViewAttempts; ++attempts)
         {
             Vector[] before = CaptureScrollOffsets(target);
             target.BringIntoView();
             target.UpdateLayout();
+
+            if (!IsPassStillValid(root, target, compact, generation, state))
+            {
+                return;
+            }
 
             if (CaptureScrollOffsets(target).SequenceEqual(before) ||
                 GetClipVisibility(target) == ClipVisibility.FullyVisible)
