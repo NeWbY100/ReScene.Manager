@@ -9,6 +9,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
@@ -657,16 +658,62 @@ public class CreatorCompactTests
             // The staged-focus guard's actual point: restoring from a focus captured on the body
             // (which just went non-focusable — flat mode's base style, not the compact-only
             // override) must relocate focus, not strand it. RestoreFocusTarget was wired to
-            // InputTextBox in the view's ctor, so that is where it must land.
-            TextBox inputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "InputTextBox");
-            Assert.True(inputTextBox.IsFocused,
-                "restoring from a focused compact body must relocate focus to the wired RestoreFocusTarget (InputTextBox), not strand it");
-            Assert.Equal("Input path", ControlAutomationPeer.CreatePeerForElement(inputTextBox).GetName());
+            // OutputTextBox in the view's ctor (NOT InputTextBox — fix round 1, codex finding 1:
+            // InputTextBox is one of the three Input-row TabIndex-trapped controls; see the ctor's
+            // own remarks), so that is where it must land.
+            TextBox outputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "OutputTextBox");
+            Assert.True(outputTextBox.IsFocused,
+                "restoring from a focused compact body must relocate focus to the wired RestoreFocusTarget (OutputTextBox), not strand it");
+            Assert.Equal("Output path", ControlAutomationPeer.CreatePeerForElement(outputTextBox).GetName());
 
             window.Height -= 420;
             Dispatcher.UIThread.RunJobs();
             Assert.Contains("compactHeight", root.Classes);
             Assert.False(helpDisclosure.IsExpanded, "re-entering compact must reset Help to collapsed, not resume the prior session's open state");
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 1 (codex finding 1, MAJOR): permanent regression guard for the exact defect the
+    /// finding named — a resize-triggered focus recovery must never deposit a keyboard user onto
+    /// one of the Input row's three TabIndex-trapped controls (InputTextBox, the file Browse
+    /// button, or the folder Browse button — see the task report's "headline finding" for the full
+    /// decompiled-source + empirical proof of the trap those three form with shell chrome).
+    /// Resolves the ACTUAL wired target via <see cref="CompactHeightBehavior.GetRestoreFocusTarget"/>
+    /// (not a hardcoded assumption of what it "should" be) and asserts it is REFERENCE-DISTINCT
+    /// from all three — so a future retarget back into the trap fails here immediately, loudly,
+    /// naming the collision, rather than silently reintroducing the exact harmful path this round
+    /// fixed.
+    /// </summary>
+    [AvaloniaFact]
+    public void RestoreFocusTarget_IsNotOneOfTheThreeTrappedControls()
+    {
+        CreatorViewModel vm = CreateVm();
+        var view = new CreatorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        try
+        {
+            Control? actualTarget = CompactHeightBehavior.GetRestoreFocusTarget(root);
+            Assert.NotNull(actualTarget);
+
+            TextBox inputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "InputTextBox");
+            Button inputBrowse = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputCommand));
+            Button inputBrowseFolder = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputFolderCommand));
+
+            Assert.False(ReferenceEquals(actualTarget, inputTextBox),
+                $"RestoreFocusTarget must not be InputTextBox — it is one of the three TabIndex-trapped controls (TabIndex=\"0\").");
+            Assert.False(ReferenceEquals(actualTarget, inputBrowse),
+                $"RestoreFocusTarget must not be the input Browse button — it is one of the three TabIndex-trapped controls (TabIndex=\"1\").");
+            Assert.False(ReferenceEquals(actualTarget, inputBrowseFolder),
+                $"RestoreFocusTarget must not be the input Browse-folder button — it is one of the three TabIndex-trapped controls (TabIndex=\"2\"), and forward-Tab from it settles into the stable shell-chrome loop.");
+
+            // Positive assertion, not just three negatives: the actual wired target is OutputTextBox,
+            // carrying its own explicit, computed accessible name (fix round 1, codex finding 1's
+            // own naming requirement).
+            TextBox outputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "OutputTextBox");
+            Assert.True(ReferenceEquals(actualTarget, outputTextBox));
+            Assert.Equal("Output path", ControlAutomationPeer.CreatePeerForElement(outputTextBox).GetName());
         }
         finally { window.Close(); }
     }
@@ -737,7 +784,11 @@ public class CreatorCompactTests
 
             ScrollViewer body = helpDisclosure.GetVisualDescendants().OfType<ScrollViewer>().Single();
             Assert.True(body.Focusable);
-            Assert.Equal("Help content", AutomationProperties.GetName(body));
+            // Fix round 1 (codex finding 5): the COMPUTED peer name, not merely the raw attached
+            // property — what a screen reader actually announces (mirrors the same
+            // ControlAutomationPeer.CreatePeerForElement(...).GetName() pattern used throughout
+            // this file for every other focus-recovery/labeled target).
+            Assert.Equal("Help content", ControlAutomationPeer.CreatePeerForElement(body).GetName());
         }
         finally { compactWindow.Close(); }
     }
@@ -944,6 +995,61 @@ public class CreatorCompactTests
     }
 
     /// <summary>
+    /// Fix round 1 (codex finding 4): real arrow-key/current-row visibility coverage for
+    /// StoredFilesGrid's own <c>ScrollHandoffBehavior.Handoff="True"</c> wiring — disclosed as a
+    /// gap in the original task report (concern 4) because, UNLIKE SampleRestorer's SRSEntriesGrid,
+    /// this grid has no per-row focusable control (a plain two-column text grid, no checkbox
+    /// column) to individually target. Mirrors SampleRestorer's own
+    /// <c>Handoff_KeyboardNavigation_ChainsBringIntoViewToOuterViewer_BottomRowEndsFullyVisible</c>
+    /// adapted to that difference: focuses the GRID CONTROL ITSELF directly (confirmed, via a
+    /// throwaway diagnostic, to be the genuine keyboard entry point here — ordinary arrow-key
+    /// browsing on this grid shape never moves focus off the grid onto a cell/row, only its own
+    /// <c>SelectedIndex</c>/current-cell state, exactly as <c>ScrollHandoffBehavior</c>'s own
+    /// remarks document for DataGrid generally), then drives real ArrowDown presses deep into a
+    /// 12-row, virtualized, compact (80-DIP) grid and asserts the LAST row ends fully
+    /// clip-aware-visible in the window — proving <c>ScrollHandoffBehavior</c>'s
+    /// <c>CurrentCellChanged</c>-&gt;<c>BringIntoView</c> chain reaches the config band's own outer
+    /// ScrollViewer even without a per-row control to focus.
+    /// </summary>
+    [AvaloniaFact]
+    public void Handoff_KeyboardArrowNavigation_ChainsBringIntoViewToOuterViewer_LastRowEndsFullyVisible()
+    {
+        CreatorViewModel vm = CreateVm();
+        for (int i = 0; i < 12; i++)
+        {
+            vm.StoredFiles.Add(Item($@"C:\release\file{i:D2}.nfo", $"file{i:D2}.nfo"));
+        }
+        var view = new CreatorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, CompactInner);
+        try
+        {
+            ScrollViewer configScroller = window.GetVisualDescendants().OfType<ScrollViewer>().Single(sv => Grid.GetRow(sv) == 1);
+            configScroller.Offset = default;
+            Dispatcher.UIThread.RunJobs();
+
+            DataGrid grid = window.GetVisualDescendants().OfType<DataGrid>().Single(g => g.Name == "StoredFilesGrid");
+            grid.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(grid.IsFocused, "test precondition: the grid control itself (not a per-row control, which this grid shape has none of) must be the genuine keyboard entry point");
+
+            for (int i = 0; i < vm.StoredFiles.Count - 1; i++)
+            {
+                window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+                window.KeyReleaseQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            Assert.Equal(vm.StoredFiles.Count - 1, grid.SelectedIndex);
+            Assert.True(grid.IsFocused, "focus should stay on the grid control throughout ordinary (non-edit) arrow-key browsing");
+
+            DataGridRow lastRow = grid.GetVisualDescendants().OfType<DataGridRow>()
+                .Single(r => ReferenceEquals(r.DataContext, vm.StoredFiles[^1]));
+            AssertFullyWithinWindow(lastRow, window);
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
     /// Wheel at the grid's own extent moves the config band's OWN (band 1) scroller — the platform
     /// default (<c>ScrollViewer.IsScrollChainingEnabled</c>, never overridden in this app), NOT a
     /// custom mechanism: <see cref="ScrollHandoffBehavior"/>'s own wheel path was removed entirely
@@ -1083,6 +1189,32 @@ public class CreatorCompactTests
         finally { window.Close(); }
     }
 
+    // ── LabeledBy audit: computed UIA names resolve to their own header (fix round 1, codex finding 5) ──
+
+    /// <summary>
+    /// Both grids/lists in this view use <c>AutomationProperties.LabeledBy</c> to pair themselves
+    /// with a sibling header TextBlock (mirrors SampleRestorer's own
+    /// <c>SRSEntriesGrid_UIAName_ResolvesToEmbeddedSRSFilesHeader</c>) — resolved via the REAL
+    /// automation peer, not the raw attached property, so this proves what a screen reader
+    /// actually announces on landing here, not merely that the XAML attribute exists.
+    /// </summary>
+    [AvaloniaFact]
+    public void LabeledByAudit_StoredFilesGridAndLogList_ResolveToTheirOwnHeaders()
+    {
+        CreatorViewModel vm = CreateVm();
+        var view = new CreatorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        try
+        {
+            DataGrid storedFilesGrid = window.GetVisualDescendants().OfType<DataGrid>().Single(g => g.Name == "StoredFilesGrid");
+            Assert.Equal("Stored Files", ControlAutomationPeer.CreatePeerForElement(storedFilesGrid).GetName());
+
+            ListBox logList = window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Classes.Contains("logList"));
+            Assert.Equal("Log", ControlAutomationPeer.CreatePeerForElement(logList).GetName());
+        }
+        finally { window.Close(); }
+    }
+
     // ── 8. Frame-rig parity (criterion F: normal-mode pixels unchanged) + splitter (criterion E) ──
 
     /// <summary>
@@ -1188,6 +1320,378 @@ public class CreatorCompactTests
         }
         finally { newWindow.Close(); }
     }
+
+    /// <summary>
+    /// Fix round 1 (codex finding 2, MAJOR): the two band-scoped tests above prove SPECIFIC
+    /// regions; this proves EVERY conversion-touched band at once, at REST, by comparing the
+    /// ENTIRE root — the strongest, most direct answer to "every conversion-touched band must be
+    /// inside compared pixels." <see cref="OldFullMarkup"/> is the pre-task
+    /// <c>CreatorView.axaml</c> VERBATIM (git blob <c>67aa5e8:ReScene.Manager/Views/CreatorView.axaml</c>,
+    /// <c>x:Class</c> stripped so <see cref="AvaloniaRuntimeXamlLoader"/> can parse it as a plain
+    /// <see cref="UserControl"/>), loaded through the REAL XAML pipeline — deliberately NOT a
+    /// hand-built C# object graph like <see cref="BuildPreDisclosureRow0Window"/> /
+    /// <see cref="BuildPreConversionInputCaptionWindow"/> above, which each needed a follow-up fix
+    /// for missed implicit whitespace <c>Run</c>s (see their own remarks): parsing the frozen,
+    /// verbatim XAML STRING through the actual compiler eliminates that entire class of
+    /// reconstruction bug structurally, for the whole page at once, rather than one hand-copied
+    /// band at a time. <c>typeof(CreatorView).Assembly</c> (not <c>typeof(UserControl).Assembly</c>,
+    /// which was tried first and failed to resolve <c>clr-namespace:ReScene.Manager.Controls</c> /
+    /// <c>.Behaviors</c>) is what lets the parser resolve <c>controls:FieldStatusLine</c> and
+    /// <c>behaviors:TextBoxDropBehavior</c>.
+    /// <para>
+    /// MEASURED (a throwaway diagnostic, same technique as this test): both roots render at the
+    /// EXACT SAME 676x721 integer pixel size, and the ENTIRE 1,949,584-byte buffer (676x721x4) is
+    /// byte-for-byte identical — zero differing bytes, not merely zero found through spot-checks.
+    /// This is the comprehensive, whole-page confirmation the two narrower band tests above could
+    /// only ever sample.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void FrameRig_NormalMode_FullRootMatchesPreChangeMarkup()
+    {
+        var oldView = (UserControl)AvaloniaRuntimeXamlLoader.Parse(OldFullMarkup, typeof(CreatorView).Assembly);
+        oldView.DataContext = CreateVm();
+        (Window oldWindow, Grid oldRoot) = CompactViewRig.HostAt(oldView, ExpandedInner);
+        try
+        {
+            var newView = new CreatorView { DataContext = CreateVm() };
+            (Window newWindow, Grid newRoot) = CompactViewRig.HostAt(newView, ExpandedInner);
+            try
+            {
+                Assert.DoesNotContain("compactHeight", newRoot.Classes);
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                Dispatcher.UIThread.RunJobs();
+
+                AssertFullRasterPixelIdentity(oldRoot, oldRoot.Bounds.Size, newRoot, newRoot.Bounds.Size);
+            }
+            finally { newWindow.Close(); }
+        }
+        finally { oldWindow.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 1 (codex finding 2's own "splitter rest/drag states" clause). A genuine
+    /// OLD-vs-NEW comparison of a DRAGGED state is not meaningful and was deliberately NOT
+    /// attempted: dragging the OLD splitter's "Next" pane (outer row 6, a Star-sized row
+    /// containing the ENTIRE Output+Options+Action+Log composite) is not the same operation as
+    /// dragging the NEW splitter's "Next" pane (ConfigGrid row 5, the Output section alone, Auto-
+    /// sized) — this task's own restructuring genuinely changes what the splitter's "Next" pane
+    /// IS, per the brief's own explicit row layout, so the two are not comparable at any dragged
+    /// offset; MEASURED directly (confirmed via <c>Splitter_FocusableAndNamed_...</c> above): the
+    /// NEW structure's row 5 stays plain <c>Auto</c> throughout a drag (there is ScrollViewer slack
+    /// to absorb the growth), which the OLD structure's Star-sized composite row could never do.
+    /// <para>
+    /// The meaningful, ACHIEVABLE equivalent instead: capture the NEW view's own full-root raster
+    /// at REST, engage a real, input-driven drag (ArrowDown — genuine keyboard input, matching
+    /// this file's own established "never a synthetic property poke" discipline), capture again
+    /// (basic sanity: the Stored Files row grew, nothing negative/degenerate), release the drag
+    /// back to EXACTLY the original 150 (ArrowUp the same count — already independently proven
+    /// exact by <see cref="StoredFilesRow_SplitterDragAtNormalSize_ResizesRow_AndDragSurvivesCompactRoundTrip"/>),
+    /// and assert the FULL-ROOT RASTER after release matches the ORIGINAL rest capture BYTE FOR
+    /// BYTE — proving a drag-then-undo cycle leaves no residual visual/layout drift anywhere on
+    /// the page, not just that the one row's numeric Height value round-trips.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void FrameRig_NormalMode_SplitterDragThenRelease_FullRootRasterReturnsToRestState()
+    {
+        CreatorViewModel vm = CreateVm();
+        var view = new CreatorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        try
+        {
+            Grid configGrid = window.GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "ConfigGrid");
+            GridSplitter splitter = window.GetVisualDescendants().OfType<GridSplitter>().Single();
+            Assert.Equal(150, configGrid.RowDefinitions[3].Height.Value);
+
+            // Focus BEFORE capturing the rest baseline (a real bug this test's own first draft
+            // hit): the splitter must stay focused throughout the whole drag/release cycle so its
+            // OWN :focus-visual color (a real, EXPECTED, and separately-tested difference — see
+            // Splitter_FocusVisual_MeetsContrastAgainstBothPanes) is held CONSTANT across both
+            // captures. Capturing "rest" before focusing would compare an unfocused splitter
+            // against a still-focused one after release and misreport that expected, unrelated
+            // color change as a residual layout defect.
+            splitter.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(splitter.IsFocused);
+
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+            PixelSize restSize = new((int)Math.Ceiling(root.Bounds.Width), (int)Math.Ceiling(root.Bounds.Height));
+            byte[] restPixels = RenderToPixelBuffer(root, restSize);
+
+            PressManyTimes(window, PhysicalKey.ArrowDown, 10);
+            double draggedHeight = configGrid.RowDefinitions[3].Height.Value;
+            Assert.True(draggedHeight > 150, $"drag must genuinely resize row 3, was {draggedHeight:F1}");
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+
+            // Basic sanity on the DRAGGED capture: the page must still render at a sane, positive,
+            // unchanged OUTER size (only row 3's internal allocation changed) — not a claim of
+            // parity against anything, since (per this test's own doc) no valid OLD-dragged
+            // comparison exists.
+            PixelSize draggedSize = new((int)Math.Ceiling(root.Bounds.Width), (int)Math.Ceiling(root.Bounds.Height));
+            Assert.Equal(restSize, draggedSize);
+
+            PressManyTimes(window, PhysicalKey.ArrowUp, 10);
+            Assert.Equal(150, configGrid.RowDefinitions[3].Height.Value);
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+
+            PixelSize releasedSize = new((int)Math.Ceiling(root.Bounds.Width), (int)Math.Ceiling(root.Bounds.Height));
+            Assert.Equal(restSize, releasedSize);
+
+            byte[] releasedPixels = RenderToPixelBuffer(root, releasedSize);
+            Assert.Equal(restPixels.Length, releasedPixels.Length);
+            for (int i = 0; i < restPixels.Length; i++)
+            {
+                if (restPixels[i] != releasedPixels[i])
+                {
+                    int stride = restSize.Width * 4;
+                    Assert.Fail(
+                        $"drag-then-release left a residual pixel difference at ({i % stride / 4}, {i / stride}) — " +
+                        $"rest byte 0x{restPixels[i]:X2} vs post-release byte 0x{releasedPixels[i]:X2}.");
+                }
+            }
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// Verbatim reconstruction of the pre-task <c>CreatorView.axaml</c> (git blob
+    /// <c>67aa5e8:ReScene.Manager/Views/CreatorView.axaml</c>) as a raw XAML string, <c>x:Class</c>
+    /// stripped so it can be loaded via <see cref="AvaloniaRuntimeXamlLoader"/> as a plain
+    /// <see cref="UserControl"/> — see <see cref="FrameRig_NormalMode_FullRootMatchesPreChangeMarkup"/>'s
+    /// own doc for why parsing the frozen, verbatim markup through the real XAML pipeline (rather
+    /// than a hand-built C# object graph) is used for the full-page comparison specifically.
+    /// </summary>
+    private const string OldFullMarkup = """
+        <UserControl xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:controls="clr-namespace:ReScene.Manager.Controls"
+                     xmlns:behaviors="clr-namespace:ReScene.Manager.Behaviors"
+                     x:CompileBindings="False">
+
+          <Grid Margin="{DynamicResource PageMargin}">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="150" MinHeight="150" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" MinHeight="100" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0"
+                       Text="Create an SRR (Scene Release Rescue) file from a RAR archive set. The SRR captures RAR headers and metadata needed to reconstruct the original archives later."
+                       Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                       TextWrapping="Wrap" Margin="0,0,0,6" />
+
+            <StackPanel Grid.Row="1">
+              <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+                <Run Text="Input " FontWeight="SemiBold" />
+                <Run Text="— use " Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+                <Run Text="Browse" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+                <Run Text=" for a single set's .sfv or first .rar, or " Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+                <Run Text="Browse folder…" FontWeight="SemiBold" Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+                <Run Text=" to search a release folder and its subfolders for RAR sets (e.g. multi-disc releases)." Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+              </TextBlock>
+              <DockPanel Margin="0,0,0,2">
+                <Button DockPanel.Dock="Right" Content="Browse folder…"
+                        Command="{Binding BrowseInputFolderCommand}"
+                        Classes="ghost"
+                        TabIndex="2"
+                        AutomationProperties.Name="Browse folder for release input"
+                        AutomationProperties.HelpText="Pick a release folder to search it and its subfolders for RAR sets."
+                        Margin="4,0,0,0" MinWidth="75" />
+                <Button DockPanel.Dock="Right" Content="Browse"
+                        Command="{Binding BrowseInputCommand}"
+                        Classes="ghost"
+                        TabIndex="1"
+                        AutomationProperties.Name="Browse input file"
+                        AutomationProperties.HelpText="Pick a single set's .sfv or first .rar file."
+                        Margin="4,0,0,0" MinWidth="75" />
+                <TextBox x:Name="InputTextBox" Text="{Binding InputPath}"
+                         TabIndex="0"
+                         AutomationProperties.Name="Input path"
+                         AutomationProperties.HelpText="Accepts a release .sfv/.rar file path or a release folder path"
+                         behaviors:TextBoxDropBehavior.DropMode="File" />
+              </DockPanel>
+              <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsScanning}" Height="4"
+                           Margin="0,0,0,2"
+                           AutomationProperties.Name="Scanning release folder" />
+              <ScrollViewer VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" MaxHeight="96" IsVisible="{Binding HasDetectedSets}">
+                <ItemsControl ItemsSource="{Binding DetectedSets}"
+                              AutomationProperties.Name="{Binding DetectedSetsSummary}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding RelativeName}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+              <controls:FieldStatusLine Status="{Binding InputStatus}" />
+            </StackPanel>
+
+            <Border Grid.Row="2" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+            <StackPanel Grid.Row="3">
+              <TextBlock Text="Stored Files" FontWeight="SemiBold" Margin="0,0,0,2" />
+              <DockPanel Margin="0,0,0,2">
+                <StackPanel Orientation="Horizontal">
+                  <Button Content="Add..." Command="{Binding AddStoredFileCommand}" Classes="ghost" Margin="0,0,4,0" />
+                  <Button Content="Remove" Command="{Binding RemoveStoredFileCommand}" Classes="ghost" Margin="0,0,4,0" />
+                  <Button Content="Remove All" Command="{Binding RemoveAllStoredFilesCommand}" Classes="ghost" Margin="0,0,4,0" />
+                  <Button Content="Move Up" Command="{Binding MoveStoredFileUpCommand}" Classes="ghost" Margin="0,0,4,0" />
+                  <Button Content="Move Down" Command="{Binding MoveStoredFileDownCommand}" Classes="ghost" />
+                </StackPanel>
+                <TextBlock Text="Double-click the Stored As column to edit the name used in the SRR."
+                           VerticalAlignment="Center" Margin="8,0,0,0"
+                           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+              </DockPanel>
+            </StackPanel>
+
+            <DataGrid x:Name="StoredFilesGrid"
+                      Grid.Row="4"
+                      ItemsSource="{Binding StoredFiles}"
+                      SelectedItem="{Binding SelectedStoredFile}"
+                      AutoGenerateColumns="False"
+                      CanUserReorderColumns="False"
+                      CanUserSortColumns="False"
+                      GridLinesVisibility="Horizontal"
+                      HeadersVisibility="Column"
+                      SelectionMode="Single"
+                      BorderThickness="0">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="File Path" Binding="{Binding FullPath}" IsReadOnly="True" Width="*" />
+                <DataGridTextColumn Header="Stored As" Binding="{Binding StoredName}" Width="450" />
+              </DataGrid.Columns>
+            </DataGrid>
+
+            <GridSplitter Grid.Row="5" Height="5" HorizontalAlignment="Stretch"
+                          VerticalAlignment="Center"
+                          ResizeDirection="Rows"
+                          ResizeBehavior="PreviousAndNext"
+                          Background="Transparent" />
+
+            <Grid Grid.Row="6">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" MinHeight="40" />
+              </Grid.RowDefinitions>
+
+              <StackPanel Grid.Row="0">
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+                  <Run Text="Output " FontWeight="SemiBold" />
+                  <Run Text="— Where the .srr file will be written."
+                       Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+                </TextBlock>
+                <DockPanel>
+                  <Button DockPanel.Dock="Right" Content="Browse"
+                          Command="{Binding BrowseOutputCommand}"
+                          Classes="ghost"
+                          Margin="4,0,0,0" MinWidth="75" />
+                  <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}"
+                           behaviors:TextBoxDropBehavior.DropMode="File" />
+                </DockPanel>
+                <controls:FieldStatusLine Status="{Binding OutputStatus}" />
+              </StackPanel>
+
+              <Border Grid.Row="1" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+              <StackPanel Grid.Row="2">
+                <TextBlock Text="Options" FontWeight="SemiBold" Margin="0,0,0,2" />
+                <CheckBox Content="Auto-include files — Scan release directory for .nfo, .sfv, proof images, .m3u, .cue, .log files."
+                          IsChecked="{Binding AutoIncludeFiles}" Margin="0,1" />
+                <CheckBox Content="Auto-create SRS — Create .srs files for samples found in Sample/ subdirectory."
+                          IsChecked="{Binding AutoCreateSRS}" Margin="0,1" />
+                <CheckBox Content="Vobsub SRR — Create nested SRR files for subtitle archives found in Subs/ directories."
+                          IsChecked="{Binding CreateVobsubSRR}" Margin="0,1" />
+                <CheckBox Content="Store fix RAR — For fix/patch releases, store the main RAR file as proof."
+                          IsChecked="{Binding StoreFixRAR}"
+                          IsEnabled="{Binding IsFolderMode, Converter={StaticResource InverseBoolConverter}}"
+                          AutomationProperties.HelpText="Automatic in folder mode — the release scan decides this"
+                          Margin="0,1" />
+                <CheckBox Content="Allow compressed — Accept RAR volumes that use compression (method != Store)."
+                          IsChecked="{Binding AllowCompressed}" Margin="0,1" />
+                <CheckBox Content="OSO hashes — Compute and store OpenSubtitles OSO hashes for archived files."
+                          IsChecked="{Binding ComputeOSOHashes}" Margin="0,1" />
+                <CheckBox Content="Languages.diz — Extract language metadata from VobSub .idx files and store in the SRR."
+                          IsChecked="{Binding GenerateLanguagesDiz}" Margin="0,1,0,4" />
+                <DockPanel Margin="0,0,0,2">
+                  <TextBlock Text="App name:" VerticalAlignment="Center"
+                             Margin="0,0,8,0" />
+                  <TextBox Text="{Binding AppName}" Width="400"
+                           HorizontalAlignment="Left" />
+                  <TextBlock Text="Embedded in the SRR header to identify the creating application."
+                             VerticalAlignment="Center" Margin="8,0,0,0"
+                             Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+                </DockPanel>
+              </StackPanel>
+
+              <Border Grid.Row="3" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+              <StackPanel Grid.Row="4">
+                <DockPanel Margin="0,0,0,2">
+                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="Create SRR"
+                            Command="{Binding CreateSRRCommand}"
+                            Classes="primary"
+                            Padding="16,4" Margin="0,0,4,0" />
+                    <Button Content="Cancel"
+                            Command="{Binding CancelCreationCommand}"
+                            Classes="cancel"
+                            IsVisible="{Binding IsCreating}"
+                            Padding="16,4" />
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ActionHint}"
+                               Foreground="{DynamicResource ForegroundSecondary}"
+                               FontSize="{DynamicResource FontSizeCaption}"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding ProgressMessage}"
+                               IsVisible="{Binding ShowProgress}"
+                               VerticalAlignment="Center" />
+                  </StackPanel>
+                </DockPanel>
+                <ProgressBar Value="{Binding ProgressPercent}"
+                             Maximum="100" Height="18"
+                             Margin="0,0,0,4"
+                             IsVisible="{Binding ShowProgress}" />
+              </StackPanel>
+
+              <Border Grid.Row="5" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+
+              <DockPanel Grid.Row="6" Margin="0,0,0,2">
+                <Button DockPanel.Dock="Right" Content="Save log..."
+                        Command="{Binding SaveLogCommand}"
+                        Classes="ghost"
+                        Padding="8,2" />
+                <TextBlock DockPanel.Dock="Left" Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock x:Name="SaveLogStatus" Text="{Binding SaveLogAnnouncement}"
+                           AutomationProperties.LiveSetting="Polite"
+                           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
+              </DockPanel>
+
+              <ListBox Grid.Row="7"
+                       ItemsSource="{Binding LogEntries}"
+                       Classes="logList"
+                       FontFamily="{DynamicResource MonoFontFamily}"
+                       FontSize="{DynamicResource MonoFontSize}" />
+            </Grid>
+
+          </Grid>
+
+        </UserControl>
+        """;
 
     /// <summary>Verbatim reconstruction of CreatorView.axaml's row-0 TextBlock before this task (git history).</summary>
     private static Window BuildPreDisclosureRow0Window()
@@ -1457,6 +1961,109 @@ public class CreatorCompactTests
         finally { window.Close(); }
     }
 
+    /// <summary>
+    /// Fix round 1 (codex finding 3, spec Step 4): the high-contrast smoke the default-theme
+    /// contrast test above does not cover. This app has no actual shipped high-contrast SKIN —
+    /// grepped the whole Resources tree and found no "HighContrast" resource dictionary, no
+    /// <c>ThemeVariant</c> switching anywhere beyond the single hardcoded
+    /// <c>RequestedThemeVariant="Dark"</c> in App.axaml, and no prior converted view's own test
+    /// file has ever exercised one either — there is nothing resembling a real Windows
+    /// high-contrast integration to toggle programmatically in a headless test, and this
+    /// environment must not flip the HOST MACHINE's own real OS-level accessibility settings just
+    /// to synthesize one (a disruptive, system-wide, outward-facing action far outside a unit
+    /// test's blast radius). The achievable, honest equivalent: prove the splitter's focus
+    /// indicator is genuinely LIVE-RESOURCE-DRIVEN (a <c>DynamicResource</c> binding to
+    /// <c>AccentPrimary</c>, not a frozen/cached brush) by swapping the resource to an extreme,
+    /// maximally-distinct color — the same technique a real high-contrast theme dictionary would
+    /// use — and confirming the RENDERED pixel actually follows it, with contrast re-verified
+    /// against both panes under the new color, then restoring the original value. This is the
+    /// architectural property that makes a genuine high-contrast override safe if one is ever
+    /// shipped: a hardcoded/cached brush would silently fail this exact check.
+    /// <para>
+    /// The override is scoped to THIS test only and restored in a <c>finally</c> block — MEASURED
+    /// (a throwaway diagnostic) that <c>Application.Current.Resources["AccentPrimary"]</c> reads
+    /// back <c>null</c> before any override (the real value lives in a MERGED dictionary,
+    /// Resources/Tokens.axaml, not the top-level one), so restoration removes the directly-set key
+    /// rather than reassigning a captured "original" value — confirmed to correctly fall back to
+    /// the merged dictionary's own value afterward, not leave the key missing or wrong.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void Splitter_FocusVisual_HighContrastSmoke_FollowsLiveResourceOverride()
+    {
+        CreatorViewModel vm = CreateVm();
+        for (int i = 0; i < 3; i++)
+        {
+            vm.StoredFiles.Add(Item($@"C:\release\file{i:D2}.nfo", $"file{i:D2}.nfo"));
+        }
+        var view = new CreatorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        try
+        {
+            GridSplitter splitter = window.GetVisualDescendants().OfType<GridSplitter>().Single();
+            splitter.Focus();
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+
+            var beforeBrush = Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background);
+            Color beforeColor = beforeBrush.Color;
+
+            // Only the TOP-LEVEL dictionary's own key matters here (not the whole merged-dictionary
+            // resolution chain TryGetResource would search) — MEASURED (a throwaway diagnostic):
+            // this key is null/absent at the top level before any override (the real value lives
+            // in the MERGED Resources/Tokens.axaml), so restoration must REMOVE the key rather than
+            // reassign a captured value, or the override would leak past this test.
+            bool hadDirectOverride = Application.Current!.Resources.ContainsKey("AccentPrimary");
+            object? capturedOriginal = hadDirectOverride ? Application.Current!.Resources["AccentPrimary"] : null;
+
+            // Maximally distinct from AccentPrimary's own default (#FF0078D4, a blue) and from
+            // both neighboring panes — mirrors the kind of extreme, saturated color a real
+            // Windows high-contrast theme substitutes for focus/accent brushes.
+            var highContrastColor = Color.FromRgb(0xFF, 0xFF, 0x00);
+            try
+            {
+                Application.Current!.Resources["AccentPrimary"] = new SolidColorBrush(highContrastColor);
+                Dispatcher.UIThread.RunJobs();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                Dispatcher.UIThread.RunJobs();
+
+                var overriddenBrush = Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background);
+                Assert.Equal(highContrastColor, overriddenBrush.Color);
+                Assert.NotEqual(beforeColor, overriddenBrush.Color);
+
+                Point? aboveInWindow = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, -3), window);
+                Point? belowInWindow = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, splitter.Bounds.Height + 3), window);
+                Assert.True(aboveInWindow is not null && belowInWindow is not null);
+
+                Color abovePane = SamplePixelColor(window, aboveInWindow!.Value);
+                Color belowPane = SamplePixelColor(window, belowInWindow!.Value);
+
+                Assert.True(ContrastRatio(highContrastColor, abovePane) >= 3.0,
+                    "the high-contrast override color must ALSO clear the 3:1 bar — a real high-contrast theme's own color choice would, and this proves the mechanism doesn't accidentally defeat itself");
+                Assert.True(ContrastRatio(highContrastColor, belowPane) >= 3.0);
+            }
+            finally
+            {
+                if (hadDirectOverride)
+                {
+                    Application.Current!.Resources["AccentPrimary"] = capturedOriginal;
+                }
+                else
+                {
+                    Application.Current!.Resources.Remove("AccentPrimary");
+                }
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+            var restoredBrush = Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background);
+            Assert.Equal(beforeColor, restoredBrush.Color);
+        }
+        finally { window.Close(); }
+    }
+
     /// <summary>Renders the whole window and reads back one pixel's RGBA — used to sample a
     /// neighboring pane's TRUE rendered color rather than guessing which named resource applies.</summary>
     private static Color SamplePixelColor(Window window, Point pointInWindow)
@@ -1577,7 +2184,7 @@ public class CreatorCompactTests
         "DataGrid name=\"Stored Files\" id=\"StoredFilesGrid\"",
         "GridSplitter name=\"Resize stored files and output\" id=\"\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"OutputTextBox\"",
+        "TextBox name=\"Output path\" id=\"OutputTextBox\"",
         "CheckBox name=\"Auto-include files — Scan release directory for .nfo, .sfv, proof images, .m3u, .cue, .log files.\" id=\"\"",
         "CheckBox name=\"Auto-create SRS — Create .srs files for samples found in Sample/ subdirectory.\" id=\"\"",
         "CheckBox name=\"Vobsub SRR — Create nested SRR files for subtitle archives found in Subs/ directories.\" id=\"\"",
@@ -1604,7 +2211,7 @@ public class CreatorCompactTests
         "DataGrid name=\"Stored Files\" id=\"StoredFilesGrid\"",
         "GridSplitter name=\"Resize stored files and output\" id=\"\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"OutputTextBox\"",
+        "TextBox name=\"Output path\" id=\"OutputTextBox\"",
         "CheckBox name=\"Auto-include files — Scan release directory for .nfo, .sfv, proof images, .m3u, .cue, .log files.\" id=\"\"",
         "CheckBox name=\"Auto-create SRS — Create .srs files for samples found in Sample/ subdirectory.\" id=\"\"",
         "CheckBox name=\"Vobsub SRR — Create nested SRR files for subtitle archives found in Subs/ directories.\" id=\"\"",

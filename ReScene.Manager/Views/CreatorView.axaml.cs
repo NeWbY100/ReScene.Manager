@@ -26,12 +26,18 @@ public partial class CreatorView : UserControl
     // constant/rationale.
     private const double LogRowMinHeight = 80;
 
-    // MEASURED slack (same mechanism, same rationale as SampleRestorerView's own
-    // ArrangeRoundingSlack): CompactInvariantRig.MeasureFloor's bare Measure(Infinity) call
-    // reports each Auto row's UNCONSTRAINED desired height, while a REAL Grid arrange pass
-    // additionally shrinks Auto rows when the total genuinely exceeds available space. Reserving
-    // this extra margin keeps MeasureFloor's own stricter, static figure additionally covered on
-    // top of the real-arrange safety this mechanism already guarantees on its own.
+    // BORROWED, not independently measured for THIS view (fix round 1, codex finding 6 — the
+    // wording here previously read "MEASURED", which overclaimed): this is SampleRestorerView's
+    // own ArrangeRoundingSlack VALUE, reused verbatim because the underlying MECHANISM is
+    // identical in kind — CompactInvariantRig.MeasureFloor's bare Measure(Infinity) call reports
+    // each Auto row's UNCONSTRAINED desired height, while a REAL Grid arrange pass additionally
+    // shrinks Auto rows when the total genuinely exceeds available space — but the exact minimum
+    // slack Creator itself needs was never separately derived from Creator's own
+    // Measure-vs-Arrange gap the way SampleRestorer's original figure was. Empirically validated
+    // for Creator's own case by Invariant_ExpandedMode_NeverClipsAcrossUnsafeHeightRange's
+    // six-point real-render safe-range test (721 through 1400), which passes with this value —
+    // but that is evidence the value is SUFFICIENT here, not that 10 is Creator's own measured
+    // minimum.
     private const double ArrangeRoundingSlack = 10;
 
     private readonly Grid _root;
@@ -57,7 +63,7 @@ public partial class CreatorView : UserControl
         Grid root = (Grid)Content!;
         Grid configGrid = this.FindControl<Grid>("ConfigGrid")!;
         Expander helpDisclosure = this.FindControl<Expander>("HelpDisclosure")!;
-        TextBox inputTextBox = this.FindControl<TextBox>("InputTextBox")!;
+        TextBox outputTextBox = this.FindControl<TextBox>("OutputTextBox")!;
         Behaviors.CompactHeightBehavior.SetThreshold(root, 720);
         Behaviors.CompactHeightBehavior.SetRowSizes(root,
             [new Behaviors.CompactRowSize(RowIndex: 1, NormalHeight: double.NaN,
@@ -70,7 +76,19 @@ public partial class CreatorView : UserControl
                 CompactMinHeight: 80, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.PixelRestore)]);
         Behaviors.CompactHeightBehavior.SetHelpExpander(root, helpDisclosure);
         Behaviors.CompactHeightBehavior.SetHelpBodyMaxHeight(root, 40);
-        Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(root, inputTextBox);
+
+        // RestoreFocusTarget is OutputTextBox, NOT InputTextBox (fix round 1, codex finding 1 — a
+        // genuinely harmful wiring the trap-finding in the task report exposed): InputTextBox is
+        // one of the Input row's three TabIndex-trapped controls (TabIndex="0"; Browse
+        // file="1"; Browse folder="2" — see the report's own "headline finding"). Landing a
+        // resize-triggered focus recovery THERE would deposit a keyboard user one single Tab press
+        // from the documented stable trap loop (Browse folder <-> the shell's "_File" menu <-> the
+        // status bar) — a NEW harmful path this task's own behavior wiring would have created,
+        // distinct from the pre-existing trap itself (which stays deferred to its own follow-up
+        // per criterion F). OutputTextBox sits safely inside this view's OWN (default-TabIndex)
+        // "safe run" — CreatorCompactTests.RestoreFocusTarget_IsNotOneOfTheThreeTrappedControls
+        // pins this permanently so a future retarget can't silently regress into the trap.
+        Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(root, outputTextBox);
 
         // EXPANDED-mode safety cap (the same categorical issue SampleRestorerView's own ctor
         // remarks flagged as the most likely SECOND consumer: "Task 6's CreatorView, whose own

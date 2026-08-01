@@ -188,7 +188,12 @@
                     Command="{Binding BrowseOutputCommand}"
                     Classes="ghost"
                     Margin="4,0,0,0" MinWidth="75" />
+            <!-- AutomationProperties.Name (fix round 1, codex finding 1): OutputTextBox became the
+                 RestoreFocusTarget below (moved off InputTextBox — see the ctor's own remarks on
+                 why) — an unnamed edit control landing focus-recovery here would have swapped one
+                 a11y gap for another. "Output path" mirrors InputTextBox's own naming convention. -->
             <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}"
+                     AutomationProperties.Name="Output path"
                      behaviors:TextBoxDropBehavior.DropMode="File" />
           </DockPanel>
           <controls:FieldStatusLine Status="{Binding OutputStatus}" />
