@@ -282,21 +282,95 @@ public class SRSCreatorCompactTests
     }
 
     // ── 3. Tab-order snapshots ────────────────────────────────────────
+    //
+    // Bare type:name identities (CompactViewRig.SnapshotTabOrder's own Describe()) are not
+    // enough here: none of this view's picker/action buttons carry an explicit
+    // AutomationProperties.Name, so a fixture built from them alone cannot tell "Main file
+    // Browse" apart from "Output Browse", meaning two same-typed controls trading places (a
+    // real reordering regression) would leave the fixture unchanged. SnapshotSemanticTabOrder
+    // below re-walks Tab the same way (leaves root's scope, or repeats an already-seen
+    // control) but resolves each stop's IDENTITY by which command/property it is bound to —
+    // stable across renames, unambiguous between same-typed siblings. Enabling Create SRS
+    // (InputPath/OutputPath set) before capturing means its own position is actually PINNED by
+    // the fixture, not left unverified because it happened to be absent.
+
+    /// <summary>
+    /// Resolved fresh against THIS CALL's <paramref name="vm"/> — RelayCommand instances are
+    /// per-VM-instance, not shared/static, so comparing against a cached dictionary built from a
+    /// DIFFERENT test's VM would silently never match. Direct reference comparison per command,
+    /// no caching.
+    /// </summary>
+    private static string DescribeSemantic(Control control, SRSCreatorViewModel vm) => control switch
+    {
+        Button { Command: { } c } when ReferenceEquals(c, vm.BrowseInputCommand) => "Button:BrowseInput",
+        Button { Command: { } c } when ReferenceEquals(c, vm.BrowseMainFileCommand) => "Button:BrowseMainFile",
+        Button { Command: { } c } when ReferenceEquals(c, vm.ClearMainFileCommand) => "Button:ClearMainFile",
+        Button { Command: { } c } when ReferenceEquals(c, vm.BrowseOutputCommand) => "Button:BrowseOutput",
+        Button { Command: { } c } when ReferenceEquals(c, vm.CreateSRSCommand) => "Button:CreateSRS",
+        Button { Command: { } c } when ReferenceEquals(c, vm.CancelCreationCommand) => "Button:Cancel",
+        Button { Command: { } c } when ReferenceEquals(c, vm.SaveLogCommand) => "Button:SaveLog",
+        TextBox { Name: "InputTextBox" } => "TextBox:Input",
+        TextBox { Name: "OutputTextBox" } => "TextBox:Output",
+        TextBox { Width: 400 } => "TextBox:AppName",
+        TextBox => "TextBox:MainFilePath", // the only remaining unnamed, non-400-width TextBox
+        ToggleButton toggle => $"ToggleButton:{AutomationProperties.GetName(toggle)}",
+        _ => throw new Xunit.Sdk.XunitException($"DescribeSemantic has no case for {control.GetType().Name} — extend the switch rather than let an unidentified stop silently pass."),
+    };
+
+    /// <summary>
+    /// Same walk-and-terminate contract as <see cref="CompactViewRig.SnapshotTabOrder"/> (leaves
+    /// <paramref name="root"/>'s scope, or repeats an already-seen control), reimplemented here
+    /// rather than extending the shared rig, so Tasks 4-6's own use of the unmodified rig is
+    /// never put at risk by a change scoped to this view's own semantic-identity need.
+    /// </summary>
+    private static IReadOnlyList<string> SnapshotSemanticTabOrder(Window window, Control root, SRSCreatorViewModel vm)
+    {
+        Control focused = window.FocusManager?.GetFocusedElement() as Control
+            ?? throw new Xunit.Sdk.XunitException("SnapshotSemanticTabOrder requires focus already inside root — focus a starting control first.");
+
+        List<string> order = [];
+        HashSet<Control> seen = [];
+        const int MaxSteps = 500;
+        for (int step = 0; step < MaxSteps; step++)
+        {
+            bool within = ReferenceEquals(root, focused) || root.IsVisualAncestorOf(focused);
+            if (!within || !seen.Add(focused))
+            {
+                return order;
+            }
+
+            order.Add(DescribeSemantic(focused, vm));
+
+            window.KeyPressQwerty(PhysicalKey.Tab, RawInputModifiers.None);
+            window.KeyReleaseQwerty(PhysicalKey.Tab, RawInputModifiers.None);
+            Dispatcher.UIThread.RunJobs();
+            focused = window.FocusManager?.GetFocusedElement() as Control
+                ?? throw new Xunit.Sdk.XunitException($"SnapshotSemanticTabOrder lost focus entirely at step {step}.");
+        }
+
+        throw new Xunit.Sdk.XunitException($"SnapshotSemanticTabOrder did not leave root or loop back within {MaxSteps} steps.");
+    }
 
     [AvaloniaFact]
     public void TabOrderSnapshot_Normal_MatchesPreChangeFixture()
     {
         SRSCreatorViewModel vm = CreateVm();
+        vm.InputPath = @"C:\release\sample.mkv";
+        vm.OutputPath = @"C:\release\sample.srs"; // Create SRS enabled: its own position is pinned, not left unverified
         var view = new SRSCreatorView { DataContext = vm };
         (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
         try
         {
             Assert.DoesNotContain("compactHeight", root.Classes);
-            TextBox sentinel = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "InputTextBox");
+
+            // The TRUE first control (Sample File's own Browse button precedes InputTextBox in
+            // DockPanel declaration order) — not a mid-sequence sentinel, so the complete order
+            // is captured, not a tail that happens to omit the first stop.
+            Button sentinel = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputCommand));
             sentinel.Focus();
             Dispatcher.UIThread.RunJobs();
 
-            IReadOnlyList<string> order = CompactViewRig.SnapshotTabOrder(window, root);
+            IReadOnlyList<string> order = SnapshotSemanticTabOrder(window, root, vm);
             Assert.Equal(NormalModeTabOrderFixture, order);
         }
         finally { window.Close(); }
@@ -306,6 +380,8 @@ public class SRSCreatorCompactTests
     public void TabOrderSnapshot_Compact_MatchesSpecSection2Order()
     {
         SRSCreatorViewModel vm = CreateVm();
+        vm.InputPath = @"C:\release\sample.mkv";
+        vm.OutputPath = @"C:\release\sample.srs";
         var view = new SRSCreatorView { DataContext = vm };
         (Window window, Grid root) = CompactViewRig.HostAt(view, CompactInner);
         try
@@ -316,7 +392,7 @@ public class SRSCreatorCompactTests
             headerToggle.Focus();
             Dispatcher.UIThread.RunJobs();
 
-            IReadOnlyList<string> order = CompactViewRig.SnapshotTabOrder(window, root);
+            IReadOnlyList<string> order = SnapshotSemanticTabOrder(window, root, vm);
             Assert.Equal(CompactModeTabOrderFixture, order);
         }
         finally { window.Close(); }
@@ -379,6 +455,14 @@ public class SRSCreatorCompactTests
             Dispatcher.UIThread.RunJobs();
             Assert.DoesNotContain("compactHeight", root.Classes);
             Assert.True(helpDisclosure.IsExpanded); // flat mode: force-expanded
+
+            // The staged-focus guard's actual point: restoring from a focus captured on the
+            // body (which just went non-focusable — flat mode's base style, not the
+            // compact-only override) must relocate focus, not strand it. RestoreFocusTarget was
+            // wired to InputTextBox in the view's ctor, so that is where it must land.
+            TextBox inputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "InputTextBox");
+            Assert.True(inputTextBox.IsFocused,
+                "restoring from a focused compact body must relocate focus to the wired RestoreFocusTarget (InputTextBox), not strand it");
 
             window.Height -= 250;
             Dispatcher.UIThread.RunJobs();
@@ -552,8 +636,20 @@ public class SRSCreatorCompactTests
         finally { window.Close(); }
     }
 
+    /// <summary>
+    /// A degenerate (zero-width or zero-height) control translates to a single point, which
+    /// trivially satisfies any containment check — exactly the pre-change defect (the Create SRS
+    /// button collapsing to <c>Height=0</c>, see the task report's red evidence) would have
+    /// slipped past a containment-only check. Effective visibility and a positive size are
+    /// asserted FIRST, unconditionally, so a collapsed/invisible control fails outright instead
+    /// of being reported as "contained".
+    /// </summary>
     private static void AssertFullyWithinWindow(Control control, Window window)
     {
+        Assert.True(control.IsEffectivelyVisible, $"{control.GetType().Name} is not effectively visible.");
+        Assert.True(control.Bounds.Width > 0 && control.Bounds.Height > 0,
+            $"{control.GetType().Name} has a non-positive size ({control.Bounds.Width:F1}x{control.Bounds.Height:F1}) — collapsed, not merely positioned badly.");
+
         Point? topLeft = control.TranslatePoint(new Point(0, 0), window);
         Point? bottomRight = control.TranslatePoint(new Point(control.Bounds.Width, control.Bounds.Height), window);
         Assert.True(topLeft is not null && bottomRight is not null,
@@ -635,39 +731,41 @@ public class SRSCreatorCompactTests
         return new Window { Width = CompactInvariantRig.InnerWidth, SizeToContent = SizeToContent.Height, Content = textBlock };
     }
 
-    // ── Fixtures (captured from real, green CompactViewRig.SnapshotTabOrder runs against
-    // this task's finished implementation — see task report for the capture method).
-    // Automation names are empty for most Buttons (none of the picker/action buttons carry an
-    // explicit AutomationProperties.Name), so the fixture's real value is the ORDERED SEQUENCE
-    // OF TYPES — it still catches a reordering, an added/removed stop, or a wrong count. ──
+    // ── Fixtures (captured from real, green SnapshotSemanticTabOrder runs against this task's
+    // finished implementation, WITH Create SRS enabled — see task report for the capture
+    // method). Each entry is a stable semantic identity (bound command, name, or a
+    // distinguishing attribute — never a bare type), so a reordering that swaps two same-typed
+    // siblings (e.g. the two "Browse" buttons trading places) changes the fixture and is
+    // caught — a bare type:name fixture could not tell them apart. ──
 
     /// <summary>
-    /// Normal mode: identical shape to today's (pre-change, captured from the original
-    /// DockPanel, before this task's XAML restructure — see task report for the capture
-    /// method) — the disclosure contributes nothing (header hidden, body non-focusable prose),
-    /// so the first real stop is the Sample File TextBox. From there: Main file's Browse/Clear
-    /// buttons + its TextBox, Output's Browse + TextBox, the App name TextBox, then Save log.
-    /// Create SRS is ABSENT — disabled (CanExecute false: the inert VM's InputPath/OutputPath
-    /// are both empty) for the default fixture state, so Avalonia correctly excludes it from Tab
-    /// order entirely (same precedent as the Reconstructor's own "Start" button, documented in
-    /// its own fixture comment for the identical reason); Cancel is likewise absent (hidden,
-    /// IsCreating false).
+    /// Normal mode, captured from the TRUE first control (Sample File's own Browse button,
+    /// which precedes InputTextBox in DockPanel declaration order — not a mid-sequence
+    /// sentinel that would silently omit it): Sample File's Browse + its TextBox, Main file's
+    /// Browse/Clear + its TextBox, Output's Browse + its TextBox, the App name TextBox, Create
+    /// SRS (InputPath/OutputPath set so it is genuinely enabled and its own position is
+    /// pinned — CanExecute false for the default inert VM would otherwise leave it absent and
+    /// unverified, the same situation the Reconstructor's own "Start" button fixture
+    /// documents), then Save log. Cancel is absent (hidden, IsCreating false).
     /// </summary>
     private static readonly IReadOnlyList<string> NormalModeTabOrderFixture =
     [
-        "TextBox:", "Button:", "Button:", "TextBox:", "Button:", "TextBox:", "TextBox:", "Button:",
+        "Button:BrowseInput", "TextBox:Input", "Button:BrowseMainFile", "Button:ClearMainFile",
+        "TextBox:MainFilePath", "Button:BrowseOutput", "TextBox:Output", "TextBox:AppName",
+        "Button:CreateSRS", "Button:SaveLog",
     ];
 
     /// <summary>
     /// Compact order (spec §2): disclosure header toggle → (body skipped: Help starts collapsed
     /// per condition 5, so the plain-prose body is IsVisible=false and correctly excluded from
-    /// Tab order) → identical tail to normal mode, with the Sample File Browse button now ALSO
-    /// included (normal mode's snapshot starts AFTER it, at the TextBox sentinel; this walk
-    /// starts before both).
+    /// Tab order) → identical tail to normal mode (this walk starts one stop earlier, at the
+    /// header toggle, rather than at Sample File's Browse button).
     /// </summary>
     private static readonly IReadOnlyList<string> CompactModeTabOrderFixture =
     [
         "ToggleButton:Help",
-        "Button:", "TextBox:", "Button:", "Button:", "TextBox:", "Button:", "TextBox:", "TextBox:", "Button:",
+        "Button:BrowseInput", "TextBox:Input", "Button:BrowseMainFile", "Button:ClearMainFile",
+        "TextBox:MainFilePath", "Button:BrowseOutput", "TextBox:Output", "TextBox:AppName",
+        "Button:CreateSRS", "Button:SaveLog",
     ];
 }
