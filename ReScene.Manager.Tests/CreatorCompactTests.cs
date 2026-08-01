@@ -1370,26 +1370,157 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// Fix round 1 (codex finding 2's own "splitter rest/drag states" clause). A genuine
-    /// OLD-vs-NEW comparison of a DRAGGED state is not meaningful and was deliberately NOT
-    /// attempted: dragging the OLD splitter's "Next" pane (outer row 6, a Star-sized row
-    /// containing the ENTIRE Output+Options+Action+Log composite) is not the same operation as
-    /// dragging the NEW splitter's "Next" pane (ConfigGrid row 5, the Output section alone, Auto-
-    /// sized) — this task's own restructuring genuinely changes what the splitter's "Next" pane
-    /// IS, per the brief's own explicit row layout, so the two are not comparable at any dragged
-    /// offset; MEASURED directly (confirmed via <c>Splitter_FocusableAndNamed_...</c> above): the
-    /// NEW structure's row 5 stays plain <c>Auto</c> throughout a drag (there is ScrollViewer slack
-    /// to absorb the growth), which the OLD structure's Star-sized composite row could never do.
+    /// Fix round 2 (codex finding 1, path (a) — a genuine cross-version dragged-state parity DOES
+    /// exist, narrower than a full-root comparison but real). The region "everything from the top
+    /// of the page down through and including the splitter itself" has an identity that did NOT
+    /// change between OLD and NEW: same content, same StoredFilesGrid row, same Pixel-height
+    /// resize mechanism for the splitter's "Previous" pane (only the "Next" pane's identity
+    /// changed — see the drag-then-release test's own doc below for why THAT makes a full-root
+    /// dragged comparison impossible). MEASURED (a throwaway diagnostic): after driving the SAME
+    /// real ArrowDown key input on both splitters, the two structures' StoredFilesGrid rows report
+    /// the EXACT SAME dragged height (the "delta tracks identically" invariant, asserted directly
+    /// below) — and, with the config band's own scrollbar NOT yet engaged (see this test's own
+    /// precondition), the CROPPED region above and including the splitter compares byte-for-byte
+    /// identical between OLD and NEW.
     /// <para>
-    /// The meaningful, ACHIEVABLE equivalent instead: capture the NEW view's own full-root raster
-    /// at REST, engage a real, input-driven drag (ArrowDown — genuine keyboard input, matching
-    /// this file's own established "never a synthetic property poke" discipline), capture again
-    /// (basic sanity: the Stored Files row grew, nothing negative/degenerate), release the drag
-    /// back to EXACTLY the original 150 (ArrowUp the same count — already independently proven
-    /// exact by <see cref="StoredFilesRow_SplitterDragAtNormalSize_ResizesRow_AndDragSurvivesCompactRoundTrip"/>),
+    /// The comparable window is genuinely NARROW — MEASURED directly: even a MODEST two-press
+    /// (20-DIP) drag on this plain, unpopulated VM already pushes ConfigGrid's own total natural
+    /// height just past the config ScrollViewer's dynamic MaxHeight cap (the same mechanism
+    /// documented in the view's own ctor remarks, sized for the brief's 883-DIP WORST case, which
+    /// leaves this plain-VM REST state only ~10-15 DIPs of headroom before it engages) — at that
+    /// point NEW shows a real, load-bearing vertical scrollbar with no OLD equivalent (OLD has no
+    /// scrolling architecture at all), narrowing NEW's own content by the scrollbar's track width
+    /// (MEASURED: 676 DIPs wide down to 660). This is not a defect to route around — it is the
+    /// scrolling fallback correctly engaging exactly as designed, on a genuinely NEW-only element.
+    /// So this test uses a single ArrowDown press (one real, minimal, still-genuine drag) and
+    /// ASSERTS the no-scrollbar precondition explicitly, so a future change to that tight margin
+    /// fails this test LOUDLY (naming the violated precondition) instead of silently comparing the
+    /// wrong thing. <see cref="FrameRig_NormalMode_SplitterDragThenRelease_FullRootRasterReturnsToRestState"/>
+    /// below is the complementary, NEW-only evidence for the LARGER-drag/scrolling regime this
+    /// test's own comparable window cannot reach.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void FrameRig_NormalMode_SplitterDrag_AboveSplitterRegionMatchesPreChangeMarkup()
+    {
+        var oldView = (UserControl)AvaloniaRuntimeXamlLoader.Parse(OldFullMarkup, typeof(CreatorView).Assembly);
+        oldView.DataContext = CreateVm();
+        (Window oldWindow, Grid oldRoot) = CompactViewRig.HostAt(oldView, ExpandedInner);
+        try
+        {
+            var newView = new CreatorView { DataContext = CreateVm() };
+            (Window newWindow, Grid newRoot) = CompactViewRig.HostAt(newView, ExpandedInner);
+            try
+            {
+                Assert.DoesNotContain("compactHeight", newRoot.Classes);
+
+                GridSplitter oldSplitter = oldWindow.GetVisualDescendants().OfType<GridSplitter>().Single();
+                GridSplitter newSplitter = newWindow.GetVisualDescendants().OfType<GridSplitter>().Single();
+                DataGrid oldGrid = oldWindow.GetVisualDescendants().OfType<DataGrid>().Single(g => g.Name == "StoredFilesGrid");
+                DataGrid newGrid = newWindow.GetVisualDescendants().OfType<DataGrid>().Single(g => g.Name == "StoredFilesGrid");
+                var newConfigGrid = newWindow.GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "ConfigGrid");
+                var newConfigScroller = newWindow.GetVisualDescendants().OfType<ScrollViewer>().Single(sv => Grid.GetRow(sv) == 1);
+
+                double oldHeightBefore = oldGrid.Bounds.Height;
+                double newHeightBefore = newConfigGrid.RowDefinitions[3].Height.Value;
+                Assert.Equal(150, oldHeightBefore);
+                Assert.Equal(150, newHeightBefore);
+
+                oldSplitter.Focus();
+                Dispatcher.UIThread.RunJobs();
+                PressManyTimes(oldWindow, PhysicalKey.ArrowDown, 1);
+
+                newSplitter.Focus();
+                Dispatcher.UIThread.RunJobs();
+                PressManyTimes(newWindow, PhysicalKey.ArrowDown, 1);
+
+                // The actual "delta tracks identically" invariant: the SAME real key input produces
+                // the SAME numeric height change in both structures' shared, unchanged "Previous" pane.
+                double oldHeightAfter = oldGrid.Bounds.Height;
+                double newHeightAfter = newConfigGrid.RowDefinitions[3].Height.Value;
+                Assert.True(oldHeightAfter > oldHeightBefore, "test precondition: the drag must genuinely resize OLD's StoredFilesGrid row");
+                Assert.Equal(oldHeightAfter, newHeightAfter);
+
+                // Precondition: the config band's own scrollbar must NOT have engaged — this is the
+                // boundary of the comparable window (see this test's own doc).
+                Assert.True(newConfigScroller.Extent.Height <= newConfigScroller.Viewport.Height + 0.5,
+                    $"test precondition violated: the config band's own scrollbar engaged (Extent {newConfigScroller.Extent.Height:F1} > Viewport {newConfigScroller.Viewport.Height:F1}) — " +
+                    "the comparable-region window this test relies on no longer holds at this drag magnitude.");
+
+                // Defocus BOTH splitters onto a neutral control before capturing (a real
+                // methodology bug this test's own first draft hit): two separate Windows in the
+                // SAME headless Application share only ONE "active" concept, so focusing NEW's
+                // splitter silently defocused OLD's — comparing a still-focused (accent-colored)
+                // splitter against a freshly-defocused one misreports that expected, unrelated
+                // difference as a layout defect. Both must render their shared REST (Transparent)
+                // focus-visual state for this comparison to isolate pure layout.
+                oldGrid.Focus();
+                Dispatcher.UIThread.RunJobs();
+                newGrid.Focus();
+                Dispatcher.UIThread.RunJobs();
+
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                Dispatcher.UIThread.RunJobs();
+
+                Point? oldBottom = oldSplitter.TranslatePoint(new Point(0, oldSplitter.Bounds.Height), oldRoot);
+                Point? newBottom = newSplitter.TranslatePoint(new Point(0, newSplitter.Bounds.Height), newRoot);
+                Assert.True(oldBottom is not null && newBottom is not null);
+
+                int oldCropHeight = (int)Math.Ceiling(oldBottom!.Value.Y);
+                int newCropHeight = (int)Math.Ceiling(newBottom!.Value.Y);
+                Assert.Equal(oldCropHeight, newCropHeight);
+
+                int width = (int)Math.Ceiling(oldRoot.Bounds.Width);
+                Assert.Equal(width, (int)Math.Ceiling(newRoot.Bounds.Width));
+
+                var oldFullSize = new PixelSize(width, (int)Math.Ceiling(oldRoot.Bounds.Height));
+                var newFullSize = new PixelSize(width, (int)Math.Ceiling(newRoot.Bounds.Height));
+                byte[] oldFull = RenderToPixelBuffer(oldRoot, oldFullSize);
+                byte[] newFull = RenderToPixelBuffer(newRoot, newFullSize);
+
+                int stride = width * 4;
+                int bytesToCompare = oldCropHeight * stride;
+                Assert.True(bytesToCompare > 0 && bytesToCompare <= oldFull.Length && bytesToCompare <= newFull.Length);
+
+                for (int i = 0; i < bytesToCompare; i++)
+                {
+                    if (oldFull[i] != newFull[i])
+                    {
+                        Assert.Fail(
+                            $"above-splitter region pixel mismatch at ({i % stride / 4}, {i / stride}) — old byte " +
+                            $"0x{oldFull[i]:X2} vs new byte 0x{newFull[i]:X2}. Compared {bytesToCompare} bytes " +
+                            $"(y < {oldCropHeight}, the splitter's own bottom edge).");
+                    }
+                }
+            }
+            finally { newWindow.Close(); }
+        }
+        finally { oldWindow.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 1 (codex finding 2's own "splitter rest/drag states" clause), refined by round 2:
+    /// a genuine, narrow cross-version comparable region DOES exist for a small drag (the test
+    /// above) — but it structurally cannot extend to a LARGER drag, because once the config band's
+    /// own scrollbar engages (see the test above's own MEASURED boundary), a real, load-bearing
+    /// NEW-only element (the scrollbar track/thumb) appears with no OLD equivalent (OLD has no
+    /// scrolling architecture at all — it is a flat, unwrapped Grid). Dragging the OLD splitter's
+    /// "Next" pane (outer row 6, a Star-sized row containing the ENTIRE Output+Options+Action+Log
+    /// composite) is ALSO not the same operation as dragging the NEW splitter's "Next" pane
+    /// (ConfigGrid row 5, the Output section alone, Auto-sized) — this task's own restructuring
+    /// genuinely changes what the splitter's "Next" pane IS, per the brief's own explicit row
+    /// layout, compounding why no LARGER-drag cross-version comparison is meaningful.
+    /// <para>
+    /// The meaningful, ACHIEVABLE equivalent for this regime instead: capture the NEW view's own
+    /// full-root raster at REST, engage a real, input-driven LARGER drag (ArrowDown — genuine
+    /// keyboard input), capture again (basic sanity: the Stored Files row grew, nothing
+    /// negative/degenerate), release the drag back to EXACTLY the original 150 (ArrowUp the same
+    /// count — already independently proven exact by
+    /// <see cref="StoredFilesRow_SplitterDragAtNormalSize_ResizesRow_AndDragSurvivesCompactRoundTrip"/>),
     /// and assert the FULL-ROOT RASTER after release matches the ORIGINAL rest capture BYTE FOR
     /// BYTE — proving a drag-then-undo cycle leaves no residual visual/layout drift anywhere on
-    /// the page, not just that the one row's numeric Height value round-trips.
+    /// the page (including the scrollbar's own appear/disappear cycle), not just that the one
+    /// row's numeric Height value round-trips.
     /// </para>
     /// </summary>
     [AvaloniaFact]
@@ -1925,7 +2056,21 @@ public class CreatorCompactTests
     /// instead of resource lookups.
     /// </summary>
     [AvaloniaFact]
-    public void Splitter_FocusVisual_MeetsContrastAgainstBothPanes()
+    public void Splitter_FocusVisual_MeetsContrastAgainstBothPanes() =>
+        AssertSplitterFocusContrastAgainstBothPanes(ExpandedInner);
+
+    /// <summary>
+    /// Fix round 2 (codex finding 3, NEW MAJOR): the default-theme contrast test above only ever
+    /// exercised EXPANDED size — compact-mode focus visibility/contrast was untested despite Step
+    /// 4 being mode-independent, and the splitter's own criterion-E reachability (proven by the
+    /// tab-walk) says nothing about whether its focus indication is actually VISIBLE once reached
+    /// at compact size. Same assertions, at <see cref="CompactInner"/>.
+    /// </summary>
+    [AvaloniaFact]
+    public void Splitter_FocusVisual_MeetsContrastAgainstBothPanes_Compact() =>
+        AssertSplitterFocusContrastAgainstBothPanes(CompactInner);
+
+    private static void AssertSplitterFocusContrastAgainstBothPanes(double innerHeight)
     {
         CreatorViewModel vm = CreateVm();
         for (int i = 0; i < 3; i++)
@@ -1933,32 +2078,41 @@ public class CreatorCompactTests
             vm.StoredFiles.Add(Item($@"C:\release\file{i:D2}.nfo", $"file{i:D2}.nfo"));
         }
         var view = new CreatorView { DataContext = vm };
-        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        (Window window, Grid root) = CompactViewRig.HostAt(view, innerHeight);
         try
         {
             GridSplitter splitter = window.GetVisualDescendants().OfType<GridSplitter>().Single();
             splitter.Focus();
             Dispatcher.UIThread.RunJobs();
+            Assert.True(splitter.IsFocused, "test precondition: the splitter must genuinely take focus at this size");
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
             Dispatcher.UIThread.RunJobs();
 
-            var focusBrush = Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background);
-            Color focusColor = focusBrush.Color;
-
-            Point? aboveInWindow = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, -3), window);
-            Point? belowInWindow = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, splitter.Bounds.Height + 3), window);
-            Assert.True(aboveInWindow is not null && belowInWindow is not null, "test precondition: both neighboring points must translate into window coordinates");
-
-            Color abovePane = SamplePixelColor(window, aboveInWindow!.Value);
-            Color belowPane = SamplePixelColor(window, belowInWindow!.Value);
-
-            double contrastVsAbove = ContrastRatio(focusColor, abovePane);
-            double contrastVsBelow = ContrastRatio(focusColor, belowPane);
+            (double contrastVsAbove, double contrastVsBelow) = MeasureSplitterFocusContrast(splitter, window);
 
             Assert.True(contrastVsAbove >= 3.0, $"focus brush vs the pane above (Stored Files grid): {contrastVsAbove:F2}:1 (need >= 3:1)");
             Assert.True(contrastVsBelow >= 3.0, $"focus brush vs the pane below (Output section): {contrastVsBelow:F2}:1 (need >= 3:1)");
         }
         finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// Extracted so both the default-theme and the complete-HC-fixture tests (expanded AND
+    /// compact variants of each) share the exact same sampling/math, never duplicated by hand.
+    /// </summary>
+    private static (double ContrastVsAbove, double ContrastVsBelow) MeasureSplitterFocusContrast(GridSplitter splitter, Window window)
+    {
+        var focusBrush = Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background);
+        Color focusColor = focusBrush.Color;
+
+        Point? aboveInWindow = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, -3), window);
+        Point? belowInWindow = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, splitter.Bounds.Height + 3), window);
+        Assert.True(aboveInWindow is not null && belowInWindow is not null, "test precondition: both neighboring points must translate into window coordinates");
+
+        Color abovePane = SamplePixelColor(window, aboveInWindow!.Value);
+        Color belowPane = SamplePixelColor(window, belowInWindow!.Value);
+
+        return (ContrastRatio(focusColor, abovePane), ContrastRatio(focusColor, belowPane));
     }
 
     /// <summary>
@@ -2060,6 +2214,263 @@ public class CreatorCompactTests
             Dispatcher.UIThread.RunJobs();
             var restoredBrush = Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background);
             Assert.Equal(beforeColor, restoredBrush.Color);
+        }
+        finally { window.Close(); }
+    }
+
+    // ── Fix round 2 (codex finding 2): a COMPLETE, scoped high-contrast theme fixture ──
+    //
+    // The round-1 single-key AccentPrimary override above proves resource LIVENESS only — it
+    // never touches the rest of the app's own palette, so it cannot prove the splitter's focus
+    // indication survives a genuine WHOLE-THEME swap the way a real Windows high-contrast
+    // activation would produce (the two neighboring panes' own colors, whatever resources feed
+    // them, would ALSO change under a real HC theme). This section builds the complete equivalent:
+    // every SolidColorBrush key Resources/Tokens.axaml defines (46 total — re-verified against
+    // that file's own current contents; a comment there should flag this list if new keys are
+    // ever added) is overridden at once, modeled on an actual Windows "High Contrast Black" theme
+    // (near-uniform black surfaces, white text/borders, a saturated yellow accent — Windows HC
+    // themes still differentiate error/warning/success semantically by hue, not just lightness).
+    // Applied/restored via the SAME proven mechanism as the single-key test above (direct
+    // top-level Resources[key] set/remove — MEASURED there that these keys are absent at the top
+    // level, so restoration removes rather than reassigns), wrapped in an IDisposable so three
+    // call sites (expanded, compact, and the discrimination covering test) share one exception-safe
+    // apply/restore path instead of three hand-duplicated try/finally blocks.
+
+    private static readonly IReadOnlyDictionary<string, Color> CompleteHighContrastFixtureColors = new Dictionary<string, Color>
+    {
+        // Surfaces -> black
+        ["WindowBackground"] = Colors.Black,
+        ["PanelBackground"] = Colors.Black,
+        ["SurfaceBackground"] = Colors.Black,
+        ["InputBackground"] = Colors.Black,
+        ["HoverBackground"] = Colors.Black,
+        ["ActiveBackground"] = Colors.Black,
+        ["SelectedItemBackground"] = Colors.Black,
+        ["HexHeaderBrush"] = Colors.Black,
+        ["SystemControlBackgroundListLowBrush"] = Colors.Black,
+        ["SystemControlBackgroundAltHighBrush"] = Colors.Black,
+        ["SystemControlHighlightListLowBrush"] = Colors.Black,
+        // Text -> white
+        ["ForegroundPrimary"] = Colors.White,
+        ["ForegroundSecondary"] = Colors.White,
+        ["ForegroundDisabled"] = Colors.White,
+        ["HeaderForeground"] = Colors.White,
+        ["LogTerminalForeground"] = Colors.White,
+        ["SystemControlForegroundBaseMediumHighBrush"] = Colors.White,
+        ["SystemControlForegroundBaseMediumBrush"] = Colors.White,
+        ["SystemControlForegroundBaseMediumLowBrush"] = Colors.White,
+        ["SystemControlForegroundBaseLowBrush"] = Colors.White,
+        ["SystemControlForegroundBaseHighBrush"] = Colors.White,
+        // Borders -> white
+        ["BorderSubtle"] = Colors.White,
+        ["BorderMedium"] = Colors.White,
+        ["BorderSeparator"] = Colors.White,
+        ["PanelBorderBrush"] = Colors.White,
+        ["StatusSeparatorBrush"] = Colors.White,
+        ["PanelHeaderSeparatorBrush"] = Colors.White,
+        // Accent -> saturated yellow (this is the key the splitter's own :focus style reads)
+        ["AccentPrimary"] = Color.FromRgb(0xFF, 0xFF, 0x00),
+        ["AccentHover"] = Color.FromRgb(0xFF, 0xFF, 0x00),
+        ["AccentPressed"] = Color.FromRgb(0xFF, 0xFF, 0x00),
+        ["BorderFocused"] = Color.FromRgb(0xFF, 0xFF, 0x00),
+        ["SystemAccentBrush"] = Color.FromRgb(0xFF, 0xFF, 0x00),
+        ["PropertyHighlightBrush"] = Color.FromRgb(0xFF, 0xFF, 0x00),
+        // Semantic hues, kept distinguishable (real HC themes still differ error/warning/success by hue)
+        ["AccentSuccess"] = Color.FromRgb(0x00, 0xFF, 0x00),
+        ["AccentWarning"] = Color.FromRgb(0xFF, 0x80, 0x00),
+        ["AccentError"] = Color.FromRgb(0xFF, 0x00, 0x00),
+        ["WarningForeground"] = Color.FromRgb(0xFF, 0x80, 0x00),
+        ["HexDiffHighlightBrush"] = Color.FromRgb(0xFF, 0x00, 0x00),
+        ["DiffRowBackground"] = Color.FromArgb(0x33, 0xFF, 0x00, 0x00),
+        // Hyperlinks -> cyan
+        ["HyperlinkForeground"] = Color.FromRgb(0x00, 0xFF, 0xFF),
+        ["HyperlinkHoverForeground"] = Color.FromRgb(0x00, 0xFF, 0xFF),
+        // Hex-view retro colors -> white/yellow (not visually relevant to this view, included for completeness)
+        ["HexOffsetForeground"] = Colors.White,
+        ["HexBytesForeground"] = Colors.White,
+        ["HexAsciiForeground"] = Colors.White,
+        ["HexSelectionBrush"] = Color.FromArgb(0x44, 0xFF, 0xFF, 0x00),
+        ["HexMatchHighlightBrush"] = Color.FromArgb(0x33, 0xFF, 0x80, 0x00),
+    };
+
+    /// <summary>
+    /// Applies <see cref="CompleteHighContrastFixtureColors"/> as direct top-level overrides on
+    /// <see cref="Application.Resources"/> (the same mechanism <see cref="Splitter_FocusVisual_HighContrastSmoke_FollowsLiveResourceOverride"/>
+    /// already proved works and restores cleanly) and restores every one of them on
+    /// <see cref="Dispose"/> — never leaks the fixture into any other test.
+    /// </summary>
+    private sealed class HighContrastFixtureScope : IDisposable
+    {
+        private readonly Dictionary<string, (bool HadDirectOverride, object? Original)> _captured = [];
+
+        public HighContrastFixtureScope()
+        {
+            foreach ((string key, Color color) in CompleteHighContrastFixtureColors)
+            {
+                bool hadDirectOverride = Application.Current!.Resources.ContainsKey(key);
+                _captured[key] = (hadDirectOverride, hadDirectOverride ? Application.Current!.Resources[key] : null);
+                Application.Current!.Resources[key] = new SolidColorBrush(color);
+            }
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        public void Dispose()
+        {
+            foreach ((string key, (bool hadDirectOverride, object? original)) in _captured)
+            {
+                if (hadDirectOverride)
+                {
+                    Application.Current!.Resources[key] = original;
+                }
+                else
+                {
+                    Application.Current!.Resources.Remove(key);
+                }
+            }
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    /// <summary>
+    /// Fix round 2 (codex finding 2). The complete-theme equivalent of
+    /// <see cref="Splitter_FocusVisual_HighContrastSmoke_FollowsLiveResourceOverride"/> — every
+    /// resource the splitter's own template AND its two neighboring panes could plausibly consume
+    /// is overridden at once (see <see cref="CompleteHighContrastFixtureColors"/>'s own remarks),
+    /// so this exercises the REAL lookup chain rather than one already-known key. Asserts contrast
+    /// against BOTH panes (now genuinely black under the fixture) AND against the splitter's OWN
+    /// unfocused state (now also black at rest, per the GridSplitter base style's literal
+    /// Transparent-over-black background) — i.e., the focus indication must be visually DISTINCT
+    /// from what this same control looks like when nothing is focused, not merely "distinct from
+    /// its neighbors" in the abstract.
+    /// </summary>
+    [AvaloniaFact]
+    public void Splitter_FocusVisual_CompleteHighContrastFixture_RemainsDistinctFromPanesAndUnfocusedState() =>
+        AssertSplitterFocusContrastUnderCompleteHighContrastFixture(ExpandedInner);
+
+    /// <summary>Fix round 2 (codex finding 3): the compact-size variant of the complete-fixture test above.</summary>
+    [AvaloniaFact]
+    public void Splitter_FocusVisual_CompleteHighContrastFixture_RemainsDistinctFromPanesAndUnfocusedState_Compact() =>
+        AssertSplitterFocusContrastUnderCompleteHighContrastFixture(CompactInner);
+
+    private static void AssertSplitterFocusContrastUnderCompleteHighContrastFixture(double innerHeight)
+    {
+        CreatorViewModel vm = CreateVm();
+        for (int i = 0; i < 3; i++)
+        {
+            vm.StoredFiles.Add(Item($@"C:\release\file{i:D2}.nfo", $"file{i:D2}.nfo"));
+        }
+        var view = new CreatorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, innerHeight);
+        try
+        {
+            GridSplitter splitter = window.GetVisualDescendants().OfType<GridSplitter>().Single();
+            Point splitterCenter = new(splitter.Bounds.Width / 2, splitter.Bounds.Height / 2);
+
+            using (new HighContrastFixtureScope())
+            {
+                // Unfocused baseline, SAMPLED FROM THE REAL RENDER (not read off the Background
+                // property directly) — a real bug this test's own first draft hit: the REST style
+                // sets a literal "Transparent" Background, and reading a transparent SolidColorBrush's
+                // own .Color property returns whatever RGB channels it happens to carry underneath
+                // its zero alpha (MEASURED: Avalonia's Transparent carries WHITE channels at alpha
+                // 0), which is not what a user actually SEES — nothing ever renders that value,
+                // since alpha-zero paints nothing at all and the pane behind shows through instead.
+                // Sampling the real rendered pixel (the same technique already used for the
+                // neighboring panes) captures what is ACTUALLY visible when unfocused, under the
+                // SAME HC theme, for a genuine apples-to-apples comparison.
+                Point? centerInWindow = splitter.TranslatePoint(splitterCenter, window);
+                Assert.True(centerInWindow is not null);
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                Dispatcher.UIThread.RunJobs();
+                Color unfocusedColor = SamplePixelColor(window, centerInWindow!.Value);
+
+                splitter.Focus();
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(splitter.IsFocused, "test precondition: the splitter must genuinely take focus at this size");
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                Dispatcher.UIThread.RunJobs();
+
+                var focusBrush = Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background);
+                Assert.Equal(Color.FromRgb(0xFF, 0xFF, 0x00), focusBrush.Color); // AccentPrimary under the fixture
+
+                (double contrastVsAbove, double contrastVsBelow) = MeasureSplitterFocusContrast(splitter, window);
+                Assert.True(contrastVsAbove >= 3.0, $"under the complete HC fixture, focus brush vs the pane above: {contrastVsAbove:F2}:1 (need >= 3:1)");
+                Assert.True(contrastVsBelow >= 3.0, $"under the complete HC fixture, focus brush vs the pane below: {contrastVsBelow:F2}:1 (need >= 3:1)");
+
+                double contrastVsOwnUnfocusedState = ContrastRatio(focusBrush.Color, unfocusedColor);
+                Assert.True(contrastVsOwnUnfocusedState >= 3.0,
+                    $"under the complete HC fixture, the focused splitter must remain visually distinct from its OWN unfocused rest state ({unfocusedColor}): {contrastVsOwnUnfocusedState:F2}:1 (need >= 3:1)");
+            }
+
+            // The fixture's own restoration is exercised too: after Dispose, the splitter (still
+            // logically focused) must revert to the DEFAULT theme's own accent color.
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+            var restoredBrush = Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background);
+            Assert.Equal(Color.FromRgb(0x00, 0x78, 0xD4), restoredBrush.Color); // AccentPrimary's real default
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 2's own discriminating-evidence requirement: "show it fails if the focus
+    /// indication is removed/hardcoded: temporarily break, observe, revert." Under the complete HC
+    /// fixture (both panes now black), a LOCAL (non-<c>DynamicResource</c>-following) Background
+    /// value that happens to equal the fixture's own black — simulating exactly the real-world
+    /// defect this whole mechanism exists to catch: a hardcoded focus color that a real Windows
+    /// high-contrast activation would leave behind, unremapped, blending into the new background —
+    /// must fail the SAME contrast check the passing tests above rely on. Reverted (the local value
+    /// cleared) before the fixture itself is disposed, proving the untampered mechanism resumes.
+    /// </summary>
+    [AvaloniaFact]
+    public void Splitter_FocusVisual_CompleteHighContrastFixture_HardcodedFocusColor_FailsContrastCheck()
+    {
+        CreatorViewModel vm = CreateVm();
+        for (int i = 0; i < 3; i++)
+        {
+            vm.StoredFiles.Add(Item($@"C:\release\file{i:D2}.nfo", $"file{i:D2}.nfo"));
+        }
+        var view = new CreatorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        try
+        {
+            GridSplitter splitter = window.GetVisualDescendants().OfType<GridSplitter>().Single();
+
+            using (new HighContrastFixtureScope())
+            {
+                splitter.Focus();
+                Dispatcher.UIThread.RunJobs();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                Dispatcher.UIThread.RunJobs();
+
+                // Sanity: the REAL, untampered mechanism passes first (same claim as the test above).
+                (double realAbove, double realBelow) = MeasureSplitterFocusContrast(splitter, window);
+                Assert.True(realAbove >= 3.0 && realBelow >= 3.0, "test precondition: the untampered fixture must pass before it is deliberately broken");
+
+                // BREAK: a LOCAL value shadows the :focus style's DynamicResource entirely —
+                // exactly what a hardcoded Background="..." in the XAML would produce, frozen at
+                // whatever color it was authored with regardless of any later theme swap. Chosen to
+                // match the fixture's own black background exactly (near-zero contrast).
+                splitter.Background = new SolidColorBrush(Colors.Black);
+                Dispatcher.UIThread.RunJobs();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                Dispatcher.UIThread.RunJobs();
+
+                (double brokenAbove, double brokenBelow) = MeasureSplitterFocusContrast(splitter, window);
+                Assert.True(brokenAbove < 3.0 && brokenBelow < 3.0,
+                    $"the hardcoded-black splitter should have FAILED the 3:1 bar against the (also black) HC fixture panes, but measured {brokenAbove:F2}:1 / {brokenBelow:F2}:1 — this covering test no longer discriminates.");
+
+                // REVERT: clear the local value so the :focus style's DynamicResource binding
+                // resumes, and confirm the untampered mechanism passes again.
+                splitter.ClearValue(TemplatedControl.BackgroundProperty);
+                Dispatcher.UIThread.RunJobs();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                Dispatcher.UIThread.RunJobs();
+
+                (double revertedAbove, double revertedBelow) = MeasureSplitterFocusContrast(splitter, window);
+                Assert.True(revertedAbove >= 3.0 && revertedBelow >= 3.0,
+                    "reverting the local override should restore the passing, untampered mechanism");
+            }
         }
         finally { window.Close(); }
     }
