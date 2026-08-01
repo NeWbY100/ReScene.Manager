@@ -670,7 +670,9 @@ internal static class CompactViewRig
     /// viewport and the window. Mirrors the behavior's own cumulative-intersection algorithm
     /// (progressively transform every ClipToBounds ancestor's bounds into window space and
     /// intersect) since independent per-clipper checks are provably not equivalent — see
-    /// CompactHeightBehavior.IsObscured's own XML doc for the counter-example.
+    /// CompactHeightBehavior.GetClipVisibility's own XML doc for the counter-example (the shared
+    /// geometry walk that IsObscured now answers from; fix round 4 moved the explanation there
+    /// when the same walk gained the finer partially-clipped verdict this helper's own bar needs).
     /// </summary>
     private static bool IsFullyVisibleWithinWindow(Control element, Window window)
     {

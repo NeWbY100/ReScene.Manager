@@ -1241,6 +1241,305 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
+    // ── Shared-behavior fix (task 6, fix round 4): CONTINUED, NON-TRANSITIONAL resize ─────
+
+    /// <summary>
+    /// The staged-focus contract must hold under CONTINUED resize, not only at the instant of a
+    /// mode transition. Task 6's own view-level investigation reproduced the gap in production
+    /// (CreatorView): crossing the threshold IS a transition, so the staged recovery correctly
+    /// fired ONCE and scrolled the focused splitter back into its band's viewport — but every
+    /// SUBSEQUENT shrink step (not a transition, so <see cref="Evaluate"/>'s
+    /// <c>if (!isTransition &amp;&amp; state.Established) return;</c> skipped the entire staged
+    /// sequence) shrank that same viewport around a FROZEN scroll offset until the still-focused
+    /// splitter was clipped away again, with nothing left to notice.
+    /// <para>
+    /// This is the BEHAVIOR's own contract test for that (the view-level regression test proves
+    /// the shipped view; this one proves the shared mechanism every converted view depends on).
+    /// The sequence deliberately covers both legs of the spec's DELIBERATE ASYMMETRY rider:
+    /// the first step shrinks by MORE than the target's own height (leaving it ENTIRELY outside
+    /// the viewport — the WCAG 2.4.11 AA line <see cref="IsObscured"/> encodes) and the steps
+    /// after the transition shrink by LESS than it (leaving it merely PARTIALLY clipped, which
+    /// is NOT "obscured" by that definition and is covered directly by
+    /// <see cref="ContinuedShrink_PartialClipOnly_IsScrolledFullyBackIntoView_FocusNeverMoves"/>).
+    /// Focus must never MOVE at any step — every state here is recoverable by scrolling, and
+    /// relocating a focus-holder the user can still reach would be focus theft, not a fix.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ContinuedShrinkPastTransition_KeepsFocusedElementFullyVisible_WithoutMovingFocus()
+    {
+        (Window w, Grid root) = Host(Threshold + 100);
+        try
+        {
+            // No explicit Height: the viewport fills row 2 (star), so it SHRINKS with the window —
+            // the production shape. A fixed-height scroller could never reproduce this at all.
+            var scroller = new ScrollViewer { [Grid.RowProperty] = 2 };
+            var stack = new StackPanel();
+            for (int i = 0; i < 10; i++) stack.Children.Add(new Button { Content = $"b{i}", Height = 30 });
+            scroller.Content = stack;
+            root.Children.Add(scroller);
+            Dispatcher.UIThread.RunJobs();
+
+            var target = (Button)stack.Children[^1];
+            target.Focus();                         // Focus() itself scrolls it into view
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(target.IsFocused, "setup precondition: the target must genuinely take focus");
+            AssertFullyVisible(target, "setup");
+            Assert.True(scroller.Offset.Y > 0, "setup precondition: the content must genuinely overflow its viewport");
+
+            // Threshold+100 -> Threshold+40: NOT a transition (still expanded), and a shrink
+            // LARGER than the target's own 30 DIPs, so it lands entirely outside the viewport.
+            // Then the threshold crossing itself (a real transition, which even the unfixed
+            // behavior handles), then three more NON-transitional shrinks, each SMALLER than the
+            // target's height so they clip it only partially.
+            double[] innerSteps = [Threshold + 40, Threshold - 1, Threshold - 20, Threshold - 40, Threshold - 60];
+            foreach (double inner in innerSteps)
+            {
+                ShrinkTo(w, root, inner);
+
+                Assert.True(target.IsFocused,
+                    $"at inner height {inner}, focus must still be on the target — a plain resize that " +
+                    "MOVES focus is theft, not a recovery (every state in this sequence is scrollable-recoverable)");
+                AssertFullyVisible(target, $"inner height {inner}");
+            }
+
+            Assert.Contains("compactHeight", root.Classes);   // the transition really did happen
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Isolates the PARTIAL-clip leg, which the sequence test above can only reach after its own
+    /// first (entirely-obscured) step already failed — so on unfixed code that test proves nothing
+    /// about this half. Here the ONLY shrink is deliberately SMALLER than the target's own height,
+    /// and the resulting state is proven — not assumed — to be one the behavior's own
+    /// <see cref="IsObscured"/> calls NOT obscured (it still intersects the viewport), by
+    /// reproducing exactly that geometry through the scroll offset first and asking the private
+    /// predicate directly. A fix that only handled entire obscurement would therefore leave this
+    /// state untouched, with a focused control hanging past its viewport for the rest of the drag.
+    /// The spec's own rider covers precisely this: "C's Tab walk lets BringIntoView resolve
+    /// partial clipping first; the relocation threshold only catches what scrolling cannot
+    /// recover" — so partial clipping is scrolled away, and focus is NEVER relocated for it.
+    /// </summary>
+    [AvaloniaFact]
+    public void ContinuedShrink_PartialClipOnly_IsScrolledFullyBackIntoView_FocusNeverMoves()
+    {
+        (Window w, Grid root) = Host(Threshold + 100);
+        try
+        {
+            var scroller = new ScrollViewer { [Grid.RowProperty] = 2 };
+            var stack = new StackPanel();
+            for (int i = 0; i < 10; i++) stack.Children.Add(new Button { Content = $"b{i}", Height = 30 });
+            scroller.Content = stack;
+            var fallbackCandidate = new Button { Content = "fallback", [Grid.RowProperty] = 1 };
+            root.Children.Add(fallbackCandidate);
+            root.Children.Add(scroller);
+            Dispatcher.UIThread.RunJobs();
+
+            var target = (Button)stack.Children[^1];
+            target.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(target.IsFocused);
+            AssertFullyVisible(target, "setup");
+
+            const double ShrinkBy = 10;
+            Assert.True(ShrinkBy < target.Bounds.Height,
+                $"setup precondition: the shrink ({ShrinkBy}) must be smaller than the target's own height " +
+                $"({target.Bounds.Height}), so the resulting state is PARTIALLY clipped, not entirely obscured");
+
+            // Reproduce that exact partial state through the offset (which nothing in the behavior
+            // watches, so no evaluation runs) and ask the behavior's OWN predicate: it is not
+            // "obscured". Proven, not assumed — this is what makes the stricter rule necessary.
+            double settled = scroller.Offset.Y;
+            scroller.Offset = new Vector(0, settled - ShrinkBy);
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(InvokeIsObscured(target),
+                "a target hanging past its viewport by less than its own height still INTERSECTS it — " +
+                "IsObscured (the AA line) says not obscured, so only the stricter fully-visible rule can catch it");
+            scroller.Offset = new Vector(0, settled);
+            Dispatcher.UIThread.RunJobs();
+            AssertFullyVisible(target, "after restoring the settled offset");
+
+            ShrinkTo(w, root, Threshold + 100 - ShrinkBy);
+
+            Assert.DoesNotContain("compactHeight", root.Classes); // no mode change: purely a within-mode resize
+            Assert.True(target.IsFocused,
+                "a merely partially-clipped focus-holder is still reachable — it must be scrolled back " +
+                "into view, never relocated");
+            Assert.False(fallbackCandidate.IsFocused, "the fallback chain must not run for a partial clip");
+            AssertFullyVisible(target, "after a shrink smaller than the target's own height");
+            Assert.True(scroller.Offset.Y > settled, "the recovery must have scrolled, not merely re-checked");
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// The no-focus-theft precondition (spec rev 8) applies to the resize recheck exactly as it
+    /// does to transitions: with focus OUTSIDE this root, a resize must cost nothing and can never
+    /// pull focus in. Made discriminating by giving the outside element a genuinely broken state —
+    /// permanently clipped by a plain ClipToBounds Border, so nothing answers BringIntoView — that
+    /// a scope-blind recheck (one asking only "is the focused element obscured?") would try to
+    /// recover and, failing, would hand to the fallback chain, dragging focus into this view.
+    /// </summary>
+    [AvaloniaFact]
+    public void NonTransitionalResize_FocusOutsideTheRoot_IsNeverPulledIn()
+    {
+        (Window w, Grid root) = Host(Threshold + 100);
+        try
+        {
+            var outsideClipper = new Border { Height = 20, ClipToBounds = true };
+            var outsideHost = new StackPanel();
+            var outside = new Button { Content = "shell", Height = 30, Margin = new Thickness(0, 50, 0, 0) };
+            outsideHost.Children.Add(outside);
+            outsideClipper.Child = outsideHost;
+            DockPanel.SetDock(outsideClipper, Dock.Top);
+
+            var insideCandidate = new Button { Content = "inside", [Grid.RowProperty] = 1 };
+            root.Children.Add(insideCandidate);
+
+            var shell = new DockPanel();
+            w.Content = null;
+            shell.Children.Add(outsideClipper);
+            shell.Children.Add(root);              // fill child: the root's height stays window-driven
+            w.Content = shell;
+            Dispatcher.UIThread.RunJobs();
+
+            outside.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(outside.IsFocused);
+            Assert.True(InvokeIsObscured(outside),
+                "setup precondition: the outside focus-holder must be genuinely broken, so a scope-blind " +
+                "recheck would have something to (fail to) recover and would fall through to relocation");
+
+            ShrinkTo(w, root, Threshold + 60);
+
+            Assert.DoesNotContain("compactHeight", root.Classes); // no transition: the recheck path is what ran
+            Assert.True(outside.IsFocused, "a resize must never pull focus out of the shell and into the view");
+            Assert.False(insideCandidate.IsFocused);
+            Assert.False(root.IsFocused);
+            Assert.False(root.Focusable, "the chain's root terminal must never have been reached");
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Frozen-generation discipline on the NEW path, mirroring
+    /// <see cref="FrozenGeneration_CallbackBuiltBeforeLaterTransitions_NoOps"/>: the resize
+    /// recheck's callback factory freezes <c>state.Generation</c> at creation time, so a recheck
+    /// posted before a later transition must reject itself rather than do stale work on top of a
+    /// newer apply. The positive control at the end — the same scenario with a freshly built
+    /// callback whose frozen generation IS current — proves the no-op came from the guard and not
+    /// from a scenario that could never have recovered anything.
+    /// </summary>
+    [AvaloniaFact]
+    public void ResizeRecheck_FrozenGeneration_CallbackBuiltBeforeALaterTransition_NoOps()
+    {
+        (Window w, Grid root) = Host(Threshold + 100);
+        try
+        {
+            var scroller = new ScrollViewer { [Grid.RowProperty] = 2 };
+            var stack = new StackPanel();
+            for (int i = 0; i < 10; i++) stack.Children.Add(new Button { Content = $"b{i}", Height = 30 });
+            scroller.Content = stack;
+            root.Children.Add(scroller);
+            Dispatcher.UIThread.RunJobs();
+
+            var target = (Button)stack.Children[^1];
+            target.Focus();
+            scroller.Offset = default;             // scroll the focused target entirely out of view
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(target.IsFocused);
+            Assert.True(InvokeIsObscured(target), "setup precondition: the target must genuinely need recovery");
+
+            object state = GetPrivateState(root);
+            Action stale = InvokeCreateResizeRecheckCallback(root, target, state);
+            SetGeneration(state, GetGeneration(state) + 3);   // three later transitions' worth
+
+            stale();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(0, scroller.Offset.Y);
+            Assert.True(InvokeIsObscured(target),
+                "the callback froze the pre-bump generation, so it must reject itself outright — a LIVE " +
+                "read of state.Generation would equal itself here and do the work anyway");
+
+            InvokeCreateResizeRecheckCallback(root, target, state)();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(scroller.Offset.Y > 0,
+                "positive control: with a matching generation the very same scenario DOES recover");
+            Assert.True(target.IsFocused);
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>Resizes the window so the behavior's own root lands at <paramref name="inner"/>
+    /// DIPs, then drains layout AND the Loaded-priority staged jobs the behavior defers to.</summary>
+    private static void ShrinkTo(Window w, Control root, double inner)
+    {
+        double overhead = w.Height - root.Bounds.Height;
+        w.Height = inner + overhead;
+        for (int i = 0; i < 5; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    /// <summary>
+    /// Clip-aware FULL visibility (criterion C's own line, and the same helper shape every
+    /// converted view's test file carries): a control that merely INTERSECTS the cumulative
+    /// intersection of its clipping ancestors' viewports is not enough — every edge must be
+    /// inside it. Effective visibility and a positive size are asserted first, since a degenerate
+    /// control translates to a single point and would trivially satisfy any containment check.
+    /// </summary>
+    private static void AssertFullyVisible(Control control, string context)
+    {
+        Assert.True(control.IsEffectivelyVisible, $"[{context}] {control.GetType().Name} is not effectively visible.");
+        Assert.True(control.Bounds is { Width: > 0, Height: > 0 },
+            $"[{context}] {control.GetType().Name} has a non-positive size ({control.Bounds.Width:F1}x{control.Bounds.Height:F1}).");
+
+        Visual visualRoot = control.GetVisualRoot() as Visual
+            ?? throw new InvalidOperationException($"[{context}] the control is not attached to a visual root.");
+        Rect controlInRoot = TransformRect(control, new Rect(control.Bounds.Size), visualRoot)
+            ?? throw new InvalidOperationException($"[{context}] the control could not be translated into root coordinates.");
+
+        Rect visible = new(visualRoot.Bounds.Size);
+        foreach (Visual ancestor in control.GetVisualAncestors())
+        {
+            if (ancestor is not Control clipper || !clipper.ClipToBounds)
+            {
+                continue;
+            }
+
+            Rect clipperInRoot = TransformRect(clipper, new Rect(clipper.Bounds.Size), visualRoot)
+                ?? throw new InvalidOperationException($"[{context}] a clipping ancestor could not be translated.");
+            visible = visible.Intersect(clipperInRoot);
+        }
+
+        const double Slack = 0.5;
+        Assert.True(
+            controlInRoot.X >= visible.X - Slack && controlInRoot.Y >= visible.Y - Slack &&
+            controlInRoot.Right <= visible.Right + Slack && controlInRoot.Bottom <= visible.Bottom + Slack,
+            $"[{context}] {control.GetType().Name} bounds ({controlInRoot}) are not fully inside the clip-aware " +
+            $"visible region {visible} — a focused control the user cannot fully see.");
+    }
+
+    private static Rect? TransformRect(Visual from, Rect localRect, Visual to)
+    {
+        Point? topLeft = from.TranslatePoint(new Point(localRect.X, localRect.Y), to);
+        Point? bottomRight = from.TranslatePoint(new Point(localRect.Right, localRect.Bottom), to);
+        return topLeft is { } tl && bottomRight is { } br ? new Rect(tl, br) : null;
+    }
+
+    private static bool InvokeIsObscured(Control element) =>
+        (bool)typeof(CompactHeightBehavior)
+            .GetMethod("IsObscured", BindingFlags.NonPublic | BindingFlags.Static)!
+            .Invoke(null, [element])!;
+
+    private static Action InvokeCreateResizeRecheckCallback(Control root, Control captured, object state)
+    {
+        MethodInfo method = typeof(CompactHeightBehavior).GetMethod("CreateResizeRecheckCallback", BindingFlags.NonPublic | BindingFlags.Static)!;
+        return (Action)method.Invoke(null, [root, captured, state])!;
+    }
+
     private static object GetPrivateState(Control control)
     {
         FieldInfo statesField = typeof(CompactHeightBehavior).GetField("_states", BindingFlags.NonPublic | BindingFlags.Static)!;

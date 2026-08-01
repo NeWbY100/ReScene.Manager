@@ -15,8 +15,9 @@ namespace ReScene.Manager.Behaviors;
 /// (restore-only hysteresis — a fresh instance at Threshold+1 starts expanded). Applies
 /// per-view <see cref="CompactRowSize"/> values on the root AND on descendant grids
 /// carrying their own RowSizes attachment (collected at each apply), applies help-open
-/// donation, manages the Help expander's per-mode state, and runs the spec rev-7 staged
-/// focus algorithm across transitions.
+/// donation, manages the Help expander's per-mode state, runs the spec rev-7 staged
+/// focus algorithm across transitions, and keeps a still-focused element visible across
+/// CONTINUED resizing between transitions (see <see cref="RecheckFocusAfterResize"/>).
 /// </summary>
 internal static class CompactHeightBehavior
 {
@@ -24,7 +25,9 @@ internal static class CompactHeightBehavior
     private const double RestoreSlack = 12;
 
     /// <summary>
-    /// Backstop on the recovery loop's BringIntoView requests. It is NOT the mechanism that
+    /// Backstop on a single recovery pass's BringIntoView requests (both
+    /// <see cref="RelocateFocusIfNeeded"/>'s loop and <see cref="ScrollFullyIntoView"/>'s).
+    /// It is NOT the mechanism that
     /// normally ends recovery: the progress rule is (see
     /// <see cref="RelocateFocusIfNeeded"/>) — each request either moves a scroller, in which
     /// case the next one starts strictly closer, or moves nothing, in which case that target
@@ -210,6 +213,16 @@ internal static class CompactHeightBehavior
         // flat-mode force-expanded state.
         if (!isTransition && state.Established)
         {
+            // Nothing to APPLY (no mode change, and the rows/class already match this mode) — but
+            // the bounds that triggered this evaluation still moved, and a viewport that shrinks
+            // around a FROZEN scroll offset re-clips whatever the last transition's own recovery
+            // scrolled into it. Task 6 measured exactly that in CreatorView: the compact-entry
+            // transition scrolled the focused splitter back into its band (offset 0 → 22), then
+            // four further, purely within-mode shrinks took that same viewport 321 → 121 DIPs with
+            // the offset never re-examined, leaving the splitter clipped away while it still held
+            // focus. The recheck below is the standing obligation the one-shot transition recovery
+            // cannot discharge on its own.
+            QueueResizeRecheck(control, state);
             return;
         }
 
@@ -271,6 +284,139 @@ internal static class CompactHeightBehavior
     {
         int generation = state.Generation;
         return () => RelocateFocusIfNeeded(control, captured, enteringCompact, generation, state);
+    }
+
+    /// <summary>
+    /// Schedules one <see cref="RecheckFocusAfterResize"/> pass for a bounds change that is NOT a
+    /// mode transition, or returns having done nothing at all.
+    /// <para>
+    /// TWO gates keep this off the hot path of a live resize-drag. The FIRST is here: the rev-8
+    /// no-focus-theft precondition, evaluated BEFORE anything is scheduled — with focus in the
+    /// shell, the tab strip, another view, another window, or nowhere, this costs one
+    /// FocusManager query and nothing is posted, so a resize can never pull focus into this view.
+    /// The SECOND is inside the posted pass: it acts only on an element that is ACTUALLY not fully
+    /// visible, which is a read-only geometry test with no side effects. Together they mean the
+    /// ordinary case — dragging a window edge with a perfectly visible focused control — issues
+    /// ZERO BringIntoView requests, and requests are spent only while the focused element is
+    /// genuinely drifting out of view, which is precisely when they are the point. No debounce
+    /// timer and no size-delta threshold: both would be heuristics standing in for the condition
+    /// the contract actually cares about, and both would let a drag END in a stranded state
+    /// whenever the last step fell under the heuristic's own bar.
+    /// </para>
+    /// <para>
+    /// Coalesced through <see cref="State.RecheckQueued"/> the same way <see cref="QueueEvaluate"/>
+    /// coalesces evaluations, so a burst of bounds changes cannot pile up passes. Coalescing is
+    /// safe despite each pass freezing a captured element, because the pass RE-RESOLVES what is
+    /// focused when it runs (<see cref="ResolveRecoveryTarget"/>); a superseded capture is
+    /// yielded to, never overwritten.
+    /// </para>
+    /// </summary>
+    private static void QueueResizeRecheck(Control control, State state)
+    {
+        if (state.RecheckQueued || CaptureFocusedElement(control) is not { } focused)
+        {
+            return;
+        }
+
+        Action recheck = CreateResizeRecheckCallback(control, focused, state);
+        state.RecheckQueued = true;
+
+        // Loaded, exactly as the transition path's own recovery: lower than the layout-driving
+        // priorities, so the bounds change that triggered this has been fully laid out by the time
+        // the pass measures anything.
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                state.RecheckQueued = false;
+                recheck();
+            },
+            DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// Builds the deferred resize-recheck pass, FREEZING both the generation and the mode into
+    /// locals at creation time — the same discipline, and for the same reason, as
+    /// <see cref="CreateRecoveryCallback"/>: read live at run time they would compare against
+    /// themselves and could never detect that a real transition has landed in between, which
+    /// would let a stale pass do focus work on top of a newer apply.
+    /// </summary>
+    private static Action CreateResizeRecheckCallback(Control control, Control captured, State state)
+    {
+        int generation = state.Generation;
+        bool compact = state.IsCompact;
+        return () => RecheckFocusAfterResize(control, captured, compact, generation, state);
+    }
+
+    /// <summary>
+    /// The within-mode half of the staged-focus contract: keep a still-focused element visible as
+    /// the layout keeps changing size around it. Splits strictly along the spec's own DELIBERATE
+    /// ASYMMETRY rider ("BringIntoView resolve[s] partial clipping first; the relocation threshold
+    /// only catches what scrolling cannot recover"):
+    /// <list type="bullet">
+    /// <item>FULLY VISIBLE — nothing to do, and nothing is touched. Note this pass judges GEOMETRY
+    /// only: an element that is fully visible but has lost <c>Focusable</c>/enablement is stranded
+    /// by something a resize did not cause (those are class-driven, i.e. transitions), and stays
+    /// the transition path's business.</item>
+    /// <item>PARTIALLY CLIPPED — scroll it back into view and STOP. Never the fallback chain: the
+    /// user can still see and reach it, so moving focus off it would be theft in exchange for
+    /// nothing. This is also the leg a coarse "entirely obscured" test cannot see at all — a
+    /// live drag clips a control a few pixels at a time, and each of those states intersects its
+    /// viewport.</item>
+    /// <item>ENTIRELY OBSCURED — the same staged transaction a transition runs
+    /// (<see cref="RelocateFocusIfNeeded"/>), which re-resolves the target, retries BringIntoView
+    /// on progress, and relocates through the fallback chain only when scrolling cannot reach it.</item>
+    /// </list>
+    /// </summary>
+    private static void RecheckFocusAfterResize(Control root, Control captured, bool compact, int generation, State state)
+    {
+        if (IsSuperseded(compact, generation, state))
+        {
+            return;
+        }
+
+        if (ResolveRecoveryTarget(root, captured) is not { } target)
+        {
+            return;
+        }
+
+        switch (GetClipVisibility(target))
+        {
+            case ClipVisibility.FullyVisible:
+                return;
+
+            case ClipVisibility.PartiallyClipped:
+                ScrollFullyIntoView(target);
+                return;
+
+            case ClipVisibility.Obscured:
+                RelocateFocusIfNeeded(root, captured, compact, generation, state);
+                return;
+        }
+    }
+
+    /// <summary>
+    /// Scroll-only recovery for a partially clipped target, under the SAME retry-on-progress rule
+    /// and attempt budget as <see cref="RelocateFocusIfNeeded"/>'s own loop: a scroller that only
+    /// partially satisfies a request still consumes it, so another request may be needed to carry
+    /// the recovery one clipper further out — but a request that moves nothing at all proves the
+    /// target is beyond BringIntoView's reach, and there is nothing further to try. Unlike that
+    /// loop, exhausting the attempts here is simply the end: a partially clipped element is never
+    /// relocated.
+    /// </summary>
+    private static void ScrollFullyIntoView(Control target)
+    {
+        for (int attempts = 0; attempts < MaxBringIntoViewAttempts; ++attempts)
+        {
+            Vector[] before = CaptureScrollOffsets(target);
+            target.BringIntoView();
+            target.UpdateLayout();
+
+            if (CaptureScrollOffsets(target).SequenceEqual(before) ||
+                GetClipVisibility(target) == ClipVisibility.FullyVisible)
+            {
+                return;
+            }
+        }
     }
 
     private static void ToggleClass(Control control, bool compact)
@@ -686,32 +832,45 @@ internal static class CompactHeightBehavior
         !obscured && captured.Focusable && captured.IsEffectivelyEnabled;
 
     /// <summary>
-    /// True if <paramref name="element"/> is detached, invisible anywhere in its ancestor
-    /// chain, or clipped out by the CUMULATIVE intersection of every clipping ancestor's
-    /// viewport — <c>IsEffectivelyVisible</c> alone does not see the clipping case (a
-    /// scrolled-away row stays "visible"), and testing each clipper INDEPENDENTLY is not
-    /// equivalent to testing against their intersection: an element can overlap clipper A in
-    /// one part of itself and clipper B in a disjoint part, passing both checks separately,
-    /// while A∩B (what is actually visible through both at once) doesn't overlap it at all.
-    /// So every clipper's own viewport is transformed into ONE common space (the visual root)
-    /// and progressively intersected together FIRST, and the element is tested against that
-    /// single combined rect.
+    /// True if <paramref name="element"/> is entirely unseeable: detached, invisible anywhere in
+    /// its ancestor chain, or clipped out completely — the WCAG 2.4.11 AA line, and the ONLY
+    /// condition the spec permits focus RELOCATION to trigger on. Merely partial clipping is
+    /// deliberately not obscurement here (spec's asymmetry rider); see
+    /// <see cref="GetClipVisibility"/> for the finer verdict and who consumes it.
     /// </summary>
-    private static bool IsObscured(Control element)
+    private static bool IsObscured(Control element) => GetClipVisibility(element) == ClipVisibility.Obscured;
+
+    /// <summary>
+    /// How much of <paramref name="element"/> survives the CUMULATIVE intersection of every
+    /// clipping ancestor's viewport. <c>IsEffectivelyVisible</c> alone does not see clipping at
+    /// all (a scrolled-away row stays "visible"), and testing each clipper INDEPENDENTLY is not
+    /// equivalent to testing against their intersection: an element can overlap clipper A in one
+    /// part of itself and clipper B in a disjoint part, passing both checks separately, while A∩B
+    /// (what is actually visible through both at once) doesn't overlap it at all. So every
+    /// clipper's own viewport is transformed into ONE common space (the visual root) and
+    /// progressively intersected together FIRST, and the element is tested against that single
+    /// combined rect.
+    /// <para>
+    /// ONE walk answers both questions the behavior asks — "is any of it visible" (relocation's
+    /// trigger) and "is ALL of it visible" (the resize recheck's) — so the two can never disagree
+    /// about the same tree, and the finer verdict costs nothing over the coarse one.
+    /// </para>
+    /// </summary>
+    private static ClipVisibility GetClipVisibility(Control element)
     {
         if (!element.IsAttachedToVisualTree() || !element.IsEffectivelyVisible)
         {
-            return true;
+            return ClipVisibility.Obscured;
         }
 
         if (element.GetVisualRoot() is not Visual root)
         {
-            return true;
+            return ClipVisibility.Obscured;
         }
 
         if (TransformRect(element, new Rect(element.Bounds.Size), root) is not { } elementInRoot)
         {
-            return true; // no common coordinate space with its own root
+            return ClipVisibility.Obscured; // no common coordinate space with its own root
         }
 
         Rect? visible = null;
@@ -724,13 +883,33 @@ internal static class CompactHeightBehavior
 
             if (TransformRect(clipper, new Rect(clipper.Bounds.Size), root) is not { } clipperInRoot)
             {
-                return true; // no common coordinate space with the clipper
+                return ClipVisibility.Obscured; // no common coordinate space with the clipper
             }
 
             visible = visible is { } current ? current.Intersect(clipperInRoot) : clipperInRoot;
         }
 
-        return visible is { } combined && !elementInRoot.Intersects(combined);
+        if (visible is not { } combined)
+        {
+            return ClipVisibility.FullyVisible; // nothing clips it at all
+        }
+
+        if (!elementInRoot.Intersects(combined))
+        {
+            return ClipVisibility.Obscured;
+        }
+
+        return Contains(combined, elementInRoot) ? ClipVisibility.FullyVisible : ClipVisibility.PartiallyClipped;
+    }
+
+    // Half a DIP of slack, the same allowance the views' own clip-aware test helpers use: at
+    // 125/150% scaling the composed transforms land edges fractionally past a viewport they
+    // exactly fill, and chasing that with BringIntoView would be work with nothing to show for it.
+    private static bool Contains(Rect outer, Rect inner)
+    {
+        const double Slack = 0.5;
+        return inner.X >= outer.X - Slack && inner.Y >= outer.Y - Slack &&
+               inner.Right <= outer.Right + Slack && inner.Bottom <= outer.Bottom + Slack;
     }
 
     private static Rect? TransformRect(Visual from, Rect localRect, Visual to)
@@ -784,7 +963,26 @@ internal static class CompactHeightBehavior
         control is not null && control.Focusable && control.IsEffectivelyEnabled && !IsObscured(control);
 
     /// <summary>
-    /// Per-control state: mode flag, the coalescing guard, the Bounds subscription, captured
+    /// How much of an element survives its clipping ancestors (see
+    /// <see cref="GetClipVisibility"/>). The three-way distinction exists because the spec draws
+    /// its relocation line at ENTIRELY obscured while criterion C requires FULLY visible: the
+    /// middle state is real, common during a resize drag, and must be handled — by scrolling
+    /// only, never by moving focus.
+    /// </summary>
+    private enum ClipVisibility
+    {
+        /// <summary>Detached, invisible in its own chain, or entirely outside the combined viewport.</summary>
+        Obscured,
+
+        /// <summary>Overlaps the combined viewport, but hangs past at least one of its edges.</summary>
+        PartiallyClipped,
+
+        /// <summary>Every edge inside the combined viewport — or nothing clips it at all.</summary>
+        FullyVisible,
+    }
+
+    /// <summary>
+    /// Per-control state: mode flag, the coalescing guards, the Bounds subscription, captured
     /// row values (keyed by the owning Grid — root or descendant — since a descendant grid
     /// never gets its own state entry), and the expander's IsExpanded subscription.
     /// </summary>
@@ -811,6 +1009,13 @@ internal static class CompactHeightBehavior
         public int Generation { get; set; }
 
         public bool UpdateQueued { get; set; }
+
+        /// <summary>
+        /// The same coalescing role <see cref="UpdateQueued"/> plays for evaluations, for the
+        /// within-mode focus recheck: a burst of bounds changes (every frame of a resize drag)
+        /// leaves at most one pass pending.
+        /// </summary>
+        public bool RecheckQueued { get; set; }
 
         public bool LifecycleHooked { get; set; }
 

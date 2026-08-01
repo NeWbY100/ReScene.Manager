@@ -2572,12 +2572,17 @@ public class CreatorCompactTests
     /// early-return means does NOT re-run the staged capture/recovery sequence at all — so if
     /// anything were going to strand the splitter, it would be here).
     /// <para>
-    /// BLOCKED — this test FINDS A REAL, REPRODUCIBLE PRODUCTION GAP, root-caused to the SHARED
-    /// <c>CompactHeightBehavior</c> (used by all six converted views), not to this view's own
-    /// wiring — per the round-3 dispatch's own explicit instruction ("if that fix needs anything
-    /// beyond this view's wiring, report BLOCKED... instead of scope-creeping into the shared
-    /// behavior"), the fix is NOT attempted here. Kept in the suite, SKIPPED with this explanation,
-    /// as the discriminating evidence trail rather than silently deleted or left failing unexplained.
+    /// FIX ROUND 4 (shared behavior): this test found a REAL, REPRODUCIBLE PRODUCTION GAP in the
+    /// SHARED <c>CompactHeightBehavior</c> (used by all five converted views), not in this view's
+    /// own wiring — round 3 reported it BLOCKED and kept the test SKIPPED as the evidence trail.
+    /// The shared fix has since landed (<c>CompactHeightBehavior</c> now re-checks a still-focused,
+    /// in-scope element's clip-aware visibility on ANY bounds change, not only at transitions), so
+    /// the test is UN-SKIPPED here and HARDENED per codex's round-3 finding on it: the original
+    /// form permitted focus theft — it only measured contrast <c>if</c> focus happened to still be
+    /// on the splitter, so a run that MOVED focus away scored as a pass. Every assertion below is
+    /// now UNCONDITIONAL: at each step the splitter must STILL be the focus-holder (focus moving is
+    /// a theft failure, reported as such), must be clip-aware fully visible, and must clear 3:1
+    /// rendered-pixel focus contrast.
     /// </para>
     /// <para>
     /// MEASURED (reproduced three times, isolating the exact trigger): the brief's OWN worst case
@@ -2601,10 +2606,13 @@ public class CreatorCompactTests
     /// treating "obscurement recheck" as transition-triggered only; a general fix would need it to
     /// also recheck the currently-focused element's visibility on ANY bounds change once compact
     /// (not just on entry), which touches the shared mechanism all six views depend on — outside
-    /// this task's own scope to change unilaterally.
+    /// this task's own scope to change unilaterally — which is exactly what fix round 4 then did,
+    /// in the shared behavior, with its own contract tests
+    /// (<c>CompactHeightBehaviorTests.ContinuedShrinkPastTransition_*</c> /
+    /// <c>ContinuedShrink_PartialClipOnly_*</c>).
     /// </para>
     /// </summary>
-    [AvaloniaFact(Skip = "BLOCKED (fix round 3): reproduces a real production gap in the SHARED CompactHeightBehavior — its own Evaluate() early-return skips staged focus-recovery entirely on non-transition (within-mode) resizes, so a focused element correctly recovered ONCE at the compact-entry transition (config ScrollViewer.Offset moved to (0,22)) becomes RE-obscured by further shrinking of the same viewport (321->121 DIPs) with nothing re-checking it. Fixing this belongs in the shared behavior serving all six converted views, not this view's own wiring - reported BLOCKED per the round-3 dispatch's own explicit instruction rather than scope-creeping into shared code. Full reproduction, exact numbers, and root-cause citation in task-6-report.md's Fix round 3 section.")]
+    [AvaloniaFact]
     public void Splitter_StaysFocusedAndVisibleWithRenderedIndication_AcrossContinuousShrinkPastThreshold()
     {
         CreatorViewModel vm = CreateVm();
@@ -2636,16 +2644,21 @@ public class CreatorCompactTests
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                 Dispatcher.UIThread.RunJobs();
 
+                // UNCONDITIONAL (codex, fix round 3 finding on this test): the earlier form guarded
+                // the contrast measurement behind "if focus is still on the splitter", which let a
+                // run that MOVED focus away score as a pass — permitting exactly the focus theft
+                // the shared behavior is required never to commit. Every state in this sequence is
+                // recoverable by scrolling the config band, so focus moving is a FAILURE.
                 Control? focused = window.FocusManager?.GetFocusedElement() as Control;
-                Assert.True(focused is not null, $"at inner height {targetInner}, focus must never be stranded to NOTHING");
-                AssertFullyWithinWindow(focused!, window);
+                Assert.True(ReferenceEquals(focused, splitter),
+                    $"at inner height {targetInner}, the splitter must STILL hold focus — this shrink is " +
+                    "recoverable by scrolling, so moving focus away is theft, not a recovery (focus is now " +
+                    $"{(focused is null ? "NOTHING" : focused.GetType().Name)})");
+                AssertFullyWithinWindow(splitter, window);
 
-                if (ReferenceEquals(focused, splitter))
-                {
-                    (double contrastVsAbove, double contrastVsBelow) = MeasureSplitterFocusContrast(splitter, window);
-                    Assert.True(contrastVsAbove >= 3.0 && contrastVsBelow >= 3.0,
-                        $"at inner height {targetInner}, the splitter is still the focus-holder but its rendered focus indication no longer clears 3:1 contrast ({contrastVsAbove:F2}:1 / {contrastVsBelow:F2}:1)");
-                }
+                (double contrastVsAbove, double contrastVsBelow) = MeasureSplitterFocusContrast(splitter, window);
+                Assert.True(contrastVsAbove >= 3.0 && contrastVsBelow >= 3.0,
+                    $"at inner height {targetInner}, the splitter still holds focus but its rendered focus indication no longer clears 3:1 contrast ({contrastVsAbove:F2}:1 / {contrastVsBelow:F2}:1)");
             }
         }
         finally { window.Close(); }
