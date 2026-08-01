@@ -10,99 +10,176 @@
     <conv:ResultSuccessToBrushConverter x:Key="ResultSuccessToBrush" />
   </UserControl.Resources>
 
-  <DockPanel Margin="{DynamicResource PageMargin}">
+  <Grid Margin="{DynamicResource PageMargin}" x:Name="RootGrid">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />                 <!-- 0: Help chrome -->
+      <RowDefinition Height="Auto" />                 <!-- 1: config (AutoToStar) -->
+      <RowDefinition Height="Auto" />                 <!-- 2: pinned action band -->
+      <RowDefinition Height="*" MinHeight="80" />     <!-- 3: log band -->
+    </Grid.RowDefinitions>
 
-    <!-- ── Tab description ─────────────────────────────────── -->
-    <TextBlock DockPanel.Dock="Top"
-               Text="Reconstruct a sample file from an SRS file and the original full media file. The reconstructed sample will be CRC-verified against the expected checksum."
-               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
-               TextWrapping="Wrap" Margin="0,0,0,6" />
+    <!-- ── Help disclosure (small-window degradation, spec §2) ── Single instance, always in
+         the tree: normal mode renders FLAT (header hidden, body force-expanded by
+         CompactHeightBehavior) so the page is pixel-identical to the pre-disclosure layout;
+         compact mode shows the header and starts collapsed. This view has no links (like
+         SRSCreator, unlike Reconstructor) — the intro TextBlock is the whole body. Margin is
+         NOT a local value here (house rule: local values beat unconditional styles, so a local
+         "0,0,0,6" would defeat the compact-mode margin-tightening override) — the base value
+         lives in the helpDisclosure style instead (task-3 finding). HorizontalAlignment/
+         HorizontalContentAlignment ARE local values (the hug-bug fix): Fluent's Expander
+         defaults to Left, so without this it hugs its own content's width instead of filling
+         the Grid column. -->
+    <Expander Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
+              HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+              AutomationProperties.Name="Help">
+      <Expander.Header>
+        <TextBlock Text="Help" FontSize="{DynamicResource FontSizeCaption}" />
+      </Expander.Header>
+      <!-- Body scroller: keyboard route for the text-only body (spec §2 rev 10) —
+           Classes="helpBody" is focusable IN COMPACT ONLY via the class-scoped style. Hosts
+           the former tab-description TextBlock verbatim, minus its old DockPanel.Dock/margin
+           (margin moved to the Expander). Inset on the content panel per house rule. -->
+      <ScrollViewer Classes="helpBody" VerticalScrollBarVisibility="Auto"
+                    ScrollViewer.AllowAutoHide="False">
+        <TextBlock Margin="0,0,4,0"
+                   Text="Reconstruct a sample file from an SRS file and the original full media file. The reconstructed sample will be CRC-verified against the expected checksum."
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                   TextWrapping="Wrap" />
+      </ScrollViewer>
+    </Expander>
 
-    <!-- ── SRS File ────────────────────────────────────────── -->
-    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,2">
-      <Run Text="SRS File " FontWeight="SemiBold" />
-      <Run Text="— The .srs file describing the sample to rebuild."
-           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-    </TextBlock>
-    <DockPanel DockPanel.Dock="Top">
-      <Button DockPanel.Dock="Right" Content="Browse"
-              Command="{Binding BrowseSRSCommand}"
-              Classes="ghost"
-              Margin="4,0,0,0" MinWidth="75" />
-      <TextBox x:Name="SRSFileTextBox" Text="{Binding SRSFilePath}"
-               behaviors:TextBoxDropBehavior.DropMode="File" />
-    </DockPanel>
-    <controls:FieldStatusLine DockPanel.Dock="Top" Status="{Binding SRSStatus}" />
+    <!-- ── Config band (always-present; squeezes + scrolls in compact via AutoToStar) ──
+         Content renders at natural height at normal size (row is Auto), no scrollbar shown. -->
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                  ScrollViewer.AllowAutoHide="False">
+      <StackPanel Margin="0,0,4,0">
 
-    <!-- separator -->
-    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+        <!-- ── SRS File ────────────────────────────────────────── -->
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+          <Run Text="SRS File " FontWeight="SemiBold" />
+          <Run Text="— The .srs file describing the sample to rebuild."
+               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+        </TextBlock>
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Content="Browse"
+                  Command="{Binding BrowseSRSCommand}"
+                  Classes="ghost"
+                  Margin="4,0,0,0" MinWidth="75" />
+          <TextBox x:Name="SRSFileTextBox" Text="{Binding SRSFilePath}"
+                   behaviors:TextBoxDropBehavior.DropMode="File" />
+        </DockPanel>
+        <controls:FieldStatusLine Status="{Binding SRSStatus}" />
 
-    <!-- ── Media File ──────────────────────────────────────── -->
-    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,2">
-      <Run Text="Media File " FontWeight="SemiBold" />
-      <Run Text="— The full original media file the sample was cut from."
-           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-    </TextBlock>
-    <DockPanel DockPanel.Dock="Top">
-      <Button DockPanel.Dock="Right" Content="Browse"
-              Command="{Binding BrowseMediaCommand}"
-              Classes="ghost"
-              Margin="4,0,0,0" MinWidth="75" />
-      <TextBox x:Name="MediaFileTextBox" Text="{Binding MediaFilePath}" IsReadOnly="{Binding IsISOSource}"
-               behaviors:TextBoxDropBehavior.DropMode="File" />
-    </DockPanel>
-    <controls:FieldStatusLine DockPanel.Dock="Top" Status="{Binding MediaStatus}" />
+        <!-- separator -->
+        <Border Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
 
-    <!-- separator -->
-    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+        <!-- ── Media File ──────────────────────────────────────── -->
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+          <Run Text="Media File " FontWeight="SemiBold" />
+          <Run Text="— The full original media file the sample was cut from."
+               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+        </TextBlock>
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Content="Browse"
+                  Command="{Binding BrowseMediaCommand}"
+                  Classes="ghost"
+                  Margin="4,0,0,0" MinWidth="75" />
+          <TextBox x:Name="MediaFileTextBox" Text="{Binding MediaFilePath}" IsReadOnly="{Binding IsISOSource}"
+                   behaviors:TextBoxDropBehavior.DropMode="File" />
+        </DockPanel>
+        <controls:FieldStatusLine Status="{Binding MediaStatus}" />
 
-    <!-- ── Output ──────────────────────────────────────────── -->
-    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,2">
-      <Run Text="Output " FontWeight="SemiBold" />
-      <Run Text="— Where the rebuilt sample will be written."
-           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-    </TextBlock>
-    <DockPanel DockPanel.Dock="Top">
-      <Button DockPanel.Dock="Right" Content="Browse"
-              Command="{Binding BrowseOutputCommand}"
-              Classes="ghost"
-              Margin="4,0,0,0" MinWidth="75" />
-      <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}"
-               behaviors:TextBoxDropBehavior.DropMode="File" />
-    </DockPanel>
-    <controls:FieldStatusLine DockPanel.Dock="Top" Status="{Binding OutputStatus}" />
+        <!-- separator -->
+        <Border Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
 
-    <!-- separator -->
-    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+        <!-- ── Output ──────────────────────────────────────────── -->
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+          <Run Text="Output " FontWeight="SemiBold" />
+          <Run Text="— Where the rebuilt sample will be written."
+               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+        </TextBlock>
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Content="Browse"
+                  Command="{Binding BrowseOutputCommand}"
+                  Classes="ghost"
+                  Margin="4,0,0,0" MinWidth="75" />
+          <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}"
+                   behaviors:TextBoxDropBehavior.DropMode="File" />
+        </DockPanel>
+        <controls:FieldStatusLine Status="{Binding OutputStatus}" />
 
-    <!-- ── Action row ──────────────────────────────────────── -->
-    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
-      <Button DockPanel.Dock="Right"
-              Content="Rebuild Sample"
-              Command="{Binding RebuildCommand}"
-              Classes="primary"
-              Padding="16,4" />
-    </DockPanel>
+      </StackPanel>
+    </ScrollViewer>
 
-    <!-- ── Result ──────────────────────────────────────────── -->
-    <Border DockPanel.Dock="Top"
-            IsVisible="{Binding ShowResult}"
-            Background="{Binding ResultSuccess, Converter={StaticResource ResultSuccessToBrush}}"
-            Padding="8,6" Margin="0,0,0,4" CornerRadius="4">
-      <TextBlock Text="{Binding ResultSummary}" FontWeight="SemiBold" />
-    </Border>
+    <!-- ── Pinned action band — ALWAYS visible (the a11y survey's core defect: this row
+         clipped off-screen mid-run). Overlay/adorner implementations forbidden. The two
+         separators bracketing it are the SAME two pre-existing Border elements from today's
+         markup (relocated together, not duplicated); Margin is NOT a local value on either —
+         Classes="pinnedSeparator" supplies today's verbatim 0,4 at normal size with a
+         measured compact-only tightening (see Styles.axaml). ── -->
+    <StackPanel Grid.Row="2">
+      <Border Classes="pinnedSeparator" Height="1" Background="{DynamicResource BorderSeparator}" />
 
-    <!-- separator -->
-    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+      <!-- ── Action row ────────────────────────────────────────── Margin is NOT a local
+           value (same reason as the Expander above: the existing compact-mode margin-
+           tightening style, Grid.compactHeight DockPanel.actionBar, needs to be able to win —
+           closes the measured 2-DIP compact+HelpOpen overage). Classes="actionBar" supplies
+           the SAME 0,0,0,4 base margin at normal size (pixel-identical), zeroed only in
+           compact (task-2 precedent: ReconstructorView's own action DockPanel). -->
+      <DockPanel Classes="actionBar">
+        <Button DockPanel.Dock="Right"
+                Content="Rebuild Sample"
+                Command="{Binding RebuildCommand}"
+                Classes="primary"
+                Padding="16,4" />
+      </DockPanel>
 
-    <!-- ── Log (fills remaining space) ─────────────────────── -->
-    <DockPanel>
+      <!-- ── Result banner ─────────────────────────────────────── Visual-only surface,
+           capped at 2 lines (a11y rev-3 NEW-4) so a very long ResultSummary (e.g. an
+           exception message) can never grow the pinned band past its own budget.
+           TextWrapping="Wrap" is what makes MaxLines meaningful (otherwise a single-line,
+           NoWrap block never reaches a second line to cap). ToolTip.Tip +
+           AutomationProperties.HelpText both carry the FULL, untrimmed summary — same
+           visual-only-trim rule as the compact tip (ReconstructorView's own
+           TextBlock.tipLine). This element carries NO LiveSetting; the announcement itself
+           rides the always-in-tree ResultStatus TextBlock in the log header below
+           (visibility-toggling here would race/lose the announcement — codex round-4).
+           Padding/Margin are NOT local values (house rule: the Border.resultBanner style
+           supplies today's verbatim 8,6 / 0,0,0,4 at normal size, with a measured
+           compact-only tightening — see Styles.axaml). -->
+      <Border x:Name="ResultBanner" Classes="resultBanner"
+              IsVisible="{Binding ShowResult}"
+              Background="{Binding ResultSuccess, Converter={StaticResource ResultSuccessToBrush}}"
+              CornerRadius="4">
+        <TextBlock Text="{Binding ResultSummary}" FontWeight="SemiBold"
+                   TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxLines="2"
+                   ToolTip.Tip="{Binding ResultSummary}"
+                   AutomationProperties.HelpText="{Binding ResultSummary}" />
+      </Border>
+
+      <Border Classes="pinnedSeparator" Height="1" Background="{DynamicResource BorderSeparator}" />
+    </StackPanel>
+
+    <!-- ── Log (fills remaining space) ───────────────────────── -->
+    <DockPanel Grid.Row="3">
       <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
         <Button DockPanel.Dock="Right" Content="Save log..."
                 Command="{Binding SaveLogCommand}"
                 Classes="ghost"
                 Padding="8,2" />
-        <TextBlock DockPanel.Dock="Left" Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock x:Name="LogHeader" DockPanel.Dock="Left" Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <!-- Result announcement (a11y rev-3 NEW-4): always in the tree, mirrors
+             SaveLogStatus's own established pattern exactly — empty text renders nothing, no
+             AutomationProperties.Name (the announced name IS the text), LiveSetting=Polite so
+             a screen reader is notified the instant ResultSummary transitions from empty to
+             text WHILE this element was already realized (the visual banner above toggles
+             IsVisible and would race/lose the announcement instead — codex round-4). Given
+             its own Dock=Right strip (rather than sharing SaveLogStatus's fill/trim slot) so
+             SaveLogStatus's existing fill+trim behavior is untouched. -->
+        <TextBlock x:Name="ResultStatus" DockPanel.Dock="Right" Text="{Binding ResultSummary}"
+                   AutomationProperties.LiveSetting="Polite"
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
         <!-- Live save-outcome line (4.1.3): always in the tree — visibility-toggling would race
              the announcement; empty text renders nothing. No AutomationProperties.Name: the
              announced name IS the text. -->
@@ -113,10 +190,11 @@
       </DockPanel>
       <ListBox ItemsSource="{Binding LogEntries}"
                Classes="logList"
+               AutomationProperties.LabeledBy="{Binding #LogHeader}"
                FontFamily="{DynamicResource MonoFontFamily}"
                FontSize="{DynamicResource MonoFontSize}" />
     </DockPanel>
 
-  </DockPanel>
+  </Grid>
 
 </UserControl>

@@ -24,6 +24,21 @@ public partial class SRSReconstructorView : UserControl
         AvaloniaXamlLoader.Load(this);
 
         DataContextChanged += OnDataContextChanged;
+
+        // Small-window layout degradation (spec rev 12 §1/§2): compact below 450 inner DIPs.
+        // x:CompileBindings="False" means x:Name elements are NOT wired to auto-generated fields
+        // here (same as every other ported view in this project — see SRSCreatorView's own
+        // note); resolved once via FindControl instead.
+        Grid root = (Grid)Content!;
+        Expander helpDisclosure = this.FindControl<Expander>("HelpDisclosure")!;
+        TextBox srsFileTextBox = this.FindControl<TextBox>("SRSFileTextBox")!;
+        Behaviors.CompactHeightBehavior.SetThreshold(root, 450);
+        Behaviors.CompactHeightBehavior.SetRowSizes(root,
+            [new Behaviors.CompactRowSize(RowIndex: 1, NormalHeight: double.NaN,
+                CompactMinHeight: 110, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.AutoToStar)]);
+        Behaviors.CompactHeightBehavior.SetHelpExpander(root, helpDisclosure);
+        Behaviors.CompactHeightBehavior.SetHelpBodyMaxHeight(root, 40);
+        Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(root, srsFileTextBox);
     }
 
     // Avalonia's DataContextChanged carries no old/new values (unlike WPF's

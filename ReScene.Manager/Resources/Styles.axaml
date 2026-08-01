@@ -137,6 +137,25 @@
   <Style Selector="Grid.compactHeight DockPanel.actionBar">
     <Setter Property="Margin" Value="0" />
   </Style>
+  <!-- SRSReconstructor's pinned band (task 4): base values are today's pre-existing, unchanged
+       markup (Border Padding="8,6" Margin="0,0,0,4"; separator Margin="0,4") — normal-mode
+       rendering is untouched. Compact tightening closes a MEASURED gap: with the result
+       banner's own 2-line MaxLines cap genuinely in play (a11y rev-3 NEW-4), the pinned band's
+       natural height ran to 92 DIPs against the spec's <=75 ceiling; this recovers 20. -->
+  <Style Selector="Border.resultBanner">
+    <Setter Property="Padding" Value="8,6" />
+    <Setter Property="Margin" Value="0,0,0,4" />
+  </Style>
+  <Style Selector="Grid.compactHeight Border.resultBanner">
+    <Setter Property="Padding" Value="8,2" />
+    <Setter Property="Margin" Value="0" />
+  </Style>
+  <Style Selector="Border.pinnedSeparator">
+    <Setter Property="Margin" Value="0,4" />
+  </Style>
+  <Style Selector="Grid.compactHeight Border.pinnedSeparator">
+    <Setter Property="Margin" Value="0,2" />
+  </Style>
   <!-- No Expander-level MaxHeight: the behavior applies HelpBodyMaxHeight to the BODY's
        internal ScrollViewer only (a whole-control cap would squeeze the header). -->
   <!-- Body-scroller focusability is COMPACT-SCOPED (criterion F: no new normal-mode

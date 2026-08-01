@@ -288,6 +288,116 @@ public sealed class SRSReconstructorViewModelTests : TempDirTestBase
         Assert.DoesNotContain(vm.LogEntries, e => e.Contains("Reconstruction failed", StringComparison.Ordinal));
     }
 
+    // ── Re-arm contract (VM half) ────────────────────────────
+    //
+    // The view now carries an ALWAYS-IN-TREE "ResultStatus" TextBlock (LiveSetting=Polite)
+    // bound directly to ResultSummary, independent of ShowResult, so a screen reader is
+    // reliably notified on completion (view-level; see SRSReconstructorCompactTests). That
+    // only works if ResultSummary is a genuine empty->text transition on every run —
+    // otherwise a stale value from a previous run would sit there unannounced, and two
+    // consecutive runs producing textually IDENTICAL outcomes would raise no PropertyChanged
+    // the second time (CommunityToolkit's generated setter suppresses equal-value sets,
+    // exactly like the existing SaveLogAnnouncement contract in OperationViewModelBase). These
+    // three tests pin the VM half of that contract; the view-level BINDING itself (VM
+    // transitions empty->text, the realized ResultStatus text follows) is asserted in
+    // SRSReconstructorCompactTests.
+
+    [Fact]
+    // Run-start clears ResultSummary BEFORE the service is even called (not merely alongside
+    // ShowResult=false) — proven by observing ResultSummary from inside the fake service's own
+    // RebuildAsync, which only runs after every run-start reset line has executed.
+    public async Task RebuildAsync_RunStart_ClearsStaleResultSummaryBeforeServiceRuns()
+    {
+        var service = new FakeReconstructionService
+        {
+            Result = new SRSReconstructionResult(
+                Success: true, CRCMatch: true,
+                ExpectedCRC: 1u, ActualCRC: 1u,
+                ExpectedSize: 1L, ActualSize: 1L, ErrorMessage: null),
+        };
+        SRSReconstructorViewModel vm = CreateVm(service, new NoOpTempDirectoryService());
+        vm.SRSFilePath = Path.Combine(TempDir, "sample.srs");
+        vm.MediaFilePath = Path.Combine(TempDir, "media.mkv");
+        vm.OutputPath = Path.Combine(TempDir, "out.mkv");
+        vm.ResultSummary = "stale text from a previous run";
+
+        string? observedDuringRun = null;
+        service.OnRebuildEntered = () => observedDuringRun = vm.ResultSummary;
+
+        await vm.RebuildCommand.ExecuteAsync(null);
+
+        Assert.Equal(string.Empty, observedDuringRun);
+    }
+
+    [Fact]
+    // Two consecutive runs producing the textually IDENTICAL outcome must each be their OWN
+    // genuine empty->text transition — never a same-value no-op on the second run, or the
+    // view's LiveSetting="Polite" TextBlock would announce nothing the second time.
+    public async Task RebuildAsync_IdenticalConsecutiveOutcomes_SecondRunAlsoRaisesEmptyToTextChange()
+    {
+        var service = new FakeReconstructionService
+        {
+            Result = new SRSReconstructionResult(
+                Success: true, CRCMatch: true,
+                ExpectedCRC: 0xAAAAAAAAu, ActualCRC: 0xAAAAAAAAu,
+                ExpectedSize: 42L, ActualSize: 42L, ErrorMessage: null),
+        };
+        SRSReconstructorViewModel vm = CreateVm(service, new NoOpTempDirectoryService());
+        vm.SRSFilePath = Path.Combine(TempDir, "sample.srs");
+        vm.MediaFilePath = Path.Combine(TempDir, "media.mkv");
+        vm.OutputPath = Path.Combine(TempDir, "out.mkv");
+
+        await vm.RebuildCommand.ExecuteAsync(null);
+        string firstSummary = vm.ResultSummary;
+        Assert.NotEqual(string.Empty, firstSummary);
+
+        var secondRunChanges = new List<string>();
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(vm.ResultSummary))
+            {
+                secondRunChanges.Add(vm.ResultSummary);
+            }
+        };
+
+        await vm.RebuildCommand.ExecuteAsync(null);
+
+        Assert.Equal(firstSummary, vm.ResultSummary); // identical canned outcome, both runs
+        // Run-start clear (firstSummary -> "") then the completion set ("" -> firstSummary
+        // again): TWO raised changes, not zero — a same-value no-op at completion would
+        // silently raise nothing and the announcement would be lost.
+        Assert.Equal([string.Empty, firstSummary], secondRunChanges);
+    }
+
+    [Fact]
+    // A cancelled run must not leave a stale PREVIOUS run's result text sitting in
+    // ResultSummary: the cancel branch itself never re-populates ResultSummary (mirrors the
+    // existing neutral-cancel contract — no red/green banner on cancel), so the run-start
+    // clear is the only thing standing between a stale value and an incorrect announcement.
+    public async Task RebuildAsync_Cancelled_LeavesResultSummaryEmpty()
+    {
+        var service = new FakeReconstructionService
+        {
+            Result = new SRSReconstructionResult(
+                Success: false, CRCMatch: false,
+                ExpectedCRC: 0u, ActualCRC: 0u,
+                ExpectedSize: 0L, ActualSize: 0L, ErrorMessage: "Operation was cancelled."),
+        };
+        SRSReconstructorViewModel vm = CreateVm(service, new NoOpTempDirectoryService());
+        vm.SRSFilePath = Path.Combine(TempDir, "sample.srs");
+        vm.MediaFilePath = Path.Combine(TempDir, "media.mkv");
+        vm.OutputPath = Path.Combine(TempDir, "out.mkv");
+        vm.ResultSummary = "stale text from a previous successful run";
+
+        service.OnRebuildEntered = () => vm.CancelRebuildCommand.Execute(null);
+
+        await vm.RebuildCommand.ExecuteAsync(null);
+
+        Assert.Equal("Cancelled.", vm.ProgressMessage);
+        Assert.False(vm.ShowResult);
+        Assert.Equal(string.Empty, vm.ResultSummary);
+    }
+
     [Fact]
     // ISO path: a temp dir is created and _extractedTempFile is set before extraction begins.
     // Pointing at a bogus SRS makes the real extractor throw, exercising the catch + finally so we

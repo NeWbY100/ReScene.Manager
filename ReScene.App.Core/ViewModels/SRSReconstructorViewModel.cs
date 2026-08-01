@@ -212,6 +212,15 @@ public partial class SRSReconstructorViewModel : OperationViewModelBase
         IsRebuilding = true;
         ShowProgress = true;
         ShowResult = false;
+        // Cleared explicitly (not just implied by ShowResult=false): the view's ResultStatus
+        // TextBlock is always in the tree and bound directly to ResultSummary so its
+        // LiveSetting="Polite" announcement survives the visual banner's own visibility
+        // toggling. Without this, a stale value from a previous run would sit there
+        // unannounced, and two runs producing an identical outcome would raise no
+        // PropertyChanged the second time (CommunityToolkit's setter suppresses equal-value
+        // sets) — re-arming here guarantees completion is always a genuine empty->text
+        // transition.
+        ResultSummary = string.Empty;
         ProgressPercent = 0;
         ProgressMessage = "Starting...";
         LogEntries.Clear();
