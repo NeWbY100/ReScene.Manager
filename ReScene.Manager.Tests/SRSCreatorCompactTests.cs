@@ -768,12 +768,17 @@ public class SRSCreatorCompactTests
     /// own retro-hardened version and HexViewControlTests — geometry alone cannot catch a shifted
     /// glyph, a recolored brush, or a stray border inside the surviving region.
     /// <para>
-    /// MEASURED, no mask needed beyond the mandatory word-wrap parameter (0 here): unlike
-    /// Reconstructor's own longer text (no WrapPanel/links row exists below this view's intro to
-    /// also check), this view's shorter intro does NOT push any word across a line-break boundary
-    /// at the narrower 672-DIP TextBlock measure — confirmed by the full-row byte-for-byte
-    /// comparison passing with ZERO excluded rows. If a future content change ever needs one, name
-    /// and document it explicitly here — never broaden this mask blindly.
+    /// Round 4 removed the last exclusion pathway rather than merely leaving it unused: there is
+    /// no mask parameter any more, no crop and no intersection, and the two captures must
+    /// rasterise to the SAME integer pixel size or the test fails naming both
+    /// (<see cref="AssertFullRasterPixelIdentity"/>). MEASURED: both sides lay out at exactly
+    /// 676.000000 x 35.000000 DIPs, so both rasterise to 676x35 — 94,640 bytes each, all of them
+    /// compared. MEASURED and unchanged by that tightening:
+    /// unlike Reconstructor's own longer text (no WrapPanel/links row exists below this view's
+    /// intro to also check), this view's shorter intro does NOT push any word across a line-break
+    /// boundary at the narrower 672-DIP TextBlock measure — the whole buffer matches byte for
+    /// byte. A future content change that genuinely reflows must be fixed or escalated, not
+    /// masked back out.
     /// </para>
     /// </summary>
     [AvaloniaFact]
@@ -826,17 +831,103 @@ public class SRSCreatorCompactTests
                 // The hosted ROW itself (the Expander, post-hug-bug-fix) is now the SAME 676
                 // width as old's own natural width — MEASURED, not assumed: this is exactly what
                 // the earlier "0.0 narrowing when comparing newRow0 directly" finding already
-                // established. Comparing at matching widths means NO width-based crop is needed
-                // at all — the full row, including the 4-DIP trailing strip the TextBlock's own
-                // inset leaves inside the Expander, is genuinely compared byte-for-byte.
+                // established. This is the readable DIP-level statement of that claim; it is NOT
+                // what licenses the pixel comparison below (round-4 codex finding: a rounded-DIP
+                // equality can hide a whole-raster-column disagreement). AssertFullRasterPixelIdentity
+                // re-derives and enforces agreement itself, exactly, in integer pixels.
                 Assert.Equal(oldSize.Width, newRowSize.Width, precision: 0);
 
-                AssertPixelIdenticalOutsideHeaderMask(oldRow0, oldSize, newRow0, newRowSize, wordWrapExcludedHeight: 0);
+                AssertFullRasterPixelIdentity(oldRow0, oldSize, newRow0, newRowSize);
             }
             finally { oldWindow.Close(); }
         }
         finally { newWindow.Close(); }
     }
+
+    /// <summary>
+    /// Proves <see cref="AssertFullRasterPixelIdentity"/>'s size gate genuinely DISCRIMINATES —
+    /// that a capture-size disagreement now fails loudly instead of silently shrinking the
+    /// compared region to the intersection, which is exactly what the round-4 codex finding said
+    /// could go unnoticed ("rounded width equality plus <c>Floor(Math.Min(...))</c> can silently
+    /// omit a terminal raster column/row; full-buffer parity remains unproven"). Two rounds
+    /// before this one each reported "byte-for-byte, zero excluded" with that pathway still open,
+    /// so the claim is made executable here rather than argued.
+    /// <para>
+    /// Uses the REAL pair of controls the frame-rig test compares and perturbs only the SIZE
+    /// handed to the helper, by a sub-DIP amount chosen (from the measured geometry, not
+    /// hardcoded) to land squarely in the old blind spot: same value once rounded to whole DIPs —
+    /// so the discarded <c>precision: 0</c> equality accepted it — yet a whole extra raster line
+    /// once <c>Ceiling</c> runs, which the discarded <c>Floor(Math.Min(...))</c> region then
+    /// dropped without a word. Both of those properties are asserted, so the construction cannot
+    /// quietly stop being the blind spot. Run for BOTH dimensions (the omitted line may be a
+    /// column or a row), then the untampered sizes are re-run against the SAME two controls and
+    /// still pass — proving the failures above were the perturbation, not a real defect.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void AssertFullRasterPixelIdentity_SubDipDriftAcrossARasterLine_FailsInsteadOfShrinkingToTheIntersection()
+    {
+        SRSCreatorViewModel vm = CreateVm();
+        var view = new SRSCreatorView { DataContext = vm };
+        (Window newWindow, Grid newRoot) = CompactViewRig.HostAt(view, ExpandedInner);
+        try
+        {
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+
+            Control newRow0 = newRoot.Children.OfType<Control>().Single(c => Grid.GetRow(c) == 0);
+            Size newRowSize = newRow0.Bounds.Size;
+
+            Window oldWindow = BuildPreDisclosureRow0Window();
+            try
+            {
+                oldWindow.Show();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                Dispatcher.UIThread.RunJobs();
+                Control oldRow0 = (Control)oldWindow.Content!;
+                Size oldSize = oldRow0.Bounds.Size;
+
+                AssertDriftedSizeFails(new Size(DriftAcrossOneRasterLine(newRowSize.Width), newRowSize.Height));
+                AssertDriftedSizeFails(new Size(newRowSize.Width, DriftAcrossOneRasterLine(newRowSize.Height)));
+
+                // Untampered, same two controls, same helper: still byte-for-byte identical across
+                // the whole buffer — so the two failures above were caused by the perturbation and
+                // not by a real parity defect the drift happened to expose.
+                AssertFullRasterPixelIdentity(oldRow0, oldSize, newRow0, newRowSize);
+
+                void AssertDriftedSizeFails(Size drifted)
+                {
+                    // The discarded gate accepted this pair (identical to whole DIPs)...
+                    Assert.Equal(oldSize.Width, drifted.Width, precision: 0);
+                    Assert.Equal(oldSize.Height, drifted.Height, precision: 0);
+
+                    // ...while the captures genuinely differ by one whole raster line, which the
+                    // discarded Floor(Math.Min(...)) region then excluded from every byte compared.
+                    Assert.NotEqual(
+                        new PixelSize((int)Math.Ceiling(oldSize.Width), (int)Math.Ceiling(oldSize.Height)),
+                        new PixelSize((int)Math.Ceiling(drifted.Width), (int)Math.Ceiling(drifted.Height)));
+
+                    Xunit.Sdk.FailException ex = Assert.Throws<Xunit.Sdk.FailException>(
+                        () => AssertFullRasterPixelIdentity(oldRow0, oldSize, newRow0, drifted));
+                    Assert.Contains("EXACTLY the same integer pixel size", ex.Message, StringComparison.Ordinal);
+                    Assert.Contains($"{drifted.Width:F4}x{drifted.Height:F4}", ex.Message, StringComparison.Ordinal);
+                }
+            }
+            finally { oldWindow.Close(); }
+        }
+        finally { newWindow.Close(); }
+    }
+
+    /// <summary>
+    /// Returns a value that rounds to the SAME whole DIP as <paramref name="value"/> but whose
+    /// <c>Ceiling</c> — the capture size — differs by exactly one raster line. Derived from the
+    /// measured value rather than hardcoded, because which direction lands in the blind spot
+    /// depends on the fractional part: when <c>Ceiling == Round</c> the drift must go up (into the
+    /// next whole DIP's lower half), otherwise the fraction already rounds down and snapping to
+    /// the whole DIP itself is what changes the ceiling.
+    /// </summary>
+    private static double DriftAcrossOneRasterLine(double value) =>
+        Math.Ceiling(value) == Math.Round(value) ? Math.Ceiling(value) + 0.4 : Math.Round(value);
 
     /// <summary>Verbatim reconstruction of SRSCreatorView.axaml's row-0 TextBlock before this task (git history).</summary>
     private static Window BuildPreDisclosureRow0Window()
@@ -854,63 +945,84 @@ public class SRSCreatorCompactTests
     }
 
     /// <summary>
-    /// Renders both controls to their own <see cref="RenderTargetBitmap"/> at their OWN true
-    /// geometry (each sized to its own full bounds, independent of whatever window each is
-    /// actually hosted in) and requires true byte-for-byte pixel identity across the FULL,
-    /// matching-width region — no width-based crop. Round-3 codex finding: an earlier version
-    /// compared the OLD side's full natural width against the NEW side's narrower, cropped-to-
-    /// the-inner-TextBlock width, silently excluding the trailing strip inside the Expander's own
-    /// bounds from any scrutiny ("the old-only strip is cropped... full-row reference parity
-    /// remains unproven"). Callers must now supply FULL-ROW geometry on both sides (verified
-    /// equal by the caller before this runs) so that strip is genuinely compared, not skipped.
-    /// Only <paramref name="wordWrapExcludedHeight"/> rows from the top (if non-zero — a
-    /// word-wrap-sensitive caption band, content-justified) are ever excluded. Mirrors
-    /// <c>ReconstructorCompactTests</c>' own helper of the same shape and rationale.
+    /// Renders both controls to a <see cref="RenderTargetBitmap"/> at their OWN true geometry
+    /// (each sized to its own full bounds, independent of whatever window each is actually hosted
+    /// in) and requires true byte-for-byte identity of the ENTIRE buffer on BOTH sides. There is
+    /// no mask, no crop, no intersection and no offset: every byte of both captures participates.
+    /// <para>
+    /// Round-4 codex finding, and the reason this is written the way it is: the previous version
+    /// checked size agreement only at ROUNDED DIP granularity
+    /// (<c>Assert.Equal(w1, w2, precision: 0)</c>) and then derived its comparison region from
+    /// <c>Floor(Math.Min(...))</c>. Those two facts combine into a silent exclusion pathway — a
+    /// pair like 676.0 vs 676.4 passes the rounded check, yet <c>Ceiling</c> makes the two
+    /// captures 676 and 677 raster columns wide, and <c>Floor(Min(...))</c> then quietly compares
+    /// 676 of them, leaving the wider capture's terminal column entirely unscrutinised while the
+    /// test still reported "full parity, zero excluded". The same arithmetic applies to the
+    /// terminal row via the height. Whether that pathway is currently reachable is beside the
+    /// point: an unproven region must fail loudly, not shrink. MEASURED on the discarded body
+    /// with exactly that pair: its size gate passed, the captures came out 676x35 and 677x35, the
+    /// compared region was 676x35, and 140 bytes of the wider capture (one terminal column x 35
+    /// rows) were never read — under a message that claimed "no width-based crop".
+    /// </para>
+    /// <para>
+    /// MEASURED, and the reason the gate below is load-bearing rather than pedantic:
+    /// <c>RenderTargetBitmap.Render</c> lays the visual out to the BITMAP's size, so the capture
+    /// size is an input to the rendering, not just a canvas around it. Rendering this view's own
+    /// row into a 677-wide bitmap instead of its natural 676 perturbs the SHARED columns too
+    /// (first difference at x=0, y=5 — the text reflows), not merely the extra one. So a raster
+    /// disagreement does not mean "the same picture, one line longer"; it means two different
+    /// layouts. Clamping to their intersection would compare two different renderings and report
+    /// parity — strictly worse than the omitted-terminal-line problem that motivated this fix.
+    /// </para>
+    /// <para>
+    /// So raster agreement is now asserted EXACTLY, in integer pixels, in BOTH dimensions, BEFORE
+    /// a single byte is read — a mismatch is a failure that names both sizes, never a clamp. Once
+    /// past it, ONE <see cref="PixelSize"/> value renders both sides, so equal stride and equal
+    /// buffer length are structural rather than merely asserted, and the loop below walks the
+    /// whole buffer end to end. Proven to discriminate by
+    /// <see cref="AssertFullRasterPixelIdentity_SubDipDriftAcrossARasterLine_FailsInsteadOfShrinkingToTheIntersection"/>.
+    /// </para>
     /// </summary>
-    private static void AssertPixelIdenticalOutsideHeaderMask(Control oldControl, Size oldSize, Control newControl, Size newSize, double wordWrapExcludedHeight)
+    private static void AssertFullRasterPixelIdentity(Control oldControl, Size oldSize, Control newControl, Size newSize)
     {
         const int BytesPerPixel = 4;
-
-        Assert.Equal(oldSize.Width, newSize.Width, precision: 0);
 
         var oldPixelSize = new PixelSize((int)Math.Ceiling(oldSize.Width), (int)Math.Ceiling(oldSize.Height));
         var newPixelSize = new PixelSize((int)Math.Ceiling(newSize.Width), (int)Math.Ceiling(newSize.Height));
 
-        byte[] oldPixels = RenderToPixelBuffer(oldControl, oldPixelSize);
-        byte[] newPixels = RenderToPixelBuffer(newControl, newPixelSize);
-
-        // Math.Min here is a defensive guard against sub-DIP rounding drift between two
-        // independent layout passes (both sides were just asserted equal to 0 decimals above) —
-        // not a deliberate "crop the wider one" mechanism; there is no wider one.
-        int compareWidth = (int)Math.Floor(Math.Min(oldSize.Width, newSize.Width));
-        int compareHeight = (int)Math.Floor(Math.Min(oldSize.Height, newSize.Height));
-        int wordWrapExcludedRows = (int)Math.Ceiling(wordWrapExcludedHeight);
-        Assert.True(compareWidth > 0 && compareHeight > wordWrapExcludedRows,
-            $"comparison region must be non-empty (old {oldSize}, new {newSize}, excluded band {wordWrapExcludedHeight:F1})");
-
-        int oldStride = oldPixelSize.Width * BytesPerPixel;
-        int newStride = newPixelSize.Width * BytesPerPixel;
-        int rowBytes = compareWidth * BytesPerPixel;
-
-        for (int y = wordWrapExcludedRows; y < compareHeight; y++)
+        if (oldPixelSize != newPixelSize)
         {
-            int oldRowStart = y * oldStride;
-            int newRowStart = y * newStride;
+            Assert.Fail(
+                $"the two captures must rasterise to EXACTLY the same integer pixel size before any " +
+                $"comparison is meaningful — old {oldPixelSize} (bounds {oldSize.Width:F4}x{oldSize.Height:F4}) " +
+                $"vs new {newPixelSize} (bounds {newSize.Width:F4}x{newSize.Height:F4}). A disagreement means " +
+                "one capture has a raster column or row with no counterpart in the other; comparing their " +
+                "intersection instead would leave that line unproven while still reporting full parity.");
+        }
 
-            for (int x = 0; x < rowBytes; x++)
+        // Past the gate the two sizes are the same value, so a SINGLE PixelSize renders both:
+        // equal stride and equal buffer length are structural here, not an assumption.
+        PixelSize rasterSize = oldPixelSize;
+        Assert.True(rasterSize.Width > 0 && rasterSize.Height > 0,
+            $"nothing to compare — both captures rasterise to {rasterSize}.");
+
+        byte[] oldPixels = RenderToPixelBuffer(oldControl, rasterSize);
+        byte[] newPixels = RenderToPixelBuffer(newControl, rasterSize);
+
+        int stride = rasterSize.Width * BytesPerPixel;
+
+        for (int i = 0; i < oldPixels.Length; i++)
+        {
+            if (oldPixels[i] == newPixels[i])
             {
-                if (oldPixels[oldRowStart + x] == newPixels[newRowStart + x])
-                {
-                    continue;
-                }
-
-                int pixelX = x / BytesPerPixel;
-                Assert.Fail(
-                    $"header region pixel mismatch at ({pixelX}, {y}) — old byte 0x{oldPixels[oldRowStart + x]:X2} " +
-                    $"vs new byte 0x{newPixels[newRowStart + x]:X2}. Compared the FULL matching-width region " +
-                    $"{compareWidth}x{compareHeight} DIPs, rows {wordWrapExcludedRows}-{compareHeight - 1} " +
-                    $"(old render {oldPixelSize}, new render {newPixelSize}); no width-based crop.");
+                continue;
             }
+
+            Assert.Fail(
+                $"header pixel mismatch at ({i % stride / BytesPerPixel}, {i / stride}) — old byte " +
+                $"0x{oldPixels[i]:X2} vs new byte 0x{newPixels[i]:X2}. Both captures are {rasterSize} " +
+                $"({oldPixels.Length} bytes each) and every byte of both is compared: no mask, no crop, " +
+                "no intersection.");
         }
     }
 
