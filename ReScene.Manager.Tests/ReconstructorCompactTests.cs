@@ -335,6 +335,7 @@ public class ReconstructorCompactTests
             // (what a TextBlock's automation peer names itself from, absent an explicit
             // AutomationProperties.Name) is never a pre-truncated string.
             Assert.Equal(FullTip, tip.Text);
+            Assert.Null(AutomationProperties.GetName(tip)); // pins the peer-derivation assumption above
             Assert.Equal(TextTrimming.CharacterEllipsis, tip.TextTrimming);
             Assert.Equal(TextWrapping.NoWrap, tip.TextWrapping);
 

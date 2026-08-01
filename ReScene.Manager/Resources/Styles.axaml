@@ -141,13 +141,19 @@
        internal ScrollViewer only (a whole-control cap would squeeze the header). -->
   <!-- Body-scroller focusability is COMPACT-SCOPED (criterion F: no new normal-mode
        Tab stop). The Reconstructor's body never takes this class-pair — its links are
-       the route. -->
+       the route. ScrollViewerHomeEndKeys.Enabled closes a real platform gap (see that
+       behavior's own doc): Avalonia's stock ScrollViewer.OnKeyDown wires PageUp/PageDown to
+       its own paging methods but never wires Home/End to its own ScrollToHome/ScrollToEnd,
+       despite the design doc's assumption that they "just work" alongside the Page keys
+       (spec rev 12 §2). Set here (not per-view code-behind) so every task's own compact Help
+       body inherits it for free. -->
   <Style Selector="ScrollViewer.helpBody">
     <Setter Property="Focusable" Value="False" />
     <Setter Property="AutomationProperties.Name" Value="Help content" />
   </Style>
   <Style Selector="Grid.compactHeight ScrollViewer.helpBody">
     <Setter Property="Focusable" Value="True" />
+    <Setter Property="behaviors:ScrollViewerHomeEndKeys.Enabled" Value="True" />
   </Style>
 
   <!-- Compact tip (a11y conditions 1/2: trimming is VISUAL-ONLY over the full bound
