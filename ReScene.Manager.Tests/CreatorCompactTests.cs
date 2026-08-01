@@ -2100,10 +2100,30 @@ public class CreatorCompactTests
     /// Extracted so both the default-theme and the complete-HC-fixture tests (expanded AND
     /// compact variants of each) share the exact same sampling/math, never duplicated by hand.
     /// </summary>
+    /// <summary>
+    /// Fix round 3 (codex finding 1): previously read <c>splitter.Background</c>'s own LOGICAL
+    /// brush color directly — the exact same defect class as round 2's "Transparent.Color is
+    /// meaningless" bug, just reachable a different way: MEASURED (a throwaway diagnostic) that
+    /// setting <c>splitter.Opacity = 0</c> leaves BOTH <c>IsEffectivelyVisible</c> AND
+    /// <c>splitter.Background</c>'s own logical color COMPLETELY UNCHANGED (still reporting the
+    /// accent color), while the ACTUAL RENDERED PIXEL at that location silently reverts to
+    /// whatever is behind it. A property-read (or a mere IsEffectivelyVisible check) would have
+    /// let a visually-suppressed, unpainted, or covered focus indicator pass this contrast check
+    /// undetected. Fixed to (a) an IN-BOUNDS check (<see cref="AssertFullyWithinWindow"/>, this
+    /// file's own established clip-aware visibility helper — catches scrolled-away/clipped cases
+    /// the opacity case does NOT, so both checks are needed, not either alone) and (b) sampling the
+    /// REAL RENDERED PIXEL at the splitter's own center (the same technique already used for both
+    /// neighboring panes) instead of trusting the logical property. Proven to genuinely
+    /// discriminate by <see cref="Splitter_FocusVisual_ContrastMeasurement_UnpaintedSplitter_FailsTheCheck"/>.
+    /// </summary>
     private static (double ContrastVsAbove, double ContrastVsBelow) MeasureSplitterFocusContrast(GridSplitter splitter, Window window)
     {
-        var focusBrush = Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background);
-        Color focusColor = focusBrush.Color;
+        AssertFullyWithinWindow(splitter, window);
+
+        Point center = new(splitter.Bounds.Width / 2, splitter.Bounds.Height / 2);
+        Point? centerInWindow = splitter.TranslatePoint(center, window);
+        Assert.True(centerInWindow is not null, "test precondition: the splitter's own center must translate into window coordinates");
+        Color focusColor = SamplePixelColor(window, centerInWindow!.Value);
 
         Point? aboveInWindow = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, -3), window);
         Point? belowInWindow = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, splitter.Bounds.Height + 3), window);
@@ -2183,19 +2203,18 @@ public class CreatorCompactTests
                 Dispatcher.UIThread.RunJobs();
 
                 var overriddenBrush = Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background);
-                Assert.Equal(highContrastColor, overriddenBrush.Color);
+                Assert.Equal(highContrastColor, overriddenBrush.Color); // WIRING claim: the property resolved correctly
                 Assert.NotEqual(beforeColor, overriddenBrush.Color);
 
-                Point? aboveInWindow = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, -3), window);
-                Point? belowInWindow = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, splitter.Bounds.Height + 3), window);
-                Assert.True(aboveInWindow is not null && belowInWindow is not null);
+                // Fix round 3 (codex finding 1): the CONTRAST claim must come from the ACTUAL
+                // RENDERED PIXEL (mirrors MeasureSplitterFocusContrast's own identical fix), not
+                // from the known override VALUE — a logically-correct-but-unpainted/clipped focus
+                // indicator would otherwise pass this exact assertion undetected.
+                (double contrastVsAbove, double contrastVsBelow) = MeasureSplitterFocusContrast(splitter, window);
 
-                Color abovePane = SamplePixelColor(window, aboveInWindow!.Value);
-                Color belowPane = SamplePixelColor(window, belowInWindow!.Value);
-
-                Assert.True(ContrastRatio(highContrastColor, abovePane) >= 3.0,
+                Assert.True(contrastVsAbove >= 3.0,
                     "the high-contrast override color must ALSO clear the 3:1 bar — a real high-contrast theme's own color choice would, and this proves the mechanism doesn't accidentally defeat itself");
-                Assert.True(ContrastRatio(highContrastColor, belowPane) >= 3.0);
+                Assert.True(contrastVsBelow >= 3.0);
             }
             finally
             {
@@ -2470,6 +2489,163 @@ public class CreatorCompactTests
                 (double revertedAbove, double revertedBelow) = MeasureSplitterFocusContrast(splitter, window);
                 Assert.True(revertedAbove >= 3.0 && revertedBelow >= 3.0,
                     "reverting the local override should restore the passing, untampered mechanism");
+            }
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 3 (codex finding 1)'s own required discriminating-evidence case: proves
+    /// <see cref="MeasureSplitterFocusContrast"/>'s rendered-pixel fix genuinely catches an
+    /// "unpainted/clipped" focus indicator that BOTH a naive property-read AND a plain
+    /// <c>IsEffectivelyVisible</c> check would miss. <c>Opacity = 0</c> is the sharpest available
+    /// case, MEASURED directly (a throwaway diagnostic): it leaves <c>IsEffectivelyVisible</c>,
+    /// <c>IsVisible</c>, AND the splitter's own logical <c>Background</c> color COMPLETELY
+    /// UNCHANGED (still reporting the focused accent color) — only the ACTUAL RENDERED PIXEL
+    /// silently reverts to whatever is behind it. This is precisely the class of real-world defect
+    /// the fix exists to catch (a focus indicator that is logically "there" and "visible" by every
+    /// property-based signal, yet invisible to an actual user).
+    /// </summary>
+    [AvaloniaFact]
+    public void Splitter_FocusVisual_ContrastMeasurement_UnpaintedSplitter_FailsTheCheck()
+    {
+        CreatorViewModel vm = CreateVm();
+        for (int i = 0; i < 3; i++)
+        {
+            vm.StoredFiles.Add(Item($@"C:\release\file{i:D2}.nfo", $"file{i:D2}.nfo"));
+        }
+        var view = new CreatorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        try
+        {
+            GridSplitter splitter = window.GetVisualDescendants().OfType<GridSplitter>().Single();
+            splitter.Focus();
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+
+            // Sanity: the REAL, untampered mechanism passes first.
+            (double realAbove, double realBelow) = MeasureSplitterFocusContrast(splitter, window);
+            Assert.True(realAbove >= 3.0 && realBelow >= 3.0, "test precondition: the untampered splitter must pass before it is deliberately suppressed");
+
+            Color loggedBackgroundBefore = Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background).Color;
+
+            // BREAK: suppress rendering WITHOUT touching any property a naive check would read.
+            splitter.Opacity = 0;
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+
+            // The exact reason a property-read (round 0/1/2's own original shape) or a plain
+            // visibility flag would have MISSED this: none of them changed. This is WHY the
+            // in-bounds check (AssertFullyWithinWindow, itself unable to see this case) is not
+            // sufficient alone — MeasureSplitterFocusContrast passes straight through it and only
+            // the rendered-pixel sample downstream actually reflects the suppression.
+            Assert.True(splitter.IsEffectivelyVisible, "test precondition: Opacity=0 must NOT flip IsEffectivelyVisible — that is exactly what makes this case dangerous");
+            Assert.True(splitter.IsVisible);
+            Assert.True(splitter.Bounds.Width > 0 && splitter.Bounds.Height > 0, "test precondition: Opacity=0 must NOT collapse layout bounds either");
+            Assert.Equal(loggedBackgroundBefore, Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background).Color);
+
+            (double brokenAbove, double brokenBelow) = MeasureSplitterFocusContrast(splitter, window);
+            Assert.True(brokenAbove < 3.0 && brokenBelow < 3.0,
+                $"the unpainted (Opacity=0) splitter should have FAILED the 3:1 bar — its rendered pixel no longer shows the focus color at all — but measured {brokenAbove:F2}:1 / {brokenBelow:F2}:1: this covering test no longer discriminates.");
+
+            // REVERT and confirm the untampered mechanism passes again.
+            splitter.Opacity = 1;
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+
+            (double revertedAbove, double revertedBelow) = MeasureSplitterFocusContrast(splitter, window);
+            Assert.True(revertedAbove >= 3.0 && revertedBelow >= 3.0, "reverting Opacity should restore the passing, untampered mechanism");
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 3, ACT-NOW item: "focused-splitter visibility after continued resizing" was
+    /// untested — the staged focus-recovery contract (<c>CompactHeightBehavior</c>'s own
+    /// capture/relocate machinery) is proven for OBSCURED-CAPTURED elements elsewhere in this
+    /// suite, but never specifically for the splitter AS the focus-holder across a genuinely
+    /// continuous shrink, including crossing the compact threshold and continuing to shrink
+    /// AFTER that (a within-mode resize, which <c>CompactHeightBehavior.Evaluate</c>'s own
+    /// early-return means does NOT re-run the staged capture/recovery sequence at all — so if
+    /// anything were going to strand the splitter, it would be here).
+    /// <para>
+    /// BLOCKED — this test FINDS A REAL, REPRODUCIBLE PRODUCTION GAP, root-caused to the SHARED
+    /// <c>CompactHeightBehavior</c> (used by all six converted views), not to this view's own
+    /// wiring — per the round-3 dispatch's own explicit instruction ("if that fix needs anything
+    /// beyond this view's wiring, report BLOCKED... instead of scope-creeping into the shared
+    /// behavior"), the fix is NOT attempted here. Kept in the suite, SKIPPED with this explanation,
+    /// as the discriminating evidence trail rather than silently deleted or left failing unexplained.
+    /// </para>
+    /// <para>
+    /// MEASURED (reproduced three times, isolating the exact trigger): the brief's OWN worst case
+    /// (<see cref="ForceWorstCase"/> — 12 detected sets, both statuses, scanning, 8 stored files,
+    /// creating+progress) is what exposes it; two narrower diagnostics (worst-case content minus
+    /// the 8 stored files; then a direct 900→319 jump instead of a gradual sequence) each found NO
+    /// gap, which is why the earliest drafts of this investigation concluded there wasn't one — the
+    /// gradual, full-worst-case combination is what surfaces it. Sequence observed: crossing the
+    /// threshold (720→719) IS a genuine transition, so <c>CompactHeightBehavior</c>'s own staged
+    /// recovery correctly fires ONCE — the config <c>ScrollViewer</c>'s Offset moves from
+    /// <c>(0,0)</c> to <c>(0,22)</c>, just enough to bring the (by-then-obscured) splitter back
+    /// into its OWN, then-321-DIP-tall viewport. But every SUBSEQUENT step (719→600→500→400→319,
+    /// none of which are mode transitions) shrinks that SAME viewport further — 321→261→211→161→121
+    /// DIPs — while the Offset stays FROZEN at 22 (nothing re-evaluates it, since
+    /// <c>Evaluate()</c>'s own <c>if (!isTransition &amp;&amp; state.Established) return;</c> skips
+    /// the entire staged sequence for a same-mode resize). The splitter's own position within the
+    /// scrollable content never moves, so a viewport that keeps shrinking around a frozen offset
+    /// eventually clips it again: at the floor (319), clip-aware visible region reported
+    /// <c>(12, 114)..(672, 375)</c> against the splitter's own <c>(12, 429)..(672, 435)</c> — fully
+    /// below it, obscured, while STILL logically focused. Root cause is <c>CompactHeightBehavior</c>
+    /// treating "obscurement recheck" as transition-triggered only; a general fix would need it to
+    /// also recheck the currently-focused element's visibility on ANY bounds change once compact
+    /// (not just on entry), which touches the shared mechanism all six views depend on — outside
+    /// this task's own scope to change unilaterally.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact(Skip = "BLOCKED (fix round 3): reproduces a real production gap in the SHARED CompactHeightBehavior — its own Evaluate() early-return skips staged focus-recovery entirely on non-transition (within-mode) resizes, so a focused element correctly recovered ONCE at the compact-entry transition (config ScrollViewer.Offset moved to (0,22)) becomes RE-obscured by further shrinking of the same viewport (321->121 DIPs) with nothing re-checking it. Fixing this belongs in the shared behavior serving all six converted views, not this view's own wiring - reported BLOCKED per the round-3 dispatch's own explicit instruction rather than scope-creeping into shared code. Full reproduction, exact numbers, and root-cause citation in task-6-report.md's Fix round 3 section.")]
+    public void Splitter_StaysFocusedAndVisibleWithRenderedIndication_AcrossContinuousShrinkPastThreshold()
+    {
+        CreatorViewModel vm = CreateVm();
+        ForceWorstCase(vm);
+        var view = new CreatorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, 900.0);
+        try
+        {
+            GridSplitter splitter = window.GetVisualDescendants().OfType<GridSplitter>().Single();
+            splitter.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(splitter.IsFocused, "test precondition: the splitter must genuinely take focus before the shrink sequence begins");
+
+            // Comfortably expanded, down through Threshold+1/Threshold/Threshold-1 (the transition
+            // itself), then CONTINUING to shrink well past it — the within-compact regime
+            // CompactHeightBehavior's own Evaluate() does NOT re-run staged recovery for.
+            double[] shrinkSteps = [850, 800, 750, ExpandedInner, Threshold, Threshold - 1, 600, 500, 400, CompactInner];
+            foreach (double targetInner in shrinkSteps)
+            {
+                double overhead = window.Height - root.Bounds.Height;
+                window.Height = targetInner + overhead;
+                Dispatcher.UIThread.RunJobs();
+                // Drain the Loaded-priority staged-recovery post (CompactHeightBehavior defers its
+                // own obscurement recheck one dispatcher-priority level below layout).
+                for (int i = 0; i < 5; i++)
+                {
+                    Dispatcher.UIThread.RunJobs();
+                }
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                Dispatcher.UIThread.RunJobs();
+
+                Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+                Assert.True(focused is not null, $"at inner height {targetInner}, focus must never be stranded to NOTHING");
+                AssertFullyWithinWindow(focused!, window);
+
+                if (ReferenceEquals(focused, splitter))
+                {
+                    (double contrastVsAbove, double contrastVsBelow) = MeasureSplitterFocusContrast(splitter, window);
+                    Assert.True(contrastVsAbove >= 3.0 && contrastVsBelow >= 3.0,
+                        $"at inner height {targetInner}, the splitter is still the focus-holder but its rendered focus indication no longer clears 3:1 contrast ({contrastVsAbove:F2}:1 / {contrastVsBelow:F2}:1)");
+                }
             }
         }
         finally { window.Close(); }
