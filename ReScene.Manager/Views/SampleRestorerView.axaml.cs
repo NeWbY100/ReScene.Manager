@@ -18,5 +18,24 @@ namespace ReScene.Manager.Views;
 /// </summary>
 public partial class SampleRestorerView : UserControl
 {
-    public SampleRestorerView() => AvaloniaXamlLoader.Load(this);
+    public SampleRestorerView()
+    {
+        AvaloniaXamlLoader.Load(this);
+
+        // Small-window layout degradation (spec rev 12 §1/§2): compact below 535 inner DIPs — the
+        // headline defect view (action row + log measured 0px at 700×450 BASE state under the
+        // pre-conversion DockPanel). x:CompileBindings="False" means x:Name elements are NOT
+        // wired to auto-generated fields here (same as every other ported view in this project) —
+        // resolved once via FindControl instead.
+        Grid root = (Grid)Content!;
+        Expander helpDisclosure = this.FindControl<Expander>("HelpDisclosure")!;
+        TextBox srrFileTextBox = this.FindControl<TextBox>("SRRFileTextBox")!;
+        Behaviors.CompactHeightBehavior.SetThreshold(root, 535);
+        Behaviors.CompactHeightBehavior.SetRowSizes(root,
+            [new Behaviors.CompactRowSize(RowIndex: 1, NormalHeight: double.NaN,
+                CompactMinHeight: 110, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.AutoToStar)]);
+        Behaviors.CompactHeightBehavior.SetHelpExpander(root, helpDisclosure);
+        Behaviors.CompactHeightBehavior.SetHelpBodyMaxHeight(root, 40);
+        Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(root, srrFileTextBox);
+    }
 }

@@ -5,148 +5,211 @@
              x:Class="ReScene.Manager.Views.SampleRestorerView"
              x:CompileBindings="False">
 
-  <DockPanel Margin="{DynamicResource PageMargin}">
+  <Grid Margin="{DynamicResource PageMargin}" x:Name="RootGrid">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />                 <!-- 0: Help chrome -->
+      <RowDefinition Height="Auto" />                 <!-- 1: config (AutoToStar) -->
+      <RowDefinition Height="Auto" />                 <!-- 2: pinned action band -->
+      <RowDefinition Height="*" MinHeight="80" />     <!-- 3: log band -->
+    </Grid.RowDefinitions>
 
-    <!-- ── Tab description ─────────────────────────────────── -->
-    <TextBlock DockPanel.Dock="Top"
-               Text="Restore media files using SRS data embedded in an SRR file. Select a directory containing the media files to restore — metadata and structure will be reconstructed and CRC-verified."
-               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
-               TextWrapping="Wrap" Margin="0,0,0,6" />
+    <!-- ── Help disclosure (small-window degradation, spec §2) ── Single instance, always in
+         the tree: normal mode renders FLAT (header hidden, body force-expanded by
+         CompactHeightBehavior) so the page is pixel-identical to the pre-disclosure layout;
+         compact mode shows the header and starts collapsed. This view has no links (like
+         SRSCreator/SRSReconstructor, unlike Reconstructor) — the intro TextBlock is the whole
+         body. Margin is NOT a local value here (house rule: local values beat unconditional
+         styles, so a local "0,0,0,6" would defeat the compact-mode margin-tightening override) —
+         the base value lives in the helpDisclosure style instead (task-3 finding).
+         HorizontalAlignment/HorizontalContentAlignment ARE local values (the hug-bug fix):
+         Fluent's Expander defaults to Left, so without this it hugs its own content's width
+         instead of filling the Grid column. -->
+    <Expander Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
+              HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+              AutomationProperties.Name="Help">
+      <Expander.Header>
+        <TextBlock Text="Help" FontSize="{DynamicResource FontSizeCaption}" />
+      </Expander.Header>
+      <!-- Body scroller: keyboard route for the text-only body (spec §2 rev 10) —
+           Classes="helpBody" is focusable IN COMPACT ONLY via the class-scoped style. Hosts
+           the former tab-description TextBlock verbatim, minus its old DockPanel.Dock/margin
+           (margin moved to the Expander). NO right inset here (deviation from the house rule's
+           usual 4px content-panel inset, task-2/3/4's own pattern): MEASURED — this view's own
+           intro sentence is long enough that narrowing its available width by even 4px shifts a
+           word-wrap point on the first line, producing a genuine pixel difference from today's
+           markup (frame-rig red at (660,10): old byte 0x9A vs new byte 0x00), not just a narrower
+           right margin. Criterion F (normal-mode pixel-parity) is treated as the stricter,
+           blocking requirement; the 4px inset was a scrollbar-clearance nicety for compact mode
+           only, and this view's compact body has ample width (676 DIPs) to spare regardless. -->
+      <ScrollViewer Classes="helpBody" VerticalScrollBarVisibility="Auto"
+                    ScrollViewer.AllowAutoHide="False">
+        <TextBlock Text="Restore media files using SRS data embedded in an SRR file. Select a directory containing the media files to restore — metadata and structure will be reconstructed and CRC-verified."
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                   TextWrapping="Wrap" />
+      </ScrollViewer>
+    </Expander>
 
-    <!-- ── SRR File ──────────────────────────────────────────── -->
-    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,2">
-      <Run Text="SRR File " FontWeight="SemiBold" />
-      <Run Text="— The .srr file containing embedded .srs sample data."
-           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-    </TextBlock>
-    <DockPanel DockPanel.Dock="Top">
-      <Button DockPanel.Dock="Right" Content="Browse"
-              Command="{Binding BrowseSRRCommand}"
-              Classes="ghost"
-              Margin="4,0,0,0" MinWidth="75" />
-      <TextBox x:Name="SRRFileTextBox" Text="{Binding SRRFilePath}"
-               behaviors:TextBoxDropBehavior.DropMode="File" />
-    </DockPanel>
-    <controls:FieldStatusLine DockPanel.Dock="Top" Status="{Binding SRRStatus}" />
+    <!-- ── Config band (always-present; squeezes + scrolls in compact via AutoToStar) ──
+         Content renders at natural height at normal size (row is Auto), no scrollbar shown. -->
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                  ScrollViewer.AllowAutoHide="False">
+      <StackPanel Margin="0,0,4,0">
 
-    <!-- separator -->
-    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+        <!-- ── SRR File ──────────────────────────────────────────── -->
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+          <Run Text="SRR File " FontWeight="SemiBold" />
+          <Run Text="— The .srr file containing embedded .srs sample data."
+               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+        </TextBlock>
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Content="Browse"
+                  Command="{Binding BrowseSRRCommand}"
+                  Classes="ghost"
+                  Margin="4,0,0,0" MinWidth="75" />
+          <TextBox x:Name="SRRFileTextBox" Text="{Binding SRRFilePath}"
+                   behaviors:TextBoxDropBehavior.DropMode="File" />
+        </DockPanel>
+        <controls:FieldStatusLine Status="{Binding SRRStatus}" />
 
-    <!-- ── Media Directory ───────────────────────────────────── -->
-    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,2">
-      <Run Text="Media Directory " FontWeight="SemiBold" />
-      <Run Text="— Folder holding the full media files the samples were cut from. Files are matched to samples automatically."
-           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-    </TextBlock>
-    <DockPanel DockPanel.Dock="Top">
-      <Button DockPanel.Dock="Right" Content="Browse"
-              Command="{Binding BrowseMediaDirectoryCommand}"
-              Classes="ghost"
-              Margin="4,0,0,0" MinWidth="75" />
-      <TextBox x:Name="MediaDirTextBox" Text="{Binding MediaDirectoryPath}"
-               behaviors:TextBoxDropBehavior.DropMode="Folder" />
-    </DockPanel>
-    <controls:FieldStatusLine DockPanel.Dock="Top" Status="{Binding MatchStatus}" />
+        <!-- separator -->
+        <Border Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
 
-    <!-- separator -->
-    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+        <!-- ── Media Directory ───────────────────────────────────── -->
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+          <Run Text="Media Directory " FontWeight="SemiBold" />
+          <Run Text="— Folder holding the full media files the samples were cut from. Files are matched to samples automatically."
+               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+        </TextBlock>
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Content="Browse"
+                  Command="{Binding BrowseMediaDirectoryCommand}"
+                  Classes="ghost"
+                  Margin="4,0,0,0" MinWidth="75" />
+          <TextBox x:Name="MediaDirTextBox" Text="{Binding MediaDirectoryPath}"
+                   behaviors:TextBoxDropBehavior.DropMode="Folder" />
+        </DockPanel>
+        <controls:FieldStatusLine Status="{Binding MatchStatus}" />
 
-    <!-- ── Output Directory ──────────────────────────────────── -->
-    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,2">
-      <Run Text="Output Directory " FontWeight="SemiBold" />
-      <Run Text="— Folder where restored samples will be written. Defaults to the media folder."
-           Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
-    </TextBlock>
-    <DockPanel DockPanel.Dock="Top">
-      <Button DockPanel.Dock="Right" Content="Browse"
-              Command="{Binding BrowseOutputDirectoryCommand}"
-              Classes="ghost"
-              Margin="4,0,0,0" MinWidth="75" />
-      <TextBox x:Name="OutputDirTextBox" Text="{Binding OutputDirectoryPath}"
-               behaviors:TextBoxDropBehavior.DropMode="Folder" />
-    </DockPanel>
+        <!-- separator -->
+        <Border Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
 
-    <!-- separator -->
-    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+        <!-- ── Output Directory ──────────────────────────────────── -->
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
+          <Run Text="Output Directory " FontWeight="SemiBold" />
+          <Run Text="— Folder where restored samples will be written. Defaults to the media folder."
+               Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
+        </TextBlock>
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Content="Browse"
+                  Command="{Binding BrowseOutputDirectoryCommand}"
+                  Classes="ghost"
+                  Margin="4,0,0,0" MinWidth="75" />
+          <TextBox x:Name="OutputDirTextBox" Text="{Binding OutputDirectoryPath}"
+                   behaviors:TextBoxDropBehavior.DropMode="Folder" />
+        </DockPanel>
 
-    <!-- ── SRS Entries DataGrid ──────────────────────────────── -->
-    <TextBlock DockPanel.Dock="Top" Text="Embedded SRS Files" FontWeight="SemiBold" Margin="0,0,0,2" />
-    <DataGrid x:Name="SRSEntriesGrid"
-              DockPanel.Dock="Top"
-              ItemsSource="{Binding SRSEntries}"
-              IsReadOnly="False"
-              AutoGenerateColumns="False"
-              CanUserReorderColumns="False"
-              CanUserSortColumns="False"
-              GridLinesVisibility="Horizontal"
-              HeadersVisibility="Column"
-              SelectionMode="Single"
-              BorderThickness="0"
-              MinHeight="100"
-              MaxHeight="250">
-      <DataGrid.Columns>
-        <!-- Authored (not DataGridCheckBoxColumn) so the cell checkbox can opt OUT of the
-             app-wide 14px glyph via Classes="fullSizeGlyph": this cell is UNLABELED, so the
-             glyph IS the pointer target — the a11y ruling keeps it at Fluent's 20x20. The
-             automation name substitutes for the missing visual label. -->
-        <DataGridTemplateColumn Header="" Width="30">
-          <DataGridTemplateColumn.CellTemplate>
-            <DataTemplate>
-              <CheckBox Classes="fullSizeGlyph"
-                        IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                        AutomationProperties.Name="Restore this sample"
-                        HorizontalAlignment="Center" VerticalAlignment="Center" />
-            </DataTemplate>
-          </DataGridTemplateColumn.CellTemplate>
-        </DataGridTemplateColumn>
-        <DataGridTextColumn Header="SRS File" Binding="{Binding SRSFileName}" Width="200" IsReadOnly="True" />
-        <DataGridTextColumn Header="Sample Name" Binding="{Binding SampleFileName}" Width="200" IsReadOnly="True" />
-        <DataGridTextColumn Header="Media File" Binding="{Binding MediaFilePath}" Width="*" />
-        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="200" IsReadOnly="True" />
-      </DataGrid.Columns>
-    </DataGrid>
+        <!-- separator -->
+        <Border Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
 
-    <!-- separator -->
-    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+        <!-- ── SRS Entries DataGrid ──────────────────────────────── -->
+        <TextBlock x:Name="SRSEntriesHeader" Text="Embedded SRS Files" FontWeight="SemiBold" Margin="0,0,0,2" />
+        <!-- behaviors:ScrollHandoffBehavior.Handoff: the config band's own ScrollViewer clips this
+             grid (fixed MinHeight 100 / MaxHeight 250) in compact mode — wheel input at the grid's
+             own top/bottom extent, and keyboard navigation past the grid's own realized rows,
+             both hand off to the OUTER (this ScrollViewer) rather than dead-ending at the grid's
+             own edge. AutomationProperties.LabeledBy pairs the grid to its own header TextBlock
+             above (the spec's LabeledBy audit — mirrors the Log ListBox/LogHeader pairing below). -->
+        <DataGrid x:Name="SRSEntriesGrid"
+                  ItemsSource="{Binding SRSEntries}"
+                  IsReadOnly="False"
+                  AutoGenerateColumns="False"
+                  CanUserReorderColumns="False"
+                  CanUserSortColumns="False"
+                  GridLinesVisibility="Horizontal"
+                  HeadersVisibility="Column"
+                  SelectionMode="Single"
+                  BorderThickness="0"
+                  MinHeight="100"
+                  MaxHeight="250"
+                  AutomationProperties.LabeledBy="{Binding #SRSEntriesHeader}"
+                  behaviors:ScrollHandoffBehavior.Handoff="True">
+          <DataGrid.Columns>
+            <!-- Authored (not DataGridCheckBoxColumn) so the cell checkbox can opt OUT of the
+                 app-wide 14px glyph via Classes="fullSizeGlyph": this cell is UNLABELED, so the
+                 glyph IS the pointer target — the a11y ruling keeps it at Fluent's 20x20. The
+                 automation name substitutes for the missing visual label. -->
+            <DataGridTemplateColumn Header="" Width="30">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate>
+                  <CheckBox Classes="fullSizeGlyph"
+                            IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                            AutomationProperties.Name="Restore this sample"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <DataGridTextColumn Header="SRS File" Binding="{Binding SRSFileName}" Width="200" IsReadOnly="True" />
+            <DataGridTextColumn Header="Sample Name" Binding="{Binding SampleFileName}" Width="200" IsReadOnly="True" />
+            <DataGridTextColumn Header="Media File" Binding="{Binding MediaFilePath}" Width="*" />
+            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="200" IsReadOnly="True" />
+          </DataGrid.Columns>
+        </DataGrid>
 
-    <!-- ── Action row ────────────────────────────────────────── -->
-    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
-      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-        <Button Content="Restore All"
-                Command="{Binding RestoreCommand}"
-                Classes="primary"
-                Padding="16,4" Margin="0,0,4,0" />
-        <Button Content="Cancel"
-                Command="{Binding CancelRestoreCommand}"
-                Classes="cancel"
-                IsVisible="{Binding IsRestoring}"
-                Padding="16,4" />
       </StackPanel>
-      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-        <TextBlock Text="{Binding OverallProgressText}" Margin="0,0,8,0" />
-        <TextBlock Text="{Binding ProgressMessage}"
+    </ScrollViewer>
+
+    <!-- ── Pinned action band — ALWAYS visible (the a11y survey's headline defect: this row and
+         the log measured 0px at 700×450 BASE state under today's DockPanel). Overlay/adorner
+         implementations forbidden. The two separators bracketing it are the SAME two pre-existing
+         Border elements from today's markup (relocated together, not duplicated); Margin "0,4" on
+         both is TODAY's own verbatim value AND happens to match Classes="pinnedSeparator"'s own
+         base value exactly (Styles.axaml, task-4), so applying it here is a zero-deviation,
+         compact-only tightening with no normal-mode change. The action DockPanel and ProgressBar
+         below keep their margins as LOCAL, verbatim values (0,0,0,2 / 0,0,0,4, unchanged from
+         today) rather than the shared actionBar class — that class's own base margin (0,0,0,4)
+         does not match this view's own pre-existing action-row margin (0,0,0,2), and task-4's
+         identical mismatch needed an explicit review adjudication to accept; compact-mode
+         tightening here is deferred until MEASURED to be needed (see task-5 report). ── -->
+    <StackPanel Grid.Row="2">
+      <Border Classes="pinnedSeparator" Height="1" Background="{DynamicResource BorderSeparator}" />
+
+      <!-- ── Action row ────────────────────────────────────────── -->
+      <DockPanel Margin="0,0,0,2">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+          <Button Content="Restore All"
+                  Command="{Binding RestoreCommand}"
+                  Classes="primary"
+                  Padding="16,4" Margin="0,0,4,0" />
+          <Button Content="Cancel"
+                  Command="{Binding CancelRestoreCommand}"
+                  Classes="cancel"
+                  IsVisible="{Binding IsRestoring}"
+                  Padding="16,4" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <TextBlock Text="{Binding OverallProgressText}" Margin="0,0,8,0" />
+          <TextBlock Text="{Binding ProgressMessage}"
+                     IsVisible="{Binding ShowProgress}" />
+        </StackPanel>
+      </DockPanel>
+
+      <!-- Progress bar -->
+      <ProgressBar Value="{Binding ProgressPercent}"
+                   Maximum="100" Height="18"
+                   Margin="0,0,0,4"
                    IsVisible="{Binding ShowProgress}" />
-      </StackPanel>
-    </DockPanel>
 
-    <!-- Progress bar -->
-    <ProgressBar DockPanel.Dock="Top"
-                 Value="{Binding ProgressPercent}"
-                 Maximum="100" Height="18"
-                 Margin="0,0,0,4"
-                 IsVisible="{Binding ShowProgress}" />
-
-    <!-- separator -->
-    <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderSeparator}" Margin="0,4" />
+      <Border Classes="pinnedSeparator" Height="1" Background="{DynamicResource BorderSeparator}" />
+    </StackPanel>
 
     <!-- ── Log (fills remaining space) ───────────────────────── -->
-    <DockPanel>
+    <DockPanel Grid.Row="3">
       <DockPanel DockPanel.Dock="Top" Margin="0,0,0,2">
         <Button DockPanel.Dock="Right" Content="Save log..."
                 Command="{Binding SaveLogCommand}"
                 Classes="ghost"
                 Padding="8,2" />
-        <TextBlock DockPanel.Dock="Left" Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock x:Name="LogHeader" DockPanel.Dock="Left" Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
         <!-- Live save-outcome line (4.1.3): always in the tree — visibility-toggling would race
              the announcement; empty text renders nothing. No AutomationProperties.Name: the
              announced name IS the text. -->
@@ -157,10 +220,11 @@
       </DockPanel>
       <ListBox ItemsSource="{Binding LogEntries}"
                Classes="logList"
+               AutomationProperties.LabeledBy="{Binding #LogHeader}"
                FontFamily="{DynamicResource MonoFontFamily}"
                FontSize="{DynamicResource MonoFontSize}" />
     </DockPanel>
 
-  </DockPanel>
+  </Grid>
 
 </UserControl>
