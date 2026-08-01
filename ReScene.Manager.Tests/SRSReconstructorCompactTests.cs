@@ -805,6 +805,93 @@ public class SRSReconstructorCompactTests
         finally { window.Close(); }
     }
 
+    /// <summary>
+    /// Fix round 1 (codex, Important): ResultStatus and SaveLogStatus share the SAME log-header
+    /// row via a Grid with FIXED-PROPORTION Star columns (1*,2*) rather than each being its own
+    /// DockPanel.Dock="Right" item, and rather than an Auto+MaxWidth column (this fix round's
+    /// first attempt). Root cause, reproduced down to a minimal case (see the task-4 report's
+    /// fix-round-1 section): an Auto column's resolved width silently stopped tracking its
+    /// child's DesiredSize specifically when ResultSummary and ShowResult change in the SAME
+    /// tick that also resizes row 2 (a sibling of this row-3 Star row) — the EXACT sequence
+    /// every real rebuild completion produces in production (SRSReconstructorViewModel.
+    /// RebuildAsync sets ResultSuccess/ResultSummary/ShowResult back to back, synchronously).
+    /// Setting only the two status texts, with ShowResult NOT also changing, measured
+    /// correctly — only the combination reproduced the defect. Star-Star columns don't
+    /// re-derive width from a child's DesiredSize at all (purely proportional to the Grid's
+    /// own, correctly-updating, total width), sidestepping it entirely.
+    /// <para>
+    /// Both presenters must render non-zero width, with the CHOSEN allocation mechanism (the
+    /// fixed 1:2 ratio) and each one's own trim behavior asserted directly, not implied —
+    /// visual-only, since each keeps its FULL text as its accessible name regardless of
+    /// rendered width (screen readers read the automation peer's Name from the underlying Text
+    /// property, never the trimmed glyphs — the same rule the Border's own result-cap TextBlock
+    /// relies on).
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void LogHeaderStatusLines_BothLongAndNonEmpty_BothRenderNonZeroWidth_AtCompactSize()
+    {
+        SRSReconstructorViewModel vm = CreateVm();
+        var view = new SRSReconstructorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, CompactInner);
+        try
+        {
+            Assert.Contains("compactHeight", root.Classes);
+
+            TextBlock resultStatus = window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "ResultStatus");
+            TextBlock saveLogStatus = window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "SaveLogStatus");
+
+            string longResultText = string.Concat(Enumerable.Repeat("Reconstruction failed verification. ", 5));
+            string longSaveLogText = string.Concat(Enumerable.Repeat("Could not save the log to the selected path. ", 5));
+
+            // The EXACT production sequence that triggered the pre-fix defect: ResultSuccess,
+            // ShowResult and ResultSummary all set synchronously, back to back, matching
+            // RebuildAsync's own real completion code exactly.
+            vm.ResultSuccess = false;
+            vm.ShowResult = true;
+            vm.ResultSummary = longResultText;
+            vm.SaveLogAnnouncement = longSaveLogText; // OperationViewModelBase property — a VM setter, per the rig house rule
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(longResultText, resultStatus.Text);
+            Assert.Equal(longSaveLogText, saveLogStatus.Text);
+
+            // The actual discriminating assertions: BOTH presenters must render at a non-zero
+            // width when both are long at once -- the pre-fix Auto-column layout left
+            // ResultStatus stuck at literal zero here (see the report's RED evidence).
+            Assert.True(resultStatus.Bounds.Width > 0,
+                $"ResultStatus rendered at zero width ({resultStatus.Bounds.Width:F1}) when both status lines are long");
+            Assert.True(saveLogStatus.Bounds.Width > 0,
+                $"SaveLogStatus rendered at zero width ({saveLogStatus.Bounds.Width:F1}) when both status lines are long");
+
+            // The CHOSEN allocation mechanism asserted directly, not implied: fixed 1:2 Star
+            // columns. Compared via the Grid's OWN column widths (raw proportions), not the two
+            // TextBlocks' rendered Bounds -- each carries the SAME fixed Margin="8,0" (16 DIPs),
+            // and subtracting an equal constant from two DIFFERENT-sized shares does not
+            // preserve their ratio, so the RENDERED widths alone would not cleanly assert 1:2.
+            var grid = (Grid)resultStatus.Parent!;
+            Assert.Equal(2, grid.ColumnDefinitions.Count);
+            double col0Width = grid.ColumnDefinitions[0].ActualWidth;
+            double col1Width = grid.ColumnDefinitions[1].ActualWidth;
+            Assert.True(Math.Abs(col1Width - col0Width * 2) <= 1.5,
+                $"expected column 1 ({col1Width:F1}) to be ~2x column 0 ({col0Width:F1}) for the fixed 1*,2* split");
+
+            // Trim behavior asserted, not implied: both must genuinely overflow their own
+            // column (proving CharacterEllipsis is an exercised claim, not a dead property),
+            // yet BOTH keep their full, untrimmed text as their accessible name -- visual-only
+            // trimming, the same rule the Border's own result-cap TextBlock relies on.
+            Assert.Equal(TextTrimming.CharacterEllipsis, resultStatus.TextTrimming);
+            Assert.Equal(TextTrimming.CharacterEllipsis, saveLogStatus.TextTrimming);
+            Assert.True(resultStatus.Bounds.Width < resultStatus.DesiredSize.Width,
+                "test precondition: ResultStatus's long text must genuinely overflow its column for CharacterEllipsis to be a meaningful, exercised claim");
+            Assert.True(saveLogStatus.Bounds.Width < saveLogStatus.DesiredSize.Width,
+                "test precondition: SaveLogStatus's long text must genuinely overflow its column for CharacterEllipsis to be a meaningful, exercised claim");
+            Assert.Equal(longResultText, ControlAutomationPeer.CreatePeerForElement(resultStatus).GetName());
+            Assert.Equal(longSaveLogText, ControlAutomationPeer.CreatePeerForElement(saveLogStatus).GetName());
+        }
+        finally { window.Close(); }
+    }
+
     // ── 7. Frame-rig parity (criterion F: normal-mode pixels unchanged) ──
 
     /// <summary>

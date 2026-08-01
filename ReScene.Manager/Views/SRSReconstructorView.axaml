@@ -168,25 +168,46 @@
                 Classes="ghost"
                 Padding="8,2" />
         <TextBlock x:Name="LogHeader" DockPanel.Dock="Left" Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
-        <!-- Result announcement (a11y rev-3 NEW-4): always in the tree, mirrors
-             SaveLogStatus's own established pattern exactly — empty text renders nothing, no
-             AutomationProperties.Name (the announced name IS the text), LiveSetting=Polite so
-             a screen reader is notified the instant ResultSummary transitions from empty to
-             text WHILE this element was already realized (the visual banner above toggles
-             IsVisible and would race/lose the announcement instead — codex round-4). Given
-             its own Dock=Right strip (rather than sharing SaveLogStatus's fill/trim slot) so
-             SaveLogStatus's existing fill+trim behavior is untouched. -->
-        <TextBlock x:Name="ResultStatus" DockPanel.Dock="Right" Text="{Binding ResultSummary}"
-                   AutomationProperties.LiveSetting="Polite"
-                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
-                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
-        <!-- Live save-outcome line (4.1.3): always in the tree — visibility-toggling would race
-             the announcement; empty text renders nothing. No AutomationProperties.Name: the
-             announced name IS the text. -->
-        <TextBlock x:Name="SaveLogStatus" Text="{Binding SaveLogAnnouncement}"
-                   AutomationProperties.LiveSetting="Polite"
-                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
-                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
+        <!-- Fix round 1 (codex, Important): the two status presenters share ONE Grid (the
+             DockPanel's sole remaining/fill child) instead of each being its own
+             DockPanel.Dock="Right" item — two same-direction docked TextBlocks left DockPanel's
+             own arrange bookkeeping unpredictable under long text in both (observed: the FIRST
+             one measured its own full unclipped width, starving the panel's remaining-rect
+             tracking so the SECOND rendered at literal zero width).
+             FIXED-PROPORTION STAR COLUMNS, not Auto+MaxWidth: measured (see task-4 fix-round-1
+             report) that an Auto column's width silently stops tracking its child's DesiredSize
+             specifically when ResultSummary/ShowResult change in the SAME tick that also
+             resizes row 2 (the pinned band, a sibling of this row-3 Star row) — i.e. on every
+             real rebuild completion, the exact production sequence. Reproduced down to a
+             minimal case; a plain direct .Text poke or changing these two TextBlocks' text
+             WITHOUT ShowResult also changing both measured correctly — only the combination
+             leaves the Auto column stuck at its pre-change (empty) width, silently starving
+             ResultStatus to zero. Star columns don't re-derive their width from a child's
+             DesiredSize at all (purely proportional to the Grid's own, correctly-updating,
+             total width), which sidesteps the defect entirely — verified against the exact
+             failing repro. Trade-off, accepted: SaveLogStatus's share is now a fixed 2/3 of the
+             row (was ~100% when ResultStatus was empty) rather than adapting to content; a
+             guaranteed non-zero floor for BOTH beats an adaptive split that can silently render
+             one of them invisible. -->
+        <Grid ColumnDefinitions="1*,2*">
+          <!-- Result announcement (a11y rev-3 NEW-4): always in the tree, mirrors
+               SaveLogStatus's own established pattern exactly — empty text renders nothing, no
+               AutomationProperties.Name (the announced name IS the text), LiveSetting=Polite so
+               a screen reader is notified the instant ResultSummary transitions from empty to
+               text WHILE this element was already realized (the visual banner above toggles
+               IsVisible and would race/lose the announcement instead — codex round-4). -->
+          <TextBlock Grid.Column="0" x:Name="ResultStatus" Text="{Binding ResultSummary}"
+                     AutomationProperties.LiveSetting="Polite"
+                     Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                     TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
+          <!-- Live save-outcome line (4.1.3): always in the tree — visibility-toggling would race
+               the announcement; empty text renders nothing. No AutomationProperties.Name: the
+               announced name IS the text. -->
+          <TextBlock Grid.Column="1" x:Name="SaveLogStatus" Text="{Binding SaveLogAnnouncement}"
+                     AutomationProperties.LiveSetting="Polite"
+                     Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                     TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
+        </Grid>
       </DockPanel>
       <ListBox ItemsSource="{Binding LogEntries}"
                Classes="logList"
