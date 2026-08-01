@@ -1,71 +1,62 @@
 using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 namespace ReScene.Manager.Behaviors;
 
 /// <summary>
-/// Chains vertical scroll input from an inner <see cref="DataGrid"/> — whose own scrolling is
+/// Chains keyboard/focus navigation in an inner <see cref="DataGrid"/> — whose own scrolling is
 /// entirely self-contained virtualization, oblivious to any ancestor — out to the nearest ANCESTOR
-/// <see cref="ScrollViewer"/> once the grid itself is exhausted in the requested direction (spec's
+/// <see cref="ScrollViewer"/> once the current row moves outside the outer's own viewport (spec's
 /// codex round-1 #8: a small-window config band scrolls its DataGrid host, so a user gesture that
-/// would otherwise dead-end at the grid's own edge must continue past it). Two independent
-/// mechanisms, each verified empirically (headless spikes) and by decompiling
-/// <c>Avalonia.Controls.DataGrid</c> 11.3.13 before writing this — see the per-mechanism remarks
-/// below for exactly what was confirmed and why it rules out relying on some existing, undocumented
-/// framework hook instead:
-/// <list type="bullet">
-///   <item><b>WHEEL</b> — <see cref="DataGrid"/>'s own <c>OnPointerWheelChanged</c> class handler
-///     already leaves the event unhandled whenever it cannot consume the gesture internally
-///     (confirmed: it computes <c>UpdateScroll(...)</c>, and when that reports no movement, sets
-///     <c>e.Handled = e.Handled || !ScrollViewer.GetIsScrollChainingEnabled(this)</c> — with
-///     <c>IsScrollChainingEnabled</c> defaulting to <c>true</c> and never overridden in this app,
-///     that leaves <c>e.Handled</c> false). Avalonia's routed-event pipeline runs CLASS handlers
-///     (which is how <see cref="DataGrid"/>'s own override is wired) before INSTANCE handlers added
-///     via <see cref="Interactive.AddHandler"/> for the same element/phase — confirmed empirically:
-///     a plain (non-handledEventsToo) instance handler added here to the SAME grid is invoked ONLY
-///     when the class handler left the event unhandled, i.e. exactly the at-extent case, and sees
-///     the correctly-still-false <c>e.Handled</c> at that point. This behavior owns that hand-off
-///     EXPLICITLY (rather than leaving the outcome to depend on that ambient default staying wired)
-///     because <see cref="PointerWheelEventArgs"/> cannot be re-raised synthetically once consumed
-///     — if this reasoning about class-handler-first ordering were ever wrong, or a future style
-///     change disabled chaining, there would be no way to recover the gesture after the fact.
-///     HONEST DISCLOSURE (fix round 1, codex finding 5): in THIS app's actual configuration
-///     (<c>IsScrollChainingEnabled</c> never overridden), this half is not currently
-///     discriminating — re-verified comprehensively, not just for the single scenario the
-///     pre-existing <c>Wheel_WithHandoffDisabled_StillChainsToOuter_ViaAvaloniasOwnDefaultScrollChaining</c>
-///     test covers: with this handler's own registration temporarily removed, ALL FOUR dedicated
-///     wheel tests in <c>ScrollHandoffBehaviorTests</c> (bottom extent, top extent, mid-grid, both
-///     extents) AND the real, production-wired <c>SampleRestorerCompactTests
-///     .Handoff_WheelAtGridExtent_MovesConfigBandScroller</c> still passed unchanged — Avalonia's
-///     own default chaining alone already produces the identical externally-observable result
-///     everywhere this behavior is currently exercised. Kept anyway for the reason stated above
-///     (an explicit, named, tested hand-off beats an unannounced dependency on a framework
-///     default) — but that is a judgment call about defensive/explicit code, not a claim that the
-///     mechanism is load-bearing today. Whether to remove it is a controller decision, not one
-///     made unilaterally here.</item>
-///   <item><b>KEYBOARD/FOCUS</b> — confirmed by decompiling every <c>Focus()</c> call site in the
-///     DataGrid package: ordinary (non-edit) arrow-key browsing NEVER focuses a specific cell or
-///     row — <c>ProcessDataGridKey</c> ends by focusing the GRID ITSELF unconditionally, and the
-///     only per-cell <c>Focus()</c> calls are inside cell-EDIT entry. Consequently
-///     <c>Control.BringIntoView()</c> — the sole way <c>RequestBringIntoView</c> is ever raised in
-///     Avalonia (also confirmed by decompilation: it is a plain extension method, never invoked
-///     automatically by any focus-change machinery) — is never called by the grid's own arrow-key
-///     handling either; it only moves the grid's OWN internal virtualized offset
-///     (<c>ScrollSlotIntoView</c>) to keep the new current row within ITS OWN viewport. This
-///     behavior calls <c>BringIntoView()</c> itself on the newly-current row (found via the public
-///     <see cref="DataGrid.CurrentCellChanged"/> event and <see cref="DataGrid.SelectedIndex"/>),
-///     which is genuinely necessary — not merely explicit-for-robustness like the wheel half —
-///     since nothing else in the framework ever performs it for this control.</item>
-/// </list>
-/// Both mechanisms key off <see cref="DataGrid.CurrentCellChanged"/>/<c>PointerWheelChanged</c> at
-/// the ROW level, not the individual cell: <see cref="DataGridRow"/> exposes no public per-column
-/// cell lookup, and a row's bounds are a strict superset of every cell within it, so bringing the
-/// row fully into view is sufficient to satisfy "the current cell ends fully visible" without
-/// depending on <see cref="DataGridCell"/> internals that are not part of the public API.
+/// would otherwise dead-end at the grid's own edge must continue past it). Confirmed by decompiling
+/// every <c>Focus()</c> call site in <c>Avalonia.Controls.DataGrid</c> 11.3.13's own package:
+/// ordinary (non-edit) arrow-key browsing NEVER focuses a specific cell or row —
+/// <c>ProcessDataGridKey</c> ends by focusing the GRID ITSELF unconditionally, and the only
+/// per-cell <c>Focus()</c> calls are inside cell-EDIT entry. Consequently
+/// <c>Control.BringIntoView()</c> — the sole way <c>RequestBringIntoView</c> is ever raised in
+/// Avalonia (also confirmed by decompilation: it is a plain extension method, never invoked
+/// automatically by any focus-change machinery) — is never called by the grid's own arrow-key
+/// handling either; it only moves the grid's OWN internal virtualized offset
+/// (<c>ScrollSlotIntoView</c>) to keep the new current row within ITS OWN viewport. This behavior
+/// calls <c>BringIntoView()</c> itself on the newly-current row (found via the public
+/// <see cref="DataGrid.CurrentCellChanged"/> event and <see cref="DataGrid.SelectedIndex"/>),
+/// which is genuinely necessary — nothing else in the framework ever performs it for this control.
+/// It keys off <see cref="DataGrid.CurrentCellChanged"/> at the ROW level, not the individual cell:
+/// <see cref="DataGridRow"/> exposes no public per-column cell lookup, and a row's bounds are a
+/// strict superset of every cell within it, so bringing the row fully into view is sufficient to
+/// satisfy "the current cell ends fully visible" without depending on <see cref="DataGridCell"/>
+/// internals that are not part of the public API.
+/// <para>
+/// NO WHEEL MECHANISM (removed, fix round 2 — codex's final ruling on the fix-round-1 disclosure):
+/// an earlier version of this behavior also chained <c>PointerWheelChanged</c> at the grid's own
+/// scroll extent. It was removed, not merely left undocumented, for two independent reasons.
+/// First, redundancy: <see cref="DataGrid"/>'s own <c>OnPointerWheelChanged</c> class handler
+/// already leaves the event unhandled whenever it cannot consume the gesture internally (it
+/// computes <c>UpdateScroll(...)</c>, and when that reports no movement, sets
+/// <c>e.Handled = e.Handled || !ScrollViewer.GetIsScrollChainingEnabled(this)</c>), and
+/// <c>IsScrollChainingEnabled</c> defaults to <c>true</c> and is never overridden anywhere in this
+/// app — so Avalonia's own bubble-to-ancestor-<see cref="ScrollViewer"/> chaining already produces
+/// the identical externally-observable result with zero custom code; re-verified comprehensively
+/// (not just one scenario) by temporarily removing the wheel registration and confirming all four
+/// dedicated wheel tests plus the real, production-wired view's own handoff test still passed
+/// unchanged. Second, and decisively: the removed handler's own claimed "insurance against a
+/// future style disabling chaining" was ineffective even in that hypothetical case. Avalonia's
+/// routed-event pipeline runs CLASS handlers (how <see cref="DataGrid"/>'s own override is wired)
+/// before INSTANCE handlers added via <see cref="Interactive.AddHandler"/> for the same
+/// element/phase; the removed handler was a plain (non-handledEventsToo) instance handler, which
+/// is skipped entirely once <c>e.Handled</c> is already <c>true</c>. If chaining were ever
+/// disabled, <see cref="DataGrid"/>'s own class handler would set <c>e.Handled = true</c> BEFORE
+/// the removed handler could run — so it could never have fired in precisely the scenario it was
+/// meant to guard against. There is no configuration, current or hypothetical, in which the wheel
+/// path did anything a plain <c>IsScrollChainingEnabled="True"</c> default does not already do; if
+/// the platform default is ever overridden, that is a deliberate, visible style change, not
+/// something this behavior can meaningfully insure against. Full history and the original
+/// per-mechanism reasoning are preserved in git (this file's own history around commits
+/// 6c1bad3/153cbb2), not reproduced here.
+/// </para>
 /// </summary>
 internal static class ScrollHandoffBehavior
 {
@@ -75,10 +66,6 @@ internal static class ScrollHandoffBehavior
     public static bool GetHandoff(Control obj) => obj.GetValue(HandoffProperty);
 
     public static void SetHandoff(Control obj, bool value) => obj.SetValue(HandoffProperty, value);
-
-    /// <summary>Mirrors <c>ScrollContentPresenter.OnPointerWheelChanged</c>'s own per-tick constant exactly, so a
-    /// gesture that hands off feels identical in speed to one the outer ScrollViewer handled natively throughout.</summary>
-    private const double WheelScrollAmount = 50.0;
 
     // Weakly keyed so a grid's state dies with the grid — no leak, no explicit unhook required on
     // the caller's part (same rationale as ListBoxAutoScroll's / ScrollViewerHomeEndKeys' own handler tables).
@@ -132,7 +119,7 @@ internal static class ScrollHandoffBehavior
     }
 
     /// <summary>
-    /// Re-resolves the outer <see cref="ScrollViewer"/> and re-wires both mechanisms every time the
+    /// Re-resolves the outer <see cref="ScrollViewer"/> and re-wires the mechanism every time the
     /// grid (re)joins the visual tree — not just once — mirroring <c>CompactHeightBehavior</c>'s own
     /// "reattach re-evaluates" rule: a tab-hosted view is detached/reattached on every tab switch in
     /// this app (only the selected TabItem's content stays in the live visual tree), and the
@@ -152,8 +139,6 @@ internal static class ScrollHandoffBehavior
 
         state.Outer = outer;
 
-        void OnPointerWheelChanged(object? _, PointerWheelEventArgs args) => HandleWheelAtExtent(outer, args);
-
         // Posted at Loaded priority (mirrors CompactHeightBehavior's own identical deferral
         // rationale for post-transition focus recovery) rather than called synchronously here:
         // MEASURED (fix round 1) that DataGrid's own internal virtualization scroll
@@ -166,21 +151,13 @@ internal static class ScrollHandoffBehavior
         void OnCurrentCellChanged(object? _, EventArgs __) =>
             Dispatcher.UIThread.Post(() => BringCurrentRowIntoView(grid), DispatcherPriority.Loaded);
 
-        grid.AddHandler(InputElement.PointerWheelChangedEvent, OnPointerWheelChanged);
         grid.CurrentCellChanged += OnCurrentCellChanged;
 
-        state.WheelHandler = OnPointerWheelChanged;
         state.CurrentCellHandler = OnCurrentCellChanged;
     }
 
     private static void Detach(DataGrid grid, State state)
     {
-        if (state.WheelHandler is { } wheelHandler)
-        {
-            grid.RemoveHandler(InputElement.PointerWheelChangedEvent, wheelHandler);
-            state.WheelHandler = null;
-        }
-
         if (state.CurrentCellHandler is { } currentCellHandler)
         {
             grid.CurrentCellChanged -= currentCellHandler;
@@ -188,34 +165,6 @@ internal static class ScrollHandoffBehavior
         }
 
         state.Outer = null;
-    }
-
-    /// <summary>
-    /// Reached only when the grid's own class handler left <paramref name="e"/> unhandled (see this
-    /// class's own remarks) — i.e. the grid could not scroll further internally in the requested
-    /// direction. Applies the SAME clamped offset formula <c>ScrollContentPresenter</c> itself uses,
-    /// directly to <paramref name="outer"/>, and marks the event handled. If the outer is ALSO
-    /// already at its own extent in this direction, nothing changes and the event is deliberately
-    /// left unhandled (matching <c>ScrollContentPresenter</c>'s own convention) so a THIRD,
-    /// further-out scrollable ancestor — none exists in this app today, but nothing here should
-    /// assume that permanently — still gets its chance.
-    /// </summary>
-    private static void HandleWheelAtExtent(ScrollViewer outer, PointerWheelEventArgs e)
-    {
-        if (outer.Extent.Height <= outer.Viewport.Height)
-        {
-            return;
-        }
-
-        double newY = outer.Offset.Y + ((0 - e.Delta.Y) * WheelScrollAmount);
-        newY = Math.Max(0, Math.Min(newY, outer.Extent.Height - outer.Viewport.Height));
-        if (newY == outer.Offset.Y)
-        {
-            return;
-        }
-
-        outer.Offset = new Vector(outer.Offset.X, newY);
-        e.Handled = true;
     }
 
     /// <summary>
@@ -240,8 +189,6 @@ internal static class ScrollHandoffBehavior
         public bool LifecycleHooked { get; set; }
 
         public ScrollViewer? Outer { get; set; }
-
-        public EventHandler<PointerWheelEventArgs>? WheelHandler { get; set; }
 
         public EventHandler<EventArgs>? CurrentCellHandler { get; set; }
     }

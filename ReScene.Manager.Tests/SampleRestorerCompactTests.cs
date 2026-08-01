@@ -900,12 +900,23 @@ public class SampleRestorerCompactTests
     // ── 6. Handoff (ScrollHandoffBehavior exercised through the real view) ──
 
     /// <summary>
-    /// Wheel at the grid's own extent moves the config band's OWN scroller — the same mechanism
-    /// <c>ScrollHandoffBehaviorTests</c> proves in isolation, exercised here through the real,
-    /// production-wired SRSEntriesGrid.
+    /// Wheel at the grid's own extent moves the config band's OWN scroller — a spec-level user
+    /// expectation (small-window config band scrolls its DataGrid host; a wheel gesture must not
+    /// dead-end at the grid's own edge) that must keep a regression guard regardless of which code
+    /// provides it.
+    /// <para>
+    /// NOT a <see cref="ScrollHandoffBehavior"/> test (renamed and re-documented, fix round 2):
+    /// this behavior's own wheel mechanism was removed — codex's final ruling found it not merely
+    /// redundant with Avalonia's native <c>ScrollViewer.IsScrollChainingEnabled</c> default (true,
+    /// never overridden in this app) but incapable of ever providing the "future insurance" it was
+    /// kept for (see <see cref="ScrollHandoffBehavior"/>'s own remarks). This test still passes
+    /// unchanged with that mechanism gone — proven directly during the investigation that led to
+    /// its removal — because the platform default alone already produces this exact result. It is
+    /// kept, renamed, as the real view's own platform-level regression guard for that expectation.
+    /// </para>
     /// </summary>
     [AvaloniaFact]
-    public void Handoff_WheelAtGridExtent_MovesConfigBandScroller()
+    public void WheelHandoffAtGridExtent_PlatformDefaultMovesConfigBandScroller()
     {
         SampleRestorerViewModel vm = CreateVm();
         for (int i = 0; i < 12; i++)
