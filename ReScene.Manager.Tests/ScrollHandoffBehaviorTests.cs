@@ -294,6 +294,16 @@ public class ScrollHandoffBehaviorTests
     /// <see cref="Keyboard_WithHandoffDisabled_ArrowKeyNavigationDoesNotChainToOuter"/> below, where
     /// disabling <c>Handoff</c> DOES change the observable outcome — that is the mechanism this
     /// behavior is solely responsible for.
+    /// <para>
+    /// RE-VERIFIED comprehensively (fix round 1, codex finding 5), beyond this one scenario: with
+    /// <see cref="ScrollHandoffBehavior"/>'s wheel registration itself temporarily removed (not
+    /// just <c>Handoff</c> set false on one grid instance), every other dedicated wheel test in
+    /// this file (bottom extent, top extent, mid-grid, both extents) AND the real,
+    /// production-wired <c>SampleRestorerCompactTests.Handoff_WheelAtGridExtent_MovesConfigBandScroller</c>
+    /// still passed unchanged. See <see cref="ScrollHandoffBehavior"/>'s own class remarks for the
+    /// full disclosure — this is a genuinely redundant-today, kept-for-explicitness mechanism, not
+    /// a hidden defect.
+    /// </para>
     /// </summary>
     [AvaloniaFact]
     public void Wheel_WithHandoffDisabled_StillChainsToOuter_ViaAvaloniasOwnDefaultScrollChaining()

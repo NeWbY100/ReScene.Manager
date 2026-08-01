@@ -50,10 +50,17 @@
     </Expander>
 
     <!-- ── Config band (always-present; squeezes + scrolls in compact via AutoToStar) ──
-         Content renders at natural height at normal size (row is Auto), no scrollbar shown. -->
+         Content renders at natural height at normal size (row is Auto), no scrollbar shown.
+         Classes="compactScrollInset" (NOT a local Margin — fix round 1, codex finding 2):
+         base value is zero, matching today's markup exactly (this StackPanel did not exist
+         before this task; its content was a plain, unindented DockPanel column) — the 4px
+         right-inset for scrollbar clearance applies ONLY in compact mode, via the style's own
+         compact-scoped override below. A local, unconditional "0,0,4,0" here (an earlier version
+         of this markup) changed EXPANDED-mode rendering too, which the frame-rig test's own
+         row-0-only comparison did not cover — see FrameRig_NormalMode_ConfigBandCaptionMatchesPreChangeShape. -->
     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
                   ScrollViewer.AllowAutoHide="False">
-      <StackPanel Margin="0,0,4,0">
+      <StackPanel Classes="compactScrollInset">
 
         <!-- ── SRR File ──────────────────────────────────────────── -->
         <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
@@ -66,7 +73,14 @@
                   Command="{Binding BrowseSRRCommand}"
                   Classes="ghost"
                   Margin="4,0,0,0" MinWidth="75" />
+          <!-- AutomationProperties.Name (fix round 1, codex finding 3): pre-existing a11y debt,
+               unrelated to this task's own compact-layout work but discovered while wiring this
+               control up as CompactHeightBehavior's RestoreFocusTarget — without it, a screen
+               reader announced this TextBox with no accessible name at all. "SRR file path"
+               mirrors CreatorView's own InputTextBox naming convention (a short "<subject> path"
+               phrase, distinct from the longer visible caption sentence above). -->
           <TextBox x:Name="SRRFileTextBox" Text="{Binding SRRFilePath}"
+                   AutomationProperties.Name="SRR file path"
                    behaviors:TextBoxDropBehavior.DropMode="File" />
         </DockPanel>
         <controls:FieldStatusLine Status="{Binding SRRStatus}" />

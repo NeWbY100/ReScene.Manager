@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 namespace ReScene.Manager.Behaviors;
@@ -31,7 +32,21 @@ namespace ReScene.Manager.Behaviors;
 ///     EXPLICITLY (rather than leaving the outcome to depend on that ambient default staying wired)
 ///     because <see cref="PointerWheelEventArgs"/> cannot be re-raised synthetically once consumed
 ///     — if this reasoning about class-handler-first ordering were ever wrong, or a future style
-///     change disabled chaining, there would be no way to recover the gesture after the fact.</item>
+///     change disabled chaining, there would be no way to recover the gesture after the fact.
+///     HONEST DISCLOSURE (fix round 1, codex finding 5): in THIS app's actual configuration
+///     (<c>IsScrollChainingEnabled</c> never overridden), this half is not currently
+///     discriminating — re-verified comprehensively, not just for the single scenario the
+///     pre-existing <c>Wheel_WithHandoffDisabled_StillChainsToOuter_ViaAvaloniasOwnDefaultScrollChaining</c>
+///     test covers: with this handler's own registration temporarily removed, ALL FOUR dedicated
+///     wheel tests in <c>ScrollHandoffBehaviorTests</c> (bottom extent, top extent, mid-grid, both
+///     extents) AND the real, production-wired <c>SampleRestorerCompactTests
+///     .Handoff_WheelAtGridExtent_MovesConfigBandScroller</c> still passed unchanged — Avalonia's
+///     own default chaining alone already produces the identical externally-observable result
+///     everywhere this behavior is currently exercised. Kept anyway for the reason stated above
+///     (an explicit, named, tested hand-off beats an unannounced dependency on a framework
+///     default) — but that is a judgment call about defensive/explicit code, not a claim that the
+///     mechanism is load-bearing today. Whether to remove it is a controller decision, not one
+///     made unilaterally here.</item>
 ///   <item><b>KEYBOARD/FOCUS</b> — confirmed by decompiling every <c>Focus()</c> call site in the
 ///     DataGrid package: ordinary (non-edit) arrow-key browsing NEVER focuses a specific cell or
 ///     row — <c>ProcessDataGridKey</c> ends by focusing the GRID ITSELF unconditionally, and the
@@ -138,7 +153,18 @@ internal static class ScrollHandoffBehavior
         state.Outer = outer;
 
         void OnPointerWheelChanged(object? _, PointerWheelEventArgs args) => HandleWheelAtExtent(outer, args);
-        void OnCurrentCellChanged(object? _, EventArgs __) => BringCurrentRowIntoView(grid);
+
+        // Posted at Loaded priority (mirrors CompactHeightBehavior's own identical deferral
+        // rationale for post-transition focus recovery) rather than called synchronously here:
+        // MEASURED (fix round 1) that DataGrid's own internal virtualization scroll
+        // (ScrollSlotIntoView, run as part of the SAME currency-update call chain that raises
+        // CurrentCellChanged) has not always finished repositioning the new current row's OWN
+        // DataGridRow by the time this event fires — calling BringIntoView() synchronously here
+        // could act on a STALE row position, undershooting the outer ScrollViewer's own offset
+        // adjustment. Loaded priority runs after the dispatcher has serviced the pending layout
+        // the internal scroll just triggered, so the row's Bounds are settled by the time this runs.
+        void OnCurrentCellChanged(object? _, EventArgs __) =>
+            Dispatcher.UIThread.Post(() => BringCurrentRowIntoView(grid), DispatcherPriority.Loaded);
 
         grid.AddHandler(InputElement.PointerWheelChangedEvent, OnPointerWheelChanged);
         grid.CurrentCellChanged += OnCurrentCellChanged;

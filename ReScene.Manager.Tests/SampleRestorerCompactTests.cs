@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Automation.Peers;
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -120,27 +121,20 @@ public class SampleRestorerCompactTests
     /// <summary>
     /// The brief's own worst case (case 1): all conditionals forced together. FieldStatusLines
     /// (SRR/Media — Output carries none today) set with realistic wrapping-length messages;
-    /// IsRestoring + ShowProgress true (forces Cancel/ProgressMessage/ProgressBar visible).
-    /// <para>
-    /// SRSEntries populated to a MODEST 2 rows here — NOT the brief's own "12 rows... MaxHeight"
-    /// figure, and this is a deliberate, MEASURED deviation, not an oversight. In EXPANDED mode
-    /// row 1 (config) is Auto-sized (only <see cref="CompactRowMode.AutoToStar"/> converts it to
-    /// Star, and only while compact), so its floor/arrange height is the child's own genuine
-    /// DesiredSize — a 12-row grid measures at its full 250-DIP MaxHeight cap, and MEASURED
-    /// (diagnostic capture): row0=41 + row1=655(238 non-grid config + a maxed-out 250-tall grid +
-    /// margins) + row2=46 + row3's floor 80 totals ~661, categorically exceeding Threshold 535 —
-    /// this is not a fixable layout defect, it is FEWER-THAN-535-DIPS genuinely being too little
-    /// room for "every FieldStatus warning visible AND a fully-maxed 12-row grid" simultaneously
-    /// in a mode with no page-level scroll. With 2 rows the grid sits at its own 100-DIP MinHeight
-    /// floor (measured: row1 totals 338, whole-page floor 505), comfortably under 535 — a
-    /// realistic "a couple of matched samples" worst case rather than an unbounded one. COMPACT
-    /// mode's own floor checks are UNAFFECTED by this choice either way: row 1 there is Star-sized
-    /// with a fixed MinHeight (110/80), which <see cref="CompactInvariantRig.MeasureFloor"/>'s own
-    /// per-row-type handling uses directly, never the grid's actual content height. The dedicated
-    /// reachability (<see cref="AssertGridLastRowAndActionReachable"/>) and Handoff (section 6)
-    /// tests below use the FULL 12-row/MaxHeight population where a genuinely virtualizing grid is
-    /// the explicit point, not incidental to a "does the page fit" check.
-    /// </para>
+    /// IsRestoring + ShowProgress true (forces Cancel/ProgressMessage/ProgressBar visible);
+    /// SRSEntries populated to 12 rows (overflows the grid's own 250-DIP MaxHeight, so it renders
+    /// AT that cap) — restored to the brief's own literal figure (fix round 1, codex finding 1;
+    /// an earlier version of this method used a modest 2-row population instead, which codex
+    /// correctly identified as weakening the fixture to hide a genuine defect rather than fixing
+    /// it: MEASURED, with 12 rows and NO production fix, that inner heights from Threshold+1 (536)
+    /// up to ~640 leave the ENTIRE log band (row 3) — not merely clipped, but translated fully
+    /// below the window's own bottom edge (e.g. at 536: log at window-Y [693,773] against a
+    /// 675-tall window). <see cref="SampleRestorerView"/>'s own constructor now fixes this with a
+    /// dynamic, window-height-aware cap on the config ScrollViewer (see its own remarks) — proven
+    /// safe across that exact previously-unsafe range by
+    /// <see cref="Invariant_ExpandedMode_NeverClipsAcrossUnsafeHeightRange"/> below, using REAL
+    /// arranged rendering + the clip-aware <see cref="AssertFullyWithinWindow"/>, not
+    /// <see cref="CompactInvariantRig.MeasureFloor"/>.
     /// </summary>
     private static void ForceWorstCase(SampleRestorerViewModel vm)
     {
@@ -148,10 +142,12 @@ public class SampleRestorerCompactTests
         vm.MatchStatus = FieldStatus.Warning("Only some samples matched a file in this media folder; the rest need manual assignment.");
         vm.IsRestoring = true;
         vm.ShowProgress = true;
-        vm.OverallProgressText = "Restoring 2 of 2...";
-        vm.ProgressMessage = "Reconstructing sample 2: verifying CRC against the expected checksum...";
-        vm.SRSEntries.Add(Entry("sample01.srs", "sample01.mkv"));
-        vm.SRSEntries.Add(Entry("sample02.srs", "sample02.mkv"));
+        vm.OverallProgressText = "Restoring 8 of 12...";
+        vm.ProgressMessage = "Reconstructing sample 8: verifying CRC against the expected checksum...";
+        for (int i = 0; i < 12; i++)
+        {
+            vm.SRSEntries.Add(Entry($"sample{i:D2}.srs", $"sample{i:D2}.mkv"));
+        }
     }
 
     // ── 1. Invariant (spec §1's four checks; CompactInvariantRig) — RED-FIRST against today's DockPanel ──
@@ -169,6 +165,51 @@ public class SampleRestorerCompactTests
             Assert.DoesNotContain("compactHeight", root.Classes);
             double floor = CompactInvariantRig.MeasureFloor(root);
             Assert.True(floor < Threshold, $"expanded-mode floor {floor:F1} must be under Threshold {Threshold}");
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// The REAL, user-facing guarantee <see cref="Invariant_ExpandedModeFloor_UnderThreshold"/>'s
+    /// own <c>MeasureFloor</c> methodology cannot directly observe (fix round 1, codex finding 1):
+    /// MEASURED that <c>MeasureFloor</c>'s bare, unconstrained <c>Measure(Infinity)</c> call
+    /// reports each Auto row's own UNCONSTRAINED desired height, while a REAL Grid arrange pass
+    /// additionally SHRINKS Auto rows when the total genuinely exceeds available space — a
+    /// mechanism the static measure-only check cannot see (this is also why
+    /// <see cref="SampleRestorerView"/>'s own safety cap reserves an
+    /// <c>ArrangeRoundingSlack</c> margin beyond the minimum its own arithmetic strictly needs —
+    /// see that constant's own remarks for the exact measured gap). This test instead uses REAL
+    /// arranged rendering (<see cref="CompactViewRig.HostAt"/>) and the clip-aware
+    /// <see cref="AssertFullyWithinWindow"/> across the EXACT range measured unsafe before the
+    /// production fix (Threshold+1 through ~640 — the entire log band, row 3, previously
+    /// translated fully below the window's own bottom edge in that range with a 12-row grid and no
+    /// fix), plus a comfortably-larger height, to prove the actual defect this task exists to fix
+    /// is gone — not merely that one abstract number moved.
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData(536.0)]   // Threshold+1 -- the smallest possible expanded height
+    [InlineData(560.0)]
+    [InlineData(600.0)]   // mid-way through the measured-unsafe range
+    [InlineData(640.0)]   // the measured-unsafe range's own upper edge
+    [InlineData(900.0)]   // comfortably larger -- the cap must not OVER-constrain when there's room to spare
+    public void Invariant_ExpandedMode_NeverClipsAcrossUnsafeHeightRange(double innerHeight)
+    {
+        SampleRestorerViewModel vm = CreateVm();
+        ForceWorstCase(vm);
+        var view = new SampleRestorerView { DataContext = vm };
+
+        (Window window, Grid root) = CompactViewRig.HostAt(view, innerHeight);
+        try
+        {
+            Assert.DoesNotContain("compactHeight", root.Classes);
+            Button restoreAll = window.GetVisualDescendants().OfType<Button>().Single(b => b.Content is "Restore All");
+            Button cancel = window.GetVisualDescendants().OfType<Button>().Single(b => b.Content is "Cancel");
+            ListBox log = window.GetVisualDescendants().OfType<ListBox>().Single();
+            Assert.True(cancel.IsVisible);
+
+            AssertFullyWithinWindow(restoreAll, window);
+            AssertFullyWithinWindow(cancel, window);
+            AssertFullyWithinWindow(log, window);
         }
         finally { window.Close(); }
     }
@@ -622,6 +663,14 @@ public class SampleRestorerCompactTests
             Assert.True(srrFileTextBox.IsFocused,
                 "restoring from a focused compact body must relocate focus to the wired RestoreFocusTarget (SRRFileTextBox), not strand it");
 
+            // Closes a standing a11y-debt item (fix round 1, codex finding 3): the resize-driven
+            // focus-recovery target had no accessible name at all before this round. Same
+            // resolution technique as SRSEntriesGrid_UIAName_ResolvesToEmbeddedSRSFilesHeader
+            // above (the real AutomationPeer, not the raw attached property) so this proves what a
+            // screen reader actually announces on landing here, not merely that a XAML attribute
+            // exists.
+            Assert.Equal("SRR file path", ControlAutomationPeer.CreatePeerForElement(srrFileTextBox).GetName());
+
             window.Height -= 250;
             Dispatcher.UIThread.RunJobs();
             Assert.Contains("compactHeight", root.Classes);
@@ -793,12 +842,23 @@ public class SampleRestorerCompactTests
     }
 
     /// <summary>
+    /// CLIP-AWARE (fix round 1, codex finding 4): a naive "translated point within the window's
+    /// own outer rectangle" check can false-PASS a control that is genuinely obscured by an
+    /// INTERMEDIATE <c>ClipToBounds</c> ancestor — e.g. a target nested inside the config band's
+    /// own <see cref="ScrollViewer"/> can translate to a point that numerically falls inside the
+    /// window's rectangle while the ScrollViewer's own clipped viewport hides it entirely. Mirrors
+    /// <c>CompactViewRig.IsFullyVisibleWithinWindow</c>'s / <c>CompactHeightBehavior.IsObscured</c>'s
+    /// own cumulative-intersection algorithm exactly: progressively intersect the window's own
+    /// bounds with every <c>ClipToBounds</c> ancestor's own translated bounds, then require the
+    /// control's OWN full translated rect to fit within that combined visible region — not merely
+    /// its top-left/bottom-right corners against the window alone.
+    /// <para>
     /// A degenerate (zero-width or zero-height) control translates to a single point, which
     /// trivially satisfies any containment check — exactly the pre-change defect (the action row
     /// and log measuring zero height, per the brief's own headline-defect framing) would have
     /// slipped past a containment-only check. Effective visibility and a positive size are
-    /// asserted FIRST, unconditionally. Local copy (not promoted into the shared rig) mirrors
-    /// every other converted view's own helper of the same shape.
+    /// asserted FIRST, unconditionally.
+    /// </para>
     /// </summary>
     private static void AssertFullyWithinWindow(Control control, Window window)
     {
@@ -806,17 +866,35 @@ public class SampleRestorerCompactTests
         Assert.True(control.Bounds.Width > 0 && control.Bounds.Height > 0,
             $"{control.GetType().Name} has a non-positive size ({control.Bounds.Width:F1}x{control.Bounds.Height:F1}) — collapsed, not merely positioned badly.");
 
-        Point? topLeft = control.TranslatePoint(new Point(0, 0), window);
-        Point? bottomRight = control.TranslatePoint(new Point(control.Bounds.Width, control.Bounds.Height), window);
-        Assert.True(topLeft is not null && bottomRight is not null,
-            $"{control.GetType().Name} could not be translated into window coordinates.");
+        if (TransformRect(control, new Rect(control.Bounds.Size), window) is not { } controlInWindow)
+        {
+            Assert.Fail($"{control.GetType().Name} could not be translated into window coordinates.");
+            return;
+        }
+
+        Rect visible = new(window.Bounds.Size);
+        foreach (Visual ancestor in control.GetVisualAncestors())
+        {
+            if (ancestor is not Control clipper || !clipper.ClipToBounds)
+            {
+                continue;
+            }
+
+            if (TransformRect(clipper, new Rect(clipper.Bounds.Size), window) is not { } clipperInWindow)
+            {
+                Assert.Fail($"{clipper.GetType().Name} (a clipping ancestor of {control.GetType().Name}) could not be translated into window coordinates.");
+                return;
+            }
+
+            visible = visible.Intersect(clipperInWindow);
+        }
 
         const double Slack = 0.5;
-        Rect windowBounds = new(window.Bounds.Size);
         Assert.True(
-            topLeft!.Value.X >= windowBounds.X - Slack && topLeft.Value.Y >= windowBounds.Y - Slack &&
-            bottomRight!.Value.X <= windowBounds.Right + Slack && bottomRight.Value.Y <= windowBounds.Bottom + Slack,
-            $"{control.GetType().Name} bounds ({topLeft.Value}..{bottomRight.Value}) exceed window bounds {windowBounds}");
+            controlInWindow.X >= visible.X - Slack && controlInWindow.Y >= visible.Y - Slack &&
+            controlInWindow.Right <= visible.Right + Slack && controlInWindow.Bottom <= visible.Bottom + Slack,
+            $"{control.GetType().Name} bounds ({controlInWindow}) exceed the visible (clip-aware) region {visible} — obscured by " +
+            "an intermediate ClipToBounds ancestor (e.g. a ScrollViewer's own clipped viewport), not just positioned outside the window.");
     }
 
     // ── 6. Handoff (ScrollHandoffBehavior exercised through the real view) ──
@@ -1110,6 +1188,84 @@ public class SampleRestorerCompactTests
     }
 
     /// <summary>
+    /// Extends the raster comparison beyond row 0 (fix round 1, codex finding 2): row 0 alone
+    /// never exercised the config band's own <c>StackPanel</c>, whose local, unconditional
+    /// <c>Margin="0,0,4,0"</c> (an earlier version of this markup) DID change expanded-mode
+    /// rendering — a real defect the row-0-only comparison structurally could not see. The SRR
+    /// File caption is the config band's own FIRST child: its available width depends entirely on
+    /// the enclosing StackPanel's own margin, so it directly exercises the fix (the
+    /// <c>compactScrollInset</c> style class, zero at normal size).
+    /// </summary>
+    [AvaloniaFact]
+    public void FrameRig_NormalMode_ConfigBandCaptionMatchesPreChangeShape()
+    {
+        SampleRestorerViewModel vm = CreateVm();
+        var view = new SampleRestorerView { DataContext = vm };
+        (Window newWindow, Grid newRoot) = CompactViewRig.HostAt(view, ExpandedInner);
+        try
+        {
+            Assert.DoesNotContain("compactHeight", newRoot.Classes);
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+
+            ScrollViewer configScroller = newRoot.Children.OfType<ScrollViewer>().Single(sv => Grid.GetRow(sv) == 1);
+            TextBlock newCaption = configScroller.GetVisualDescendants().OfType<TextBlock>()
+                .Single(tb => tb.Inlines is [Run { Text: "SRR File " }, ..]);
+            Size newCaptionSize = newCaption.Bounds.Size;
+
+            Window oldWindow = BuildPreConversionSrrCaptionWindow();
+            try
+            {
+                oldWindow.Show();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                Dispatcher.UIThread.RunJobs();
+                Control oldCaption = (Control)oldWindow.Content!;
+                Size oldSize = oldCaption.Bounds.Size;
+
+                Assert.Equal(oldSize.Height, newCaptionSize.Height, precision: 0);
+
+                // Zero narrowing at normal size -- the fix's own point (a local, unconditional
+                // inset on the enclosing StackPanel would have shown up here as a 4-DIP gap).
+                Assert.Equal(oldSize.Width, newCaptionSize.Width, precision: 0);
+
+                AssertFullRasterPixelIdentity(oldCaption, oldSize, newCaption, newCaptionSize);
+            }
+            finally { oldWindow.Close(); }
+        }
+        finally { newWindow.Close(); }
+    }
+
+    /// <summary>
+    /// Verbatim reconstruction of SampleRestorerView.axaml's SRR File caption TextBlock before this
+    /// task (git history). DIAGNOSED (fix round 1): the two &lt;Run&gt; elements sit on separate
+    /// source lines in the XAML, and Avalonia's XAML parser collapses the inter-tag newline +
+    /// indentation into a THIRD, implicit whitespace-only <see cref="Run"/> (plain, default-styled
+    /// — it does not inherit the preceding Run's own local FontWeight) in the real
+    /// <c>Inlines</c> collection — CONFIRMED directly (a throwaway diagnostic dump of the real,
+    /// live-hosted TextBlock's own <c>Inlines</c> showed exactly 3 entries: "SRR File ", a bare
+    /// " ", then the caption text — not the 2 this reconstruction originally assumed). Omitting it
+    /// silently drops one space before the em dash, shifting every pixel from the em dash onward
+    /// and producing a false raster mismatch unrelated to this task's own compactScrollInset fix.
+    /// No equivalent gap exists after the second Run (whitespace immediately before the closing
+    /// &lt;/TextBlock&gt; tag is trimmed, not collapsed to content) — confirmed by the same dump
+    /// reporting exactly 3 inlines, not 4.
+    /// </summary>
+    private static Window BuildPreConversionSrrCaptionWindow()
+    {
+        var textBlock = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 2) };
+        textBlock.Inlines!.Add(new Run { Text = "SRR File ", FontWeight = FontWeight.SemiBold });
+        textBlock.Inlines!.Add(new Run { Text = " " });
+        textBlock.Inlines!.Add(new Run
+        {
+            Text = "— The .srr file containing embedded .srs sample data.",
+            Foreground = (IBrush?)Application.Current!.FindResource("ForegroundSecondary"),
+            FontSize = (double)Application.Current!.FindResource("FontSizeCaption")!,
+        });
+
+        return new Window { Width = CompactInvariantRig.InnerWidth, SizeToContent = SizeToContent.Height, Content = textBlock };
+    }
+
+    /// <summary>
     /// Proves <see cref="AssertFullRasterPixelIdentity"/>'s size gate genuinely DISCRIMINATES — a
     /// capture-size disagreement fails loudly instead of silently shrinking to the intersection.
     /// Mirrors every other converted view's own identical covering test.
@@ -1250,7 +1406,10 @@ public class SampleRestorerCompactTests
     // is CompactViewRig.Describe's own format (real automation peer name plus x:Name, reported
     // separately) — a human-readable regression net, NOT the discriminating check itself.
     // Same-typed siblings that describe identically (the three "Browse" buttons, both grid row
-    // checkboxes) are disambiguated by AssertTabWalk's OWN independent, reference-based checks. ──
+    // checkboxes) are disambiguated by AssertTabWalk's OWN independent, reference-based checks.
+    // SRRFileTextBox's own entry updated (fix round 1, codex finding 3): its automation peer name
+    // went from "" to "SRR file path" once AutomationProperties.Name was added; MediaDirTextBox
+    // and OutputDirTextBox are untouched pre-existing a11y debt, out of this task's scope. ──
 
     /// <summary>
     /// Normal mode, starting at SRR File's own Browse button — PROVEN first (not presumed): the
@@ -1260,7 +1419,7 @@ public class SampleRestorerCompactTests
     private static readonly IReadOnlyList<string> NormalModeTabOrderFixture =
     [
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"SRRFileTextBox\"",
+        "TextBox name=\"SRR file path\" id=\"SRRFileTextBox\"",
         "Button name=\"Browse\" id=\"\"",
         "TextBox name=\"\" id=\"MediaDirTextBox\"",
         "Button name=\"Browse\" id=\"\"",
@@ -1281,7 +1440,7 @@ public class SampleRestorerCompactTests
     [
         "ToggleButton name=\"Help\" id=\"\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"SRRFileTextBox\"",
+        "TextBox name=\"SRR file path\" id=\"SRRFileTextBox\"",
         "Button name=\"Browse\" id=\"\"",
         "TextBox name=\"\" id=\"MediaDirTextBox\"",
         "Button name=\"Browse\" id=\"\"",

@@ -156,6 +156,19 @@
   <Style Selector="Grid.compactHeight Border.pinnedSeparator">
     <Setter Property="Margin" Value="0,2" />
   </Style>
+  <!-- SampleRestorer's config band (task 5, fix round 1): the base value is ZERO — the config
+       band's own StackPanel did not exist before this task's conversion (its content was a
+       plain, unindented DockPanel column), so zero is the genuine "unchanged from today" value,
+       not merely a convenient default. The 4px right-inset (the same scrollbar-clearance
+       rationale as every other converted view's own house-rule content-panel inset) applies
+       ONLY in compact mode, where the config band's own ScrollViewer can genuinely show a
+       scrollbar; EXPANDED mode never needs it and must stay pixel-identical to today's markup. -->
+  <Style Selector="StackPanel.compactScrollInset">
+    <Setter Property="Margin" Value="0" />
+  </Style>
+  <Style Selector="Grid.compactHeight StackPanel.compactScrollInset">
+    <Setter Property="Margin" Value="0,0,4,0" />
+  </Style>
   <!-- No Expander-level MaxHeight: the behavior applies HelpBodyMaxHeight to the BODY's
        internal ScrollViewer only (a whole-control cap would squeeze the header). -->
   <!-- Body-scroller focusability is COMPACT-SCOPED (criterion F: no new normal-mode
