@@ -242,6 +242,21 @@ public class ReconstructorCompactTests
     /// entry points.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Round-5 retro-review (the per-scope redesign the round-4 blocker was ruled into): replaces
+    /// round 3/4's single combined <see cref="CompactViewRig.AssertTabWalkStaysVisible"/> call
+    /// with the FORWARD walk plus TWO independent, per-scope REVERSE walks — one per
+    /// keyboard-navigation scope this view actually has (see
+    /// <see cref="NormalScopeAReverseTabOrderFixture"/>'s own doc comment for why there are two,
+    /// not one). Each reverse walk is anchored at ITS OWN scope's last forward stop, checked
+    /// against an ORDERED fixture (not membership-only), and asserted to land on ITS OWN scope's
+    /// first-in-scope element explicitly — so a topology change that merges or splits the two
+    /// scopes differently fails loudly rather than being silently absorbed by whichever walk
+    /// happens to run. Finally, the exact reference UNION of both reverse walks' visited controls
+    /// is asserted equal to the forward walk's own full inventory — any control in neither reverse
+    /// scope (a real regression, not a hypothetical one — this is exactly what "the forward walk
+    /// passes but reverse quietly stops reaching something" would look like) fails here.
+    /// </summary>
     private static void AssertTabWalk(double innerHeight)
     {
         ReconstructorViewModel vm = CreateVm();
@@ -260,12 +275,88 @@ public class ReconstructorCompactTests
                     .GetVisualDescendants().OfType<ToggleButton>().Single()
                 : window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "WindowsPackLink");
 
-            IReadOnlyCollection<string> forwardFixture = compact ? CompactModeTabOrderFixture : NormalModeTabOrderFixture;
-            IReadOnlyCollection<string> reverseFixture = compact ? CompactModeReverseTabOrderFixture : NormalModeReverseTabOrderFixture;
+            IReadOnlyList<string> forwardFixture = compact ? CompactModeTabOrderFixture : NormalModeTabOrderFixture;
             List<Control> expectedForwardStops = ResolveExpectedStops(window, forwardFixture);
-            List<Control> expectedReverseStops = ResolveExpectedStops(window, reverseFixture);
 
-            CompactViewRig.AssertTabWalkStaysVisible(window, sentinel, expectedForwardStops, expectedReverseStops);
+            // The forward walk uses CaptureTabOrderControls (root-SCOPED: stops the moment focus
+            // would leave root, exactly like NormalModeTabOrderFixture/CompactModeTabOrderFixture
+            // were themselves captured) rather than RunTabPass (UNSCOPED: keeps walking into the
+            // surrounding shell chrome — MenuItem/status-bar controls — until it returns to the
+            // sentinel or repeats, which it eventually does, but only after visiting controls
+            // outside this view entirely). The per-scope REVERSE walks below still use RunTabPass
+            // directly: reverse never needs to leave root's scope to begin with (round 3/4 already
+            // established that both this view's navigation scopes are entirely WITHIN root), so
+            // RunTabPass's own "stable loop" boundary is the right one there.
+            sentinel.Focus();
+            Dispatcher.UIThread.RunJobs();
+            IReadOnlyList<Control> forwardOrder = CompactViewRig.CaptureTabOrderControls(window, root, expectedForwardStops);
+            Assert.Equal(forwardFixture, forwardOrder.Select(CompactViewRig.Describe));
+
+            // Scope split: scope A is everything up to and including the Paths TabItem header;
+            // scope B is everything after (the Paths sub-tab's own content). Resolved by POSITION
+            // in forwardOrder, not by re-querying descriptions — the four "Browse" buttons
+            // describe identically, so only the forward walk's own disambiguated, ordered result
+            // can name a SPECIFIC one unambiguously (see ScopeBReverseTabOrderFixture's own note).
+            int tabItemIndex = forwardFixture.ToList().FindIndex(s => s.StartsWith("TabItem", StringComparison.Ordinal));
+            Control scopeAAnchor = forwardOrder[tabItemIndex];
+            Control scopeAFirstInScope = forwardOrder[0];
+            Control scopeBAnchor = forwardOrder[^1];
+            Control scopeBFirstInScope = forwardOrder[tabItemIndex + 1];
+
+            IReadOnlyList<string> scopeAReverseFixture = compact ? CompactScopeAReverseTabOrderFixture : NormalScopeAReverseTabOrderFixture;
+            List<Control> expectedScopeAReverseStops = ResolveExpectedStops(window, scopeAReverseFixture);
+            List<Control> expectedScopeBReverseStops = ResolveExpectedStops(window, ScopeBReverseTabOrderFixture);
+
+            CompactViewRig.TabWalkResult scopeAReverse = CompactViewRig.RunTabPass(window, scopeAAnchor, forward: false, expectedScopeAReverseStops);
+            CompactViewRig.TabWalkResult scopeBReverse = CompactViewRig.RunTabPass(window, scopeBAnchor, forward: false, expectedScopeBReverseStops);
+
+            // ORDER, explicit — RunTabPass's own completeness check is set-based, not order-based.
+            Assert.Equal(scopeAReverseFixture, scopeAReverse.Order.Select(CompactViewRig.Describe));
+            Assert.Equal(ScopeBReverseTabOrderFixture, scopeBReverse.Order.Select(CompactViewRig.Describe));
+
+            // BOUNDARY LANDING, explicit — so a topology change that merges/splits the two scopes
+            // differently fails loudly instead of being silently absorbed by the split.
+            Assert.True(ReferenceEquals(scopeAReverse.LoopedBackTo, scopeAFirstInScope),
+                $"scope A's reverse walk should land on {CompactViewRig.Describe(scopeAFirstInScope)}, " +
+                $"not {CompactViewRig.Describe(scopeAReverse.LoopedBackTo)}");
+            Assert.True(ReferenceEquals(scopeBReverse.LoopedBackTo, scopeBFirstInScope),
+                $"scope B's reverse walk should land on {CompactViewRig.Describe(scopeBFirstInScope)}, " +
+                $"not {CompactViewRig.Describe(scopeBReverse.LoopedBackTo)}");
+
+            // UNION: the exact reference union of both scopes' reverse-visited controls must equal
+            // the forward walk's full inventory — any control in NEITHER reverse scope fails here.
+            var unionOfReverseScopes = new HashSet<Control>(ReferenceEqualityComparer.Instance);
+            foreach (Control c in scopeAReverse.Order) { unionOfReverseScopes.Add(c); }
+            foreach (Control c in scopeBReverse.Order) { unionOfReverseScopes.Add(c); }
+            var forwardInventory = new HashSet<Control>(forwardOrder, ReferenceEqualityComparer.Instance);
+            Assert.True(unionOfReverseScopes.SetEquals(forwardInventory),
+                $"the union of scope A's ({scopeAReverse.Order.Count}) and scope B's " +
+                $"({scopeBReverse.Order.Count}) reverse-visited controls must exactly equal the " +
+                $"forward walk's full inventory ({forwardOrder.Count}) — some control is " +
+                "reachable forward but in neither reverse scope.");
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// Round-5 retro-review: permanentizes round 4's TEMPORARY sanity check (a fake 5th "Browse"
+    /// entry, manually inserted then removed) as a REAL, committed test. This view has exactly 4
+    /// real "Browse" buttons; a fixture claiming a 5th must fail loudly, naming the exact
+    /// shortfall, rather than silently resolving to whatever 4 happen to exist.
+    /// </summary>
+    [AvaloniaFact]
+    public void ResolveExpectedStops_FixtureExpectsMoreThanExist_ThrowsNamingTheShortfall()
+    {
+        ReconstructorViewModel vm = CreateVm();
+        var view = new ReconstructorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        try
+        {
+            List<string> bogusFixture = [.. NormalModeTabOrderFixture, "Button name=\"Browse\" id=\"\""];
+
+            Xunit.Sdk.XunitException ex = Assert.Throws<Xunit.Sdk.XunitException>(() => ResolveExpectedStops(window, bogusFixture));
+
+            Assert.Contains("expects 5, this window has 4", ex.Message, StringComparison.Ordinal);
         }
         finally { window.Close(); }
     }
@@ -1023,30 +1114,65 @@ public class ReconstructorCompactTests
     ];
 
     /// <summary>
-    /// Round-3 retro-review finding #1: the REVERSE (Shift+Tab) counterpart to
-    /// <see cref="NormalModeTabOrderFixture"/> — captured, not assumed, and deliberately
-    /// single-entry. Two independent checks (a direct <c>KeyboardNavigationHandler.GetNext(...,
-    /// NavigationDirection.Previous)</c> query and a real Shift+Tab key-press simulation) both
-    /// confirm Shift+Tab from WindowsPackLink resolves back to WindowsPackLink itself — Avalonia's
-    /// TabControl scopes keyboard navigation to the selected tab's own content (Tab/Shift+Tab stay
-    /// inside the active tab rather than escaping to the tab strip or shell chrome), and
-    /// WindowsPackLink is the first focusable element within that scope. See
-    /// <see cref="AssertTabWalk"/>'s own doc comment and the retro-fix report for the full finding.
+    /// Round-5 retro-review: PER-SCOPE reverse walks, superseding round 3/4's single-entry
+    /// fixtures. Round 4 found Reconstructor hosts a SECOND, nested <c>TabControl</c>
+    /// (<c>settingsTabs</c>, the Paths/Options sub-tab container) inside the outer shell's own
+    /// TabControl, and each independently scopes keyboard navigation to its own selected
+    /// content — so a single, view-wide reverse walk can never cross the inner boundary. Scope A
+    /// (this fixture) is the Reconstructor tab's OWN content: everything up to and including the
+    /// Paths <c>TabItem</c> header. Scope B (<see cref="ScopeBReverseTabOrderFixture"/>, identical
+    /// in both modes since compact mode only affects row 0) is the Paths sub-tab's own content —
+    /// everything after. Captured from a real Shift+Tab key-press simulation anchored at scope A's
+    /// own LAST forward stop (the TabItem header) — confirmed to land back on WindowsPackLink
+    /// (scope A's own first-in-scope element, matching round 3's finding) via object-identity hash,
+    /// not just description. Scope A ∪ scope B, as a set of object references, equals the FULL
+    /// forward inventory exactly (7 + 11 = 18 here; 5 + 11 = 16 in compact mode) — asserted by
+    /// <see cref="AssertTabWalk"/>.
     /// </summary>
-    private static readonly IReadOnlyList<string> NormalModeReverseTabOrderFixture =
+    private static readonly IReadOnlyList<string> NormalScopeAReverseTabOrderFixture =
     [
+        "TabItem name=\"Avalonia.Controls.ScrollViewer\" id=\"\"",
+        "Button name=\"Import from SRR\" id=\"\"",
+        "Button name=\"Import Config\" id=\"\"",
+        "Button name=\"Export Config\" id=\"\"",
+        "Button name=\"Original files from RAR FTP (Windows)\" id=\"\"",
+        "Button name=\"Extracted files for Linux (ready to use)\" id=\"\"",
         "Button name=\"Extracted files for Windows (ready to use)\" id=\"WindowsPackLink\"",
     ];
 
-    /// <summary>
-    /// Round-3 retro-review finding #1: the REVERSE (Shift+Tab) counterpart to
-    /// <see cref="CompactModeTabOrderFixture"/> — same finding, same verification, as
-    /// <see cref="NormalModeReverseTabOrderFixture"/>: Shift+Tab from the disclosure's header
-    /// toggle resolves back to the toggle itself (the first focusable element within the
-    /// selected tab's own keyboard-navigation scope).
-    /// </summary>
-    private static readonly IReadOnlyList<string> CompactModeReverseTabOrderFixture =
+    /// <summary>Compact-mode counterpart to <see cref="NormalScopeAReverseTabOrderFixture"/> — same finding, shorter (the 3 link buttons are hidden), same verification.</summary>
+    private static readonly IReadOnlyList<string> CompactScopeAReverseTabOrderFixture =
     [
+        "TabItem name=\"Avalonia.Controls.ScrollViewer\" id=\"\"",
+        "Button name=\"Import from SRR\" id=\"\"",
+        "Button name=\"Import Config\" id=\"\"",
+        "Button name=\"Export Config\" id=\"\"",
         "ToggleButton name=\"Help & links\" id=\"\"",
+    ];
+
+    /// <summary>
+    /// Scope B (the Paths sub-tab's own keyboard-navigation scope — see
+    /// <see cref="NormalScopeAReverseTabOrderFixture"/>'s own doc comment) — identical in both
+    /// modes, since compact mode never touches row 4 (the Paths/Options TabControl itself).
+    /// Captured from a real Shift+Tab key-press simulation anchored at "Auto-scroll" (scope B's
+    /// own last forward stop), confirmed to land back on the FIRST "Browse" button (scope B's own
+    /// first-in-scope element) via object-identity hash — description alone cannot distinguish it
+    /// from the other three, which all read identically (see the a11y-debt note elsewhere in this
+    /// file), so the boundary-landing assertion in <see cref="AssertTabWalk"/> resolves it by
+    /// POSITION in the forward walk's own ordered result, never by description matching.
+    /// </summary>
+    private static readonly IReadOnlyList<string> ScopeBReverseTabOrderFixture =
+    [
+        "CheckBox name=\"Auto-scroll\" id=\"\"",
+        "Button name=\"Save log...\" id=\"\"",
+        "GridSplitter name=\"Resize options and log\" id=\"\"",
+        "TextBox name=\"\" id=\"OutputTextBox\"",
+        "Button name=\"Browse\" id=\"\"",
+        "TextBox name=\"\" id=\"VerifyTextBox\"",
+        "Button name=\"Browse\" id=\"\"",
+        "TextBox name=\"\" id=\"ReleaseTextBox\"",
+        "Button name=\"Browse\" id=\"\"",
+        "TextBox name=\"\" id=\"WinRARTextBox\"",
+        "Button name=\"Browse\" id=\"\"",
     ];
 }

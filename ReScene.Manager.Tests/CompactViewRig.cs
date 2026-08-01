@@ -245,6 +245,17 @@ internal static class CompactViewRig
     }
 
     /// <summary>
+    /// Round-5 retro-review: the distinct controls a <see cref="RunTabPass"/> call actually
+    /// visited, in visitation order, plus WHERE it ultimately landed when the walk concluded — the
+    /// control it either genuinely returned to (the starting sentinel) or the ALREADY-visited
+    /// control the confirmed-stable terminal loop closes on (which, for a walk that starts at one
+    /// end of a keyboard-navigation scope and runs off the OTHER end, is that scope's own
+    /// first-in-scope element — see <see cref="ReconstructorCompactTests"/>'s round-5 per-scope
+    /// walks for why callers need to assert this explicitly, not just infer it).
+    /// </summary>
+    internal readonly record struct TabWalkResult(IReadOnlyList<Control> Order, Control LoopedBackTo);
+
+    /// <summary>
     /// Round-4 retro-review: widened from <c>private</c> to <c>internal</c> so a covering test
     /// (<c>CompactViewRigTests</c>) can exercise the forward and reverse passes INDEPENDENTLY —
     /// proving a reverse-only trap genuinely lets the forward pass succeed before the reverse
@@ -252,8 +263,17 @@ internal static class CompactViewRig
     /// sequential call (where a forward-pass exception would mask whether reverse ever ran at
     /// all, and conversely a passing combined call can't by itself prove forward succeeded
     /// FIRST rather than not being reached).
+    /// <para>
+    /// Round-5 retro-review: returns a <see cref="TabWalkResult"/> (the visited order plus the
+    /// boundary it landed on) instead of <c>void</c>, so a caller doing a per-scope reverse walk
+    /// can assert the exact ORDER against a committed fixture and assert the boundary LANDING
+    /// explicitly (so a topology change that merges or splits scopes differently fails loudly
+    /// instead of being silently absorbed). <see cref="AssertTabWalkStaysVisible"/> itself still
+    /// discards the result — its own contract only ever needed the visibility/completeness side
+    /// effects.
+    /// </para>
     /// </summary>
-    internal static void RunTabPass(Window window, Control sentinel, bool forward, IReadOnlyCollection<Control>? expectedStops = null)
+    internal static TabWalkResult RunTabPass(Window window, Control sentinel, bool forward, IReadOnlyCollection<Control>? expectedStops = null)
     {
         sentinel.Focus();
         Dispatcher.UIThread.RunJobs();
@@ -274,7 +294,7 @@ internal static class CompactViewRig
                 // a true cycle back to the sentinel is unambiguous stability — no lap-confirmation
                 // needed — but completeness still must hold.
                 AssertCompleteness(order, expectedStops, PassName(forward));
-                return;
+                return new TabWalkResult(order, sentinel);
             }
 
             int firstSeenAt = order.FindIndex(c => ReferenceEquals(c, focused));
@@ -282,7 +302,7 @@ internal static class CompactViewRig
             {
                 ConfirmStableLoop(window, forward, order, firstSeenAt, order.Count - firstSeenAt);
                 AssertCompleteness(order, expectedStops, PassName(forward));
-                return;
+                return new TabWalkResult(order, focused);
             }
 
             order.Add(focused);
@@ -370,7 +390,21 @@ internal static class CompactViewRig
     /// mistaken for the view's own genuine internal cycle). Either ending is now also checked for
     /// completeness when <paramref name="expectedStops"/> is supplied.
     /// </remarks>
-    public static IReadOnlyList<string> SnapshotTabOrder(Window window, Control root, IReadOnlyCollection<Control>? expectedStops = null)
+    public static IReadOnlyList<string> SnapshotTabOrder(Window window, Control root, IReadOnlyCollection<Control>? expectedStops = null) =>
+        [.. CaptureTabOrderControls(window, root, expectedStops).Select(Describe)];
+
+    /// <summary>
+    /// Round-5 retro-review: <see cref="SnapshotTabOrder"/>'s own core walk, extracted so a
+    /// caller needing the REAL, root-scoped, ordered <see cref="Control"/> references (not just
+    /// their descriptions) can get them directly — completeness/order checks against a committed
+    /// fixture are reference-based, and <see cref="ReconstructorCompactTests"/>'s round-5
+    /// per-scope reverse walks need to index into the forward walk's own disambiguated result by
+    /// POSITION (the four "Browse" buttons describe identically, so only the walk's own ordered
+    /// result can name a specific one unambiguously). <see cref="SnapshotTabOrder"/> itself is
+    /// unchanged — a thin wrapper over this — so every pre-round-5 caller (Task 3's included)
+    /// keeps its exact prior behavior.
+    /// </summary>
+    internal static IReadOnlyList<Control> CaptureTabOrderControls(Window window, Control root, IReadOnlyCollection<Control>? expectedStops = null)
     {
         Control focused = window.FocusManager?.GetFocusedElement() as Control
             ?? throw new Xunit.Sdk.XunitException(
@@ -389,7 +423,7 @@ internal static class CompactViewRig
             if (!IsWithin(root, focused))
             {
                 AssertCompleteness(order, expectedStops, "forward");
-                return [.. order.Select(Describe)];
+                return order;
             }
 
             int firstSeenAt = order.FindIndex(c => ReferenceEquals(c, focused));
@@ -397,7 +431,7 @@ internal static class CompactViewRig
             {
                 ConfirmStableLoopWithinRoot(window, root, order, firstSeenAt, order.Count - firstSeenAt);
                 AssertCompleteness(order, expectedStops, "forward");
-                return [.. order.Select(Describe)];
+                return order;
             }
 
             order.Add(focused);

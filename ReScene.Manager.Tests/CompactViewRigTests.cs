@@ -154,4 +154,119 @@ public class CompactViewRigTests
 
         window.Close();
     }
+
+    /// <summary>
+    /// Round-5 retro-review: direct proof that the public <c>reverseSentinel</c> parameter (added
+    /// round 4) is genuinely forwarded to the reverse pass rather than silently ignored. "a" is
+    /// built as a scope boundary — Shift+Tab from it stays put — mirroring the REAL, verified
+    /// Reconstructor finding (a TabControl's own content-scope first element has nowhere to go
+    /// backward; see <c>ReconstructorCompactTests</c>' round 3/4/5 notes). Without an explicit
+    /// <c>reverseSentinel</c>, reverse reuses the forward sentinel and hits the boundary
+    /// immediately (only "a" is ever visited) — asserted here as the pre-round-4 baseline. WITH an
+    /// explicit <c>reverseSentinel</c> of "c", reverse must start there instead, genuinely walking
+    /// c → b → a before hitting the same boundary. If <c>reverseSentinel</c> were silently
+    /// ignored, this second call would fail identically to the baseline (only "a" visited) rather
+    /// than reaching b and c first.
+    /// </summary>
+    [AvaloniaFact]
+    public void AssertTabWalkStaysVisible_ReverseSentinel_GenuinelyAnchorsTheReversePass()
+    {
+        var a = new Button { Content = "A" };
+        var b = new Button { Content = "B" };
+        var c = new Button { Content = "C" };
+
+        var panel = new StackPanel();
+        panel.Children.Add(a);
+        panel.Children.Add(b);
+        panel.Children.Add(c);
+
+        var window = new Window { Content = panel };
+
+        panel.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        {
+            if (e.Key != Key.Tab || e.KeyModifiers != KeyModifiers.Shift
+                || !ReferenceEquals(window.FocusManager?.GetFocusedElement(), a))
+            {
+                return;
+            }
+
+            a.Focus();
+            e.Handled = true;
+        });
+
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        // Baseline: reverseSentinel omitted, reverse reuses the forward sentinel (a) and hits the
+        // boundary immediately.
+        CompactViewRig.AssertTabWalkStaysVisible(window, a, expectedForwardStops: [a, b, c], expectedReverseStops: [a]);
+
+        // reverseSentinel supplied explicitly: reverse must start at c instead, genuinely walking
+        // c -> b -> a before hitting the same boundary.
+        CompactViewRig.AssertTabWalkStaysVisible(
+            window, a, expectedForwardStops: [a, b, c], expectedReverseStops: [a, b, c], reverseSentinel: c);
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// Round-5 retro-review: direct proof that <see cref="CompactViewRig.RunTabPass"/>'s
+    /// <c>forward</c> parameter genuinely controls which key modifier gets sent — a forward pass
+    /// sends only plain Tab (never Shift+Tab) and a reverse pass sends only Shift+Tab (never plain
+    /// Tab), rather than, say, both passes accidentally sending the same key. Two independent
+    /// counters, incremented by a non-hijacking KeyDown handler that only inspects
+    /// <see cref="KeyEventArgs.KeyModifiers"/>, confirm this directly.
+    /// </summary>
+    [AvaloniaFact]
+    public void RunTabPass_ForwardAndReverse_EachSendsOnlyItsOwnDirectionsKeyPresses()
+    {
+        var a = new Button { Content = "A" };
+        var b = new Button { Content = "B" };
+        var c = new Button { Content = "C" };
+
+        var panel = new StackPanel();
+        panel.Children.Add(a);
+        panel.Children.Add(b);
+        panel.Children.Add(c);
+
+        var window = new Window { Content = panel };
+
+        int forwardKeyCount = 0;
+        int reverseKeyCount = 0;
+        panel.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        {
+            if (e.Key != Key.Tab)
+            {
+                return;
+            }
+
+            if (e.KeyModifiers == KeyModifiers.Shift)
+            {
+                reverseKeyCount++;
+            }
+            else if (e.KeyModifiers == KeyModifiers.None)
+            {
+                forwardKeyCount++;
+            }
+        });
+
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        CompactViewRig.RunTabPass(window, a, forward: true, expectedStops: [a, b, c]);
+        int forwardCountAfterForwardPass = forwardKeyCount;
+
+        Assert.True(forwardCountAfterForwardPass > 0, "the forward pass should have sent at least one plain Tab press");
+        Assert.Equal(0, reverseKeyCount);
+
+        c.Focus();
+        Dispatcher.UIThread.RunJobs();
+
+        CompactViewRig.RunTabPass(window, c, forward: false, expectedStops: [a, b, c]);
+
+        Assert.True(reverseKeyCount > 0, "the reverse pass should have sent at least one Shift+Tab press");
+        Assert.Equal(forwardCountAfterForwardPass, forwardKeyCount);
+
+        window.Close();
+    }
 }
