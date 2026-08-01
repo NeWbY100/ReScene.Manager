@@ -20,8 +20,15 @@
          has no links (unlike the Reconstructor) — the intro TextBlock is the whole body.
          Margin is NOT a local value here (house rule: local values beat unconditional styles,
          so a local "0,0,0,6" would defeat the compact-mode margin-tightening override) — the
-         base value lives in the helpDisclosure style instead. -->
+         base value lives in the helpDisclosure style instead. HorizontalAlignment/
+         HorizontalContentAlignment ARE local values (the same hug-bug fix Reconstructor's own
+         Expander needed): Fluent's Expander defaults to Left, so without this it hugs its own
+         content's width instead of filling the Grid column. Deliberately scoped to THIS
+         instance rather than the shared helpDisclosure style — a shared-style change would also
+         alter Reconstructor's own already-approved frame-rig numbers; no compact-mode override
+         ever touches these two properties, so a local value here carries no house-rule risk. -->
     <Expander Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
+              HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
               AutomationProperties.Name="Help">
       <Expander.Header>
         <TextBlock Text="Help" FontSize="{DynamicResource FontSizeCaption}" />

@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -6,6 +7,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ReScene.App.Core.Models;
@@ -258,145 +260,176 @@ public class SRSCreatorCompactTests
         CompactViewRig.AssertReachableByThumb(window, target);
     }
 
+    /// <summary>
+    /// Codex finding (post-fix-1 review): the fix-1 version force-focused a PRESUMED first
+    /// control and walked forward from it — that presumption was never actually verified. This
+    /// version adopts the now-hardened <see cref="CompactViewRig"/> idioms directly: a forward
+    /// walk with an INDEPENDENTLY-resolved completeness set (so an unreached control, including
+    /// one that would only be reachable BEFORE the presumed sentinel, fails loudly rather than
+    /// being silently absorbed), plus a REVERSE walk anchored at the forward walk's own LAST
+    /// stop (the unambiguous "boundary" — the log's Save button, not a presumed starting point)
+    /// that must retrace the ENTIRE forward order and land back on the forward walk's FIRST
+    /// stop — the actual, empirical proof that the presumed-first control really is first,
+    /// rather than an assumption. SRSCreatorView is a single keyboard-navigation scope (no
+    /// nested TabControl like Reconstructor's), so this is one forward walk plus one reverse
+    /// walk — no per-scope machinery.
+    /// </summary>
     private static void AssertTabWalk(double innerHeight)
-    {
-        SRSCreatorViewModel vm = CreateVm();
-        var view = new SRSCreatorView { DataContext = vm };
-        (Window window, Grid root) = CompactViewRig.HostAt(view, innerHeight);
-        try
-        {
-            // In compact mode Help starts collapsed (condition 5): the body's own prose is not a
-            // tab stop while collapsed, so the header toggle is the walk's genuine entry point.
-            // In expanded/flat mode the disclosure contributes NOTHING to tab order at all (its
-            // header is hidden by style and its body is plain, non-focusable prose) — the
-            // Sample File TextBox is the first genuinely focusable control either way, so it is
-            // the flat-mode sentinel.
-            bool compact = root.Classes.Contains("compactHeight");
-            Control sentinel = compact
-                ? root.GetVisualDescendants().OfType<Expander>().Single(e => e.Name == "HelpDisclosure")
-                    .GetVisualDescendants().OfType<ToggleButton>().Single()
-                : window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "InputTextBox");
-            CompactViewRig.AssertTabWalkStaysVisible(window, sentinel);
-        }
-        finally { window.Close(); }
-    }
-
-    // ── 3. Tab-order snapshots ────────────────────────────────────────
-    //
-    // Bare type:name identities (CompactViewRig.SnapshotTabOrder's own Describe()) are not
-    // enough here: none of this view's picker/action buttons carry an explicit
-    // AutomationProperties.Name, so a fixture built from them alone cannot tell "Main file
-    // Browse" apart from "Output Browse", meaning two same-typed controls trading places (a
-    // real reordering regression) would leave the fixture unchanged. SnapshotSemanticTabOrder
-    // below re-walks Tab the same way (leaves root's scope, or repeats an already-seen
-    // control) but resolves each stop's IDENTITY by which command/property it is bound to —
-    // stable across renames, unambiguous between same-typed siblings. Enabling Create SRS
-    // (InputPath/OutputPath set) before capturing means its own position is actually PINNED by
-    // the fixture, not left unverified because it happened to be absent.
-
-    /// <summary>
-    /// Resolved fresh against THIS CALL's <paramref name="vm"/> — RelayCommand instances are
-    /// per-VM-instance, not shared/static, so comparing against a cached dictionary built from a
-    /// DIFFERENT test's VM would silently never match. Direct reference comparison per command,
-    /// no caching.
-    /// </summary>
-    private static string DescribeSemantic(Control control, SRSCreatorViewModel vm) => control switch
-    {
-        Button { Command: { } c } when ReferenceEquals(c, vm.BrowseInputCommand) => "Button:BrowseInput",
-        Button { Command: { } c } when ReferenceEquals(c, vm.BrowseMainFileCommand) => "Button:BrowseMainFile",
-        Button { Command: { } c } when ReferenceEquals(c, vm.ClearMainFileCommand) => "Button:ClearMainFile",
-        Button { Command: { } c } when ReferenceEquals(c, vm.BrowseOutputCommand) => "Button:BrowseOutput",
-        Button { Command: { } c } when ReferenceEquals(c, vm.CreateSRSCommand) => "Button:CreateSRS",
-        Button { Command: { } c } when ReferenceEquals(c, vm.CancelCreationCommand) => "Button:Cancel",
-        Button { Command: { } c } when ReferenceEquals(c, vm.SaveLogCommand) => "Button:SaveLog",
-        TextBox { Name: "InputTextBox" } => "TextBox:Input",
-        TextBox { Name: "OutputTextBox" } => "TextBox:Output",
-        TextBox { Width: 400 } => "TextBox:AppName",
-        TextBox => "TextBox:MainFilePath", // the only remaining unnamed, non-400-width TextBox
-        ToggleButton toggle => $"ToggleButton:{AutomationProperties.GetName(toggle)}",
-        _ => throw new Xunit.Sdk.XunitException($"DescribeSemantic has no case for {control.GetType().Name} — extend the switch rather than let an unidentified stop silently pass."),
-    };
-
-    /// <summary>
-    /// Same walk-and-terminate contract as <see cref="CompactViewRig.SnapshotTabOrder"/> (leaves
-    /// <paramref name="root"/>'s scope, or repeats an already-seen control), reimplemented here
-    /// rather than extending the shared rig, so Tasks 4-6's own use of the unmodified rig is
-    /// never put at risk by a change scoped to this view's own semantic-identity need.
-    /// </summary>
-    private static IReadOnlyList<string> SnapshotSemanticTabOrder(Window window, Control root, SRSCreatorViewModel vm)
-    {
-        Control focused = window.FocusManager?.GetFocusedElement() as Control
-            ?? throw new Xunit.Sdk.XunitException("SnapshotSemanticTabOrder requires focus already inside root — focus a starting control first.");
-
-        List<string> order = [];
-        HashSet<Control> seen = [];
-        const int MaxSteps = 500;
-        for (int step = 0; step < MaxSteps; step++)
-        {
-            bool within = ReferenceEquals(root, focused) || root.IsVisualAncestorOf(focused);
-            if (!within || !seen.Add(focused))
-            {
-                return order;
-            }
-
-            order.Add(DescribeSemantic(focused, vm));
-
-            window.KeyPressQwerty(PhysicalKey.Tab, RawInputModifiers.None);
-            window.KeyReleaseQwerty(PhysicalKey.Tab, RawInputModifiers.None);
-            Dispatcher.UIThread.RunJobs();
-            focused = window.FocusManager?.GetFocusedElement() as Control
-                ?? throw new Xunit.Sdk.XunitException($"SnapshotSemanticTabOrder lost focus entirely at step {step}.");
-        }
-
-        throw new Xunit.Sdk.XunitException($"SnapshotSemanticTabOrder did not leave root or loop back within {MaxSteps} steps.");
-    }
-
-    [AvaloniaFact]
-    public void TabOrderSnapshot_Normal_MatchesPreChangeFixture()
     {
         SRSCreatorViewModel vm = CreateVm();
         vm.InputPath = @"C:\release\sample.mkv";
         vm.OutputPath = @"C:\release\sample.srs"; // Create SRS enabled: its own position is pinned, not left unverified
         var view = new SRSCreatorView { DataContext = vm };
-        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        (Window window, Grid root) = CompactViewRig.HostAt(view, innerHeight);
         try
         {
-            Assert.DoesNotContain("compactHeight", root.Classes);
+            bool compact = root.Classes.Contains("compactHeight");
 
-            // The TRUE first control (Sample File's own Browse button precedes InputTextBox in
-            // DockPanel declaration order) — not a mid-sequence sentinel, so the complete order
-            // is captured, not a tail that happens to omit the first stop.
-            Button sentinel = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputCommand));
+            // In compact mode Help starts collapsed (condition 5): the body's own prose is not a
+            // tab stop while collapsed, so the header toggle is the walk's genuine entry point.
+            // In expanded/flat mode the disclosure contributes NOTHING to tab order at all (its
+            // header is hidden by style and its body is plain, non-focusable prose) — Sample
+            // File's own Browse button is the presumed first stop there, PROVEN (not merely
+            // assumed) by the reverse walk's own boundary-landing assertion below.
+            Control sentinel = compact
+                ? root.GetVisualDescendants().OfType<Expander>().Single(e => e.Name == "HelpDisclosure")
+                    .GetVisualDescendants().OfType<ToggleButton>().Single()
+                : window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputCommand));
+
+            IReadOnlyList<string> fixture = compact ? CompactModeTabOrderFixture : NormalModeTabOrderFixture;
+            List<Control> expectedStops = ResolveExpectedStops(window, fixture);
+
             sentinel.Focus();
             Dispatcher.UIThread.RunJobs();
+            CompactViewRig.TabOrderCapture forwardCapture = CompactViewRig.CaptureTabOrderControls(window, root, expectedStops);
+            IReadOnlyList<Control> forwardOrder = forwardCapture.Order;
+            Assert.Equal(fixture, forwardOrder.Select(CompactViewRig.Describe));
 
-            IReadOnlyList<string> order = SnapshotSemanticTabOrder(window, root, vm);
-            Assert.Equal(NormalModeTabOrderFixture, order);
+            // The forward walk's terminal external target must be the SPECIFIC, expected
+            // shell-chrome boundary — the rig's own fake shell (CompactViewRig's BuildShell)
+            // puts a "_File" MenuItem right after the TabControl in Z-order, matching
+            // Reconstructor's own identical finding against the same shared shell. Confirmed by
+            // a real run: FirstExternalTarget's own Describe is `MenuItem name="File" id=""`
+            // (the accessible name strips the access-key underscore; matched here against the
+            // raw Header property, "_File", which is what BuildShell actually declares).
+            MenuItem expectedExternalBoundary = window.GetVisualDescendants().OfType<MenuItem>()
+                .Single(m => m.Header as string == "_File");
+            Assert.True(forwardCapture.FirstExternalTarget is not null,
+                "forward capture should have left root's scope onto an external control, not ended via a stable loop within root");
+            Assert.True(ReferenceEquals(expectedExternalBoundary, forwardCapture.FirstExternalTarget),
+                $"forward capture's terminal external target should be {CompactViewRig.Describe(expectedExternalBoundary)}, " +
+                $"not {CompactViewRig.Describe(forwardCapture.FirstExternalTarget!)} — same description does not mean same control instance.");
+
+            // REVERSE: anchored at the forward walk's own LAST stop (the unambiguous boundary),
+            // never a presumed starting point. Confirmed by a real run: a single scope means the
+            // reverse walk genuinely retraces the WHOLE forward order and lands back on the
+            // forward walk's FIRST stop — the actual, empirical proof that the presumed forward
+            // sentinel is genuinely first, not an assumption.
+            CompactViewRig.TabWalkResult reverse = CompactViewRig.RunTabPass(window, forwardOrder[^1], forward: false, expectedStops);
+
+            List<Control> expectedReverseOrder = [.. forwardOrder.Reverse()];
+            AssertSameControlSequence(expectedReverseOrder, reverse.Order, "reverse");
+
+            Assert.True(ReferenceEquals(reverse.LoopedBackTo, forwardOrder[0]),
+                $"the reverse walk should land back on {CompactViewRig.Describe(forwardOrder[0])} (the forward walk's own first " +
+                $"stop), not {CompactViewRig.Describe(reverse.LoopedBackTo)} — this is the actual proof that the forward " +
+                "sentinel is genuinely first, not a presumption.");
         }
         finally { window.Close(); }
     }
+
+    /// <summary>
+    /// Resolves a committed, description-based fixture (see <see cref="CompactViewRig.Describe"/>)
+    /// back into the REAL <see cref="Control"/> references it names, for THIS SPECIFIC window —
+    /// completeness-checking is reference-based, and a fixture committed to source can only ever
+    /// be strings across separate test runs. Reimplemented locally (mirroring
+    /// <c>ReconstructorCompactTests</c>' own private helper of the same shape) rather than
+    /// extending the shared rig, so Tasks 4-6's own use of the unmodified rig is never put at
+    /// risk by a change scoped to this view's own need. Matching is a COUNTED MULTISET, not a
+    /// set — this view's three identically-described "Browse" buttons need three real, distinct
+    /// matches, not merely "at least one" — so a regression that removed one of them (leaving
+    /// two) is still caught here rather than silently resolving successfully.
+    /// </summary>
+    private static List<Control> ResolveExpectedStops(Window window, IReadOnlyCollection<string> fixture)
+    {
+        Dictionary<string, int> expectedCounts = fixture
+            .GroupBy(description => description)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        ILookup<string, Control> byDescription = window.GetVisualDescendants().OfType<Control>()
+            .ToLookup(CompactViewRig.Describe);
+
+        List<Control> resolved = [];
+        List<string> shortfalls = [];
+        foreach ((string description, int expectedCount) in expectedCounts)
+        {
+            List<Control> matches = [.. byDescription[description]];
+            if (matches.Count < expectedCount)
+            {
+                shortfalls.Add($"\"{description}\" expects {expectedCount}, this window has {matches.Count}");
+                continue;
+            }
+
+            resolved.AddRange(matches.Take(expectedCount));
+        }
+
+        if (shortfalls.Count > 0)
+        {
+            throw new Xunit.Sdk.XunitException(
+                $"{shortfalls.Count} fixture descriptions do not have enough matching controls in " +
+                $"this window (counted, not merely present): {string.Join("; ", shortfalls)}");
+        }
+
+        return resolved;
+    }
+
+    /// <summary>
+    /// OBJECT-REFERENCE-exact sequence comparison — asserts <paramref name="actual"/> is,
+    /// position for position, the SAME control REFERENCES as <paramref name="expected"/>, not
+    /// merely the same DESCRIPTIONS. A description-based <c>Assert.Equal</c> cannot distinguish
+    /// a permutation of controls that all describe identically (this view's three "Browse"
+    /// buttons, none of which carry a distinguishing x:Name or accessible name); this can, since
+    /// it never converts either side to a string until it already knows a mismatch exists and
+    /// needs to report it. Mirrors <c>ReconstructorCompactTests</c>' own helper of the same
+    /// shape.
+    /// </summary>
+    private static void AssertSameControlSequence(IReadOnlyList<Control> expected, IReadOnlyList<Control> actual, string context)
+    {
+        if (expected.Count != actual.Count)
+        {
+            Assert.Fail(
+                $"{context}: expected {expected.Count} controls but the walk visited {actual.Count} " +
+                $"(expected: {string.Join(", ", expected.Select(CompactViewRig.Describe))}; " +
+                $"actual: {string.Join(", ", actual.Select(CompactViewRig.Describe))})");
+        }
+
+        for (int i = 0; i < expected.Count; i++)
+        {
+            if (!ReferenceEquals(expected[i], actual[i]))
+            {
+                Assert.Fail(
+                    $"{context}: position {i} expected {CompactViewRig.Describe(expected[i])} but the " +
+                    $"walk visited {CompactViewRig.Describe(actual[i])} — same description does not " +
+                    "mean same control instance.");
+            }
+        }
+    }
+
+    // ── 3. Tab-order snapshots ────────────────────────────────────────
+    //
+    // Both entry points below simply invoke the SAME hardened AssertTabWalk (section 2's own
+    // criterion-C helper, now ALSO the exact-order/completeness/reverse-boundary authority) at
+    // the exact heights RenderedMatrix_CompactAt700x450_... and
+    // RenderedMatrix_FreshAtThresholdPlusOne_... already exercise. Kept as separate, named entry
+    // points (rather than deleted as pure duplicates) so "the tab order is exactly this" reads
+    // as its own explicit, discoverable assertion — not merely a side effect of a criterion-C
+    // reachability test.
 
     [AvaloniaFact]
-    public void TabOrderSnapshot_Compact_MatchesSpecSection2Order()
-    {
-        SRSCreatorViewModel vm = CreateVm();
-        vm.InputPath = @"C:\release\sample.mkv";
-        vm.OutputPath = @"C:\release\sample.srs";
-        var view = new SRSCreatorView { DataContext = vm };
-        (Window window, Grid root) = CompactViewRig.HostAt(view, CompactInner);
-        try
-        {
-            Assert.Contains("compactHeight", root.Classes);
-            ToggleButton headerToggle = root.GetVisualDescendants().OfType<Expander>().Single(e => e.Name == "HelpDisclosure")
-                .GetVisualDescendants().OfType<ToggleButton>().Single();
-            headerToggle.Focus();
-            Dispatcher.UIThread.RunJobs();
+    public void TabOrderSnapshot_Normal_MatchesPreChangeFixture() => AssertTabWalk(ExpandedInner);
 
-            IReadOnlyList<string> order = SnapshotSemanticTabOrder(window, root, vm);
-            Assert.Equal(CompactModeTabOrderFixture, order);
-        }
-        finally { window.Close(); }
-    }
+    [AvaloniaFact]
+    public void TabOrderSnapshot_Compact_MatchesSpecSection2Order() => AssertTabWalk(CompactInner);
 
     // ── 4. Chrome ─────────────────────────────────────────────────────
 
@@ -666,16 +699,29 @@ public class SRSCreatorCompactTests
     // ── 6. Frame-rig parity (criterion F: normal-mode pixels unchanged) ──
 
     /// <summary>
-    /// Compares the flat-mode header region (row 0) against a standalone reconstruction of the
-    /// PRE-TASK markup (verbatim tab-description TextBlock, the row-0 shape before this task
-    /// wrapped it in the helpDisclosure Expander), both forced through a real render tick (the
-    /// Reconstructor's own frame-rig pattern) before measuring. The same two DELIBERATE,
-    /// spec-mandated differences the Reconstructor's own equivalent test documents apply here
-    /// for the identical reasons: (1) the content's own inset (house rule, narrows available
-    /// width by ~4 DIPs) and (2) the flat-mode wrapper is now Expander+ScrollViewer+TextBlock
-    /// rather than a bare TextBlock — invisible when the content needs no scrolling (confirmed
-    /// by <see cref="SingleIntroInstance_ExistsInBothModes"/>), but a structurally different
-    /// visual tree nonetheless.
+    /// RECAPTURED after the hug-bug fix (HorizontalAlignment/HorizontalContentAlignment=
+    /// "Stretch" on the Expander — see the view's own XAML comment): comparing at TRUE ORIGINAL
+    /// geometries — old at its own natural, unconstrained width
+    /// (<see cref="CompactInvariantRig.InnerWidth"/>); new at its own real width, measured from
+    /// the intro TextBlock itself (this view's row 0 has no intermediate content StackPanel
+    /// unlike Reconstructor's — the Margin="0,0,4,0" inset sits directly on the TextBlock) —
+    /// plus a REAL pixel comparison (RenderTargetBitmap + CopyPixels, same technique as
+    /// Reconstructor's own retro-hardened version and HexViewControlTests), not merely a
+    /// geometry check: geometry alone cannot catch a shifted glyph, a recolored brush, or a
+    /// reflowed line inside the surviving region.
+    /// <para>
+    /// MEASURED, no mask needed: with the hug-bug fixed, newRow0 (the Expander) itself now
+    /// matches newRoot's full 676 width exactly (confirmed: 0.0 narrowing when comparing
+    /// newRow0 directly, which is what originally exposed this test as stale — see the task
+    /// report). The TRUE remaining delta is the TextBlock's own 4-DIP right margin (672 vs
+    /// 676) — the SAME minimal, fully-explained inset Reconstructor's own retro-review arrived
+    /// at. Unlike Reconstructor's own text, this view's shorter intro (no WrapPanel/links row
+    /// below it to also check) does NOT push any word across a line-break boundary at the
+    /// narrower 672-DIP measure — confirmed by the byte-for-byte comparison below requiring NO
+    /// excluded band beyond the mandatory trailing-width strip (present only in old's wider
+    /// render, with no counterpart in new at all). If a future content change ever needs one,
+    /// name and document it explicitly here — never broaden this mask blindly.
+    /// </para>
     /// </summary>
     [AvaloniaFact]
     public void FrameRig_NormalMode_HeaderRegionMatchesPreDisclosureShape()
@@ -690,7 +736,13 @@ public class SRSCreatorCompactTests
             Dispatcher.UIThread.RunJobs();
 
             Control newRow0 = newRoot.Children.OfType<Control>().Single(c => Grid.GetRow(c) == 0);
-            Size newSize = newRow0.Bounds.Size;
+
+            // NEW's true comparison partner: the intro TextBlock itself (this view's row 0 has
+            // no intermediate content StackPanel, unlike Reconstructor's) — NOT newRow0 (the
+            // outer Expander), which the hug-bug fix now stretches to the full 676 with no
+            // narrowing of its own at all.
+            TextBlock newCaption = newRow0.GetVisualDescendants().OfType<TextBlock>().Single();
+            Size newSize = newCaption.Bounds.Size;
 
             Window oldWindow = BuildPreDisclosureRow0Window();
             try
@@ -702,14 +754,22 @@ public class SRSCreatorCompactTests
                 Size oldSize = oldRow0.Bounds.Size;
 
                 // Height must match exactly — the visually significant dimension (a
-                // taller/shorter header block would shift every row below it).
+                // taller/shorter header block would shift every row below it). Confirmed exact:
+                // nothing about the width narrowing below causes the TextBlock to wrap onto an
+                // extra line.
                 Assert.Equal(oldSize.Height, newSize.Height, precision: 0);
 
-                // Width is narrower by a bounded, EXPLAINED amount (content inset + reserved
-                // vertical-scrollbar track — same reasoning as the Reconstructor's own test).
+                // The intro TextBlock's own documented, intentional inset (Margin="0,0,4,0",
+                // "per house rule") — MEASURED, not the pre-hug-bug-fix figure this test
+                // originally carried (which conflated the inset with the hug bug itself).
                 double widthNarrowing = oldSize.Width - newSize.Width;
-                Assert.True(widthNarrowing is > 0 and <= 30,
-                    $"header region width narrowed by {widthNarrowing:F1} DIPs (old {oldSize.Width:F1}, new {newSize.Width:F1}) — expected a small, explained narrowing (inset + reserved scrollbar track), not an unbounded drift");
+                Assert.Equal(4.0, widthNarrowing, precision: 0);
+
+                // TRUE pixel comparison at each side's own real geometry — no mask needed
+                // (MEASURED, see this test's own doc comment) beyond the mandatory trailing
+                // strip AssertPixelIdenticalOutsideHeaderMask itself always excludes (present
+                // only in old's wider render).
+                AssertPixelIdenticalOutsideHeaderMask(oldRow0, oldSize, newCaption, newSize, wordWrapExcludedHeight: 0);
             }
             finally { oldWindow.Close(); }
         }
@@ -731,41 +791,136 @@ public class SRSCreatorCompactTests
         return new Window { Width = CompactInvariantRig.InnerWidth, SizeToContent = SizeToContent.Height, Content = textBlock };
     }
 
-    // ── Fixtures (captured from real, green SnapshotSemanticTabOrder runs against this task's
-    // finished implementation, WITH Create SRS enabled — see task report for the capture
-    // method). Each entry is a stable semantic identity (bound command, name, or a
-    // distinguishing attribute — never a bare type), so a reordering that swaps two same-typed
-    // siblings (e.g. the two "Browse" buttons trading places) changes the fixture and is
-    // caught — a bare type:name fixture could not tell them apart. ──
+    /// <summary>
+    /// Renders both controls to their own <see cref="RenderTargetBitmap"/> at their OWN true
+    /// geometry (each sized to its own full bounds, independent of whatever window each is
+    /// actually hosted in), then excludes only the trailing rectangle that exists solely in
+    /// <paramref name="oldControl"/>'s wider render (x from <paramref name="newSize"/>'s width
+    /// to <paramref name="oldSize"/>'s width, full height) plus, if non-zero,
+    /// <paramref name="wordWrapExcludedHeight"/> rows from the top — and requires true
+    /// byte-for-byte pixel identity everywhere else. Mirrors
+    /// <c>ReconstructorCompactTests</c>' own helper of the same shape and rationale.
+    /// </summary>
+    private static void AssertPixelIdenticalOutsideHeaderMask(Control oldControl, Size oldSize, Control newControl, Size newSize, double wordWrapExcludedHeight)
+    {
+        const int BytesPerPixel = 4;
+
+        Assert.True(oldSize.Width > newSize.Width,
+            $"the header mask assumes old is the WIDER render, since old's bare TextBlock never " +
+            $"had new's content-inset narrowing (old {oldSize.Width:F2}, new {newSize.Width:F2}).");
+
+        var oldPixelSize = new PixelSize((int)Math.Ceiling(oldSize.Width), (int)Math.Ceiling(oldSize.Height));
+        var newPixelSize = new PixelSize((int)Math.Ceiling(newSize.Width), (int)Math.Ceiling(newSize.Height));
+
+        byte[] oldPixels = RenderToPixelBuffer(oldControl, oldPixelSize);
+        byte[] newPixels = RenderToPixelBuffer(newControl, newPixelSize);
+
+        int maskedCompareWidth = (int)Math.Floor(newSize.Width);
+        int compareHeight = (int)Math.Floor(Math.Min(oldSize.Height, newSize.Height));
+        int wordWrapExcludedRows = (int)Math.Ceiling(wordWrapExcludedHeight);
+        Assert.True(maskedCompareWidth > 0 && compareHeight > wordWrapExcludedRows,
+            $"comparison region must be non-empty (old {oldSize}, new {newSize}, excluded band {wordWrapExcludedHeight:F1})");
+
+        int oldStride = oldPixelSize.Width * BytesPerPixel;
+        int newStride = newPixelSize.Width * BytesPerPixel;
+        int rowBytes = maskedCompareWidth * BytesPerPixel;
+
+        for (int y = wordWrapExcludedRows; y < compareHeight; y++)
+        {
+            int oldRowStart = y * oldStride;
+            int newRowStart = y * newStride;
+
+            for (int x = 0; x < rowBytes; x++)
+            {
+                if (oldPixels[oldRowStart + x] == newPixels[newRowStart + x])
+                {
+                    continue;
+                }
+
+                int pixelX = x / BytesPerPixel;
+                Assert.Fail(
+                    $"header region pixel mismatch at ({pixelX}, {y}) — old byte 0x{oldPixels[oldRowStart + x]:X2} " +
+                    $"vs new byte 0x{newPixels[newRowStart + x]:X2}. Compared region was " +
+                    $"{maskedCompareWidth}x{compareHeight} DIPs, rows {wordWrapExcludedRows}-{compareHeight - 1} " +
+                    $"(old render {oldPixelSize}, new render {newPixelSize}); excluded: the trailing " +
+                    $"strip (x from {maskedCompareWidth} to {oldPixelSize.Width - 1}, old-only).");
+            }
+        }
+    }
+
+    private static byte[] RenderToPixelBuffer(Control control, PixelSize size)
+    {
+        using var bitmap = new RenderTargetBitmap(size, new Vector(96, 96));
+        bitmap.Render(control);
+
+        byte[] buffer = new byte[size.Width * size.Height * 4];
+        GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        try
+        {
+            bitmap.CopyPixels(new PixelRect(0, 0, size.Width, size.Height), handle.AddrOfPinnedObject(), buffer.Length, size.Width * 4);
+        }
+        finally
+        {
+            handle.Free();
+        }
+
+        return buffer;
+    }
+
+    // ── Fixtures (captured from real, green CompactViewRig.CaptureTabOrderControls runs against
+    // this task's finished implementation, WITH Create SRS enabled — see task report for the
+    // capture method). Each entry is CompactViewRig.Describe's own format (real automation peer
+    // name plus x:Name, reported separately — see its own doc). Same-typed siblings that
+    // describe identically (this view's three "Browse" buttons) are still disambiguated where
+    // it matters: AssertTabWalk's completeness check is a counted multiset (ResolveExpectedStops)
+    // and its reverse-order check is OBJECT-REFERENCE-exact (AssertSameControlSequence), so a
+    // swap between two identically-described siblings is still caught even though the fixture
+    // STRING itself could not tell them apart on its own. ──
 
     /// <summary>
-    /// Normal mode, captured from the TRUE first control (Sample File's own Browse button,
-    /// which precedes InputTextBox in DockPanel declaration order — not a mid-sequence
-    /// sentinel that would silently omit it): Sample File's Browse + its TextBox, Main file's
-    /// Browse/Clear + its TextBox, Output's Browse + its TextBox, the App name TextBox, Create
-    /// SRS (InputPath/OutputPath set so it is genuinely enabled and its own position is
-    /// pinned — CanExecute false for the default inert VM would otherwise leave it absent and
+    /// Normal mode, starting at Sample File's own Browse button — PROVEN first (not presumed):
+    /// the reverse walk anchored at the tail end (Save log) retraces this exact sequence
+    /// backwards and lands back on this same Browse button, empirically confirming nothing
+    /// precedes it. From there: Sample File's Browse + its TextBox, Main file's Browse/Clear +
+    /// its TextBox, Output's Browse + its TextBox, the App name TextBox, Create SRS
+    /// (InputPath/OutputPath set so it is genuinely enabled and its own position is pinned —
+    /// CanExecute false for the default inert VM would otherwise leave it absent and
     /// unverified, the same situation the Reconstructor's own "Start" button fixture
     /// documents), then Save log. Cancel is absent (hidden, IsCreating false).
     /// </summary>
     private static readonly IReadOnlyList<string> NormalModeTabOrderFixture =
     [
-        "Button:BrowseInput", "TextBox:Input", "Button:BrowseMainFile", "Button:ClearMainFile",
-        "TextBox:MainFilePath", "Button:BrowseOutput", "TextBox:Output", "TextBox:AppName",
-        "Button:CreateSRS", "Button:SaveLog",
+        "Button name=\"Browse\" id=\"\"",
+        "TextBox name=\"\" id=\"InputTextBox\"",
+        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Clear\" id=\"\"",
+        "TextBox name=\"\" id=\"\"",
+        "Button name=\"Browse\" id=\"\"",
+        "TextBox name=\"\" id=\"OutputTextBox\"",
+        "TextBox name=\"\" id=\"\"",
+        "Button name=\"Create SRS\" id=\"\"",
+        "Button name=\"Save log...\" id=\"\"",
     ];
 
     /// <summary>
     /// Compact order (spec §2): disclosure header toggle → (body skipped: Help starts collapsed
     /// per condition 5, so the plain-prose body is IsVisible=false and correctly excluded from
     /// Tab order) → identical tail to normal mode (this walk starts one stop earlier, at the
-    /// header toggle, rather than at Sample File's Browse button).
+    /// header toggle, rather than at Sample File's Browse button — likewise PROVEN first here by
+    /// its own reverse walk landing back on the toggle).
     /// </summary>
     private static readonly IReadOnlyList<string> CompactModeTabOrderFixture =
     [
-        "ToggleButton:Help",
-        "Button:BrowseInput", "TextBox:Input", "Button:BrowseMainFile", "Button:ClearMainFile",
-        "TextBox:MainFilePath", "Button:BrowseOutput", "TextBox:Output", "TextBox:AppName",
-        "Button:CreateSRS", "Button:SaveLog",
+        "ToggleButton name=\"Help\" id=\"\"",
+        "Button name=\"Browse\" id=\"\"",
+        "TextBox name=\"\" id=\"InputTextBox\"",
+        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Clear\" id=\"\"",
+        "TextBox name=\"\" id=\"\"",
+        "Button name=\"Browse\" id=\"\"",
+        "TextBox name=\"\" id=\"OutputTextBox\"",
+        "TextBox name=\"\" id=\"\"",
+        "Button name=\"Create SRS\" id=\"\"",
+        "Button name=\"Save log...\" id=\"\"",
     ];
 }
