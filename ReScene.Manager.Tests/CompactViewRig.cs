@@ -391,7 +391,18 @@ internal static class CompactViewRig
     /// completeness when <paramref name="expectedStops"/> is supplied.
     /// </remarks>
     public static IReadOnlyList<string> SnapshotTabOrder(Window window, Control root, IReadOnlyCollection<Control>? expectedStops = null) =>
-        [.. CaptureTabOrderControls(window, root, expectedStops).Select(Describe)];
+        [.. CaptureTabOrderControls(window, root, expectedStops).Order.Select(Describe)];
+
+    /// <summary>
+    /// Round-5 retro-review: the distinct, in-root controls a <see cref="CaptureTabOrderControls"/>
+    /// call actually visited, in visitation order, plus — round 6 retro-review — the control it
+    /// landed on if it terminated by LEAVING root's scope (<c>null</c> if it instead terminated by
+    /// a confirmed stable loop within root; there is no "external target" in that case). A caller
+    /// needs this to validate the walk didn't merely leave root at all, but left it at the
+    /// SPECIFIC, expected boundary — an unvalidated blind exit could mask a topology change that
+    /// makes the walk leave root somewhere unintended.
+    /// </summary>
+    internal readonly record struct TabOrderCapture(IReadOnlyList<Control> Order, Control? FirstExternalTarget);
 
     /// <summary>
     /// Round-5 retro-review: <see cref="SnapshotTabOrder"/>'s own core walk, extracted so a
@@ -403,8 +414,23 @@ internal static class CompactViewRig
     /// result can name a specific one unambiguously). <see cref="SnapshotTabOrder"/> itself is
     /// unchanged — a thin wrapper over this — so every pre-round-5 caller (Task 3's included)
     /// keeps its exact prior behavior.
+    /// <para>
+    /// Round-6 retro-review: the extraction had DROPPED per-step visibility assertions
+    /// (<see cref="SnapshotTabOrder"/>'s own pre-round-5 body never called
+    /// <see cref="AssertFullyVisible"/> either — this was always a latent gap in
+    /// <c>SnapshotTabOrder</c> itself, but it only became a real Criterion C regression once
+    /// round 5 started using this extraction for <c>ReconstructorCompactTests</c>' own FORWARD
+    /// walk, a role <see cref="RunTabPass"/> — which DOES assert visibility at every step — used
+    /// to fill). Restored: every control visited WITHIN root (including the starting one) is now
+    /// asserted fully visible, exactly matching <see cref="RunTabPass"/>'s own guarantee. The
+    /// control outside root that the walk lands on is NOT visibility-checked (Criterion C is
+    /// about the view under test staying visible, not the surrounding shell chrome it exits
+    /// into) — it is returned via <see cref="TabOrderCapture.FirstExternalTarget"/> instead, so
+    /// the CALLER can validate it is the SPECIFIC, expected boundary rather than accepting
+    /// whatever the walk happened to exit onto.
+    /// </para>
     /// </summary>
-    internal static IReadOnlyList<Control> CaptureTabOrderControls(Window window, Control root, IReadOnlyCollection<Control>? expectedStops = null)
+    internal static TabOrderCapture CaptureTabOrderControls(Window window, Control root, IReadOnlyCollection<Control>? expectedStops = null)
     {
         Control focused = window.FocusManager?.GetFocusedElement() as Control
             ?? throw new Xunit.Sdk.XunitException(
@@ -423,15 +449,17 @@ internal static class CompactViewRig
             if (!IsWithin(root, focused))
             {
                 AssertCompleteness(order, expectedStops, "forward");
-                return order;
+                return new TabOrderCapture(order, focused);
             }
+
+            AssertFullyVisible(focused, window, $"forward capture, step {step}");
 
             int firstSeenAt = order.FindIndex(c => ReferenceEquals(c, focused));
             if (firstSeenAt >= 0)
             {
                 ConfirmStableLoopWithinRoot(window, root, order, firstSeenAt, order.Count - firstSeenAt);
                 AssertCompleteness(order, expectedStops, "forward");
-                return order;
+                return new TabOrderCapture(order, null);
             }
 
             order.Add(focused);

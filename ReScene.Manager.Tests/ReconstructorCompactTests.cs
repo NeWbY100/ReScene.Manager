@@ -289,8 +289,22 @@ public class ReconstructorCompactTests
             // RunTabPass's own "stable loop" boundary is the right one there.
             sentinel.Focus();
             Dispatcher.UIThread.RunJobs();
-            IReadOnlyList<Control> forwardOrder = CompactViewRig.CaptureTabOrderControls(window, root, expectedForwardStops);
+            CompactViewRig.TabOrderCapture forwardCapture = CompactViewRig.CaptureTabOrderControls(window, root, expectedForwardStops);
+            IReadOnlyList<Control> forwardOrder = forwardCapture.Order;
             Assert.Equal(forwardFixture, forwardOrder.Select(CompactViewRig.Describe));
+
+            // Round-6 retro-review: the terminal EXTERNAL target (the first control outside root
+            // the forward walk lands on) must be the SPECIFIC, expected shell-chrome boundary, not
+            // accepted blind — an unvalidated blind exit could mask a topology change that makes
+            // the walk leave root somewhere unintended (e.g. mid-view, rather than genuinely
+            // exhausting root's own tab order first). Confirmed via a real run (both modes,
+            // consistently): the rig's own fake shell (CompactViewRig.BuildShell) puts a "_File"
+            // MenuItem right after the TabControl in Z-order, so that is the first control the
+            // walk reaches once it exhausts this view's own root.
+            const string ExpectedForwardExternalBoundary = "MenuItem name=\"File\" id=\"\"";
+            Assert.True(forwardCapture.FirstExternalTarget is not null,
+                "forward capture should have left root's scope onto an external control, not ended via a stable loop within root");
+            Assert.Equal(ExpectedForwardExternalBoundary, CompactViewRig.Describe(forwardCapture.FirstExternalTarget!));
 
             // Scope split: scope A is everything up to and including the Paths TabItem header;
             // scope B is everything after (the Paths sub-tab's own content). Resolved by POSITION
@@ -310,9 +324,17 @@ public class ReconstructorCompactTests
             CompactViewRig.TabWalkResult scopeAReverse = CompactViewRig.RunTabPass(window, scopeAAnchor, forward: false, expectedScopeAReverseStops);
             CompactViewRig.TabWalkResult scopeBReverse = CompactViewRig.RunTabPass(window, scopeBAnchor, forward: false, expectedScopeBReverseStops);
 
-            // ORDER, explicit — RunTabPass's own completeness check is set-based, not order-based.
-            Assert.Equal(scopeAReverseFixture, scopeAReverse.Order.Select(CompactViewRig.Describe));
-            Assert.Equal(ScopeBReverseTabOrderFixture, scopeBReverse.Order.Select(CompactViewRig.Describe));
+            // ORDER, explicit and OBJECT-REFERENCE-exact — round-6 retro-review: comparing
+            // DESCRIPTIONS (as this used to) cannot catch a permutation of the four identically
+            // described "Browse" instances — the same four strings in the same positions pass
+            // regardless of which SPECIFIC Browse control actually sat at each position. The
+            // forward walk's own ordered result is the single source of truth for "which specific
+            // control," so each per-scope reverse walk is checked against the REVERSED SLICE of
+            // those SAME references — descriptions are used only inside the failure message.
+            List<Control> expectedScopeAReverseOrder = [.. forwardOrder.Take(tabItemIndex + 1).Reverse()];
+            List<Control> expectedScopeBReverseOrder = [.. forwardOrder.Skip(tabItemIndex + 1).Reverse()];
+            AssertSameControlSequence(expectedScopeAReverseOrder, scopeAReverse.Order, "scope A reverse");
+            AssertSameControlSequence(expectedScopeBReverseOrder, scopeBReverse.Order, "scope B reverse");
 
             // BOUNDARY LANDING, explicit — so a topology change that merges/splits the two scopes
             // differently fails loudly instead of being silently absorbed by the split.
@@ -334,6 +356,88 @@ public class ReconstructorCompactTests
                 $"({scopeBReverse.Order.Count}) reverse-visited controls must exactly equal the " +
                 $"forward walk's full inventory ({forwardOrder.Count}) — some control is " +
                 "reachable forward but in neither reverse scope.");
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// Round-6 retro-review: OBJECT-REFERENCE-exact sequence comparison — asserts
+    /// <paramref name="actual"/> is, position for position, the SAME control REFERENCES as
+    /// <paramref name="expected"/>, not merely the same DESCRIPTIONS. A description-based
+    /// <c>Assert.Equal</c> cannot distinguish a permutation of controls that all describe
+    /// identically (this view's four "Browse" buttons, none of which carry a distinguishing
+    /// x:Name or accessible name); this can, since it never converts either side to a string
+    /// until it already knows a mismatch exists and needs to report it.
+    /// </summary>
+    private static void AssertSameControlSequence(IReadOnlyList<Control> expected, IReadOnlyList<Control> actual, string context)
+    {
+        if (expected.Count != actual.Count)
+        {
+            Assert.Fail(
+                $"{context}: expected {expected.Count} controls but the walk visited {actual.Count} " +
+                $"(expected: {string.Join(", ", expected.Select(CompactViewRig.Describe))}; " +
+                $"actual: {string.Join(", ", actual.Select(CompactViewRig.Describe))})");
+        }
+
+        for (int i = 0; i < expected.Count; i++)
+        {
+            if (!ReferenceEquals(expected[i], actual[i]))
+            {
+                Assert.Fail(
+                    $"{context}: position {i} expected {CompactViewRig.Describe(expected[i])} but the " +
+                    $"walk visited {CompactViewRig.Describe(actual[i])} — same description does not " +
+                    "mean same control instance.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Round-6 retro-review: proves <see cref="AssertSameControlSequence"/> — and therefore
+    /// <see cref="AssertTabWalk"/>'s own per-scope reverse order checks, which rely on it — is
+    /// genuinely sensitive to a PERMUTATION of identically-described controls, not just to
+    /// controls going missing. Captures the REAL forward walk, builds scope B's real, correctly
+    /// reversed expected order from it, then deliberately swaps two of the four identically
+    /// described "Browse" positions within that EXPECTED list — simulating a hypothetical
+    /// regression that reordered them while every description stayed the same, which a
+    /// description-based comparison could never catch. Runs the REAL scope B reverse walk (which
+    /// visits them in the correct, un-swapped order, exactly as the earlier `RenderedMatrix_*`
+    /// tests already confirm) against this deliberately-wrong expectation and asserts it fails,
+    /// naming the specific mismatched position.
+    /// </summary>
+    [AvaloniaFact]
+    public void AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch()
+    {
+        ReconstructorViewModel vm = CreateVm();
+        var view = new ReconstructorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        try
+        {
+            Button sentinel = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "WindowsPackLink");
+            sentinel.Focus();
+            Dispatcher.UIThread.RunJobs();
+
+            IReadOnlyList<Control> forwardOrder = CompactViewRig.CaptureTabOrderControls(window, root, ResolveExpectedStops(window, NormalModeTabOrderFixture)).Order;
+            int tabItemIndex = NormalModeTabOrderFixture.ToList().FindIndex(s => s.StartsWith("TabItem", StringComparison.Ordinal));
+            Control scopeBAnchor = forwardOrder[^1];
+
+            List<Control> expectedScopeBReverseOrder = [.. forwardOrder.Skip(tabItemIndex + 1).Reverse()];
+
+            // Deliberately swap two of the four identically-described "Browse" positions —
+            // description-based comparison sees no difference at all; reference-based comparison
+            // must.
+            List<int> browseIndexes = [.. Enumerable.Range(0, expectedScopeBReverseOrder.Count)
+                .Where(i => CompactViewRig.Describe(expectedScopeBReverseOrder[i]) == "Button name=\"Browse\" id=\"\"")];
+            Assert.True(browseIndexes.Count >= 2, "this covering test requires at least 2 identically-described Browse buttons to swap");
+            (expectedScopeBReverseOrder[browseIndexes[0]], expectedScopeBReverseOrder[browseIndexes[1]]) =
+                (expectedScopeBReverseOrder[browseIndexes[1]], expectedScopeBReverseOrder[browseIndexes[0]]);
+
+            CompactViewRig.TabWalkResult scopeBReverse = CompactViewRig.RunTabPass(window, scopeBAnchor, forward: false);
+
+            Xunit.Sdk.FailException ex = Assert.Throws<Xunit.Sdk.FailException>(
+                () => AssertSameControlSequence(expectedScopeBReverseOrder, scopeBReverse.Order, "scope B reverse"));
+
+            Assert.Contains($"position {browseIndexes[0]}", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("same description does not mean same control instance", ex.Message, StringComparison.Ordinal);
         }
         finally { window.Close(); }
     }
