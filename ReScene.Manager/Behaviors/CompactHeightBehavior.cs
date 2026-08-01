@@ -397,22 +397,28 @@ internal static class CompactHeightBehavior
                     return;
 
                 case ClipVisibility.Obscured:
-                    RelocateFocusIfNeeded(root, holder, compact, generation, state);
-                    return;
+                    RunStagedRecovery(root, holder, compact, generation, state, ref attempts);
+                    break;
 
                 case ClipVisibility.PartiallyClipped:
                     ScrollFullyIntoView(root, holder, compact, generation, state, ref attempts);
                     break;
             }
 
-            // HAND-OVER (the only way back round this loop). ScrollFullyIntoView also returns when
-            // the holder is settled, unreachable or superseded — in every one of those the live
-            // holder is still this one, or none, and there is nothing further to do. What is left is
-            // the case that matters: focus moved to another in-root element DURING one of the
-            // requests, which means that request went on bubbling and may have scrolled the new
-            // holder out of view on the old one's behalf. The behavior does not get to walk away
-            // from a stranding it caused itself, and waiting for the next bounds change is no
-            // answer — a drag has a last step, and after it no further bounds change arrives.
+            // HAND-OVER (the only way back round this loop). Both legs above also return with the
+            // holder unchanged when it is settled, unreachable or superseded — nothing further to
+            // do. What is left is the case that matters: focus moved to another in-root element
+            // DURING one of the requests, which means that request went on bubbling and may have
+            // scrolled the new holder out of view on the old one's behalf. The behavior does not get
+            // to walk away from a stranding it caused itself, and waiting for the next bounds change
+            // is no answer — a drag has a last step, and after it no further bounds change arrives.
+            //
+            // This applies to the OBSCURED leg every bit as much as the partial one, which is why it
+            // breaks rather than returns. RunStagedRecovery yields to a newer focus it judges
+            // USABLE — and usable is the AA line (focusable, enabled, not ENTIRELY hidden), which a
+            // partially clipped element passes. So it can hand back a holder that is perfectly
+            // "usable" and still not fully visible, which is this pass's bar, not its. Only the
+            // three-way verdict below settles that.
             if (CaptureFocusedElement(root) is not { } live || ReferenceEquals(live, holder))
             {
                 return;
@@ -793,9 +799,19 @@ internal static class CompactHeightBehavior
     /// </summary>
     private static void RelocateFocusIfNeeded(Control root, Control captured, bool enteringCompact, int generation, State state)
     {
+        // The TRANSITION path's entry point, and its budget: one transition's recovery gets its own
+        // full allowance of requests, exactly as it always has. The resize pass calls
+        // <see cref="RunStagedRecovery"/> directly instead, threading the budget it has already
+        // partly spent, so that one pass cannot cost more than one allowance in total.
+        int attempts = 0;
+        RunStagedRecovery(root, captured, enteringCompact, generation, state, ref attempts);
+    }
+
+    /// <inheritdoc cref="RelocateFocusIfNeeded"/>
+    private static void RunStagedRecovery(Control root, Control captured, bool enteringCompact, int generation, State state, ref int attempts)
+    {
         Control candidate = captured;
         HashSet<Control> exhausted = [];
-        int attempts = 0;
 
         while (true)
         {

@@ -1471,6 +1471,176 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
+    // ── Shared-behavior fix round 7: the budget, and the resolver's softer bar ───────────
+
+    /// <summary>
+    /// Fix round 7, sliver #1: the shared-budget POLICY was implemented only as far as the
+    /// wrapper's own leg. A pass that reached the obscured leg called
+    /// <see cref="RelocateFocusIfNeeded"/>, which starts its own counter at zero — so a pass could
+    /// spend wrapper budget PLUS a whole fresh allowance, more than the 8 requests the policy
+    /// promises. Now the resize pass threads its remaining budget straight into the staged
+    /// recovery, while <see cref="RelocateFocusIfNeeded"/> — the TRANSITION path's entry point —
+    /// still opens a fresh allowance of its own, so
+    /// <see cref="FakedProgressForever_StopsAtTheCap_AndRelocates"/> keeps pinning that contract
+    /// unchanged.
+    /// <para>
+    /// Constructed to cross both legs in ONE pass: the first holder is permanently partially
+    /// clipped and fakes progress, so the wrapper's own leg spends a request; its handler then
+    /// moves focus to a permanently OBSCURED element that also fakes progress, so the hand-over
+    /// lands in the obscured leg. Round 6 spent 1 + a fresh 8 = 9; the budget now covers the whole
+    /// pass, so the total is exactly 8 however it is split between the legs.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void OneResizePass_CrossingBothLegs_NeverExceedsTheSharedBringIntoViewBudget()
+    {
+        (Window w, Grid root) = Host(Threshold + 100);
+        try
+        {
+            // Added FIRST, so it is first in tree order and the fallback chain (which the obscured
+            // leg reaches once the budget runs out) lands here — on something fully visible and
+            // outside the scroller. Otherwise the chain picks the partially-clipped target inside
+            // the scroller, whose own handler fires again and re-enters the scenario, and the
+            // request count stops being attributable to the budget at all (MEASURED: 11 rather
+            // than a clean 9).
+            var landing = new Button { Content = "landing", [Grid.RowProperty] = 1 };
+            root.Children.Add(landing);
+
+            (ScrollViewer scroller, Button partial) = BuildPermanentlyPartialTarget(root);
+
+            // Permanently obscured, and — critically — obscured by its OWN 20-DIP band while sitting
+            // WITHIN the scroller's viewport, exactly as FakedProgressForever_StopsAtTheCap_AndRelocates
+            // arranges its target. MEASURED that the obvious alternative (park it far below the
+            // viewport) does not work: the real BringIntoView then genuinely scrolls to it, the
+            // presenter keeps restoring that same offset, and the fingerprint stops changing after
+            // two requests, so the loop exhausts the target long before any budget is reached. With
+            // the clipper already on screen the real request can never improve anything, which
+            // leaves the handler's own monotone nudge as the sole source of "progress".
+            var hiddenClipper = new Border { Height = 20, ClipToBounds = true };
+            var hiddenHost = new StackPanel();
+            var obscured = new Button { Content = "obscured", Height = 30, Margin = new Thickness(0, 25, 0, 0) };
+            hiddenHost.Children.Add(obscured);
+            hiddenClipper.Child = hiddenHost;
+            ((StackPanel)scroller.Content!).Children.Insert(1, hiddenClipper);
+
+            Dispatcher.UIThread.RunJobs();
+
+            partial.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(partial.IsFocused);
+            Assert.Equal("PartiallyClipped", DescribeClipVisibility(partial));
+            Assert.Equal("Obscured", DescribeClipVisibility(obscured));
+
+            static void FakeProgress(ScrollViewer s) => s.Offset = new Vector(0, s.Offset.Y + 1);
+
+            int requests = 0;
+            bool handedOver = false;
+            partial.AddHandler(Control.RequestBringIntoViewEvent, (_, _) =>
+            {
+                ++requests;
+                if (handedOver)
+                {
+                    return;
+                }
+
+                handedOver = true;
+                obscured.Focus();                       // hand the pass into the obscured leg
+
+                // Counted only from here on, so Focus()'s OWN request above — which is not the
+                // pass's spending — never lands in the budget this test is measuring.
+                obscured.AddHandler(Control.RequestBringIntoViewEvent, (_, _) =>
+                {
+                    ++requests;
+                    FakeProgress(scroller);
+                });
+                FakeProgress(scroller);
+            });
+
+            ShrinkTo(w, root, Threshold + 60);
+
+            int cap = GetMaxBringIntoViewAttempts();
+            Assert.Equal(8, cap);
+            Assert.Equal(cap, requests);
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 7, sliver #2 — and a correction to round 6's own stated reasoning. Round 6
+    /// returned straight out of the obscured leg, arguing that
+    /// <see cref="RelocateFocusIfNeeded"/> already hands over internally and a second loop would
+    /// only duplicate it. That was wrong, and this is the case that proves it: the two hand over
+    /// against DIFFERENT bars. The inner resolver yields to a newer focus it judges USABLE, and
+    /// usable is the AA line — focusable, enabled, not ENTIRELY hidden — which a merely PARTIALLY
+    /// clipped element satisfies. This pass's bar is full visibility. So the recovery can finish,
+    /// perfectly correctly by its own contract, having left the live focus-holder half off-screen,
+    /// displaced by its own in-flight request; and round 6 then declared the pass complete.
+    /// <para>
+    /// Geometry, in the scroller's content space (viewport 205 when the pass runs): spacer to 20,
+    /// neighbour [20,50], spacer to 215, target [215,245], trailing scroll room. At offset 0 the
+    /// target is ENTIRELY below the viewport (so the obscured leg runs) and the neighbour is fully
+    /// visible. Request 1's handler moves focus to the neighbour and lets the request bubble on;
+    /// the presenter scrolls 40 DIPs to reveal the target, which leaves the neighbour [20,50]
+    /// showing only [40,50] — 10 of its 30 DIPs, PARTIALLY clipped. The resolver calls that usable
+    /// and stops; the wrapper must not.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ObscuredRecovery_StaleRequestLeftTheNewHolderPartiallyClipped_HandsOverAndScrollsItBack()
+    {
+        (Window w, Grid root) = Host(Threshold + 100);
+        try
+        {
+            var scroller = new ScrollViewer { [Grid.RowProperty] = 2 };
+            var stack = new StackPanel();
+            stack.Children.Add(new Border { Height = 20 });
+            var neighbour = new Button { Content = "neighbour", Height = 30 };
+            stack.Children.Add(neighbour);
+            stack.Children.Add(new Border { Height = 165 });
+            var target = new Button { Content = "target", Height = 30 };
+            stack.Children.Add(target);
+            stack.Children.Add(new Border { Height = 200 });
+            scroller.Content = stack;
+            root.Children.Add(scroller);
+            Dispatcher.UIThread.RunJobs();
+
+            target.Focus();
+            scroller.Offset = default;   // Focus() reveals it; put it back so the obscured leg runs
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(target.IsFocused);
+            Assert.Equal("Obscured", DescribeClipVisibility(target));
+            AssertFullyVisible(neighbour, "setup: the neighbour starts fully visible");
+
+            int neighbourRequests = 0;
+            bool moved = false;
+            target.AddHandler(Control.RequestBringIntoViewEvent, (_, _) =>
+            {
+                if (moved)
+                {
+                    return;
+                }
+
+                moved = true;
+                // The race, during RELOCATION this time: focus moves and the request bubbles on,
+                // so the presenter still scrolls for the target and half-clips the new holder.
+                neighbour.Focus();
+                neighbour.AddHandler(Control.RequestBringIntoViewEvent, (_, _) => ++neighbourRequests);
+            });
+
+            ShrinkTo(w, root, Threshold + 95);
+
+            Assert.True(neighbour.IsFocused, "the focus move must stand");
+            AssertFullyVisible(neighbour,
+                "the staged recovery yielded to the neighbour because it judged it USABLE — but " +
+                "usable tolerates partial clipping, and this pass's bar is full visibility, so the " +
+                "pass owes it the scroll-back its own request made necessary");
+            Assert.True(neighbourRequests >= 1,
+                "and it must have got there by ACTING on the new holder — zero requests would mean " +
+                "the scenario was inert and the assertion above proved nothing");
+        }
+        finally { w.Close(); }
+    }
+
     // ── Shared-behavior fix round 6: the stale in-flight request ─────────────────────────
 
     /// <summary>
