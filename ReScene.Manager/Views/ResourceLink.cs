@@ -11,6 +11,15 @@ namespace ReScene.Manager.Views;
 /// </summary>
 internal static class ResourceLink
 {
+    /// <summary>
+    /// Test seam (retro-review finding #4): swap for a fake <see cref="ILauncherService"/> so a
+    /// test can raise a REAL Click/UIA Invoke on a link button and assert the invocation actually
+    /// fired, without a real OS browser launch as a side effect. Defaults to the real,
+    /// production launcher; every one of this class's 3 callers is unaffected in production,
+    /// since none of them ever touch this property.
+    /// </summary>
+    internal static ILauncherService Launcher { get; set; } = new SystemLauncherService();
+
     internal static void OpenFromTag(object? sender)
     {
         if (sender is Button { Tag: string url } && !string.IsNullOrWhiteSpace(url))
@@ -19,7 +28,7 @@ internal static class ResourceLink
             // click can never surface an unhandled exception.
             try
             {
-                new SystemLauncherService().OpenUrl(url);
+                Launcher.OpenUrl(url);
             }
             catch
             {

@@ -234,6 +234,50 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
+    /// <summary>
+    /// Retro-review finding #1: the given Step-1 test above only exercises a late attach in
+    /// NORMAL mode with nothing focused. A late attach while the control is ALREADY compact and
+    /// established forces the just-attached expander's body collapsed (condition 5) exactly as a
+    /// real compact-entry transition would — and if something inside that about-to-collapse body
+    /// is currently focused, that focus must go through the SAME staged capture/recover
+    /// transaction <see cref="Evaluate"/> uses for real transitions, not a bare apply that
+    /// strands it. Here the expander/body/focused button all exist and are wired up BEFORE
+    /// SetHelpExpander is ever called (simulating a body that was independently expanded and
+    /// focused, then only later handed to the behavior) — the compact entry's own fallback
+    /// chain (entering-compact direction: the header toggle) must recover it.
+    /// </summary>
+    [AvaloniaFact]
+    public void HelpExpander_LateAttachWhileCompact_CollapsingFocusedBody_RelocatesFocus_NotStranded()
+    {
+        (Window w, Grid root) = Host(Threshold - 1); // already compact AND established (Host shows the window)
+        try
+        {
+            Assert.Contains("compactHeight", root.Classes);
+
+            var expander = new Expander { IsExpanded = true, [Grid.RowProperty] = 0 };
+            var bodyButton = new Button { Content = "body" };
+            expander.Content = bodyButton;
+            root.Children.Add(expander);
+            Dispatcher.UIThread.RunJobs(); // realize the expander's template + its expanded body
+
+            bodyButton.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(bodyButton.IsFocused);
+
+            // Late attach: root is ALREADY compact/established, so this must force the body
+            // collapsed THROUGH the staged capture/recover transaction, not a bare apply that
+            // strands the currently-focused button.
+            CompactHeightBehavior.SetHelpExpander(root, expander);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(expander.IsExpanded, "late attach while compact must still collapse per condition 5");
+            ToggleButton toggle = expander.GetVisualDescendants().OfType<ToggleButton>().First();
+            Assert.True(toggle.IsFocused,
+                "focus must be relocated to the header toggle (fallback chain, entering-compact direction), not stranded on the collapsed body");
+        }
+        finally { w.Close(); }
+    }
+
     [AvaloniaFact]
     public void FocusInsideCollapsingRegion_MovesToDesignatedTarget_OnCompactOnly()
     {

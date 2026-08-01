@@ -472,10 +472,33 @@ internal static class CompactHeightBehavior
             // normally do this anyway — but a HelpExpander attached to a control that has ALREADY
             // been through at least one Evaluate() (state.Established) would otherwise be left at
             // its own IsExpanded=false default forever, since nothing else re-synchronizes an
-            // already-settled mode to a newly-arriving expander. Harmless pre-attachment too:
-            // state.IsCompact's default (false) matches normal mode, and the real first Evaluate()
-            // re-applies whatever mode actually computes, superseding this early guess regardless.
-            ApplyHelpExpanderDirection(control, state, state.IsCompact);
+            // already-settled mode to a newly-arriving expander.
+            //
+            // On an ALREADY-established control this can genuinely collapse focused content: if
+            // state.IsCompact is true, ApplyHelpExpanderDirection forces IsExpanded=false exactly
+            // as a real compact-entry transition would, and anything focused inside that
+            // about-to-collapse body must be recovered through the SAME staged capture/apply/
+            // relocate transaction Evaluate() uses — a bare apply would strand it instead.
+            // Pre-attachment (!state.Established) there is nothing live to capture, and the
+            // upcoming real first Evaluate() re-applies whatever mode actually computes
+            // regardless, so the bare apply there remains correct and side-effect-free.
+            if (state.Established)
+            {
+                Control? captured = CaptureFocusedElement(control);
+                ApplyHelpExpanderDirection(control, state, state.IsCompact);
+
+                if (captured is not null)
+                {
+                    ++state.Generation;
+                    Dispatcher.UIThread.Post(
+                        CreateRecoveryCallback(control, captured, state.IsCompact, state),
+                        DispatcherPriority.Loaded);
+                }
+            }
+            else
+            {
+                ApplyHelpExpanderDirection(control, state, state.IsCompact);
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Automation;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
@@ -186,10 +187,16 @@ internal static class CompactViewRig
     /// settles into a small closed loop among the last few controls (e.g. a status-bar button, a
     /// menu item, and a checkbox bouncing between each other) rather than either advancing
     /// further or genuinely wrapping back to the very first control. The walk therefore ends
-    /// successfully either on genuinely returning to the sentinel (a true cycle exists) OR on
-    /// revisiting ANY already-seen control (the natural, expected terminal loop) — both mean
-    /// every reachable control between the start and the end was visited and verified visible;
-    /// only never reaching either within the step budget counts as broken.
+    /// successfully either on genuinely returning to the sentinel (a true cycle exists — no
+    /// further proof needed) OR on revisiting an already-seen control — but a BARE repeat is not
+    /// enough evidence on its own: retro-review finding #2 is that an early, erratic trap (a real
+    /// bug that happens to bounce back to something already seen after only 2-3 steps) would
+    /// look identical to a genuine, stable terminal loop under a "first repeat wins" rule. So a
+    /// repeat that ISN'T the sentinel is CONFIRMED, not trusted blindly: one more full lap of the
+    /// apparent cycle length must reproduce the IDENTICAL sequence (see
+    /// <see cref="ConfirmStableLoop"/>) before the walk is accepted as done. A genuine steady
+    /// state reproduces trivially; an early trap diverges and fails loudly instead of silently
+    /// passing.
     /// </remarks>
     public static void AssertTabWalkStaysVisible(Window window, Control sentinel)
     {
@@ -203,7 +210,7 @@ internal static class CompactViewRig
         Dispatcher.UIThread.RunJobs();
         AssertFullyVisible(sentinel, window, $"{PassName(forward)} pass, start");
 
-        HashSet<Control> seen = [sentinel];
+        List<Control> order = [sentinel];
         const int MaxSteps = 500;
         for (int step = 1; step <= MaxSteps; step++)
         {
@@ -213,10 +220,19 @@ internal static class CompactViewRig
 
             AssertFullyVisible(focused, window, $"{PassName(forward)} pass, step {step}");
 
-            if (!seen.Add(focused))
+            if (ReferenceEquals(focused, sentinel))
             {
+                return; // a true cycle back to the sentinel is unambiguous — no confirmation needed
+            }
+
+            int firstSeenAt = order.FindIndex(c => ReferenceEquals(c, focused));
+            if (firstSeenAt >= 0)
+            {
+                ConfirmStableLoop(window, forward, order, firstSeenAt, order.Count - firstSeenAt);
                 return;
             }
+
+            order.Add(focused);
         }
 
         throw new Xunit.Sdk.XunitException(
@@ -224,17 +240,46 @@ internal static class CompactViewRig
             $"stable terminal loop within {MaxSteps} steps.");
     }
 
+    /// <summary>
+    /// Steps forward <paramref name="cycleLength"/> more times and requires EVERY step to
+    /// reproduce the exact control the first lap saw at that position (asserting visibility at
+    /// each, same as the main walk) — the escapable half of the terminal-loop boundary: an early
+    /// trap that only coincidentally repeated once diverges here and throws, rather than being
+    /// silently accepted as "done".
+    /// </summary>
+    private static void ConfirmStableLoop(Window window, bool forward, List<Control> order, int cycleStart, int cycleLength)
+    {
+        for (int i = 0; i < cycleLength; i++)
+        {
+            Control expected = order[cycleStart + (i + 1) % cycleLength];
+            Control focused = StepFocus(window, forward)
+                ?? throw new Xunit.Sdk.XunitException(
+                    $"Tab walk ({PassName(forward)}) lost focus entirely during terminal-loop confirmation (step {i}).");
+
+            AssertFullyVisible(focused, window, $"{PassName(forward)} pass, terminal-loop confirmation step {i}");
+
+            if (!ReferenceEquals(focused, expected))
+            {
+                throw new Xunit.Sdk.XunitException(
+                    $"Tab walk ({PassName(forward)}) terminal loop did not reproduce: expected " +
+                    $"{Describe(expected)} but got {Describe(focused)} at confirmation step {i} — " +
+                    "this looks like an early trap, not a genuine stable cycle.");
+            }
+        }
+    }
+
     private static string PassName(bool forward) => forward ? "forward" : "reverse";
 
-    /// <summary>Ordered (control type, automation name) snapshot of the Tab cycle.</summary>
+    /// <summary>Ordered (control type, effective automation name) snapshot of the Tab cycle.</summary>
     /// <remarks>
     /// Requires focus to already sit inside <paramref name="root"/> (focus its intended starting
     /// control before calling — mirrors <see cref="AssertTabWalkStaysVisible"/>'s explicit
     /// sentinel). Records forward-Tab steps while focus remains a descendant of
     /// <paramref name="root"/>, stopping the moment a step would leave root's scope (the walk has
-    /// reached the surrounding shell chrome) or loops back onto an already-recorded control (the
-    /// view captured its own internal cycle without ever leaving) — either way, that is the full,
-    /// one-pass snapshot of the view's OWN tab order, which is what a per-view fixture pins.
+    /// reached the surrounding shell chrome — unambiguous, no confirmation needed) or repeats an
+    /// already-recorded control — CONFIRMED via the same one-more-lap check
+    /// <see cref="RunTabPass"/> uses, for the identical reason (an early trap must not be
+    /// mistaken for the view's own genuine internal cycle).
     /// </remarks>
     public static IReadOnlyList<string> SnapshotTabOrder(Window window, Control root)
     {
@@ -248,17 +293,23 @@ internal static class CompactViewRig
                 $"SnapshotTabOrder's initial focus ({Describe(focused)}) is not inside root.");
         }
 
-        List<string> order = [];
-        HashSet<Control> seen = [];
+        List<Control> order = [];
         const int MaxSteps = 500;
         for (int step = 0; step < MaxSteps; step++)
         {
-            if (!IsWithin(root, focused) || !seen.Add(focused))
+            if (!IsWithin(root, focused))
             {
-                return order;
+                return [.. order.Select(Describe)];
             }
 
-            order.Add(Describe(focused));
+            int firstSeenAt = order.FindIndex(c => ReferenceEquals(c, focused));
+            if (firstSeenAt >= 0)
+            {
+                ConfirmStableLoopWithinRoot(window, root, order, firstSeenAt, order.Count - firstSeenAt);
+                return [.. order.Select(Describe)];
+            }
+
+            order.Add(focused);
             focused = StepFocus(window, forward: true)
                 ?? throw new Xunit.Sdk.XunitException(
                     $"SnapshotTabOrder lost focus entirely at step {step}.");
@@ -266,6 +317,29 @@ internal static class CompactViewRig
 
         throw new Xunit.Sdk.XunitException(
             $"SnapshotTabOrder did not leave root or loop back within {MaxSteps} steps.");
+    }
+
+    /// <summary>See <see cref="ConfirmStableLoop"/> — the same confirmation, scoped to "still inside root" instead of visibility.</summary>
+    private static void ConfirmStableLoopWithinRoot(Window window, Control root, List<Control> order, int cycleStart, int cycleLength)
+    {
+        for (int i = 0; i < cycleLength; i++)
+        {
+            Control? focused = StepFocus(window, forward: true);
+            if (focused is null || !IsWithin(root, focused))
+            {
+                throw new Xunit.Sdk.XunitException(
+                    $"SnapshotTabOrder's terminal loop did not reproduce: step {i} left root's scope " +
+                    "or lost focus entirely — this looks like an early trap, not a genuine stable cycle.");
+            }
+
+            Control expected = order[cycleStart + (i + 1) % cycleLength];
+            if (!ReferenceEquals(focused, expected))
+            {
+                throw new Xunit.Sdk.XunitException(
+                    $"SnapshotTabOrder's terminal loop did not reproduce: expected {Describe(expected)} " +
+                    $"but got {Describe(focused)} at confirmation step {i} — this looks like an early trap, not a genuine stable cycle.");
+            }
+        }
     }
 
     /// <summary>
@@ -477,9 +551,27 @@ internal static class CompactViewRig
         return topLeft is { } tl && bottomRight is { } br ? new Rect(tl, br) : null;
     }
 
+    /// <summary>
+    /// Retro-review finding #2: reading ONLY the attached <c>AutomationProperties.Name</c>
+    /// (as before) is empty for most Buttons in this app (none of the link/toolbar buttons carry
+    /// an explicit one), so every such stop collapsed to the same bare "Button:" identity — a
+    /// fixture built from that cannot tell "Export Config" apart from "Import from SRR", so a
+    /// same-type reorder is invisible to it. The REAL automation peer's <c>GetName()</c> is what
+    /// AT actually announces: for a ContentControl (Button/ToggleButton/CheckBox/...) with no
+    /// explicit Name, <c>ContentControlAutomationPeer.GetNameCore()</c> falls through to the
+    /// realized content's own text — see the peer's own decompiled source, confirmed empirically
+    /// below. <c>control.Name</c> (the x:Name) is a SECOND, generic fallback for controls whose
+    /// peer name is ALSO empty (e.g. this app's path TextBoxes, which carry an x:Name but no
+    /// AutomationProperties.Name/LabeledBy) — deliberately NOT VM/command-based (unlike a
+    /// per-view local reimplementation would need), so this stays usable by every future view
+    /// task without any view-specific knowledge.
+    /// </summary>
     private static string Describe(Control control)
     {
-        string? name = AutomationProperties.GetName(control);
-        return $"{control.GetType().Name}:{name ?? string.Empty}";
+        string peerName = ControlAutomationPeer.CreatePeerForElement(control).GetName();
+        string identity = !string.IsNullOrEmpty(peerName) ? peerName
+            : !string.IsNullOrEmpty(control.Name) ? control.Name!
+            : string.Empty;
+        return $"{control.GetType().Name}:{identity}";
     }
 }

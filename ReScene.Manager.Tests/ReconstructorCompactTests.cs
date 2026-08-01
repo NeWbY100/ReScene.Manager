@@ -1,11 +1,15 @@
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Automation;
+using Avalonia.Automation.Peers;
+using Avalonia.Automation.Provider;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ReScene.App.Core.Services;
@@ -331,11 +335,16 @@ public class ReconstructorCompactTests
             Assert.Contains("compactHeight", root.Classes);
             TextBlock tip = window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Classes.Contains("tipLine"));
 
-            // Condition 1: trimming is VISUAL-ONLY over the full bound text — the underlying Text
-            // (what a TextBlock's automation peer names itself from, absent an explicit
-            // AutomationProperties.Name) is never a pre-truncated string.
+            // Condition 1: trimming is VISUAL-ONLY over the full bound text. Retro-review finding
+            // #3: asserting tip.Text alone (or that the ATTACHED AutomationProperties.Name is
+            // null) is not the same claim as "AT announces the full text" — go through the REAL
+            // automation peer, the same thing a screen reader actually calls.
+            // TextBlockAutomationPeer.GetNameCore() returns Owner.Inlines?.Text ?? Owner.Text, so
+            // with no explicit AutomationProperties.Name (asserted below) this is required to
+            // equal tip.Text exactly.
+            Assert.Null(AutomationProperties.GetName(tip));
             Assert.Equal(FullTip, tip.Text);
-            Assert.Null(AutomationProperties.GetName(tip)); // pins the peer-derivation assumption above
+            Assert.Equal(FullTip, ControlAutomationPeer.CreatePeerForElement(tip).GetName());
             Assert.Equal(TextTrimming.CharacterEllipsis, tip.TextTrimming);
             Assert.Equal(TextWrapping.NoWrap, tip.TextWrapping);
 
@@ -391,11 +400,24 @@ public class ReconstructorCompactTests
             Assert.True(windowsLink.IsEffectivelyEnabled);
             CompactViewRig.AssertReachableByKeyboard(window, windowsLink);
 
+            // The staged-focus guard's actual point (retro-review finding #6, mirroring Task 3's
+            // identical fix): focus the header TOGGLE — visible and focusable ONLY in compact
+            // mode (Styles.axaml's Grid.compactHeight ... /template/ ToggleButton IsVisible=True
+            // override; flat/normal mode hides it) — then restore. The toggle going
+            // IsVisible=false in flat mode must relocate focus to the wired RestoreFocusTarget
+            // (WindowsPackLink), not strand it.
+            ToggleButton headerToggle = helpDisclosure.GetVisualDescendants().OfType<ToggleButton>().Single();
+            headerToggle.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(headerToggle.IsFocused);
+
             // Restore to normal, then re-enter compact: durability is compact-SESSION scoped only.
             window.Height += 250; // comfortably above Threshold + hysteresis slack
             Dispatcher.UIThread.RunJobs();
             Assert.DoesNotContain("compactHeight", root.Classes);
             Assert.True(helpDisclosure.IsExpanded); // flat mode: force-expanded
+            Assert.True(windowsLink.IsFocused,
+                "restoring from a focused compact-only header toggle must relocate focus to the wired RestoreFocusTarget (WindowsPackLink), not strand it");
 
             window.Height -= 250;
             Dispatcher.UIThread.RunJobs();
@@ -403,6 +425,57 @@ public class ReconstructorCompactTests
             Assert.False(helpDisclosure.IsExpanded, "re-entering compact must reset Help to collapsed, not resume the prior session's open state");
         }
         finally { window.Close(); }
+    }
+
+    /// <summary>Records every launcher call so a test can assert an invocation actually fired.</summary>
+    private sealed class RecordingLauncherService : ILauncherService
+    {
+        public List<string> OpenedUrls { get; } = [];
+
+        public void OpenUrl(string url) => OpenedUrls.Add(url);
+
+        public void RevealPath(string path) { }
+    }
+
+    /// <summary>
+    /// Retro-review finding #4: reachability/focusability alone proves a link CAN be reached, not
+    /// that activating it actually does anything. <see cref="ResourceLink.Launcher"/> is a test
+    /// seam (added for this finding) precisely so a genuine invocation can be exercised safely —
+    /// swapped for a <see cref="RecordingLauncherService"/> fake, restored in a finally block
+    /// (it is a static, process-wide seam). Invoked via the REAL automation peer's
+    /// <see cref="IInvokeProvider"/> (the same path a screen reader's "activate" gesture uses,
+    /// which itself calls <c>Button.PerformClick()</c> — so this exercises Click too, not just
+    /// UIA Invoke), never a raw <c>Button.ClickEvent</c> raise.
+    /// </summary>
+    [AvaloniaFact]
+    public void CompactLinks_Invoke_RoutesThroughLauncher_WithoutARealBrowserLaunch()
+    {
+        var fakeLauncher = new RecordingLauncherService();
+        ILauncherService originalLauncher = ResourceLink.Launcher;
+        ResourceLink.Launcher = fakeLauncher;
+        try
+        {
+            ReconstructorViewModel vm = CreateVm();
+            var view = new ReconstructorView { DataContext = vm };
+            (Window window, Grid root) = CompactViewRig.HostAt(view, CompactInner);
+            try
+            {
+                Expander helpDisclosure = root.GetVisualDescendants().OfType<Expander>().Single(e => e.Name == "HelpDisclosure");
+                helpDisclosure.IsExpanded = true;
+                Dispatcher.UIThread.RunJobs();
+
+                Button windowsLink = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "WindowsPackLink");
+                string expectedUrl = Assert.IsType<string>(windowsLink.Tag);
+
+                var invokeProvider = Assert.IsAssignableFrom<IInvokeProvider>(ControlAutomationPeer.CreatePeerForElement(windowsLink));
+                invokeProvider.Invoke();
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.Equal([expectedUrl], fakeLauncher.OpenedUrls);
+            }
+            finally { window.Close(); }
+        }
+        finally { ResourceLink.Launcher = originalLauncher; }
     }
 
     [AvaloniaFact]
@@ -499,18 +572,32 @@ public class ReconstructorCompactTests
     /// Compares the flat-mode header region (row 0) against a standalone reconstruction of the
     /// PRE-TASK markup (verbatim intro TextBlock + WrapPanel of 3 links, the row-0 shape before
     /// this task wrapped it in the helpDisclosure Expander), both forced through a real render
-    /// tick (the versions-tree rig pattern) before measuring. DOCUMENTED FALLBACK INVOKED (see
-    /// task report): Fluent's stock Expander carries hardcoded floors (control MinHeight 48,
-    /// chevron cell 32) that made pixel-identical flat-mode chrome unreachable through style
-    /// overrides, so Styles.axaml re-templates Expander.helpDisclosure entirely (mirroring the
-    /// existing Expander.versionGroup re-template). Two DELIBERATE, spec-mandated differences
-    /// are therefore expected and excluded from the "no diff" bar rather than hidden: (1) the
-    /// content StackPanel's own inset (Margin="0,0,4,0", "per house rule" — the brief's own given
-    /// XAML), narrowing available width by 4 DIPs versus the original's un-inset StackPanel; (2)
-    /// the flat-mode wrapper is now Expander+ScrollViewer+StackPanel rather than a bare
-    /// StackPanel — invisible when the content needs no scrolling (confirmed below by
-    /// SingleLinkInstance_ExistsInBothModes and the exact 3-link count), but a structurally
-    /// different visual tree nonetheless.
+    /// tick before measuring. DOCUMENTED FALLBACK INVOKED (see task report): Fluent's stock
+    /// Expander carries hardcoded floors (control MinHeight 48, chevron cell 32) that made
+    /// pixel-identical flat-mode chrome unreachable through style overrides, so Styles.axaml
+    /// re-templates Expander.helpDisclosure entirely (mirroring the existing
+    /// Expander.versionGroup re-template). ONE deliberate, spec-mandated difference is therefore
+    /// expected and excluded from the "no diff" bar rather than hidden: the content StackPanel's
+    /// own inset (Margin="0,0,4,0", "per house rule") plus the body ScrollViewer's reserved
+    /// scrollbar track together narrow available width by a bounded, geometry-asserted amount
+    /// versus the original's un-inset StackPanel.
+    /// <para>
+    /// Retro-review finding #5: geometry (height/width) alone cannot catch a shifted glyph, a
+    /// recolored brush, or a reflowed line inside the surviving region — only a REAL pixel
+    /// comparison can (<see cref="AssertPixelIdenticalOverCommonRegion"/>, RenderTargetBitmap +
+    /// CopyPixels, same technique as HexViewControlTests). Naively cropping "old at its own
+    /// natural width" and "new" to their common width is not a fair comparison, though: the
+    /// pre-disclosure paragraph re-wraps its OWN words depending on how much width it is actually
+    /// given, so "old at width 676" legitimately breaks lines differently than "new at width 649"
+    /// even at identical total line count/height — a mechanical, expected consequence of the
+    /// sanctioned width delta, not a rendering regression. So a SECOND old reconstruction is built
+    /// at NEW's own measured width (no reflow possible — both sides wrap identically) and required
+    /// to be byte-for-byte pixel-identical to new, no cropping needed. This gate is not vacuous —
+    /// building it surfaced two real, since-fixed issues: the reflow-from-unequal-width artifact
+    /// just described, and (initially) a missing Foreground="{DynamicResource ForegroundSecondary}"
+    /// on three of this method's own WrapPanel TextBlocks in <see cref="BuildPreDisclosureRow0Window"/>
+    /// (an inaccuracy in the "verbatim" reconstruction, not a production bug).
+    /// </para>
     /// </summary>
     [AvaloniaFact]
     public void FrameRig_NormalMode_HeaderRegionMatchesPreDisclosureShape()
@@ -527,7 +614,7 @@ public class ReconstructorCompactTests
             Control newRow0 = newRoot.Children.OfType<Control>().Single(c => Grid.GetRow(c) == 0);
             Size newSize = newRow0.Bounds.Size;
 
-            Window oldWindow = BuildPreDisclosureRow0Window();
+            Window oldWindow = BuildPreDisclosureRow0Window(CompactInvariantRig.InnerWidth);
             try
             {
                 oldWindow.Show();
@@ -553,12 +640,45 @@ public class ReconstructorCompactTests
                     $"header region width narrowed by {widthNarrowing:F1} DIPs (old {oldSize.Width:F1}, new {newSize.Width:F1}) — expected a small, explained narrowing (inset + reserved scrollbar track), not an unbounded drift");
             }
             finally { oldWindow.Close(); }
+
+            // Retro-review finding #5: geometry alone cannot catch a shifted glyph, a recolored
+            // brush, or a misaligned baseline — only a real pixel comparison can. But naively
+            // cropping the OLD-at-natural-width render and the NEW render to their common width
+            // is not a fair comparison: the pre-disclosure paragraph re-wraps its OWN words
+            // depending on how much width it is actually given, so "old at width 676" legitimately
+            // breaks its lines differently than "new at width 649" even though both land on the
+            // same total LINE COUNT (hence the identical height already asserted above) — that
+            // reflow is a mechanical, expected consequence of the sanctioned width delta, not a
+            // rendering regression. Isolating the real question ("does the new Expander/
+            // ScrollViewer wrapper paint anything different from the old bare StackPanel, once
+            // you neutralize the width delta both sides already agree is sanctioned") means giving
+            // the OLD markup the SAME width NEW actually measured, so nothing reflows differently
+            // — then requiring true byte-for-byte pixel identity, no cropping needed.
+            Window widthMatchedOldWindow = BuildPreDisclosureRow0Window(newSize.Width);
+            try
+            {
+                widthMatchedOldWindow.Show();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                Dispatcher.UIThread.RunJobs();
+                Control widthMatchedOldRow0 = (Control)widthMatchedOldWindow.Content!;
+                Size widthMatchedOldSize = widthMatchedOldRow0.Bounds.Size;
+
+                Assert.Equal(newSize.Height, widthMatchedOldSize.Height, precision: 0);
+                AssertPixelIdenticalOverCommonRegion(widthMatchedOldRow0, widthMatchedOldSize, newRow0, newSize);
+            }
+            finally { widthMatchedOldWindow.Close(); }
         }
         finally { newWindow.Close(); }
     }
 
-    /// <summary>Verbatim reconstruction of ReconstructorView.axaml's row-0 StackPanel before this task (git history).</summary>
-    private static Window BuildPreDisclosureRow0Window()
+    /// <summary>
+    /// Reconstruction of ReconstructorView.axaml's row-0 StackPanel before this task (git history),
+    /// verbatim except for <paramref name="width"/> — the caller picks the window width (and thus
+    /// the constraint the caption/WrapPanel wrap against) so it can either reproduce the ORIGINAL
+    /// natural layout (<see cref="CompactInvariantRig.InnerWidth"/>) or match today's actual
+    /// narrower measured width for a fair, no-reflow pixel comparison.
+    /// </summary>
+    private static Window BuildPreDisclosureRow0Window(double width)
     {
         var stack = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
         stack.Children.Add(new TextBlock
@@ -569,16 +689,91 @@ public class ReconstructorCompactTests
             TextWrapping = TextWrapping.Wrap,
         });
 
+        IBrush? secondary = (IBrush?)Application.Current!.FindResource("ForegroundSecondary");
         var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 0) };
-        wrap.Children.Add(new TextBlock { Text = "WinRAR versions needed for reconstruction can be downloaded from:", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0), FontSize = (double)Application.Current!.FindResource("FontSizeCaption")! });
+        wrap.Children.Add(new TextBlock { Text = "WinRAR versions needed for reconstruction can be downloaded from:", Foreground = secondary, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0), FontSize = (double)Application.Current!.FindResource("FontSizeCaption")! });
         wrap.Children.Add(new Button { Classes = { "link" }, Content = "Extracted files for Windows (ready to use)", FontSize = (double)Application.Current!.FindResource("FontSizeCaption")!, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
-        wrap.Children.Add(new TextBlock { Text = ",", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0), FontSize = (double)Application.Current!.FindResource("FontSizeCaption")! });
+        wrap.Children.Add(new TextBlock { Text = ",", Foreground = secondary, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0), FontSize = (double)Application.Current!.FindResource("FontSizeCaption")! });
         wrap.Children.Add(new Button { Classes = { "link" }, Content = "Extracted files for Linux (ready to use)", FontSize = (double)Application.Current!.FindResource("FontSizeCaption")!, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0) });
-        wrap.Children.Add(new TextBlock { Text = "or", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0), FontSize = (double)Application.Current!.FindResource("FontSizeCaption")! });
+        wrap.Children.Add(new TextBlock { Text = "or", Foreground = secondary, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0), FontSize = (double)Application.Current!.FindResource("FontSizeCaption")! });
         wrap.Children.Add(new Button { Classes = { "link" }, Content = "Original files from RAR FTP (Windows)", FontSize = (double)Application.Current!.FindResource("FontSizeCaption")!, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
         stack.Children.Add(wrap);
 
-        return new Window { Width = CompactInvariantRig.InnerWidth, SizeToContent = SizeToContent.Height, Content = stack };
+        return new Window { Width = width, SizeToContent = SizeToContent.Height, Content = stack };
+    }
+
+    /// <summary>
+    /// Renders both controls to their own <see cref="RenderTargetBitmap"/> (each sized to its own
+    /// full bounds, independent of whatever window each is actually hosted in — <c>Render</c> is
+    /// an immediate-mode draw of the visual's own subtree, not a capture of its parent's canvas —
+    /// confirmed via <c>ImmediateRenderer</c>'s own source: the passed-in visual is always treated
+    /// as its own root at (0,0), so neither control's real on-screen position leaks in) and asserts
+    /// every pixel is byte-identical. The two callers of this method always pass equal-width
+    /// controls (a width-matched reconstruction vs the real view — see the caller), so no cropping
+    /// is expected; the defensive min/floor below only guards against a stray sub-DIP rounding
+    /// artifact in the two independent layout passes, and is itself asserted tight.
+    /// </summary>
+    private static void AssertPixelIdenticalOverCommonRegion(Control oldControl, Size oldSize, Control newControl, Size newSize)
+    {
+        const int BytesPerPixel = 4;
+
+        Assert.True(Math.Abs(oldSize.Width - newSize.Width) < 1.0,
+            $"pixel comparison requires matched widths (old {oldSize.Width:F2}, new {newSize.Width:F2}) — " +
+            "the caller must render the OLD reconstruction at NEW's own measured width first.");
+
+        var oldPixelSize = new PixelSize((int)Math.Ceiling(oldSize.Width), (int)Math.Ceiling(oldSize.Height));
+        var newPixelSize = new PixelSize((int)Math.Ceiling(newSize.Width), (int)Math.Ceiling(newSize.Height));
+
+        byte[] oldPixels = RenderToPixelBuffer(oldControl, oldPixelSize);
+        byte[] newPixels = RenderToPixelBuffer(newControl, newPixelSize);
+
+        int commonWidth = (int)Math.Floor(Math.Min(oldSize.Width, newSize.Width));
+        int commonHeight = (int)Math.Floor(Math.Min(oldSize.Height, newSize.Height));
+        Assert.True(commonWidth > 0 && commonHeight > 0,
+            $"common comparison region must be non-empty (old {oldSize}, new {newSize})");
+
+        int oldStride = oldPixelSize.Width * BytesPerPixel;
+        int newStride = newPixelSize.Width * BytesPerPixel;
+        int rowBytes = commonWidth * BytesPerPixel;
+
+        for (int y = 0; y < commonHeight; y++)
+        {
+            int oldRowStart = y * oldStride;
+            int newRowStart = y * newStride;
+
+            for (int x = 0; x < rowBytes; x++)
+            {
+                if (oldPixels[oldRowStart + x] == newPixels[newRowStart + x])
+                {
+                    continue;
+                }
+
+                int pixelX = x / BytesPerPixel;
+                Assert.Fail(
+                    $"header region pixel mismatch at ({pixelX}, {y}) — old byte 0x{oldPixels[oldRowStart + x]:X2} " +
+                    $"vs new byte 0x{newPixels[newRowStart + x]:X2}. Compared region was " +
+                    $"{commonWidth}x{commonHeight} DIPs (old render {oldPixelSize}, new render {newPixelSize}).");
+            }
+        }
+    }
+
+    private static byte[] RenderToPixelBuffer(Control control, PixelSize size)
+    {
+        using var bitmap = new RenderTargetBitmap(size, new Vector(96, 96));
+        bitmap.Render(control);
+
+        byte[] buffer = new byte[size.Width * size.Height * 4];
+        GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        try
+        {
+            bitmap.CopyPixels(new PixelRect(0, 0, size.Width, size.Height), handle.AddrOfPinnedObject(), buffer.Length, size.Width * 4);
+        }
+        finally
+        {
+            handle.Free();
+        }
+
+        return buffer;
     }
 
     private static void PressManyTimes(Window window, PhysicalKey key, int times)
@@ -613,25 +808,36 @@ public class ReconstructorCompactTests
         c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
 
     // ── Fixtures (captured from real, green CompactViewRig.SnapshotTabOrder runs against
-    // this task's finished implementation — see task report for the capture method).
-    // Automation names are empty for most Buttons (none of the link/toolbar buttons carry an
-    // explicit AutomationProperties.Name), so the fixture's real value is the ORDERED SEQUENCE
-    // OF TYPES — it still catches a reordering, an added/removed stop, or a wrong count. ──
+    // this task's finished implementation — see task report's retro-fix section for the capture
+    // method). Retro-review finding #2: Describe() now reads the control's REAL automation peer
+    // name (falling back to x:Name, then to the bare type), so same-type controls with distinct
+    // content/x:Name are no longer collapsed to indistinguishable "Button:" entries — an early
+    // trap, a same-type reorder, or a swapped stop is now caught by content, not just by count. ──
 
     /// <summary>
     /// Normal mode: identical shape to today's — the disclosure's body is force-expanded with
     /// its header hidden, so the 3 link buttons occupy exactly the StackPanel's old slot. Start
     /// is absent (disabled — CanExecute false for the inert VM's empty paths, so Tab correctly
-    /// skips it): 3 links + Export/Import-Config/Import-from-SRR = 6 buttons, then the Paths
-    /// sub-tab (header + 4 Browse/TextBox pairs), splitter, Save-log button, Auto-scroll checkbox.
+    /// skips it): 3 links (peer name = their Content text) + Export/Import-Config/Import-from-SRR,
+    /// then the Paths sub-tab (TabItem peer name falls back to its body content's ToString(), i.e.
+    /// the hosted ScrollViewer — still deterministic and distinct from every other stop's type),
+    /// its 4 Browse/TextBox pairs (TextBoxes disambiguated by their x:Name — Browse buttons share
+    /// identical Content text but each is immediately followed by a uniquely-named TextBox, so a
+    /// pair-reorder is still caught), splitter, Save-log button, Auto-scroll checkbox.
     /// </summary>
     private static readonly IReadOnlyList<string> NormalModeTabOrderFixture =
     [
-        "Button:", "Button:", "Button:", "Button:", "Button:", "Button:",
-        "TabItem:",
-        "Button:", "TextBox:", "Button:", "TextBox:", "Button:", "TextBox:", "Button:", "TextBox:",
+        "Button:Extracted files for Windows (ready to use)",
+        "Button:Extracted files for Linux (ready to use)",
+        "Button:Original files from RAR FTP (Windows)",
+        "Button:Export Config", "Button:Import Config", "Button:Import from SRR",
+        "TabItem:Avalonia.Controls.ScrollViewer",
+        "Button:Browse", "TextBox:WinRARTextBox",
+        "Button:Browse", "TextBox:ReleaseTextBox",
+        "Button:Browse", "TextBox:VerifyTextBox",
+        "Button:Browse", "TextBox:OutputTextBox",
         "GridSplitter:Resize options and log",
-        "Button:", "CheckBox:",
+        "Button:Save log...", "CheckBox:Auto-scroll",
     ];
 
     /// <summary>
@@ -639,15 +845,19 @@ public class ReconstructorCompactTests
     /// condition 5, so the 3 link buttons are IsVisible=false and correctly excluded from Tab
     /// order) → toolbar (3 enabled buttons — Start is absent, same reason as normal mode) →
     /// work area (Paths sub-tab) → splitter → log. Identical tail to normal mode; only the head
-    /// differs (header toggle prepended in place of the — here hidden — link buttons).
+    /// differs (header toggle, named by its own Content text, prepended in place of the — here
+    /// hidden — link buttons).
     /// </summary>
     private static readonly IReadOnlyList<string> CompactModeTabOrderFixture =
     [
         "ToggleButton:Help & links",
-        "Button:", "Button:", "Button:",
-        "TabItem:",
-        "Button:", "TextBox:", "Button:", "TextBox:", "Button:", "TextBox:", "Button:", "TextBox:",
+        "Button:Export Config", "Button:Import Config", "Button:Import from SRR",
+        "TabItem:Avalonia.Controls.ScrollViewer",
+        "Button:Browse", "TextBox:WinRARTextBox",
+        "Button:Browse", "TextBox:ReleaseTextBox",
+        "Button:Browse", "TextBox:VerifyTextBox",
+        "Button:Browse", "TextBox:OutputTextBox",
         "GridSplitter:Resize options and log",
-        "Button:", "CheckBox:",
+        "Button:Save log...", "CheckBox:Auto-scroll",
     ];
 }
