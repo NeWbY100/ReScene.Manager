@@ -197,6 +197,17 @@ internal static class CompactViewRig
     /// mirror of Tab order (a trap could plausibly affect only one direction), so a genuine
     /// per-direction regression needs a per-direction expectation to be caught.
     /// </param>
+    /// <param name="reverseSentinel">
+    /// Round-4 retro-review: the REVERSE pass's own starting point, independent of
+    /// <paramref name="sentinel"/>. Defaults to null, meaning "reuse <paramref name="sentinel"/>"
+    /// — identical to every pre-round-4 caller's behavior (source- and behavior-compatible with
+    /// Task 3's existing calls). A caller with a topology where the forward sentinel is ALSO the
+    /// first focusable element of its own keyboard-navigation scope (so Shift+Tab from it cannot
+    /// move at all — see <see cref="ReconstructorCompactTests"/>'s own round-3/4 findings) can
+    /// supply a genuinely different anchor here — e.g. the last control the forward pass reaches
+    /// — so the reverse pass explores a real walk instead of a trivial, always-true single-step
+    /// one.
+    /// </param>
     /// <remarks>
     /// Avalonia's default top-level <c>KeyboardNavigation.TabNavigation</c> ("Continue") does
     /// NOT wrap a whole Window back to its first focusable element — confirmed empirically here,
@@ -226,13 +237,23 @@ internal static class CompactViewRig
     public static void AssertTabWalkStaysVisible(
         Window window, Control sentinel,
         IReadOnlyCollection<Control>? expectedForwardStops = null,
-        IReadOnlyCollection<Control>? expectedReverseStops = null)
+        IReadOnlyCollection<Control>? expectedReverseStops = null,
+        Control? reverseSentinel = null)
     {
         RunTabPass(window, sentinel, forward: true, expectedForwardStops);
-        RunTabPass(window, sentinel, forward: false, expectedReverseStops);
+        RunTabPass(window, reverseSentinel ?? sentinel, forward: false, expectedReverseStops);
     }
 
-    private static void RunTabPass(Window window, Control sentinel, bool forward, IReadOnlyCollection<Control>? expectedStops = null)
+    /// <summary>
+    /// Round-4 retro-review: widened from <c>private</c> to <c>internal</c> so a covering test
+    /// (<c>CompactViewRigTests</c>) can exercise the forward and reverse passes INDEPENDENTLY —
+    /// proving a reverse-only trap genuinely lets the forward pass succeed before the reverse
+    /// pass fails, rather than relying on <see cref="AssertTabWalkStaysVisible"/>'s combined,
+    /// sequential call (where a forward-pass exception would mask whether reverse ever ran at
+    /// all, and conversely a passing combined call can't by itself prove forward succeeded
+    /// FIRST rather than not being reached).
+    /// </summary>
+    internal static void RunTabPass(Window window, Control sentinel, bool forward, IReadOnlyCollection<Control>? expectedStops = null)
     {
         sentinel.Focus();
         Dispatcher.UIThread.RunJobs();

@@ -274,33 +274,62 @@ public class ReconstructorCompactTests
     /// Resolves a committed, description-based fixture (see <see cref="CompactViewRig.Describe"/>)
     /// back into the REAL <see cref="Control"/> references it names, for THIS SPECIFIC window —
     /// completeness-checking is reference-based, and a fixture committed to source can only ever
-    /// be strings across separate test runs. Matches every control in the window whose own
-    /// description is IN the fixture set — deliberately a set-membership test, not a 1:1 pairing,
-    /// so entries that describe identically (the four "Browse" buttons all read the same, having
-    /// no distinguishing content or x:Name) still resolve to ALL of their real, distinct
-    /// instances, not just one arbitrarily "matched" one.
+    /// be strings across separate test runs.
     /// <para>
-    /// A fixture entry with NO matching control at all throws here, loudly, rather than being
-    /// silently dropped: if resolution just filtered the window's own controls down to matches,
-    /// a future regression that REMOVED an expected control from the tree would silently vanish
-    /// from <c>expectedStops</c> along with it — the completeness check downstream would never
-    /// even learn that entry was supposed to exist, defeating the entire point of a hardcoded,
-    /// protective fixture. Confirming every fixture string resolves to at least one real control
-    /// closes that hole.
+    /// Round-4 retro-review (disclosed-not-blocking, fixed anyway): matching is a COUNTED
+    /// MULTISET, not a set — the fixture's own count of each distinct description (the four
+    /// "Browse" buttons all describe identically, so that description's count is 4) is the
+    /// number of REAL, DISTINCT controls required for it, not merely "at least one". A plain
+    /// <c>HashSet&lt;string&gt;</c> membership test would silently deduplicate the fixture's own
+    /// count down to 1 before ever comparing against the real window, so a regression that
+    /// removed, say, one of the four Browse buttons (leaving three) would still "resolve"
+    /// successfully — the missing one would never be noticed, because the check never actually
+    /// counted how many were expected versus how many are real. This view's own fixtures happen
+    /// to have every duplicated entry immediately followed by a uniquely test-id'd sibling (each
+    /// "Browse" by its own path TextBox), so the existing snapshot-equality tests already catch a
+    /// missing Browse button by a side effect of position — but this resolver has no such luck of
+    /// its own, and is used by a different, position-independent check, so it must count for
+    /// itself rather than ride on that coincidence.
+    /// </para>
+    /// <para>
+    /// A fixture description with FEWER matching real controls than its own count throws here,
+    /// loudly, rather than silently resolving to whatever happens to exist: if resolution just
+    /// filtered the window's own controls down to matches without counting, a regression that
+    /// removed an expected control would silently produce a SMALLER resolved list instead of
+    /// surfacing that anything was wrong — the completeness check downstream would never learn
+    /// that entry was supposed to appear more than it did, defeating the entire point of a
+    /// hardcoded, protective fixture.
     /// </para>
     /// </summary>
     private static List<Control> ResolveExpectedStops(Window window, IReadOnlyCollection<string> fixture)
     {
-        var expected = new HashSet<string>(fixture);
-        List<Control> resolved = [.. window.GetVisualDescendants().OfType<Control>().Where(c => expected.Contains(CompactViewRig.Describe(c)))];
+        Dictionary<string, int> expectedCounts = fixture
+            .GroupBy(description => description)
+            .ToDictionary(g => g.Key, g => g.Count());
 
-        HashSet<string> resolvedDescriptions = [.. resolved.Select(CompactViewRig.Describe)];
-        List<string> unresolved = [.. expected.Where(e => !resolvedDescriptions.Contains(e))];
-        if (unresolved.Count > 0)
+        ILookup<string, Control> byDescription = window.GetVisualDescendants().OfType<Control>()
+            .ToLookup(CompactViewRig.Describe);
+
+        List<Control> resolved = [];
+        List<string> shortfalls = [];
+        foreach ((string description, int expectedCount) in expectedCounts)
+        {
+            List<Control> matches = [.. byDescription[description]];
+            if (matches.Count < expectedCount)
+            {
+                shortfalls.Add($"\"{description}\" expects {expectedCount}, this window has {matches.Count}");
+                continue;
+            }
+
+            resolved.AddRange(matches.Take(expectedCount));
+        }
+
+        if (shortfalls.Count > 0)
         {
             throw new Xunit.Sdk.XunitException(
-                $"{unresolved.Count} fixture entries have no matching control in this window at all " +
-                $"(not merely unvisited by the walk — genuinely absent from the tree): {string.Join(", ", unresolved)}");
+                $"{shortfalls.Count} fixture descriptions do not have enough matching controls in " +
+                $"this window (counted, not merely present — not merely unvisited by the walk, " +
+                $"genuinely too few in the tree): {string.Join("; ", shortfalls)}");
         }
 
         return resolved;
