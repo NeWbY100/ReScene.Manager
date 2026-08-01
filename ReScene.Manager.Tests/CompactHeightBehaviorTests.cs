@@ -1471,6 +1471,96 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
+    // ── Shared-behavior fix round 6: the stale in-flight request ─────────────────────────
+
+    /// <summary>
+    /// Fix round 6: stopping attempts 2–8 was never the whole duty. When a handler moves focus
+    /// during request 1, that request is ALREADY IN FLIGHT — it keeps bubbling past the handler to
+    /// the <c>ScrollContentPresenter</c>, which then scrolls on behalf of the OLD target. If the
+    /// element that just took focus lives in that same scroller, the behavior's own request is what
+    /// pushes it out of view — and round 5's unconditional abandonment then walked away from a
+    /// stranding it had itself created. Rescheduling on the next bounds change is no answer: a drag
+    /// has a LAST step, and after it there is no next bounds change.
+    /// <para>
+    /// The pass must instead HAND OVER: once the stale request has settled, run the same
+    /// visibility recheck for whoever actually holds focus now. The no-theft precondition still
+    /// binds — the new holder must genuinely hold focus and be in-root — and empty focus still
+    /// means full abandon (round 5's rule, unchanged).
+    /// </para>
+    /// <para>
+    /// Geometry, all in the scroller's own content space (viewport 210 at the hosted size, 205
+    /// after the shrink that triggers the pass): neighbour [0,15], spacer to 200, target [200,230],
+    /// trailing spacer for scroll room. At offset 0 the neighbour is fully visible and the target
+    /// hangs 25 DIPs past the viewport — PARTIALLY clipped (asserted through the behavior's own
+    /// verdict, not assumed), so the partial leg is what runs. Request 1's handler moves focus to
+    /// the neighbour and lets the request bubble on; the presenter scrolls to offset 25 to reveal
+    /// the target in full, which puts the neighbour [0,15] ENTIRELY outside the viewport. Round 5
+    /// abandons there, leaving the focused neighbour invisible; the handover recovers it.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void PartialRecovery_StaleRequestDisplacedTheNewHolder_HandsOverAndRecoversIt()
+    {
+        (Window w, Grid root) = Host(Threshold + 100);
+        try
+        {
+            var scroller = new ScrollViewer { [Grid.RowProperty] = 2 };
+            var stack = new StackPanel();
+            var neighbour = new Button { Content = "neighbour", Height = 15 };
+            stack.Children.Add(neighbour);
+            stack.Children.Add(new Border { Height = 185 });
+            var target = new Button { Content = "target", Height = 30 };
+            stack.Children.Add(target);
+            stack.Children.Add(new Border { Height = 200 });   // scroll room below the target
+            scroller.Content = stack;
+            root.Children.Add(scroller);
+            Dispatcher.UIThread.RunJobs();
+
+            target.Focus();
+            scroller.Offset = default;   // Focus() scrolls it into view; put it back so it hangs out
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(target.IsFocused);
+            Assert.Equal("PartiallyClipped", DescribeClipVisibility(target));
+            AssertFullyVisible(neighbour, "setup: the neighbour starts fully visible");
+
+            int targetRequests = 0;
+            int neighbourRequests = 0;
+            target.AddHandler(Control.RequestBringIntoViewEvent, (_, _) =>
+            {
+                ++targetRequests;
+                if (targetRequests > 1)
+                {
+                    return;
+                }
+
+                // The race: focus moves mid-call, and this request KEEPS BUBBLING afterwards —
+                // e.Handled is deliberately left alone — so the presenter still scrolls for the
+                // target and displaces the neighbour that just took focus.
+                neighbour.Focus();
+
+                // Installed only now, so it counts what the PASS does from here on and never the
+                // request Focus() itself just raised.
+                neighbour.AddHandler(Control.RequestBringIntoViewEvent, (_, _) => ++neighbourRequests);
+            });
+
+            ShrinkTo(w, root, Threshold + 95);
+
+            Assert.Equal(1, targetRequests);
+            Assert.True(neighbour.IsFocused,
+                "the focus move must stand — handing over is not the same as fighting it");
+
+            // The load-bearing claim, asserted FIRST so a failure reports the stranded geometry
+            // itself rather than a proxy for it.
+            AssertFullyVisible(neighbour,
+                "after the pass settles: the behavior's own in-flight request displaced the new " +
+                "focus-holder, so the behavior must repair it rather than walk away");
+            Assert.True(neighbourRequests >= 1,
+                "and it must have repaired it by genuinely ACTING on the new holder — zero requests " +
+                "would mean the scenario was inert and the visibility assertion above proved nothing");
+        }
+        finally { w.Close(); }
+    }
+
     // ── Shared-behavior fix round 5: races inside the new path ───────────────────────────
 
     /// <summary>
@@ -1479,8 +1569,17 @@ public class CompactHeightBehaviorTests
     /// and then re-checked only GEOMETRY before acting again. The staged transaction's discipline
     /// (revalidate after every action, not just before the first) applies to any action this
     /// behavior takes. Here a handler moves focus to a DIFFERENT in-root element during request 1;
-    /// the leg must abandon immediately rather than keep scrolling an ancestor on behalf of an
-    /// element that no longer holds focus — which can scroll the NEW focus-holder out of view.
+    /// the leg must stop spending requests on an element that no longer holds focus.
+    /// <para>
+    /// WHAT THIS ONE PINS, as distinct from
+    /// <see cref="PartialRecovery_StaleRequestDisplacedTheNewHolder_HandsOverAndRecoversIt"/>: the
+    /// new focus-holder here sits OUTSIDE the scroller, so the stale in-flight request cannot have
+    /// displaced it, and the pass must therefore find it already fine and STOP — no further request
+    /// against the old target, and no work invented for the new holder either. The companion test
+    /// covers the opposite topology (new holder inside the same scroller, displaced by that very
+    /// request), where stopping is not enough and the pass must hand over and repair. Together they
+    /// pin both halves: never spend on the wrong element, never abandon a mess of one's own making.
+    /// </para>
     /// <para>
     /// Discriminating by CONSTRUCTION, not timing: the target is permanently clipped by a plain
     /// <c>ClipToBounds</c> Border (nothing can ever recover it) while the handler FAKES progress by

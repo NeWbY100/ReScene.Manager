@@ -351,10 +351,19 @@ internal static class CompactHeightBehavior
     /// The within-mode half of the staged-focus contract: keep a still-focused element visible as
     /// the layout keeps changing size around it.
     /// <para>
-    /// Runs at all only while <see cref="IsPassStillValid"/> holds — the element this pass was
-    /// scheduled for must STILL be the live focus-holder in this root. That is what makes the
-    /// verdict below safe to read off <c>captured</c> directly: it has just been confirmed to be
-    /// the focused element, so there is nothing else the pass could be talking about.
+    /// Each turn of the loop runs only while <see cref="IsPassStillValid"/> holds — the element the
+    /// pass is currently serving must BE the live focus-holder in this root. That is what makes the
+    /// verdict below safe to read off it directly: it has just been confirmed to be the focused
+    /// element, so there is nothing else the pass could be talking about. Empty focus, focus that
+    /// left the root, or a newer transition all end the pass outright.
+    /// </para>
+    /// <para>
+    /// The loop exists for HAND-OVER, and only for it: an action this pass takes can itself displace
+    /// focus (see <see cref="ScrollFullyIntoView"/>), and the behavior may not leave a control
+    /// stranded that its own request pushed out of view. Two bounds keep that from becoming an
+    /// argument with the user or with a hostile handler: every element is served at most ONCE per
+    /// pass (<c>served</c>), and the BringIntoView budget is shared across the whole pass rather
+    /// than refreshed per hand-over.
     /// </para>
     /// Splits strictly along the spec's own DELIBERATE ASYMMETRY rider ("BringIntoView resolve[s]
     /// partial clipping first; the relocation threshold only catches what scrolling cannot
@@ -376,23 +385,40 @@ internal static class CompactHeightBehavior
     /// </summary>
     private static void RecheckFocusAfterResize(Control root, Control captured, bool compact, int generation, State state)
     {
-        if (!IsPassStillValid(root, captured, compact, generation, state))
+        Control holder = captured;
+        HashSet<Control> served = [];
+        int attempts = 0;
+
+        while (IsPassStillValid(root, holder, compact, generation, state) && served.Add(holder))
         {
-            return;
-        }
+            switch (GetClipVisibility(holder))
+            {
+                case ClipVisibility.FullyVisible:
+                    return;
 
-        switch (GetClipVisibility(captured))
-        {
-            case ClipVisibility.FullyVisible:
-                return;
+                case ClipVisibility.Obscured:
+                    RelocateFocusIfNeeded(root, holder, compact, generation, state);
+                    return;
 
-            case ClipVisibility.PartiallyClipped:
-                ScrollFullyIntoView(root, captured, compact, generation, state);
-                return;
+                case ClipVisibility.PartiallyClipped:
+                    ScrollFullyIntoView(root, holder, compact, generation, state, ref attempts);
+                    break;
+            }
 
-            case ClipVisibility.Obscured:
-                RelocateFocusIfNeeded(root, captured, compact, generation, state);
+            // HAND-OVER (the only way back round this loop). ScrollFullyIntoView also returns when
+            // the holder is settled, unreachable or superseded — in every one of those the live
+            // holder is still this one, or none, and there is nothing further to do. What is left is
+            // the case that matters: focus moved to another in-root element DURING one of the
+            // requests, which means that request went on bubbling and may have scrolled the new
+            // holder out of view on the old one's behalf. The behavior does not get to walk away
+            // from a stranding it caused itself, and waiting for the next bounds change is no
+            // answer — a drag has a last step, and after it no further bounds change arrives.
+            if (CaptureFocusedElement(root) is not { } live || ReferenceEquals(live, holder))
+            {
                 return;
+            }
+
+            holder = live;
         }
     }
 
@@ -431,17 +457,29 @@ internal static class CompactHeightBehavior
     /// introduced — keeps scrolling an ancestor on behalf of an element that may no longer hold
     /// focus at all, which can drag the element that DOES hold it out of view: the exact
     /// stranding this behavior exists to prevent, self-inflicted. So the pass's own precondition
-    /// (<see cref="IsPassStillValid"/>) is re-asserted between attempts, and a failed one abandons
-    /// silently — no further request, and emphatically no relocation.
+    /// (<see cref="IsPassStillValid"/>) is re-asserted between attempts, and a failed one stops this
+    /// target immediately — no further request, and emphatically no relocation. Stopping is not the
+    /// end of the pass, though: <see cref="RecheckFocusAfterResize"/> decides whether the reason was
+    /// a hand-over.
+    /// </para>
+    /// <para>
+    /// <paramref name="attempts"/> is the WHOLE pass's budget, threaded by reference rather than
+    /// restarted per target. A hand-over is not evidence that more work is warranted — quite the
+    /// opposite, a handler that displaces focus on every request is precisely the pathology
+    /// <see cref="MaxBringIntoViewAttempts"/> exists to bound, and handing it a fresh budget each
+    /// time it fires would let one pass issue attempts without limit. One pass therefore costs at
+    /// most <see cref="MaxBringIntoViewAttempts"/> requests no matter how focus moves inside it,
+    /// which is the same number, and the same promise, as before hand-over existed.
     /// </para>
     /// </summary>
-    private static void ScrollFullyIntoView(Control root, Control target, bool compact, int generation, State state)
+    private static void ScrollFullyIntoView(Control root, Control target, bool compact, int generation, State state, ref int attempts)
     {
-        for (int attempts = 0; attempts < MaxBringIntoViewAttempts; ++attempts)
+        while (attempts < MaxBringIntoViewAttempts)
         {
             Vector[] before = CaptureScrollOffsets(target);
             target.BringIntoView();
             target.UpdateLayout();
+            ++attempts;
 
             if (!IsPassStillValid(root, target, compact, generation, state))
             {
