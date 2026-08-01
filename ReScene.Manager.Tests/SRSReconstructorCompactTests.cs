@@ -808,24 +808,37 @@ public class SRSReconstructorCompactTests
     /// <summary>
     /// Fix round 1 (codex, Important): ResultStatus and SaveLogStatus share the SAME log-header
     /// row via a Grid with FIXED-PROPORTION Star columns (1*,2*) rather than each being its own
-    /// DockPanel.Dock="Right" item, and rather than an Auto+MaxWidth column (this fix round's
-    /// first attempt). Root cause, reproduced down to a minimal case (see the task-4 report's
-    /// fix-round-1 section): an Auto column's resolved width silently stopped tracking its
-    /// child's DesiredSize specifically when ResultSummary and ShowResult change in the SAME
-    /// tick that also resizes row 2 (a sibling of this row-3 Star row) — the EXACT sequence
-    /// every real rebuild completion produces in production (SRSReconstructorViewModel.
-    /// RebuildAsync sets ResultSuccess/ResultSummary/ShowResult back to back, synchronously).
-    /// Setting only the two status texts, with ShowResult NOT also changing, measured
-    /// correctly — only the combination reproduced the defect. Star-Star columns don't
-    /// re-derive width from a child's DesiredSize at all (purely proportional to the Grid's
-    /// own, correctly-updating, total width), sidestepping it entirely.
+    /// DockPanel.Dock="Right" item, and rather than an Auto+MaxWidth column (fix round 1's first
+    /// attempt). Both presenters must render non-zero width, with the CHOSEN allocation
+    /// mechanism (the fixed 1:2 ratio) and each one's own trim behavior asserted directly, not
+    /// implied — visual-only, since each keeps its FULL text as its accessible name regardless
+    /// of rendered width (screen readers read the automation peer's Name from the underlying
+    /// Text property, never the trimmed glyphs — the same rule the Border's own result-cap
+    /// TextBlock relies on).
     /// <para>
-    /// Both presenters must render non-zero width, with the CHOSEN allocation mechanism (the
-    /// fixed 1:2 ratio) and each one's own trim behavior asserted directly, not implied —
-    /// visual-only, since each keeps its FULL text as its accessible name regardless of
-    /// rendered width (screen readers read the automation peer's Name from the underlying Text
-    /// property, never the trimmed glyphs — the same rule the Border's own result-cap TextBlock
-    /// relies on).
+    /// Sequence used here — verified directly against <c>SRSReconstructorViewModel.RebuildAsync</c>'s
+    /// own source (all three completion branches: success, failure, exception all agree):
+    /// <c>ResultSuccess</c>, THEN <c>ResultSummary</c>, THEN <c>ShowResult</c>, with
+    /// <c>SaveLogAnnouncement</c> set and settled EARLIER (a stale value from an earlier "Save
+    /// log..." click — nothing in <c>RebuildAsync</c> clears it, so this is a genuinely reachable
+    /// real sequence, not a contrived one). Fix round 2 (codex): an earlier version of this test
+    /// used <c>ResultSuccess -> ShowResult -> ResultSummary</c>, which does not match production;
+    /// corrected here.
+    /// </para>
+    /// <para>
+    /// IMPORTANT, disclosed rather than papered over (fix round 2): this exact, real production
+    /// order does NOT reproduce fix round 1's original Auto+MaxWidth defect — confirmed by
+    /// re-testing three separate realistic reconstructions against a restored copy of the
+    /// Auto+MaxWidth layout (single synchronous tick with today's real order; the same tick
+    /// split into two, rebuild-then-separately-save-log; and this method's own
+    /// stale-save-log-then-rebuild order) — all three rendered BOTH presenters correctly even on
+    /// the OLD layout. The original defect is real and reproducible (see fix round 1's own RED
+    /// evidence) but requires <c>ResultSummary</c> changing strictly AFTER <c>ShowResult</c> in
+    /// the same tick — an ordering that does not correspond to any code path in this codebase
+    /// today. This test therefore does NOT discriminate the old layout from the new one; it is a
+    /// correctness/regression check against the CURRENT, real production sequence.
+    /// <see cref="LogHeaderStatusLines_ResultSummaryAfterShowResult_OrderSensitiveAutoColumnFragility_StarColumnsAreImmune"/>
+    /// below is the test that still provides genuine RED/GREEN discriminating coverage.
     /// </para>
     /// </summary>
     [AvaloniaFact]
@@ -844,21 +857,22 @@ public class SRSReconstructorCompactTests
             string longResultText = string.Concat(Enumerable.Repeat("Reconstruction failed verification. ", 5));
             string longSaveLogText = string.Concat(Enumerable.Repeat("Could not save the log to the selected path. ", 5));
 
-            // The EXACT production sequence that triggered the pre-fix defect: ResultSuccess,
-            // ShowResult and ResultSummary all set synchronously, back to back, matching
-            // RebuildAsync's own real completion code exactly.
+            // Stale SaveLogAnnouncement from an EARLIER save action, settled first -- nothing in
+            // RebuildAsync clears SaveLogAnnouncement, so this genuinely can already be showing
+            // when a LATER rebuild completes.
+            vm.SaveLogAnnouncement = longSaveLogText;
+            Dispatcher.UIThread.RunJobs();
+
+            // The real RebuildAsync completion order.
             vm.ResultSuccess = false;
-            vm.ShowResult = true;
             vm.ResultSummary = longResultText;
-            vm.SaveLogAnnouncement = longSaveLogText; // OperationViewModelBase property — a VM setter, per the rig house rule
+            vm.ShowResult = true;
             Dispatcher.UIThread.RunJobs();
 
             Assert.Equal(longResultText, resultStatus.Text);
             Assert.Equal(longSaveLogText, saveLogStatus.Text);
 
-            // The actual discriminating assertions: BOTH presenters must render at a non-zero
-            // width when both are long at once -- the pre-fix Auto-column layout left
-            // ResultStatus stuck at literal zero here (see the report's RED evidence).
+            // Both presenters must render at a non-zero width when both are long at once.
             Assert.True(resultStatus.Bounds.Width > 0,
                 $"ResultStatus rendered at zero width ({resultStatus.Bounds.Width:F1}) when both status lines are long");
             Assert.True(saveLogStatus.Bounds.Width > 0,
@@ -888,6 +902,55 @@ public class SRSReconstructorCompactTests
                 "test precondition: SaveLogStatus's long text must genuinely overflow its column for CharacterEllipsis to be a meaningful, exercised claim");
             Assert.Equal(longResultText, ControlAutomationPeer.CreatePeerForElement(resultStatus).GetName());
             Assert.Equal(longSaveLogText, ControlAutomationPeer.CreatePeerForElement(saveLogStatus).GetName());
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// Fix round 2 (codex): the genuinely DISCRIMINATING covering test — reproduces fix round
+    /// 1's original Auto+MaxWidth defect exactly (RED against a restored copy of that layout,
+    /// GREEN against the current Star-Star columns), using the SPECIFIC order that triggers it:
+    /// <c>ResultSummary</c> changing strictly AFTER <c>ShowResult</c> in the same synchronous
+    /// tick. This is NOT a real <c>RebuildAsync</c> code path — verified by grep against every
+    /// assignment site in <c>SRSReconstructorViewModel.cs</c>: all three completion branches, and
+    /// the constructor/run-start resets, always set <c>ResultSummary</c> before <c>ShowResult</c>
+    /// (see the report's fix-round-2 section for the full verification and the three realistic
+    /// orderings that did NOT reproduce it). This test exists as deliberate hardening: it proves
+    /// the Star-Star mechanism is immune to a real, reproducible Avalonia Grid Auto-column
+    /// order-sensitivity regardless of property-set order, guarding against a plausible FUTURE
+    /// refactor of <c>RebuildAsync</c> (or a similar view) reintroducing it.
+    /// </summary>
+    [AvaloniaFact]
+    public void LogHeaderStatusLines_ResultSummaryAfterShowResult_OrderSensitiveAutoColumnFragility_StarColumnsAreImmune()
+    {
+        SRSReconstructorViewModel vm = CreateVm();
+        var view = new SRSReconstructorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, CompactInner);
+        try
+        {
+            Assert.Contains("compactHeight", root.Classes);
+
+            TextBlock resultStatus = window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "ResultStatus");
+            TextBlock saveLogStatus = window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "SaveLogStatus");
+
+            string longResultText = string.Concat(Enumerable.Repeat("Reconstruction failed verification. ", 5));
+            string longSaveLogText = string.Concat(Enumerable.Repeat("Could not save the log to the selected path. ", 5));
+
+            // Deliberately NOT production's order (see this test's own doc) -- ResultSummary is
+            // set LAST, after ShowResult, in the same synchronous tick as SaveLogAnnouncement.
+            vm.ResultSuccess = false;
+            vm.ShowResult = true;
+            vm.SaveLogAnnouncement = longSaveLogText;
+            vm.ResultSummary = longResultText;
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(longResultText, resultStatus.Text);
+            Assert.Equal(longSaveLogText, saveLogStatus.Text);
+
+            Assert.True(resultStatus.Bounds.Width > 0,
+                $"ResultStatus rendered at zero width ({resultStatus.Bounds.Width:F1}) under the order-sensitive trigger");
+            Assert.True(saveLogStatus.Bounds.Width > 0,
+                $"SaveLogStatus rendered at zero width ({saveLogStatus.Bounds.Width:F1}) under the order-sensitive trigger");
         }
         finally { window.Close(); }
     }
