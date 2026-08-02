@@ -33,14 +33,18 @@ public partial class ReconstructorView : UserControl
         AvaloniaXamlLoader.Load(this);
         DataContextChanged += OnDataContextChanged;
 
-        // Small-window layout degradation: compact below 421 inner DIPs.
+        // Small-window layout degradation: the switch height is DERIVED from this view's own
+        // measured expanded floor, not named here. Every givable row already declares its own
+        // minimum in the XAML — the TabControl's Star row (130) and the log's (80) — so the floor
+        // is those two plus the measured height of the chrome that has to be shown whole: the Help
+        // disclosure, toolbar, tip line, warning row and splitter.
         // x:CompileBindings="False" means x:Name elements are NOT wired to auto-generated fields
         // here (same as every other ported view in this project — see BruteForceProgressWindow's
         // own note); resolved once via FindControl instead.
         var root = (Grid)Content!;
         Expander helpDisclosure = this.FindControl<Expander>("HelpDisclosure")!;
         Button windowsPackLink = this.FindControl<Button>("WindowsPackLink")!;
-        Behaviors.CompactHeightBehavior.SetThreshold(root, 421);
+        Behaviors.CompactHeightBehavior.SetEnabled(root, true);
         Behaviors.CompactHeightBehavior.SetRowSizes(root,
             [new Behaviors.CompactRowSize(RowIndex: 4, NormalHeight: double.NaN,
                 CompactMinHeight: 96, HelpOpenMinHeight: 60, Mode: Behaviors.CompactRowMode.MinOnly)]);

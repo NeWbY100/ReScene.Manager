@@ -25,14 +25,17 @@ public partial class SRSReconstructorView : UserControl
 
         DataContextChanged += OnDataContextChanged;
 
-        // Small-window layout degradation: compact below 450 inner DIPs.
+        // Small-window layout degradation: the switch height is DERIVED from this view's own
+        // measured expanded floor, not named here. As in SRSCreatorView, the config band (row 1)
+        // declares no expanded minimum — at expanded size it is an uncapped Auto row that does not
+        // give, so its measured content height is what the floor owes it.
         // x:CompileBindings="False" means x:Name elements are NOT wired to auto-generated fields
         // here (same as every other ported view in this project — see SRSCreatorView's own
         // note); resolved once via FindControl instead.
         var root = (Grid)Content!;
         Expander helpDisclosure = this.FindControl<Expander>("HelpDisclosure")!;
         TextBox srsFileTextBox = this.FindControl<TextBox>("SRSFileTextBox")!;
-        Behaviors.CompactHeightBehavior.SetThreshold(root, 450);
+        Behaviors.CompactHeightBehavior.SetEnabled(root, true);
         Behaviors.CompactHeightBehavior.SetRowSizes(root,
             [new Behaviors.CompactRowSize(RowIndex: 1, NormalHeight: double.NaN,
                 CompactMinHeight: 110, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.AutoToStar)]);

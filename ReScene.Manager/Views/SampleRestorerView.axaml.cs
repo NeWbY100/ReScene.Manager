@@ -46,18 +46,28 @@ public partial class SampleRestorerView : UserControl
     {
         AvaloniaXamlLoader.Load(this);
 
-        // Small-window layout degradation: compact below 535 inner DIPs — the
-        // headline defect view (action row + log measured 0px at 700×450 BASE state under the
-        // pre-conversion DockPanel). x:CompileBindings="False" means x:Name elements are NOT
-        // wired to auto-generated fields here (same as every other ported view in this project) —
-        // resolved once via FindControl instead.
+        // Small-window layout degradation: the switch height is DERIVED from this view's own
+        // measured expanded floor, not named here — the headline defect view (action row + log
+        // measured 0px at 700×450 BASE state under the pre-conversion DockPanel).
+        // x:CompileBindings="False" means x:Name elements are NOT wired to auto-generated fields
+        // here (same as every other ported view in this project) — resolved once via FindControl
+        // instead.
+        //
+        // The config band declares ExpandedMinHeight 320: this view is one of the two whose config
+        // band genuinely GIVES at expanded size, because the cap installed below makes its
+        // ScrollViewer scroll rather than push the trailing bands off-screen. 320 is the share of
+        // the previous hand-calibrated 535 constant that the design attributed to this band —
+        // (535 − 20 margin) − 47 chrome − 68 pinned − 80 log, measured on Windows and rounded — so
+        // the derived switch point lands where the constant used to, while now moving with the
+        // platform's own font metrics instead of pretending they are the Windows ones.
         var root = (Grid)Content!;
         Expander helpDisclosure = this.FindControl<Expander>("HelpDisclosure")!;
         TextBox srrFileTextBox = this.FindControl<TextBox>("SRRFileTextBox")!;
-        Behaviors.CompactHeightBehavior.SetThreshold(root, 535);
+        Behaviors.CompactHeightBehavior.SetEnabled(root, true);
         Behaviors.CompactHeightBehavior.SetRowSizes(root,
             [new Behaviors.CompactRowSize(RowIndex: 1, NormalHeight: double.NaN,
-                CompactMinHeight: 110, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.AutoToStar)]);
+                CompactMinHeight: 110, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.AutoToStar,
+                ExpandedMinHeight: 320)]);
         Behaviors.CompactHeightBehavior.SetHelpExpander(root, helpDisclosure);
         Behaviors.CompactHeightBehavior.SetHelpBodyMaxHeight(root, 40);
         Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(root, srrFileTextBox);

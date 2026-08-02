@@ -11,8 +11,12 @@ namespace ReScene.Manager.Behaviors;
 
 /// <summary>
 /// Toggles the <c>compactHeight</c> style class on a view's inner layout root from its own
-/// bounds height: compact when height &lt; Threshold, restore at ≥ Threshold+12
-/// (restore-only hysteresis — a fresh instance at Threshold+1 starts expanded). Applies
+/// bounds height: compact when height &lt; the effective threshold, restore at ≥ threshold+12
+/// (restore-only hysteresis — a fresh instance at threshold+1 starts expanded). The threshold is
+/// DERIVED from the view's own measured expanded floor (see <see cref="EffectiveThreshold"/> and
+/// <see cref="MeasureExpandedFloor"/>) rather than written down per view, so a platform whose font
+/// metrics need more room gets a switch point that reflects that instead of a constant calibrated
+/// somewhere else; <see cref="ThresholdProperty"/> survives as an optional MINIMUM. Applies
 /// per-view <see cref="CompactRowSize"/> values on the root AND on descendant grids
 /// carrying their own RowSizes attachment (collected at each apply), applies help-open
 /// donation, manages the Help expander's per-mode state, runs the staged
@@ -23,6 +27,14 @@ internal static class CompactHeightBehavior
 {
     private const string ClassName = "compactHeight";
     private const double RestoreSlack = 12;
+
+    /// <summary>
+    /// Headroom between a view's measured expanded floor and the height at which it switches to
+    /// compact, so the switch happens slightly BEFORE expanded content stops fitting rather than
+    /// at the exact pixel it does. Absorbs the fractional-DIP differences that composed transforms
+    /// produce at 125/150% scaling.
+    /// </summary>
+    private const double ThresholdMargin = 20;
 
     /// <summary>
     /// Backstop on a single recovery pass's BringIntoView requests (both
@@ -39,6 +51,23 @@ internal static class CompactHeightBehavior
     /// </summary>
     private const int MaxBringIntoViewAttempts = 8;
 
+    /// <summary>
+    /// Attaches the behavior to a view root that names no switch height of its own, leaving the
+    /// derivation to do all the work. This is how the shipped views opt in: setting an attached
+    /// property is what hooks the lifecycle, and <see cref="ThresholdProperty"/> cannot serve that
+    /// purpose for a view with no opinion, because its default already IS NaN and assigning NaN
+    /// raises no change. Derivation itself is not gated on this — see
+    /// <see cref="EffectiveThreshold"/>.
+    /// </summary>
+    public static readonly AttachedProperty<bool> EnabledProperty =
+        AvaloniaProperty.RegisterAttached<Control, bool>("Enabled", typeof(CompactHeightBehavior));
+
+    /// <summary>
+    /// An optional MINIMUM switch height, not the switch height itself. The effective threshold is
+    /// the larger of this and the view's own measured expanded floor plus
+    /// <see cref="ThresholdMargin"/>, so an explicit value can only make a view go compact EARLIER,
+    /// never later than its content requires. Setting it also attaches the behavior.
+    /// </summary>
     public static readonly AttachedProperty<double> ThresholdProperty =
         AvaloniaProperty.RegisterAttached<Control, double>("Threshold", typeof(CompactHeightBehavior), double.NaN);
     public static readonly AttachedProperty<IReadOnlyList<CompactRowSize>?> RowSizesProperty =
@@ -51,6 +80,25 @@ internal static class CompactHeightBehavior
         AvaloniaProperty.RegisterAttached<Control, Control?>("RestoreFocusTarget", typeof(CompactHeightBehavior));
     public static readonly AttachedProperty<double> HelpBodyMaxHeightProperty =
         AvaloniaProperty.RegisterAttached<Control, double>("HelpBodyMaxHeight", typeof(CompactHeightBehavior), double.NaN);
+
+    public static bool GetEnabled(Control obj) => obj.GetValue(EnabledProperty);
+
+    public static void SetEnabled(Control obj, bool value) => obj.SetValue(EnabledProperty, value);
+
+    /// <summary>
+    /// The height this control actually switches at, as the behavior itself computes it — the
+    /// larger of any explicit <see cref="ThresholdProperty"/> minimum and the control's own
+    /// measured expanded floor plus <see cref="ThresholdMargin"/>. NaN before the control has ever
+    /// been evaluated and while it has no opinion at all (see <see cref="EffectiveThreshold"/>).
+    /// <para>
+    /// Read-only, and exposed for callers that need to reason about the switch point without
+    /// restating it: a test deriving the heights either side of it, most of all. A per-view
+    /// constant written down a second time somewhere else is a constant that can drift from the
+    /// one the behavior uses; asking the behavior cannot.
+    /// </para>
+    /// </summary>
+    public static double GetEffectiveThreshold(Control obj) =>
+        _states.TryGetValue(obj, out State? state) ? EffectiveThreshold(obj, state) : GetThreshold(obj);
 
     public static double GetThreshold(Control obj) => obj.GetValue(ThresholdProperty);
 
@@ -85,6 +133,7 @@ internal static class CompactHeightBehavior
 
     static CompactHeightBehavior()
     {
+        EnabledProperty.Changed.AddClassHandler<Control>(OnThresholdChanged);
         ThresholdProperty.Changed.AddClassHandler<Control>(OnThresholdChanged);
         HelpOpenProperty.Changed.AddClassHandler<Control>(OnHelpOpenChanged);
         HelpExpanderProperty.Changed.AddClassHandler<Control>(OnHelpExpanderChanged);
@@ -132,10 +181,21 @@ internal static class CompactHeightBehavior
     private static void OnControlDetachedFromVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
     {
         var control = (Control)sender!;
-        if (_states.TryGetValue(control, out State? state) && state.BoundsHandler is { } handler)
+        if (!_states.TryGetValue(control, out State? state))
+        {
+            return;
+        }
+
+        if (state.BoundsHandler is { } handler)
         {
             control.PropertyChanged -= handler;
             state.BoundsHandler = null;
+        }
+
+        if (state.LayoutHandler is { } layoutHandler)
+        {
+            control.LayoutUpdated -= layoutHandler;
+            state.LayoutHandler = null;
         }
     }
 
@@ -166,6 +226,11 @@ internal static class CompactHeightBehavior
             control.PropertyChanged -= previous;
         }
 
+        if (state.LayoutHandler is { } previousLayout)
+        {
+            control.LayoutUpdated -= previousLayout;
+        }
+
         void Handler(object? _, AvaloniaPropertyChangedEventArgs args)
         {
             if (args.Property == Visual.BoundsProperty)
@@ -176,7 +241,48 @@ internal static class CompactHeightBehavior
 
         control.PropertyChanged += Handler;
         state.BoundsHandler = Handler;
+
+        EventHandler layoutHandler = (_, _) => RecaptureFloorAfterLayout(control, state);
+        control.LayoutUpdated += layoutHandler;
+        state.LayoutHandler = layoutHandler;
+
         QueueEvaluate(control, state);
+    }
+
+    /// <summary>
+    /// Keeps the captured expanded floor TRUE, rather than true as of the last time the view's own
+    /// bounds happened to change.
+    /// <para>
+    /// A floor grows for reasons that have nothing to do with the window: a conditional row
+    /// appearing, a status line arriving, prose rewrapping, the Help body realizing its content
+    /// after flat mode forces it open on the very first evaluation. None of those resize the root —
+    /// its height is the window's to decide — so none of them raise a bounds change, and an
+    /// evaluation-only capture would keep quoting a floor the layout has already outgrown. Layout
+    /// completion is the event that actually corresponds to "the numbers may have moved", so that
+    /// is what this listens to.
+    /// </para>
+    /// <para>
+    /// Only while EXPANDED, for the same reason <see cref="Evaluate"/>'s own capture is: compact
+    /// mode has already replaced the values being read. And only a GROWN floor can change the
+    /// verdict from here — the view is expanded, so a floor that shrank leaves it comfortably
+    /// expanded still — which is why an evaluation is queued for that case alone instead of on
+    /// every layout pass. The ordinary pass costs one row walk and stops.
+    /// </para>
+    /// </summary>
+    private static void RecaptureFloorAfterLayout(Control control, State state)
+    {
+        if (state.IsCompact)
+        {
+            return;
+        }
+
+        double before = state.ExpandedFloor;
+        CaptureExpandedFloor(control, state);
+
+        if (state.ExpandedFloor > before && control.Bounds.Height < EffectiveThreshold(control, state))
+        {
+            QueueEvaluate(control, state);
+        }
     }
 
     private static void QueueEvaluate(Control control, State state)
@@ -198,20 +304,31 @@ internal static class CompactHeightBehavior
 
     private static void Evaluate(Control control, State state)
     {
-        double threshold = GetThreshold(control);
-        if (double.IsNaN(threshold))
-        {
-            return;
-        }
-
         double height = control.Bounds.Height;
         if (height <= 0)
         {
             return;
         }
 
+        // Refresh the captured floor whenever the view is EXPANDED, which is the only state in
+        // which the expanded layout can be observed: while compact the row minimums and the
+        // compactHeight class have already replaced the values being measured. Every expanded pass
+        // re-captures, so a floor that grows with content, with the font size, or with a width
+        // change that rewraps text is picked up on the pass that follows it.
+        if (!state.IsCompact)
+        {
+            CaptureExpandedFloor(control, state);
+        }
+
+        double threshold = EffectiveThreshold(control, state);
+        if (double.IsNaN(threshold))
+        {
+            return;
+        }
+
         bool wantCompact = state.IsCompact ? height < threshold + RestoreSlack : height < threshold;
         bool isTransition = wantCompact != state.IsCompact;
+        bool establishing = !state.Established;
 
         // A fresh control's very first evaluation must establish the expander/HelpOpen state
         // for whatever mode it starts in even when that mode matches state.IsCompact's false
@@ -266,6 +383,32 @@ internal static class CompactHeightBehavior
         ApplyHelpExpanderDirection(control, state, wantCompact);
         ApplyRowsEverywhere(control, state);
         ToggleClass(control, wantCompact);
+
+        // A pass that leaves the view EXPANDED has just changed the very layout its floor is read
+        // from — a restore rebuilds the expanded rows, and a first evaluation at normal height
+        // forces the Help body open — while the capture at the top of this pass necessarily ran
+        // BEFORE those changes, and therefore under-reports. So re-evaluate once layout has caught
+        // up: that pass re-captures against the settled expanded tree and drops straight back to
+        // compact if expanded genuinely no longer fits.
+        //
+        // Posted rather than left to RecaptureFloorAfterLayout, which covers a DIFFERENT case and
+        // cannot cover this one: that handler runs when layout runs, and the changes made just
+        // above do not always invalidate layout at all (a class no style in this view keys on, row
+        // values that resolve to what they already were). Re-validating a restore is not something
+        // to make conditional on the layout system having had an opinion about it. The two are
+        // complementary — this one guarantees a check after every change the BEHAVIOR makes, that
+        // one catches the changes it does not make: content arriving, prose rewrapping, a font
+        // growing, none of which resize the root and none of which would otherwise be noticed.
+        //
+        // It cannot oscillate. A restore that fails raises the threshold above the very height
+        // that produced it (the new floor is what made it fail), so restoring again would need a
+        // height strictly greater than the one already rejected. One flip, then rest — and this
+        // settling pass does not re-post, being neither a transition nor an establishment, so it
+        // takes the "nothing to apply" early return above.
+        if (!wantCompact && (isTransition || establishing))
+        {
+            Dispatcher.UIThread.Post(() => Evaluate(control, state), DispatcherPriority.Loaded);
+        }
 
         if (captured is null)
         {
@@ -506,6 +649,145 @@ internal static class CompactHeightBehavior
                 return;
             }
         }
+    }
+
+    /// <summary>
+    /// The height below which this view switches to compact: the larger of the optional explicit
+    /// minimum and the view's own measured expanded floor plus <see cref="ThresholdMargin"/>.
+    /// NaN — meaning "no opinion, do nothing" — only when neither is available, which is a root
+    /// that is not a Grid and carries no explicit value.
+    /// <para>
+    /// Taking the LARGER is what makes the derived model safe: an explicit minimum can pull the
+    /// switch earlier for a view that wants it, but can never hold a view in expanded mode below
+    /// the height its own content actually needs. That is the whole invariant — there must be no
+    /// band of window heights in which expanded mode is showing clipped content. Derivation is
+    /// therefore NOT opt-in: a view that names a minimum is protected by its own measurements just
+    /// the same, because an invariant a caller can decline is not one.
+    /// </para>
+    /// <para>
+    /// Help state does not enter into it. The donation rule (<see cref="CompactRowSize"/>'s
+    /// HelpOpen minimums) is a compact-mode mechanism, and <see cref="GetHelpOpen"/> is false
+    /// throughout expanded mode by construction — <see cref="RecomputeHelpOpen"/> requires
+    /// <see cref="State.IsCompact"/>. Expanded mode instead renders the Help body flat, expanded
+    /// and unconstrained, which is the LARGEST it ever is, and the floor already carries that cost
+    /// as measured chrome. So the expanded floor is both Help-state-correct and conservative
+    /// without a second set of minimums.
+    /// </para>
+    /// </summary>
+    private static double EffectiveThreshold(Control control, State state)
+    {
+        double explicitMinimum = GetThreshold(control);
+        if (state.ExpandedFloor <= 0)
+        {
+            return explicitMinimum;
+        }
+
+        double derived = state.ExpandedFloor + ThresholdMargin;
+        return double.IsNaN(explicitMinimum) ? derived : Math.Max(explicitMinimum, derived);
+    }
+
+    private static void CaptureExpandedFloor(Control control, State state)
+    {
+        if (control is Grid grid && MeasureExpandedFloor(grid, GetRowSizes(grid)) is > 0 and double floor)
+        {
+            state.ExpandedFloor = floor;
+        }
+    }
+
+    /// <summary>
+    /// What this layout needs, in DIPs, for its expanded content to fit — Σ per RowDefinition,
+    /// splitting every row into one of two kinds:
+    /// <list type="bullet">
+    /// <item>GIVABLE — the row's content can scroll, so the floor owes it only the minimum the
+    /// design insists on seeing, never its content height. Two ways a row qualifies: a Star row,
+    /// which gives by construction and is owed its <c>MinHeight</c>; or a row whose
+    /// <see cref="CompactRowSize"/> declares an <see cref="CompactRowSize.ExpandedMinHeight"/>,
+    /// which is owed exactly that. A declaration wins over the row's own kind — it is the more
+    /// specific statement, and the only one available for the three-band views' config band, which
+    /// is a plain Auto row at expanded size.</item>
+    /// <item>FIXED — everything else: chrome that has to be shown whole or not at all. A pixel row
+    /// contributes its height, an Auto row the tallest desired height among its children including
+    /// margins. This is the part that MUST be measured rather than written down, because it is
+    /// exactly the part that moves with the platform's font metrics.</item>
+    /// </list>
+    /// <para>
+    /// That split is the whole point of the derived model: measure what varies by platform, author
+    /// what is design intent. Counting a scrollable band at its CONTENT height instead would make
+    /// the floor say the view cannot fit in space the view can in fact scroll — and for a band the
+    /// view caps to the room left over (CreatorView, SampleRestorerView), that content height is a
+    /// function of the current window height, so the floor would chase the very height it is being
+    /// compared against and no window would ever be tall enough.
+    /// </para>
+    /// <para>
+    /// Reads the desired sizes the last real layout pass already produced rather than re-measuring:
+    /// a Grid measures its Auto rows unconstrained in the dimension they size to, so those values
+    /// are the natural content heights regardless of how short the window currently is, and reading
+    /// them cannot invalidate the layout that produced them. A naive <c>Measure(∞)</c> would report
+    /// CONTENT height for the givable rows too, and would dirty the live layout to ask.
+    /// </para>
+    /// </summary>
+    private static double MeasureExpandedFloor(Grid grid, IReadOnlyList<CompactRowSize>? rows)
+    {
+        double total = 0;
+        for (int i = 0; i < grid.RowDefinitions.Count; i++)
+        {
+            RowDefinition row = grid.RowDefinitions[i];
+            if (AuthoredExpandedMinimum(rows, i) is { } authored)
+            {
+                total += authored;
+                continue;
+            }
+
+            if (row.Height.IsAbsolute)
+            {
+                total += Math.Max(row.Height.Value, row.MinHeight);
+                continue;
+            }
+
+            if (row.Height.IsStar)
+            {
+                total += row.MinHeight;
+                continue;
+            }
+
+            double rowDesired = 0;
+            foreach (Control child in grid.Children.OfType<Control>())
+            {
+                if (Grid.GetRow(child) == i)
+                {
+                    rowDesired = Math.Max(rowDesired, child.DesiredSize.Height + child.Margin.Top + child.Margin.Bottom);
+                }
+            }
+
+            total += Math.Max(rowDesired, row.MinHeight);
+        }
+
+        return total;
+    }
+
+    /// <summary>
+    /// The expanded minimum a view has declared for one of its rows, or null if it has declared
+    /// none — which is also what a row carrying the NaN default means, so "givable" is opt-in per
+    /// row rather than implied by merely having a <see cref="CompactRowSize"/> entry at all (the
+    /// Reconstructor's TabControl row has one for its compact minimums while remaining a Star row
+    /// the floor already handles).
+    /// </summary>
+    private static double? AuthoredExpandedMinimum(IReadOnlyList<CompactRowSize>? rows, int rowIndex)
+    {
+        if (rows is null)
+        {
+            return null;
+        }
+
+        foreach (CompactRowSize row in rows)
+        {
+            if (row.RowIndex == rowIndex && !double.IsNaN(row.ExpandedMinHeight))
+            {
+                return row.ExpandedMinHeight;
+            }
+        }
+
+        return null;
     }
 
     private static void ToggleClass(Control control, bool compact)
@@ -1143,6 +1425,14 @@ internal static class CompactHeightBehavior
         /// </summary>
         public int Generation { get; set; }
 
+        /// <summary>
+        /// The view's expanded content height in DIPs, captured on every pass that runs while
+        /// expanded and held across a compact session — where the expanded layout no longer exists
+        /// to be measured. Zero until the first expanded pass, which is the only state in which the
+        /// behavior has no opinion of its own about where the switch belongs.
+        /// </summary>
+        public double ExpandedFloor { get; set; }
+
         public bool UpdateQueued { get; set; }
 
         /// <summary>
@@ -1155,6 +1445,14 @@ internal static class CompactHeightBehavior
         public bool LifecycleHooked { get; set; }
 
         public EventHandler<AvaloniaPropertyChangedEventArgs>? BoundsHandler { get; set; }
+
+        /// <summary>
+        /// The LayoutUpdated subscription that keeps <see cref="ExpandedFloor"/> current — see
+        /// <see cref="RecaptureFloorAfterLayout"/>. Tracked alongside
+        /// <see cref="BoundsHandler"/> and torn down with it, so the two follow the same
+        /// attach/detach lifecycle and neither outlives the tree it was hooked into.
+        /// </summary>
+        public EventHandler? LayoutHandler { get; set; }
 
         public Dictionary<(Control Grid, int RowIndex), double> CapturedDragHeight { get; } = [];
 

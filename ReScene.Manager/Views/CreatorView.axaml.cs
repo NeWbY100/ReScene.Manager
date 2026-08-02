@@ -55,18 +55,29 @@ public partial class CreatorView : UserControl
         grid.AddHandler(DragDrop.DragOverEvent, OnStoredFilesDragOver);
         grid.AddHandler(DragDrop.DropEvent, OnStoredFilesDrop);
 
-        // Small-window layout degradation: compact below 720 inner DIPs — the
-        // largest converted view. x:CompileBindings="False" means x:Name elements are NOT wired
-        // to auto-generated fields (same as every other ported view in this project) — resolved
-        // once via FindControl instead.
+        // Small-window layout degradation: the switch height is DERIVED from this view's own
+        // measured expanded floor, not named here — the largest converted view, and the one that
+        // is therefore compact in most real windows. x:CompileBindings="False" means x:Name
+        // elements are NOT wired to auto-generated fields (same as every other ported view in this
+        // project) — resolved once via FindControl instead.
+        //
+        // The config band declares ExpandedMinHeight 500: like SampleRestorerView, this view's
+        // config band genuinely GIVES at expanded size, because the cap installed below makes its
+        // ScrollViewer scroll rather than push the trailing bands off-screen. 500 is the share of
+        // the previous hand-calibrated 720 constant that the design attributed to this band —
+        // (720 − 20 margin) − 47 chrome − 68 pinned − 80 log ≈ 505, measured on Windows and
+        // rounded down — and is what keeps the Input section, the Stored Files grid at its
+        // authored 150, the Output row and the Options stack visible together before the view
+        // would rather be compact.
         var root = (Grid)Content!;
         Grid configGrid = this.FindControl<Grid>("ConfigGrid")!;
         Expander helpDisclosure = this.FindControl<Expander>("HelpDisclosure")!;
         TextBox outputTextBox = this.FindControl<TextBox>("OutputTextBox")!;
-        Behaviors.CompactHeightBehavior.SetThreshold(root, 720);
+        Behaviors.CompactHeightBehavior.SetEnabled(root, true);
         Behaviors.CompactHeightBehavior.SetRowSizes(root,
             [new Behaviors.CompactRowSize(RowIndex: 1, NormalHeight: double.NaN,
-                CompactMinHeight: 110, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.AutoToStar)]);
+                CompactMinHeight: 110, HelpOpenMinHeight: 80, Mode: Behaviors.CompactRowMode.AutoToStar,
+                ExpandedMinHeight: 500)]);
         // DESCENDANT row: the Stored Files grid row lives on ConfigGrid, not root — a fixed-pixel
         // row (150 normal) so the splitter drags exactly as today, restoring to a user's dragged
         // height (not just back to 150) across a compact round-trip via PixelRestore's own capture.
