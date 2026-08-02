@@ -1,4 +1,3 @@
-using ReScene.App.Core.Helpers;
 using ReScene.App.Core.ViewModels;
 using ReScene.SRS;
 

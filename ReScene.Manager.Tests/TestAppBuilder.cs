@@ -1,7 +1,5 @@
 using Avalonia;
 using Avalonia.Headless;
-using ReScene.Manager;
-using Xunit;
 
 [assembly: AvaloniaTestApplication(typeof(ReScene.Manager.Tests.TestAppBuilder))]
 

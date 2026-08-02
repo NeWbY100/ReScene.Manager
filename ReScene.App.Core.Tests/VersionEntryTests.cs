@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using ReScene.App.Core.ViewModels;
 using ReScene.Core;
 

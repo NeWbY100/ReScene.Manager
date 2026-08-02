@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using ReScene.Core.Comparison;
 using ReScene.Hex;
 using ReScene.App.Core.ViewModels;

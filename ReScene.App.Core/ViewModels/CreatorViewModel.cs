@@ -7,7 +7,6 @@ using ReScene.SRR;
 using ReScene.SRS;
 
 using ReScene.App.Core.Helpers;
-using ReScene.App.Core.ViewModels;
 namespace ReScene.App.Core.ViewModels;
 
 /// <summary>

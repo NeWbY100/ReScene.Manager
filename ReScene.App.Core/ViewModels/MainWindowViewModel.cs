@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using ReScene.App.Core;
 using ReScene.App.Core.Services;
 using ReScene.App.Core.Models;
 

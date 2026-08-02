@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Input.Platform;
 using Avalonia.VisualTree;
 
 namespace ReScene.Manager.Behaviors;

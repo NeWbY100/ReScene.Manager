@@ -1,5 +1,3 @@
-using ReScene.App.Core.Models;
-
 using ReScene.App.Core.Services;
 namespace ReScene.App.Core.Tests;
 
