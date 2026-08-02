@@ -1,36 +1,35 @@
 using Avalonia.Automation.Peers;
-using Avalonia.Automation.Provider;
-using Avalonia.Controls.Automation.Peers;
 
 namespace ReScene.Manager.Controls;
 
 /// <summary>
-/// Reports the <see cref="HelpDisclosure"/> region as a stable, NON-ACTIONABLE container: a group
-/// that holds the Help content, never a control an assistive technology can expand or collapse.
-/// The single actionable route is the header ToggleButton, which carries the Toggle pattern and is
-/// the only keyboard-focusable peer in the region — and which exists only in compact mode, exactly
-/// where a disclosure affordance is real.
+/// Reports the <see cref="HelpDisclosure"/> region as a plain structural GROUP: a container that
+/// holds the Help content and has no expand/collapse semantics of any kind. The single actionable
+/// route in the region is the header ToggleButton, which carries the Toggle pattern, is the only
+/// keyboard-focusable peer, and exists only in compact mode — exactly where a disclosure affordance
+/// is real.
 /// <para>
-/// WHY THE PATTERN IS WITHHELD IN BOTH MODES, not per mode: a peer whose advertised patterns change
-/// underneath a client is worse than one that never offered them. An AT that has resolved and cached
-/// this element's providers must not find the topology reshaped by a window resize it did not
-/// initiate. Compact loses nothing by it — the toggle reports the same state through Toggle, which
-/// is the pattern a header button should carry anyway.
+/// WHY IT DERIVES FROM <see cref="ControlAutomationPeer"/> RATHER THAN <c>ExpanderAutomationPeer</c>.
+/// Withholding the ExpandCollapse PROVIDER stopped an assistive technology INVOKING the pattern, but
+/// left the inherited machinery that RELAYS <c>IsExpanded</c> changes as ExpandCollapse property
+/// events — and that relay is not overridable (<c>OwnerPropertyChanged</c> is non-virtual). MEASURED
+/// against the derived version: a programmatic collapse at normal size, which the behavior's
+/// invariant guard immediately reverts, emitted <c>Expanded -&gt; Collapsed</c> while the region
+/// ended up expanded and visible — because the guard's revert re-enters the property notification
+/// and completes before the peer's own subscription runs on the outer one. A subscribed AT was told
+/// the region was collapsed while it sat open. Deriving from the plain control peer removes both the
+/// interface implementation and that event relay at the source: there is no expand/collapse
+/// semantics left to contradict anything, in either mode.
 /// </para>
 /// <para>
-/// MECHANISM, and why it is this one. <see cref="ExpanderAutomationPeer"/>'s own
-/// <c>Collapse</c>, <c>Expand</c> and <c>ExpandCollapseState</c> are IL <c>virtual final</c> —
-/// what an implicit interface implementation compiles to — so they cannot be overridden, however
-/// much reflection's <c>IsVirtual</c> alone suggests otherwise (MEASURED: <c>virtual=True
-/// final=True</c> on all three). The overridable seam is <see cref="GetProviderCore"/>, the
-/// protected virtual behind the public <c>GetProvider&lt;T&gt;()</c> that the platform's UIA bridge
-/// resolves patterns through: returning null there withholds the pattern at the boundary that
-/// decides what a client can actually invoke. The peer type still IMPLEMENTS the interface — that
-/// cannot be un-inherited — so a direct cast in-process still succeeds; a UIA client does not have
-/// one, it asks through the provider route this closes.
+/// Nothing is reimplemented beyond the control type, because nothing else was being added by the
+/// expander peer: name, children, parent, bounds, enablement, offscreen state, focusability and the
+/// content/control-element flags all resolve identically from <see cref="ControlAutomationPeer"/> —
+/// verified by capturing every one of them before and after this rebase (see the task report's
+/// inventory), not assumed.
 /// </para>
 /// </summary>
-public class HelpDisclosureAutomationPeer : ExpanderAutomationPeer
+public class HelpDisclosureAutomationPeer : ControlAutomationPeer
 {
     public HelpDisclosureAutomationPeer(HelpDisclosure owner)
         : base(owner)
@@ -38,7 +37,4 @@ public class HelpDisclosureAutomationPeer : ExpanderAutomationPeer
     }
 
     protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Group;
-
-    protected override object? GetProviderCore(Type patternType) =>
-        patternType == typeof(IExpandCollapseProvider) ? null : base.GetProviderCore(patternType);
 }

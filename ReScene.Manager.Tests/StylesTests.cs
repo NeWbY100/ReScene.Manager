@@ -196,12 +196,18 @@ public class StylesTests
             // ^ the toggle CONTROL is still in the visual tree, so its peer's absence is genuine UIA
             //   pruning of an invisible control rather than the template not creating it at all.
 
-            // THE LOAD-BEARING ASSERTION: the container offers NO way for an assistive technology to
-            // collapse this region. GetProvider is the route the platform's UIA bridge resolves
-            // patterns through, so a null here is the pattern genuinely withheld, not merely
-            // unoffered by the visuals.
+            // THE LOAD-BEARING ASSERTIONS: this container has no expand/collapse semantics AT ALL.
+            // Not merely a withheld provider — the peer does not implement the interface, so there
+            // is nothing to invoke and, crucially, nothing to RELAY as events either.
             Assert.Null(expanderPeer.GetProvider<IExpandCollapseProvider>());
+            Assert.False(expanderPeer is IExpandCollapseProvider);
             Assert.Equal(AutomationControlType.Group, expanderPeer.GetAutomationControlType());
+
+            // Subscribed BEFORE the scenario, not after: the defect this pins emitted its
+            // contradicting event DURING the churn, so a subscription installed afterwards saw a
+            // clean stream and proved nothing.
+            var normalEvents = new List<object?>();
+            expanderPeer.PropertyChanged += (_, e) => normalEvents.Add(e.NewValue);
 
             // The round-2 invariant guard stays as the PROGRAMMATIC defense (nothing in the UI or
             // the UIA tree can now reach it, but code still can): a collapse at normal size never
@@ -213,10 +219,19 @@ public class StylesTests
                 "the header toggle is hidden here, leaving no affordance in any modality to undo it");
             Assert.True(expander.IsExpanded);
             Assert.False(toggle.IsVisible, "and it must not have revealed the toggle as a side effect");
+            Assert.Empty(normalEvents.OfType<ExpandCollapseState>());
+            // ^ the guard's revert is a true->false->true round trip whose notifications nest, so the
+            //   expander peer used to end the stream on Collapsed while the region sat expanded —
+            //   telling a subscribed AT the opposite of the truth. No such semantics exist here now.
 
             // ── COMPACT: real disclosure. Toggle appears; the behavior resets it collapsed. ──
+            // Still subscribed from above, so the mode transition itself is inside the window: a
+            // real compact entry collapses the expander, and the container must stay silent about
+            // that too rather than announcing a disclosure change it does not model.
+            normalEvents.Clear();
             window.Height = Threshold - 1;
             Dispatcher.UIThread.RunJobs();
+            Assert.Empty(normalEvents.OfType<ExpandCollapseState>());
             Assert.Contains("compactHeight", host.Classes);
             Assert.True(toggle.IsVisible);
             Assert.False(expander.IsExpanded, "compact entry starts collapsed (condition 5)");
@@ -251,24 +266,33 @@ public class StylesTests
             // Collapse at normal size produced Expanded -> Collapsed while the body stayed visible,
             // because the invariant guard's revert re-entered ahead of the peer's own subscription.
             // With no provider to invoke, that path no longer exists to be raced.)
-            var stateEvents = new List<object?>();
-            compactExpanderPeer.PropertyChanged += (_, e) => stateEvents.Add(e.NewValue);
-            togglePeer.PropertyChanged += (_, e) => stateEvents.Add(e.NewValue);
+            // Subscribed BEFORE the scenario on BOTH peers: the container must stay silent about
+            // disclosure, and the toggle must NOT — silencing the container must not silence the
+            // feature, because the toggle's peer is where the semantics live now.
+            var containerEvents = new List<object?>();
+            var toggleEvents = new List<object?>();
+            compactExpanderPeer.PropertyChanged += (_, e) => containerEvents.Add(e.NewValue);
+            togglePeer.PropertyChanged += (_, e) => toggleEvents.Add(e.NewValue);
 
             toggleProvider!.Toggle();
             Dispatcher.UIThread.RunJobs();
             Assert.True(expander.IsExpanded);
             Assert.True(toggle.IsChecked, "the toggle reports the state it just set");
             Assert.True(CompactHeightBehavior.GetHelpOpen(host), "and the behavior's donation follows it");
-            Assert.DoesNotContain(ExpandCollapseState.Collapsed, stateEvents.OfType<ExpandCollapseState>());
+            Assert.Equal(ToggleState.On, toggleProvider.ToggleState);
+            Assert.Contains(ToggleState.On, toggleEvents.OfType<ToggleState>());
+            Assert.Empty(containerEvents.OfType<ExpandCollapseState>());
 
-            stateEvents.Clear();
+            containerEvents.Clear();
+            toggleEvents.Clear();
             toggleProvider.Toggle();
             Dispatcher.UIThread.RunJobs();
             Assert.False(expander.IsExpanded, "collapsing IS allowed in compact — the toggle is right there");
             Assert.False(toggle.IsChecked);
             Assert.False(CompactHeightBehavior.GetHelpOpen(host));
-            Assert.DoesNotContain(ExpandCollapseState.Expanded, stateEvents.OfType<ExpandCollapseState>());
+            Assert.Equal(ToggleState.Off, toggleProvider.ToggleState);
+            Assert.Contains(ToggleState.Off, toggleEvents.OfType<ToggleState>());
+            Assert.Empty(containerEvents.OfType<ExpandCollapseState>());
         }
         finally { window.Close(); }
     }
