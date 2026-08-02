@@ -521,6 +521,12 @@ public class SRSReconstructorCompactTests
             Assert.True(srsFileTextBox.IsFocused,
                 "restoring from a focused compact body must relocate focus to the wired RestoreFocusTarget (SRSFileTextBox), not strand it");
 
+            // A11y gate NEW-1: the resize-driven focus-recovery target must have an accessible
+            // name (WCAG 4.1.2) — same resolution technique as SampleRestorer's SRRFileTextBox
+            // and Creator's OutputTextBox (the real AutomationPeer, not the raw attached
+            // property), so this proves what a screen reader actually announces on landing here.
+            Assert.Equal("SRS file path", ControlAutomationPeer.CreatePeerForElement(srsFileTextBox).GetName());
+
             window.Height -= 250;
             Dispatcher.UIThread.RunJobs();
             Assert.Contains("compactHeight", root.Classes);
@@ -1179,7 +1185,7 @@ public class SRSReconstructorCompactTests
     private static readonly IReadOnlyList<string> NormalModeTabOrderFixture =
     [
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"SRSFileTextBox\"",
+        "TextBox name=\"SRS file path\" id=\"SRSFileTextBox\"",
         "Button name=\"Browse\" id=\"\"",
         "TextBox name=\"\" id=\"MediaFileTextBox\"",
         "Button name=\"Browse\" id=\"\"",
@@ -1199,7 +1205,7 @@ public class SRSReconstructorCompactTests
     [
         "ToggleButton name=\"Help\" id=\"\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"SRSFileTextBox\"",
+        "TextBox name=\"SRS file path\" id=\"SRSFileTextBox\"",
         "Button name=\"Browse\" id=\"\"",
         "TextBox name=\"\" id=\"MediaFileTextBox\"",
         "Button name=\"Browse\" id=\"\"",

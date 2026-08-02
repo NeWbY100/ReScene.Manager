@@ -65,6 +65,7 @@
                   Classes="ghost"
                   Margin="4,0,0,0" MinWidth="75" />
           <TextBox x:Name="InputTextBox" Text="{Binding InputPath}"
+                   AutomationProperties.Name="Sample file path"
                    behaviors:TextBoxDropBehavior.DropMode="File" />
         </DockPanel>
         <controls:FieldStatusLine Status="{Binding SampleStatus}" />

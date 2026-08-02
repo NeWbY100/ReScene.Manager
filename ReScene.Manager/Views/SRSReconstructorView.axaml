@@ -66,6 +66,7 @@
                   Classes="ghost"
                   Margin="4,0,0,0" MinWidth="75" />
           <TextBox x:Name="SRSFileTextBox" Text="{Binding SRSFilePath}"
+                   AutomationProperties.Name="SRS file path"
                    behaviors:TextBoxDropBehavior.DropMode="File" />
         </DockPanel>
         <controls:FieldStatusLine Status="{Binding SRSStatus}" />

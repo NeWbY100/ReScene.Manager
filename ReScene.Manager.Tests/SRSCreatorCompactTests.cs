@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Automation;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
@@ -552,6 +553,12 @@ public class SRSCreatorCompactTests
             Assert.True(inputTextBox.IsFocused,
                 "restoring from a focused compact body must relocate focus to the wired RestoreFocusTarget (InputTextBox), not strand it");
 
+            // A11y gate NEW-1: the resize-driven focus-recovery target must have an accessible
+            // name (WCAG 4.1.2) — same resolution technique as SampleRestorer's SRRFileTextBox
+            // and Creator's OutputTextBox (the real AutomationPeer, not the raw attached
+            // property), so this proves what a screen reader actually announces on landing here.
+            Assert.Equal("Sample file path", ControlAutomationPeer.CreatePeerForElement(inputTextBox).GetName());
+
             window.Height -= 250;
             Dispatcher.UIThread.RunJobs();
             Assert.Contains("compactHeight", root.Classes);
@@ -1071,7 +1078,7 @@ public class SRSCreatorCompactTests
     private static readonly IReadOnlyList<string> NormalModeTabOrderFixture =
     [
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"InputTextBox\"",
+        "TextBox name=\"Sample file path\" id=\"InputTextBox\"",
         "Button name=\"Browse\" id=\"\"",
         "Button name=\"Clear\" id=\"\"",
         "TextBox name=\"\" id=\"\"",
@@ -1093,7 +1100,7 @@ public class SRSCreatorCompactTests
     [
         "ToggleButton name=\"Help\" id=\"\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"InputTextBox\"",
+        "TextBox name=\"Sample file path\" id=\"InputTextBox\"",
         "Button name=\"Browse\" id=\"\"",
         "Button name=\"Clear\" id=\"\"",
         "TextBox name=\"\" id=\"\"",
