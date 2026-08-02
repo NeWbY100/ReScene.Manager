@@ -1,5 +1,9 @@
 # Small-Window Layout Degradation — Design
 
+Status: rev 14 — per-view threshold constants replaced by derived switch heights
+(2026-08-02); see [Amendment 2026-08-02](#amendment-2026-08-02--derived-thresholds). Everything
+below that the amendment does not supersede stands as rev 13 left it.
+
 Status: rev 13 — implemented d045ea6. Task 7 (Settings audit + whole-board close) verified
 the feature end-to-end: SettingsWindow's own 560×360 minimum audited (criterion C Tab-walk
 passes with no compact machinery needed), a cross-view board (font-source enlargement,
@@ -156,6 +160,12 @@ the invariant test measures the rendered truth against the 307 bound.
 
 (Creator's large threshold simply means Creator is compact in most real windows — correct,
 given its content volume.)
+
+> **SUPERSEDED 2026-08-02 — the Threshold column above is no longer the switch height.** The
+> per-view constants are gone; each view now derives its own. The compact-floor column and the
+> 307 bound are unchanged and still normative. See
+> [Amendment 2026-08-02](#amendment-2026-08-02--derived-thresholds) for what replaced them; the
+> table is retained because the amendment's authored minimums are back-derived from it.
 
 ### 2. Chrome — the "Help" disclosure (always-present, single instance)
 
@@ -333,6 +343,138 @@ F. Normal size: tab order, reading order, and pixels unchanged — ordered tab-o
   retained or added on the touched surfaces.
 - Full Manager suite on forced rebuilds (stale-XAML hazard); runtime ava-desktop pass at
   the VM size with before/after captures.
+
+## Amendment 2026-08-02 — derived thresholds
+
+The five per-view threshold constants are replaced by a switch height each view derives from its
+own measured content. Everything else in this document stands: the compact floors, the 307 bound,
+the donation rule, the staged-focus contract, criteria A–F.
+
+### Why the constants had to go
+
+The constants were calibrated on Windows and are wrong on other platforms. Measured: the
+Reconstructor's expanded floor is **419** inner DIPs on Windows against a threshold of 421 — two
+DIPs of headroom — and **438** on Linux CI, i.e. 17 DIPs ABOVE its own threshold. Three tests fail
+there, and the failure is not a test artifact: a window between 421 and 438 renders expanded mode
+with content the window cannot fit, which is exactly the clipped-and-unreachable state §Problem
+exists to eliminate. Font metrics differ per platform; a constant cannot.
+
+A threshold is also not a constant in time. Floors grow at runtime as conditional rows appear, and
+a number written in a constructor cannot follow them.
+
+### The invariant (normative; replaces "Threshold ≥ rendered expanded worst floor")
+
+> At every window height, whichever mode a view is in must FIT: no always-visible, non-scrolling
+> content clipped, on any platform, with any font stack.
+
+The old check compared one measurement against one constant, which is only as good as the constant.
+The new one is a per-view sweep of fresh instances at heights either side of that view's own
+derived switch point, asserting at each that the active mode renders without clipping
+(`CompactInvariantRig.AssertActiveModeFitsAroundSwitchPoint`). Every height it visits is derived
+from the switch point and every verdict is about the rendered result, so a platform that needs
+40 more DIPs moves the switch point and the swept band together and the same assertion still
+describes the same promise. The sweep is platform-independent by construction rather than by
+calibration. The old numbers are no longer normative; a few DIPs of drift from them is expected
+and fine.
+
+### Deriving the floor: measure what varies by platform, author what is design intent
+
+Effective threshold = `max(explicit minimum, measured expanded floor + 20)`.
+
+The floor is a sum over the root Grid's rows, each row being one of two kinds:
+
+- **GIVABLE** — the row's content can scroll, so the floor owes only the minimum the design insists
+  on seeing, never the content height. Two ways to qualify: a **Star row**, which gives by
+  construction and is owed its `MinHeight`; or a row whose `CompactRowSize` declares an
+  **`ExpandedMinHeight`**, which is owed exactly that. The declaration wins over the row's kind —
+  it is the more specific statement, and the only one available for the three-band views' config
+  band, which is a plain Auto row at expanded size.
+- **FIXED** — everything else: chrome shown whole or not at all. Pixel rows contribute their
+  height, Auto rows the tallest desired height among their children including margins. This is the
+  part that must be measured, because it is the part that moves with the platform's fonts.
+
+Counting a scrollable band at its content height instead is not merely pessimistic, it is
+divergent: for a band the view caps to the room left over (Creator, SampleRestorer — see below),
+the content height is a function of the current window height, so the floor chases the height it is
+being compared against and no window is ever tall enough. Measured before the fix: Creator's floor
+at a 721-DIP window came out at 717, giving a threshold of 737 — above the window that produced it.
+
+`ExpandedMinHeight` is an authored design value, not a measurement. It answers "how little of this
+band is still worth staying expanded for", which no amount of measuring content can decide.
+
+**A band is only givable if something actually makes it give.** Creator and SampleRestorer cap
+their config ScrollViewer's `MaxHeight` to the room remaining after chrome, the pinned band and the
+log minimum (per-view code-behind, on every layout pass) — that cap is what makes the claim true,
+and both declare an `ExpandedMinHeight`. SRSCreator and SRSReconstructor have no such cap: at
+expanded size their config row is a plain Auto row that takes its full desired height, so it does
+NOT give and its measured content height genuinely is what the floor owes it. They declare no
+expanded minimum. Declaring one on a row that cannot give moves the switch point below the height
+the row's content actually needs — the sweep catches it: a throwaway sabotage declaring SRSCreator
+givable at 100 fails with `SRSCreator at inner height 315 in EXPANDED mode: ScrollViewer bottom
+337.0 exceeds 315`.
+
+Help state does not enter the expanded floor. The donation rule is a compact-mode mechanism and
+`HelpOpen` is false throughout expanded mode by construction; expanded mode renders the Help body
+flat, expanded and unconstrained, which is the largest it ever is, and the floor already carries
+that as measured chrome. So the expanded floor is both Help-state-correct and conservative without
+a second set of minimums.
+
+### Authored minimums, back-derived from the table above
+
+Each is the share of the old constant that the design attributed to that band:
+`(old constant − 20 margin) − measured chrome − measured pinned band − log minimum 80`, rounded.
+Windows switch points therefore land near the old numbers, with the invariant — not the numbers —
+now normative.
+
+| View | Givable band | Authored `ExpandedMinHeight` | Derived switch point (Windows) | Old constant |
+|---|---|---|---|---|
+| Reconstructor | TabControl + log (Star rows, `MinHeight` 130 / 80 in XAML) | none needed | **439** | 421 |
+| SRSCreator | none (config row is uncapped Auto) | none | **511** | 520 |
+| SRSReconstructor | none (config row is uncapped Auto) | none | **456** | 450 |
+| SampleRestorer | config band (row 1) | **320** | **535** | 535 |
+| Creator | config band (row 1) | **500** | **715** | 720 |
+
+The Reconstructor's +18 is the honest correction: its floor really is 419 on Windows, and 421 left
+two DIPs — which is how Linux's 438 ended up below the switch point.
+
+### Capture, hysteresis, anti-flap
+
+- **Capture.** The floor is read from the desired sizes the last real layout pass produced, never
+  by re-measuring — a `Measure(∞)` would report content height for givable rows and would dirty the
+  live layout to ask. Read only while EXPANDED, the only state in which the expanded layout exists;
+  the value is held across a compact session.
+- **Two triggers, complementary.** (1) After every change the behavior itself makes that leaves the
+  view expanded — a restore, or the first evaluation at normal height, where flat mode has just
+  forced the Help body open and the capture ran before the body existed — a re-evaluation is posted
+  at `Loaded`, below the layout-driving priorities, so it reads the settled tree. This is not left
+  to layout notification, because those changes do not always invalidate layout. (2) `LayoutUpdated`
+  re-captures continuously, for the changes the behavior does NOT make: content arriving, prose
+  rewrapping, a font growing. None of those resize the root — its height is the window's to decide —
+  so none raise a bounds change, and an evaluation-only capture would keep quoting a floor the
+  layout has already outgrown. Only a GROWN floor can change the verdict from expanded, so an
+  evaluation is queued for that case alone; the ordinary pass costs one row walk.
+- **Hysteresis** is unchanged and now applies to the derived value: compact below the effective
+  threshold, restore at effective + 12, restore-only, so a fresh instance at the threshold starts
+  expanded.
+- **Anti-flap, by construction.** A floor that grew while compact is invisible until the expanded
+  layout is back, so a restore CAN turn out to be wrong. When it does, the re-validation returns the
+  view to compact — and the newly-measured floor has raised the threshold ABOVE the very height that
+  produced the failed restore, so restoring again would need a strictly greater height. One flip,
+  then rest. Pinned by `RestoreThatNoLongerFits_ReturnsToCompact_AndThenRests`, which asserts
+  exactly two class changes and no further movement across five more dispatcher turns.
+
+### `Threshold` survives as an optional minimum
+
+The attached property still exists and still binds — but only UPWARD: the effective threshold is
+the larger of it and the derived floor plus margin, so a view can choose to go compact earlier than
+its content strictly requires and can never be held expanded in a window its content does not fit.
+Derivation is therefore not opt-in; an invariant a caller can decline is not one. `Enabled` is the
+attach trigger for a view that names no minimum, since `Threshold`'s default is already NaN and
+assigning NaN raises no change. No shipped view sets a minimum.
+
+`CompactHeightBehavior.GetEffectiveThreshold` exposes the switch height read-only, so tests derive
+their heights from it instead of restating a number that can drift from the one the behavior uses.
+No per-view switch height is written down anywhere in the test suite.
 
 ## Out of scope
 

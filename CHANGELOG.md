@@ -8,7 +8,10 @@ All notable changes to ReScene Manager (formerly ReScene.NET) are documented her
 
 - Task pages now adapt to small windows: panes shrink and scroll instead of clipping, header
   help collapses behind a disclosure, and every control stays reachable by keyboard at the
-  minimum window size (700×450).
+  minimum window size (700×450). Each page works out for itself how small it can get before
+  switching to the compact layout, measuring its own content rather than relying on fixed
+  numbers — so the switch happens in the right place on Linux and macOS, whose font metrics
+  render the same content at different heights, and it keeps up as a page's content grows.
 
 ### Fixed
 
