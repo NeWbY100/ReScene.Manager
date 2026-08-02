@@ -190,16 +190,24 @@
             <Run Text="— Where the .srr file will be written."
                  Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
           </TextBlock>
-          <DockPanel>
+          <!-- Same shape as the Input row above, and the same correction: Browse is docked Right and
+               therefore declared FIRST, so the tree order is the reverse of the visual one and an
+               unpinned row tabs backwards (Browse before the path box). TabIndex restores visual
+               order; TabNavigation="Local" scopes those pins to this row so they are never compared
+               against the whole window — see the Input row's own note for what that costs when it is
+               left off. -->
+          <DockPanel KeyboardNavigation.TabNavigation="Local">
             <Button DockPanel.Dock="Right" Content="Browse"
                     Command="{Binding BrowseOutputCommand}"
                     Classes="ghost"
+                    TabIndex="1"
                     Margin="4,0,0,0" MinWidth="75" />
             <!-- AutomationProperties.Name: OutputTextBox became the
                  RestoreFocusTarget below (moved off InputTextBox — see the ctor's own remarks on
                  why) — an unnamed edit control landing focus-recovery here would have swapped one
                  a11y gap for another. "Output path" mirrors InputTextBox's own naming convention. -->
             <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}"
+                     TabIndex="0"
                      AutomationProperties.Name="Output path"
                      behaviors:TextBoxDropBehavior.DropMode="File" />
           </DockPanel>
