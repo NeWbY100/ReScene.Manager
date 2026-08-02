@@ -231,12 +231,27 @@ internal static class CompactHeightBehavior
             control.LayoutUpdated -= previousLayout;
         }
 
+        // Every (re)attachment re-arms the in-line decision below: whatever height this attachment
+        // turns out to have, the verdict for it must be part of the first frame drawn at that
+        // height rather than arriving after it.
+        state.AwaitingFirstBounds = true;
+
         void Handler(object? _, AvaloniaPropertyChangedEventArgs args)
         {
-            if (args.Property == Visual.BoundsProperty)
+            if (args.Property != Visual.BoundsProperty)
             {
-                QueueEvaluate(control, state);
+                return;
             }
+
+            // IN LINE, not posted — the one case where the coalescing that serves every other
+            // bounds change would be actively wrong. See State.AwaitingFirstBounds.
+            if (state.AwaitingFirstBounds && control.Bounds.Height > 0)
+            {
+                Evaluate(control, state);
+                return;
+            }
+
+            QueueEvaluate(control, state);
         }
 
         control.PropertyChanged += Handler;
@@ -309,6 +324,12 @@ internal static class CompactHeightBehavior
         {
             return;
         }
+
+        // A real height has now been seen and judged, so the in-line path has done its job for this
+        // attachment. Cleared here rather than at the call site so a POSTED evaluation that happens
+        // to get there first disarms it too — otherwise the next bounds change would still be
+        // handled in line, doing layout work during a layout pass for no reason.
+        state.AwaitingFirstBounds = false;
 
         // Refresh the captured floor whenever the view is EXPANDED, which is the only state in
         // which the expanded layout can be observed: while compact the row minimums and the
@@ -1452,6 +1473,35 @@ internal static class CompactHeightBehavior
         /// leaves at most one pass pending.
         /// </summary>
         public bool RecheckQueued { get; set; }
+
+        /// <summary>
+        /// Set on every (re)attachment, cleared by the first evaluation that sees a real height:
+        /// while it holds, a bounds change is evaluated IN LINE instead of through
+        /// <see cref="QueueEvaluate"/>.
+        /// <para>
+        /// A posted evaluation cannot decide the frame the user is about to see. Bounds arrive
+        /// during the layout pass; the job posted from that notification runs after the pass has
+        /// finished, by which time the frame built from it can already have been presented — in the
+        /// view's DEFAULT (expanded) shape, because nothing had told it otherwise yet. That is the
+        /// flash: click into a tab whose view belongs in compact, and one expanded frame appears
+        /// first. Deciding in line puts the class and row values in before the pass completes, so
+        /// the layout the frame is built from is the right one.
+        /// </para>
+        /// <para>
+        /// The derived model made this structural rather than incidental. A per-view constant could
+        /// be compared against the very first height available; a measured floor needs the view to
+        /// have been measured — but that measurement has happened by the time bounds are being
+        /// assigned, so the first bounds notification is exactly the last moment at which the
+        /// verdict can still make the frame, and the first at which it can be reached.
+        /// </para>
+        /// <para>
+        /// Deliberately one-shot per attachment. Mutating classes and row definitions from inside a
+        /// layout pass costs an extra pass, which is the right trade once — to avoid a visibly
+        /// wrong frame — and the wrong one for every frame of a resize drag, where coalescing is
+        /// what keeps the cost bounded and no frame is wrong for long enough to see.
+        /// </para>
+        /// </summary>
+        public bool AwaitingFirstBounds { get; set; }
 
         public bool LifecycleHooked { get; set; }
 
