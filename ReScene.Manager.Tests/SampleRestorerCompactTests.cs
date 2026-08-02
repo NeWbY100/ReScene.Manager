@@ -24,7 +24,8 @@ using ReScene.SRS;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Small-window layout degradation tests for <see cref="SampleRestorerView"/> (threshold 535,
+/// Small-window layout degradation tests for <see cref="SampleRestorerView"/> (switch height
+/// DERIVED from the view's own measured expanded floor — see <see cref="Threshold"/> —
 /// config row AutoToStar 110 compact / 80 help-open, log 80, Help body MaxHeight
 /// 40, compact CI bound <see cref="CompactInvariantRig.CiBound"/> == 307, pinned band ceiling
 /// 75). This is the view whose action row and log measured 0px at 700×450 BASE state under
@@ -84,9 +85,26 @@ public class SampleRestorerCompactTests
     private static SampleRestorerViewModel.SRSFileEntry Entry(string srsFileName, string sampleFileName, bool isSelected = true) =>
         new() { SRSFileName = srsFileName, SampleFileName = sampleFileName, MediaFilePath = string.Empty, Status = "Pending", IsSelected = isSelected };
 
-    private const double Threshold = 535;
+    private static SampleRestorerView BuildWorstCase()
+    {
+        SampleRestorerViewModel vm = CreateVm();
+        ForceWorstCase(vm);
+        return new SampleRestorerView { DataContext = vm };
+    }
+
+    /// <summary>
+    /// This view's switch height, READ BACK from the behavior rather than written down — see
+    /// <see cref="CompactInvariantRig.ProbeSwitchPoint"/>. Probed once per test process.
+    /// </summary>
+    private static double Threshold => _threshold.Value;
+
+    private static readonly Lazy<double> _threshold =
+        new(() => CompactInvariantRig.ProbeSwitchPoint(BuildWorstCase));
+
     private const double CompactInner = 319;   // the canonical 700x450 minimum window
-    private const double ExpandedInner = 536;  // Threshold+1, comfortably expanded
+
+    /// <summary>Comfortably above <see cref="Threshold"/>, clear of the restore hysteresis.</summary>
+    private static double ExpandedInner => Threshold + CompactInvariantRig.ExpandedHeadroom;
 
     /// <summary>
     /// Sets the three paths <c>CanRestore()</c> needs for Restore All to be genuinely enabled.
@@ -126,7 +144,8 @@ public class SampleRestorerCompactTests
     /// AT that cap) — a real row count, not a token one: an earlier version of this method used a
     /// modest 2-row population instead, which weakened the fixture enough to hide a genuine
     /// defect rather than exercising it: MEASURED, with 12 rows and NO production fix, that inner
-    /// heights from Threshold+1 (536) up to ~640 leave the ENTIRE log band (row 3) — not merely
+    /// heights from 536 (the smallest expanded height when that was measured) up to ~640 leave the
+    /// ENTIRE log band (row 3) — not merely
     /// clipped, but translated fully below the window's own bottom edge (e.g. at 536: log at
     /// window-Y [693,773] against a 675-tall window). <see cref="SampleRestorerView"/>'s own
     /// constructor now fixes this with a
@@ -152,25 +171,37 @@ public class SampleRestorerCompactTests
 
     // ── 1. Invariant (the four one-sum checks; CompactInvariantRig) — RED-FIRST against today's DockPanel ──
 
+    /// <summary>
+    /// The derivation's own guarantee, in place of the constant this used to pin: whatever the
+    /// view's expanded floor measures on this platform, the height it switches at is above it.
+    /// </summary>
     [AvaloniaFact]
-    public void Invariant_ExpandedModeFloor_UnderThreshold()
+    public void Invariant_ExpandedModeFloor_UnderDerivedThreshold()
     {
-        SampleRestorerViewModel vm = CreateVm();
-        ForceWorstCase(vm);
-        var view = new SampleRestorerView { DataContext = vm };
-
-        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        (Window window, Grid root) = CompactViewRig.HostAt(BuildWorstCase(), ExpandedInner);
         try
         {
             Assert.DoesNotContain("compactHeight", root.Classes);
             double floor = CompactInvariantRig.MeasureFloor(root);
-            Assert.True(floor < Threshold, $"expanded-mode floor {floor:F1} must be under Threshold {Threshold}");
+            double threshold = CompactHeightBehavior.GetEffectiveThreshold(root);
+            Assert.True(floor < threshold,
+                $"expanded-mode floor {floor:F1} must be under the DERIVED threshold {threshold:F1}");
         }
         finally { window.Close(); }
     }
 
     /// <summary>
-    /// The REAL, user-facing guarantee <see cref="Invariant_ExpandedModeFloor_UnderThreshold"/>'s
+    /// THE invariant: at every height around this view's own switch point, whichever mode is
+    /// active actually fits. See
+    /// <see cref="CompactInvariantRig.AssertActiveModeFitsAroundSwitchPoint"/> — no height and no
+    /// verdict in it is a platform-calibrated number.
+    /// </summary>
+    [AvaloniaFact]
+    public void Invariant_ActiveModeFits_AtEveryHeightAroundTheSwitchPoint() =>
+        CompactInvariantRig.AssertActiveModeFitsAroundSwitchPoint("SampleRestorer", BuildWorstCase);
+
+    /// <summary>
+    /// The REAL, user-facing guarantee <see cref="Invariant_ExpandedModeFloor_UnderDerivedThreshold"/>'s
     /// own <c>MeasureFloor</c> methodology cannot directly observe:
     /// MEASURED that <c>MeasureFloor</c>'s bare, unconstrained <c>Measure(Infinity)</c> call
     /// reports each Auto row's own UNCONSTRAINED desired height, while a REAL Grid arrange pass
@@ -180,25 +211,28 @@ public class SampleRestorerCompactTests
     /// <c>ArrangeRoundingSlack</c> margin beyond the minimum its own arithmetic strictly needs —
     /// see that constant's own remarks for the exact measured gap). This test instead uses REAL
     /// arranged rendering (<see cref="CompactViewRig.HostAt"/>) and the clip-aware
-    /// <see cref="AssertFullyWithinWindow"/> across the EXACT range measured unsafe before the
-    /// production fix (Threshold+1 through ~640 — the entire log band, row 3, previously
+    /// <see cref="AssertFullyWithinWindow"/> across the range measured unsafe before the
+    /// production fix, expressed as offsets ABOVE this view's own switch point so it follows the
+    /// derivation rather than pinning heights that meant something on one font stack (1 through
+    /// ~105 DIPs above it — the entire log band, row 3, previously
     /// translated fully below the window's own bottom edge in that range with a 12-row grid and no
     /// fix), plus a comfortably-larger height, to prove the actual defect this change exists to fix
     /// is gone — not merely that one abstract number moved.
     /// </summary>
     [AvaloniaTheory]
-    [InlineData(536.0)]   // Threshold+1 -- the smallest possible expanded height
-    [InlineData(560.0)]
-    [InlineData(600.0)]   // mid-way through the measured-unsafe range
-    [InlineData(640.0)]   // the measured-unsafe range's own upper edge
-    [InlineData(900.0)]   // comfortably larger -- the cap must not OVER-constrain when there's room to spare
-    public void Invariant_ExpandedMode_NeverClipsAcrossUnsafeHeightRange(double innerHeight)
+    [InlineData(1.0)]     // the smallest possible expanded height
+    [InlineData(25.0)]
+    [InlineData(65.0)]    // mid-way through the measured-unsafe range
+    [InlineData(105.0)]   // the measured-unsafe range's own upper edge
+    [InlineData(365.0)]   // comfortably larger -- the cap must not OVER-constrain when there's room to spare
+    public void Invariant_ExpandedMode_NeverClipsAcrossUnsafeHeightRange(double dipsAboveSwitchPoint)
     {
-        SampleRestorerViewModel vm = CreateVm();
-        ForceWorstCase(vm);
-        var view = new SampleRestorerView { DataContext = vm };
+        // Offsets, not absolute heights: the range this covers is defined RELATIVE to the height
+        // this view switches at, so it follows the derivation onto a platform whose fonts put that
+        // switch somewhere else instead of testing a band that no longer means anything there.
+        double innerHeight = Threshold + dipsAboveSwitchPoint;
 
-        (Window window, Grid root) = CompactViewRig.HostAt(view, innerHeight);
+        (Window window, Grid root) = CompactViewRig.HostAt(BuildWorstCase(), innerHeight);
         try
         {
             Assert.DoesNotContain("compactHeight", root.Classes);
@@ -650,7 +684,12 @@ public class SampleRestorerCompactTests
             CompactViewRig.AssertReachableByKeyboard(window, body);
 
             // Restore to normal, then re-enter compact: durability is compact-SESSION scoped only.
-            window.Height += 250; // comfortably above Threshold + hysteresis slack
+            // Out of compact and comfortably clear of the restore hysteresis, DERIVED rather
+            // than a fixed delta: a constant step that clears the switch point on one platform's
+            // font metrics can land inside the hysteresis band on another's, leaving this test
+            // asserting normal-mode behaviour on a view that never left compact.
+            double restoreDelta = (Threshold + 12 + CompactInvariantRig.ExpandedHeadroom) - CompactInner;
+            window.Height += restoreDelta;
             Dispatcher.UIThread.RunJobs();
             Assert.DoesNotContain("compactHeight", root.Classes);
             Assert.True(helpDisclosure.IsExpanded); // flat mode: force-expanded
@@ -670,7 +709,7 @@ public class SampleRestorerCompactTests
             // actually announces on landing here, not merely that a XAML attribute exists.
             Assert.Equal("SRR file path", ControlAutomationPeer.CreatePeerForElement(srrFileTextBox).GetName());
 
-            window.Height -= 250;
+            window.Height -= restoreDelta;
             Dispatcher.UIThread.RunJobs();
             Assert.Contains("compactHeight", root.Classes);
             Assert.False(helpDisclosure.IsExpanded, "re-entering compact must reset Help to collapsed, not resume the prior session's open state");

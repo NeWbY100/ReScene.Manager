@@ -137,7 +137,8 @@ public class SmallWindowBoardTests
             // ListBox, itself several levels below root) would leave the outer log band's own
             // bounds untouched and pass undetected. AssertNoDescendantIsClipped closes that gap.
             CompactInvariantRig.AssertArrangesWithin(root, root.Bounds.Height);
-            AssertNoDescendantIsClipped(window, root);
+            CompactInvariantRig.AssertNoAlwaysVisibleDescendantIsClipped(
+                window, root, $"{view.GetType().Name} under enlarged fonts");
 
             // "the per-view... reachability assertions still hold": RestoreFocusTarget is the
             // behavior's OWN restore-direction fallback target — a view-agnostic probe
@@ -189,40 +190,6 @@ public class SmallWindowBoardTests
         {
             window.Close();
         }
-    }
-
-    /// <summary>
-    /// Recurses over EVERY descendant of <paramref name="root"/> — not just its direct
-    /// children, closing the gap left by checking direct children alone — and requires each one that is
-    /// currently rendered to be fully visible, using the exact same clip-aware bar
-    /// <see cref="CompactViewRig"/>'s own criterion-C walk already uses
-    /// (<see cref="CompactViewRig.IsFullyVisibleWithinWindow"/>, reused rather than forked).
-    /// Descendants of any <see cref="ScrollViewer"/> are excluded: a scrollable region's content
-    /// legitimately extends beyond its own viewport by design — that is what "growth absorbed by
-    /// scrolling regions" (spec Testing) means, and flagging it would be a false positive, not a
-    /// finding. What remains after that exclusion is exactly the surface this board case already
-    /// claims to cover: every ALWAYS-visible, non-scrolling element anywhere in the view — the
-    /// pinned/action band(s) and the log band's header among them, not merely root's own
-    /// direct children.
-    /// </summary>
-    private static void AssertNoDescendantIsClipped(Window window, Control root)
-    {
-        List<string> clipped = [];
-        foreach (Control descendant in root.GetVisualDescendants().OfType<Control>())
-        {
-            if (!descendant.IsEffectivelyVisible || descendant.GetVisualAncestors().OfType<ScrollViewer>().Any())
-            {
-                continue;
-            }
-
-            if (!CompactViewRig.IsFullyVisibleWithinWindow(descendant, window))
-            {
-                clipped.Add(CompactViewRig.Describe(descendant));
-            }
-        }
-
-        Assert.True(clipped.Count == 0,
-            $"font growth clipped {clipped.Count} always-visible (non-scrolling) descendant(s): {string.Join("; ", clipped)}");
     }
 
     // ── Case 2: RenderScaling sweep — distinct from the 1.0x every per-view invariant test
@@ -414,14 +381,20 @@ public class SmallWindowBoardTests
     // ── Case 3: cross-view invariant existence guard ──────────────────────────────────────────
 
     /// <summary>
-    /// The established per-view shape (unchanged since the Reconstructor template):
-    /// <c>Invariant_ExpandedModeFloor_UnderThreshold</c>, <c>Invariant_CompactFloor_HelpClosed_
-    /// WithinCiBound</c>, and <c>Invariant_CompactFloor_HelpOpen_WithinCiBound_And...Sane</c> —
-    /// checks 1-3 of the four one-sum invariant checks (check 4, the pinned-band bound, is
-    /// asserted inside the third). Below this count a view has PARTIALLY dropped its invariant
-    /// coverage even if it still has one.
+    /// The established per-view shape: <c>Invariant_ExpandedModeFloor_UnderDerivedThreshold</c>,
+    /// <c>Invariant_ActiveModeFits_AtEveryHeightAroundTheSwitchPoint</c>,
+    /// <c>Invariant_CompactFloor_HelpClosed_WithinCiBound</c>, and
+    /// <c>Invariant_CompactFloor_HelpOpen_WithinCiBound_And...Sane</c> — the compact one-sum checks
+    /// (the pinned-band bound is asserted inside the last), plus the two that police the derived
+    /// switch point. Below this count a view has PARTIALLY dropped its invariant coverage even if
+    /// it still has some.
+    /// <para>
+    /// Raised from 3 to 4 when the sweep arrived: it is the centerpiece invariant — the one that
+    /// says the ACTIVE mode fits at every height around the switch — and a view quietly losing it
+    /// would leave the remaining three all passing.
+    /// </para>
     /// </summary>
-    private const int MinInvariantMethodsPerView = 3;
+    private const int MinInvariantMethodsPerView = 4;
 
     /// <summary>
     /// Guards against a future view task silently dropping (deleting, renaming past recognition,

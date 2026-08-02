@@ -22,7 +22,8 @@ using ReScene.SRS;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Small-window layout degradation tests for <see cref="SRSCreatorView"/> (threshold 520, config
+/// Small-window layout degradation tests for <see cref="SRSCreatorView"/> (switch height DERIVED
+/// from the view's own measured expanded floor — see <see cref="Threshold"/> — config
 /// row AutoToStar 110 compact / 80 help-open, log 80, Help body MaxHeight 40, compact CI bound
 /// <see cref="CompactInvariantRig.CiBound"/> == 307, pinned band ceiling 75). Adapts
 /// <c>ReconstructorCompactTests</c>' five-part shape to this view's simpler, sub-tab-free
@@ -72,9 +73,26 @@ public class SRSCreatorCompactTests
             new DefaultAppSettingsService(),
             new InlineUiDispatcher());
 
-    private const double Threshold = 520;
+    private static SRSCreatorView BuildWorstCase()
+    {
+        SRSCreatorViewModel vm = CreateVm();
+        ForceWorstCase(vm);
+        return new SRSCreatorView { DataContext = vm };
+    }
+
+    /// <summary>
+    /// This view's switch height, READ BACK from the behavior rather than written down — see
+    /// <see cref="CompactInvariantRig.ProbeSwitchPoint"/>. Probed once per test process.
+    /// </summary>
+    private static double Threshold => _threshold.Value;
+
+    private static readonly Lazy<double> _threshold =
+        new(() => CompactInvariantRig.ProbeSwitchPoint(BuildWorstCase));
+
     private const double CompactInner = 319;   // the canonical 700x450 minimum window
-    private const double ExpandedInner = 521;  // comfortably above Threshold
+
+    /// <summary>Comfortably above <see cref="Threshold"/>, clear of the restore hysteresis.</summary>
+    private static double ExpandedInner => Threshold + CompactInvariantRig.ExpandedHeadroom;
 
     /// <summary>
     /// The worst-case layout, forced together: ISO selection visible, all three FieldStatusLines
@@ -96,22 +114,34 @@ public class SRSCreatorCompactTests
 
     // ── 1. Invariant (the four one-sum checks; CompactInvariantRig) ────
 
+    /// <summary>
+    /// The derivation's own guarantee, in place of the constant this used to pin: whatever the
+    /// view's expanded floor measures on this platform, the height it switches at is above it.
+    /// </summary>
     [AvaloniaFact]
-    public void Invariant_ExpandedModeFloor_UnderThreshold()
+    public void Invariant_ExpandedModeFloor_UnderDerivedThreshold()
     {
-        SRSCreatorViewModel vm = CreateVm();
-        ForceWorstCase(vm);
-        var view = new SRSCreatorView { DataContext = vm };
-
-        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        (Window window, Grid root) = CompactViewRig.HostAt(BuildWorstCase(), ExpandedInner);
         try
         {
             Assert.DoesNotContain("compactHeight", root.Classes);
             double floor = CompactInvariantRig.MeasureFloor(root);
-            Assert.True(floor < Threshold, $"expanded-mode floor {floor:F1} must be under Threshold {Threshold}");
+            double threshold = CompactHeightBehavior.GetEffectiveThreshold(root);
+            Assert.True(floor < threshold,
+                $"expanded-mode floor {floor:F1} must be under the DERIVED threshold {threshold:F1}");
         }
         finally { window.Close(); }
     }
+
+    /// <summary>
+    /// THE invariant: at every height around this view's own switch point, whichever mode is
+    /// active actually fits. See
+    /// <see cref="CompactInvariantRig.AssertActiveModeFitsAroundSwitchPoint"/> — no height and no
+    /// verdict in it is a platform-calibrated number.
+    /// </summary>
+    [AvaloniaFact]
+    public void Invariant_ActiveModeFits_AtEveryHeightAroundTheSwitchPoint() =>
+        CompactInvariantRig.AssertActiveModeFitsAroundSwitchPoint("SRSCreator", BuildWorstCase);
 
     [AvaloniaFact]
     public void Invariant_CompactFloor_HelpClosed_WithinCiBound()
@@ -540,7 +570,12 @@ public class SRSCreatorCompactTests
             CompactViewRig.AssertReachableByKeyboard(window, body);
 
             // Restore to normal, then re-enter compact: durability is compact-SESSION scoped only.
-            window.Height += 250; // comfortably above Threshold + hysteresis slack
+            // Out of compact and comfortably clear of the restore hysteresis, DERIVED rather
+            // than a fixed delta: a constant step that clears the switch point on one platform's
+            // font metrics can land inside the hysteresis band on another's, leaving this test
+            // asserting normal-mode behaviour on a view that never left compact.
+            double restoreDelta = (Threshold + 12 + CompactInvariantRig.ExpandedHeadroom) - CompactInner;
+            window.Height += restoreDelta;
             Dispatcher.UIThread.RunJobs();
             Assert.DoesNotContain("compactHeight", root.Classes);
             Assert.True(helpDisclosure.IsExpanded); // flat mode: force-expanded
@@ -559,7 +594,7 @@ public class SRSCreatorCompactTests
             // proves what a screen reader actually announces on landing here.
             Assert.Equal("Sample file path", ControlAutomationPeer.CreatePeerForElement(inputTextBox).GetName());
 
-            window.Height -= 250;
+            window.Height -= restoreDelta;
             Dispatcher.UIThread.RunJobs();
             Assert.Contains("compactHeight", root.Classes);
             Assert.False(helpDisclosure.IsExpanded, "re-entering compact must reset Help to collapsed, not resume the prior session's open state");

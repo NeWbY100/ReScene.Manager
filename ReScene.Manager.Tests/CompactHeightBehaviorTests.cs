@@ -99,6 +99,385 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
+    // ── Derived switch height ─────────────────────────────────────────────
+    //
+    // The tests above drive a root carrying an EXPLICIT Threshold, which the derived floor of that
+    // rig (40 + 150 + 0 = 190, so 210 with the margin) never reaches — so they pin the explicit
+    // path unchanged, exactly as they did before the switch height became derivable. The tests
+    // below drive roots with NO explicit value at all, where the behavior's own measurement of the
+    // view is the only thing deciding.
+
+    /// <summary>Chrome row: fixed, non-givable, and therefore MEASURED into the floor.</summary>
+    private const double DerivedChromeHeight = 40;
+
+    /// <summary>The star row's authored minimum — givable, so this is all the floor owes it.</summary>
+    private const double DerivedStarFloor = 60;
+
+    /// <summary>
+    /// A root whose switch height is entirely DERIVED: <c>Enabled</c> attaches it, no
+    /// <c>Threshold</c> is set. Rows are chrome (Auto, fixed height) / body (Auto, caller-sized) /
+    /// tail (Star with a minimum), which is the shape every converted view reduces to — something
+    /// that must be shown whole, something whose size is the variable under test, and something
+    /// that can give.
+    /// </summary>
+    private static (Window Window, Grid Root, Border Body) DerivedHost(
+        double height, double bodyHeight, IReadOnlyList<CompactRowSize>? rows = null)
+    {
+        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*") };
+        root.RowDefinitions[2].MinHeight = DerivedStarFloor;
+
+        var body = new Border { Height = bodyHeight, [Grid.RowProperty] = 1 };
+        root.Children.Add(new Border { Height = DerivedChromeHeight, [Grid.RowProperty] = 0 });
+        root.Children.Add(body);
+        root.Children.Add(new Border { [Grid.RowProperty] = 2 });
+
+        if (rows is not null)
+        {
+            CompactHeightBehavior.SetRowSizes(root, rows);
+        }
+
+        CompactHeightBehavior.SetEnabled(root, true);
+
+        var window = new Window { Width = 700, Height = height, Content = root };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        return (window, root, body);
+    }
+
+    /// <summary>
+    /// Sets the window height that puts the ROOT at <paramref name="innerHeight"/>, then settles.
+    /// Drained repeatedly for the same reason <see cref="ShrinkTo"/> is: a height change can post
+    /// work that itself posts more — here, the layout pass that follows a restore re-reads the
+    /// floor and may queue another evaluation on the strength of it, and that second job is not in
+    /// the queue when the first drain begins.
+    /// </summary>
+    private static void SetInnerHeight(Window window, Grid root, double innerHeight)
+    {
+        window.Height = innerHeight + (window.Height - root.Bounds.Height);
+        for (int i = 0; i < 5; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    /// <summary>
+    /// The arithmetic the whole derived model rests on, stated once: the switch height is the
+    /// view's own measured expanded floor plus the margin — chrome measured, givable rows counted
+    /// at their minimums.
+    /// </summary>
+    [AvaloniaFact]
+    public void DerivedThreshold_IsTheMeasuredFloorPlusMargin()
+    {
+        const double BodyHeight = 150;
+        (Window w, Grid root, _) = DerivedHost(500, BodyHeight);
+        try
+        {
+            double expectedFloor = DerivedChromeHeight + BodyHeight + DerivedStarFloor;
+            Assert.Equal(expectedFloor + 20, CompactHeightBehavior.GetEffectiveThreshold(root), 1);
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// The property that a per-view constant cannot have, and the reason this feature exists: give
+    /// the view more content its layout cannot scroll away and the height it switches at rises to
+    /// match — so a window that comfortably fitted the old content, and no longer fits the new,
+    /// goes compact instead of showing the difference clipped.
+    /// <para>
+    /// This is also the shape of the CI failure that motivated the change: a platform whose font
+    /// metrics make the same content measure taller is, to the behavior, indistinguishable from
+    /// more content.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void DerivedThreshold_TracksAGrowingFloor_WhereAConstantWouldNot()
+    {
+        (Window w, Grid root, Border body) = DerivedHost(400, bodyHeight: 150);
+        try
+        {
+            double before = CompactHeightBehavior.GetEffectiveThreshold(root);
+            Assert.DoesNotContain("compactHeight", root.Classes);
+
+            body.Height = 300;
+            Dispatcher.UIThread.RunJobs();
+
+            double after = CompactHeightBehavior.GetEffectiveThreshold(root);
+            Assert.Equal(before + 150, after, 1);
+            Assert.Contains("compactHeight", root.Classes);   // 400 no longer clears the new floor
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// An explicit <c>Threshold</c> is a MINIMUM, never a ceiling: below the view's own derived
+    /// floor it simply does not bind. A caller cannot use it to hold a view expanded in a window
+    /// its content does not fit — which is what would reintroduce the clipped band the invariant
+    /// forbids.
+    /// </summary>
+    [AvaloniaFact]
+    public void ExplicitThreshold_BelowTheDerivedFloor_IsOnlyAMinimum_AndDoesNotBind()
+    {
+        (Window w, Grid root, _) = DerivedHost(500, bodyHeight: 150);
+        try
+        {
+            CompactHeightBehavior.SetThreshold(root, 100);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(DerivedChromeHeight + 150 + DerivedStarFloor + 20,
+                CompactHeightBehavior.GetEffectiveThreshold(root), 1);
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// The other half of "minimum": ABOVE the derived floor an explicit value still governs, so a
+    /// view that wants to go compact earlier than its own content strictly requires can still say
+    /// so. Nothing about the derivation takes that away.
+    /// </summary>
+    [AvaloniaFact]
+    public void ExplicitThreshold_AboveTheDerivedFloor_StillGoverns()
+    {
+        (Window w, Grid root, _) = DerivedHost(600, bodyHeight: 150);
+        try
+        {
+            CompactHeightBehavior.SetThreshold(root, 450);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(450, CompactHeightBehavior.GetEffectiveThreshold(root), 1);
+
+            SetInnerHeight(w, root, 449);
+            Assert.Contains("compactHeight", root.Classes);
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// The givable-row rule, declared form: a row the view marks with an
+    /// <see cref="CompactRowSize.ExpandedMinHeight"/> contributes that authored minimum however
+    /// tall its content is, because the content scrolls and only the minimum is owed. Without this
+    /// the floor of a band the view caps to the room available would chase the very height it is
+    /// compared against, and no window would ever be tall enough.
+    /// </summary>
+    [AvaloniaFact]
+    public void GivableRow_ContributesItsAuthoredExpandedMinimum_NotItsContentHeight()
+    {
+        const double AuthoredMinimum = 50;
+        CompactRowSize[] rows =
+        [
+            new(RowIndex: 1, NormalHeight: double.NaN, CompactMinHeight: 30, HelpOpenMinHeight: 20,
+                Mode: CompactRowMode.AutoToStar, ExpandedMinHeight: AuthoredMinimum),
+        ];
+
+        (Window w, Grid root, Border body) = DerivedHost(500, bodyHeight: 150, rows);
+        try
+        {
+            double expected = DerivedChromeHeight + AuthoredMinimum + DerivedStarFloor + 20;
+            Assert.Equal(expected, CompactHeightBehavior.GetEffectiveThreshold(root), 1);
+
+            // ...and it stays the authored value as the content grows, which is exactly what
+            // "this band can give" means.
+            body.Height = 400;
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(expected, CompactHeightBehavior.GetEffectiveThreshold(root), 1);
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// The givable-row rule, structural form: a Star row gives by construction, so the floor owes
+    /// it its MinHeight and nothing more, however tall the content inside it happens to measure.
+    /// This is the rule the Reconstructor relies on — both its TabControl and its log band are
+    /// Star rows with authored minimums in the XAML, so it needs no declaration at all.
+    /// </summary>
+    [AvaloniaFact]
+    public void StarRow_ContributesItsMinimum_NotItsContentHeight()
+    {
+        (Window w, Grid root, _) = DerivedHost(500, bodyHeight: 150);
+        try
+        {
+            double before = CompactHeightBehavior.GetEffectiveThreshold(root);
+
+            root.Children.Add(new Border { Height = 300, [Grid.RowProperty] = 2 });
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(before, CompactHeightBehavior.GetEffectiveThreshold(root), 1);
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Help donation is a COMPACT-mode mechanism and must not reach the expanded floor. Expanded
+    /// mode renders the Help body flat and unconstrained — its largest state, already measured as
+    /// chrome — so there is no donated budget to account for, and the floor must not quietly swap
+    /// in a donation minimum just because <c>HelpOpen</c> happens to read true.
+    /// </summary>
+    [AvaloniaFact]
+    public void HelpOpenDonationMinimums_NeverEnterTheExpandedFloor()
+    {
+        CompactRowSize[] rows =
+        [
+            new(RowIndex: 1, NormalHeight: double.NaN, CompactMinHeight: 30, HelpOpenMinHeight: 20,
+                Mode: CompactRowMode.AutoToStar, ExpandedMinHeight: 50),
+        ];
+
+        (Window w, Grid root, _) = DerivedHost(500, bodyHeight: 150, rows);
+        try
+        {
+            double expanded = CompactHeightBehavior.GetEffectiveThreshold(root);
+
+            CompactHeightBehavior.SetHelpOpen(root, true);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.DoesNotContain("compactHeight", root.Classes);   // still expanded
+            Assert.Equal(expanded, CompactHeightBehavior.GetEffectiveThreshold(root), 1);
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Hysteresis is a property of the SWITCH, not of a constant: it applies just the same when
+    /// the switch height is derived. A fresh instance at the derived threshold is expanded; an
+    /// already-compact one needs the derived threshold plus the restore slack to come back.
+    /// </summary>
+    [AvaloniaFact]
+    public void DerivedThreshold_Hysteresis_RestoreOnlyAtDerivedPlusTwelve()
+    {
+        (Window w, Grid root, _) = DerivedHost(600, bodyHeight: 150);
+        try
+        {
+            double threshold = CompactHeightBehavior.GetEffectiveThreshold(root);
+
+            SetInnerHeight(w, root, threshold - 1);
+            Assert.Contains("compactHeight", root.Classes);
+
+            SetInnerHeight(w, root, threshold + 6);         // inside the hysteresis band
+            Assert.Contains("compactHeight", root.Classes);
+
+            SetInnerHeight(w, root, threshold + 12);        // restore boundary
+            Assert.DoesNotContain("compactHeight", root.Classes);
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// The anti-flap guarantee, which is what makes it safe for a restore to be re-validated at
+    /// all. A floor that grew while the view was compact is invisible until the expanded layout is
+    /// back — so a restore CAN turn out to be wrong. When it does, the behavior returns to compact
+    /// and then RESTS: the newly-measured floor raises the threshold above the very height that
+    /// produced the failed restore, so restoring again would need a strictly greater height. One
+    /// flip, then still.
+    /// </summary>
+    [AvaloniaFact]
+    public void RestoreThatNoLongerFits_ReturnsToCompact_AndThenRests()
+    {
+        (Window w, Grid root, Border body) = DerivedHost(600, bodyHeight: 150);
+        try
+        {
+            double staleThreshold = CompactHeightBehavior.GetEffectiveThreshold(root);
+            SetInnerHeight(w, root, staleThreshold - 1);
+            Assert.Contains("compactHeight", root.Classes);
+
+            // Content grows while compact, where the expanded floor cannot be observed at all.
+            body.Height = 400;
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(staleThreshold, CompactHeightBehavior.GetEffectiveThreshold(root), 1);
+
+            int classChanges = 0;
+            root.Classes.CollectionChanged += (_, _) => classChanges++;
+
+            // Enough to clear the STALE threshold and its restore slack, nowhere near the true one.
+            SetInnerHeight(w, root, staleThreshold + 12);
+
+            Assert.Contains("compactHeight", root.Classes);
+            Assert.True(CompactHeightBehavior.GetEffectiveThreshold(root) > staleThreshold + 12,
+                "the re-measured floor must put the threshold above the height that produced the failed restore — " +
+                "that is what makes another restore attempt impossible rather than merely unlikely");
+
+            // Exactly one round trip: the class came off for the restore and went straight back on.
+            Assert.Equal(2, classChanges);
+
+            // ...and it settles there. Further dispatcher turns must not produce another attempt.
+            for (int i = 0; i < 5; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            Assert.Contains("compactHeight", root.Classes);
+            Assert.Equal(2, classChanges);
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// A fresh view that opens at normal height and is never resized must still end up with a
+    /// floor that includes what flat mode reveals. The Help body is forced open by the very first
+    /// evaluation, and its content only realizes in the layout pass AFTER that — a pass that
+    /// raises no bounds change, because the root's height is the window's to decide. Reading the
+    /// floor only at evaluation time would leave this instance quoting a floor measured without
+    /// the body in it, for its whole life.
+    /// </summary>
+    [AvaloniaFact]
+    public void FreshNormalInstance_FloorIncludesWhatTheFirstLayoutRevealed()
+    {
+        const double BodyHeight = 200;
+        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*") };
+        root.RowDefinitions[2].MinHeight = DerivedStarFloor;
+
+        var expander = new Expander
+        {
+            [Grid.RowProperty] = 0,
+            Content = new Border { Height = BodyHeight },
+        };
+        root.Children.Add(expander);
+        root.Children.Add(new Border { Height = DerivedChromeHeight, [Grid.RowProperty] = 1 });
+        root.Children.Add(new Border { [Grid.RowProperty] = 2 });
+
+        CompactHeightBehavior.SetEnabled(root, true);
+        CompactHeightBehavior.SetHelpExpander(root, expander);
+
+        var window = new Window { Width = 700, Height = 900, Content = root };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            Assert.DoesNotContain("compactHeight", root.Classes);   // never transitions
+            Assert.True(expander.IsExpanded, "flat mode must force the Help body open");
+
+            double threshold = CompactHeightBehavior.GetEffectiveThreshold(root);
+            Assert.True(threshold > BodyHeight + DerivedChromeHeight + DerivedStarFloor,
+                $"the derived threshold ({threshold:F1}) must account for the Help body the first " +
+                $"layout revealed — a floor read only at evaluation time would omit its {BodyHeight} DIPs");
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// "No opinion, do nothing": a root with no explicit minimum AND no floor the behavior can
+    /// measure (it is not a Grid) must never touch the class, at any height. Silence is the
+    /// correct answer there — inventing a switch point for a layout it cannot read would be worse
+    /// than leaving it alone.
+    /// </summary>
+    [AvaloniaFact]
+    public void NoExplicitThreshold_AndNoMeasurableFloor_LeavesTheViewAlone()
+    {
+        var root = new Border { Child = new TextBlock { Text = "not a grid" } };
+        CompactHeightBehavior.SetEnabled(root, true);
+
+        var window = new Window { Width = 700, Height = 900, Content = root };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            Assert.True(double.IsNaN(CompactHeightBehavior.GetEffectiveThreshold(root)));
+            Assert.DoesNotContain("compactHeight", root.Classes);
+
+            // Any real threshold would make THIS compact; nothing does.
+            window.Height = 40;
+            Dispatcher.UIThread.RunJobs();
+            Assert.DoesNotContain("compactHeight", root.Classes);
+        }
+        finally { window.Close(); }
+    }
+
     [AvaloniaFact]
     public void RowSizes_ApplyOnCompact_RestorePreservingSplitterDrag()
     {

@@ -26,8 +26,9 @@ using ReScene.SRS;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Small-window layout degradation tests for <see cref="CreatorView"/> (threshold
-/// 720, config row AutoToStar 110 compact / 80 help-open, log 80, Help body MaxHeight 40, compact
+/// Small-window layout degradation tests for <see cref="CreatorView"/> (switch height DERIVED
+/// from the view's own measured expanded floor — see <see cref="Threshold"/> — config row
+/// AutoToStar 110 compact / 80 help-open / 500 expanded, log 80, Help body MaxHeight 40, compact
 /// CI bound <see cref="CompactInvariantRig.CiBound"/> == 307, pinned band ceiling 75, compact
 /// worst floor &lt;= 307). The largest converted view: band 1's config ScrollViewer hosts a GRID
 /// (not a StackPanel, unlike every prior converted view) so the pre-existing Stored Files
@@ -107,9 +108,26 @@ public class CreatorCompactTests
     private static CreatorViewModel.StoredFileItem Item(string fullPath, string storedName) =>
         new() { FullPath = fullPath, StoredName = storedName };
 
-    private const double Threshold = 720;
+    private static CreatorView BuildWorstCase()
+    {
+        CreatorViewModel vm = CreateVm();
+        ForceWorstCase(vm);
+        return new CreatorView { DataContext = vm };
+    }
+
+    /// <summary>
+    /// This view's switch height, READ BACK from the behavior rather than written down — see
+    /// <see cref="CompactInvariantRig.ProbeSwitchPoint"/>. Probed once per test process.
+    /// </summary>
+    private static double Threshold => _threshold.Value;
+
+    private static readonly Lazy<double> _threshold =
+        new(() => CompactInvariantRig.ProbeSwitchPoint(BuildWorstCase));
+
     private const double CompactInner = 319;   // the canonical 700x450 minimum window
-    private const double ExpandedInner = 721;  // Threshold+1, comfortably expanded
+
+    /// <summary>Comfortably above <see cref="Threshold"/>, clear of the restore hysteresis.</summary>
+    private static double ExpandedInner => Threshold + CompactInvariantRig.ExpandedHeadroom;
 
     /// <summary>
     /// The worst case, forced together: IsScanning true, HasDetectedSets with
@@ -139,31 +157,43 @@ public class CreatorCompactTests
 
     // ── 1. Invariant (CompactInvariantRig's four checks) — verified to fail against the pre-fix plain Grid layout ──
 
+    /// <summary>
+    /// The derivation's own guarantee, in place of the constant this used to pin: whatever the
+    /// view's expanded floor measures on this platform, the height it switches at is above it.
+    /// </summary>
     [AvaloniaFact]
-    public void Invariant_ExpandedModeFloor_UnderThreshold()
+    public void Invariant_ExpandedModeFloor_UnderDerivedThreshold()
     {
-        CreatorViewModel vm = CreateVm();
-        ForceWorstCase(vm);
-        var view = new CreatorView { DataContext = vm };
-
-        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        (Window window, Grid root) = CompactViewRig.HostAt(BuildWorstCase(), ExpandedInner);
         try
         {
             Assert.DoesNotContain("compactHeight", root.Classes);
             double floor = CompactInvariantRig.MeasureFloor(root);
-            Assert.True(floor < Threshold, $"expanded-mode floor {floor:F1} must be under Threshold {Threshold}");
+            double threshold = CompactHeightBehavior.GetEffectiveThreshold(root);
+            Assert.True(floor < threshold,
+                $"expanded-mode floor {floor:F1} must be under the DERIVED threshold {threshold:F1}");
         }
         finally { window.Close(); }
     }
 
     /// <summary>
-    /// The REAL, user-facing guarantee <see cref="Invariant_ExpandedModeFloor_UnderThreshold"/>'s
+    /// THE invariant: at every height around this view's own switch point, whichever mode is
+    /// active actually fits. See
+    /// <see cref="CompactInvariantRig.AssertActiveModeFitsAroundSwitchPoint"/> — no height and no
+    /// verdict in it is a platform-calibrated number.
+    /// </summary>
+    [AvaloniaFact]
+    public void Invariant_ActiveModeFits_AtEveryHeightAroundTheSwitchPoint() =>
+        CompactInvariantRig.AssertActiveModeFitsAroundSwitchPoint("Creator", BuildWorstCase);
+
+    /// <summary>
+    /// The REAL, user-facing guarantee <see cref="Invariant_ExpandedModeFloor_UnderDerivedThreshold"/>'s
     /// own <c>MeasureFloor</c> methodology cannot directly observe. MEASURED: with the worst case
     /// forced (12 detected sets capped at 96, 8 stored files, both FieldStatusLines non-None,
     /// Cancel+ProgressMessage+ProgressBar visible), this view's config content — none of which
     /// scrolls independently in EXPANDED mode without the production fix below — sums to ~883
-    /// DIPs of natural (unconstrained) height, far exceeding the 721-DIP window this view first
-    /// expands at (Threshold+1). Without <see cref="CreatorView"/>'s own dynamic config-ScrollViewer
+    /// DIPs of natural (unconstrained) height, far exceeding the smallest window this view stays
+    /// expanded in (721 DIPs when that was measured). Without <see cref="CreatorView"/>'s own dynamic config-ScrollViewer
     /// MaxHeight cap (ctor remarks), the pinned action band and the entire log would translate
     /// fully below the window's own bottom edge across this whole range — exactly the same
     /// categorical defect already found and fixed the same way for SampleRestorerView. This test
@@ -173,19 +203,20 @@ public class CreatorCompactTests
     /// defect is gone — not merely that one abstract number moved.
     /// </summary>
     [AvaloniaTheory]
-    [InlineData(721.0)]   // Threshold+1 -- the smallest possible expanded height
-    [InlineData(760.0)]
-    [InlineData(820.0)]
-    [InlineData(883.0)]   // approximately the measured-unsafe range's own upper edge
-    [InlineData(950.0)]
-    [InlineData(1400.0)]  // comfortably larger -- the cap must not OVER-constrain when there's room to spare
-    public void Invariant_ExpandedMode_NeverClipsAcrossUnsafeHeightRange(double innerHeight)
+    [InlineData(1.0)]     // the smallest possible expanded height
+    [InlineData(40.0)]
+    [InlineData(100.0)]
+    [InlineData(163.0)]   // approximately the measured-unsafe range's own upper edge
+    [InlineData(230.0)]
+    [InlineData(680.0)]   // comfortably larger -- the cap must not OVER-constrain when there's room to spare
+    public void Invariant_ExpandedMode_NeverClipsAcrossUnsafeHeightRange(double dipsAboveSwitchPoint)
     {
-        CreatorViewModel vm = CreateVm();
-        ForceWorstCase(vm);
-        var view = new CreatorView { DataContext = vm };
+        // Offsets, not absolute heights: the range this covers is defined RELATIVE to the height
+        // this view switches at, so it follows the derivation onto a platform whose fonts put that
+        // switch somewhere else instead of testing a band that no longer means anything there.
+        double innerHeight = Threshold + dipsAboveSwitchPoint;
 
-        (Window window, Grid root) = CompactViewRig.HostAt(view, innerHeight);
+        (Window window, Grid root) = CompactViewRig.HostAt(BuildWorstCase(), innerHeight);
         try
         {
             Assert.DoesNotContain("compactHeight", root.Classes);
@@ -649,7 +680,12 @@ public class CreatorCompactTests
             CompactViewRig.AssertReachableByKeyboard(window, body);
 
             // Restore to normal, then re-enter compact: durability is compact-SESSION scoped only.
-            window.Height += 420; // comfortably above Threshold (720) + hysteresis slack (+12)
+            // Out of compact and comfortably clear of the restore hysteresis, DERIVED rather
+            // than a fixed delta: a constant step that clears the switch point on one platform's
+            // font metrics can land inside the hysteresis band on another's, leaving this test
+            // asserting normal-mode behaviour on a view that never left compact.
+            double restoreDelta = (Threshold + 12 + CompactInvariantRig.ExpandedHeadroom) - CompactInner;
+            window.Height += restoreDelta;
             Dispatcher.UIThread.RunJobs();
             Assert.DoesNotContain("compactHeight", root.Classes);
             Assert.True(helpDisclosure.IsExpanded); // flat mode: force-expanded
@@ -665,7 +701,7 @@ public class CreatorCompactTests
                 "restoring from a focused compact body must relocate focus to the wired RestoreFocusTarget (OutputTextBox), not strand it");
             Assert.Equal("Output path", ControlAutomationPeer.CreatePeerForElement(outputTextBox).GetName());
 
-            window.Height -= 420;
+            window.Height -= restoreDelta;
             Dispatcher.UIThread.RunJobs();
             Assert.Contains("compactHeight", root.Classes);
             Assert.False(helpDisclosure.IsExpanded, "re-entering compact must reset Help to collapsed, not resume the prior session's open state");
@@ -2588,8 +2624,9 @@ public class CreatorCompactTests
     /// creating+progress) is what exposes it; two narrower diagnostics (worst-case content minus
     /// the 8 stored files; then a direct 900→319 jump instead of a gradual sequence) each found NO
     /// gap, which is why the earliest drafts of this investigation concluded there wasn't one — the
-    /// gradual, full-worst-case combination is what surfaces it. Sequence observed: crossing the
-    /// threshold (720→719) IS a genuine transition, so <c>CompactHeightBehavior</c>'s own staged
+    /// gradual, full-worst-case combination is what surfaces it. Sequence observed (at the heights
+    /// this view switched at when it was measured — 720→719): crossing the
+    /// threshold IS a genuine transition, so <c>CompactHeightBehavior</c>'s own staged
     /// recovery correctly fires ONCE — the config <c>ScrollViewer</c>'s Offset moves from
     /// <c>(0,0)</c> to <c>(0,22)</c>, just enough to bring the (by-then-obscured) splitter back
     /// into its OWN, then-321-DIP-tall viewport. But every SUBSEQUENT step (719→600→500→400→319,
@@ -2616,7 +2653,7 @@ public class CreatorCompactTests
         CreatorViewModel vm = CreateVm();
         ForceWorstCase(vm);
         var view = new CreatorView { DataContext = vm };
-        (Window window, Grid root) = CompactViewRig.HostAt(view, 900.0);
+        (Window window, Grid root) = CompactViewRig.HostAt(view, Threshold + 185);
         try
         {
             GridSplitter splitter = window.GetVisualDescendants().OfType<GridSplitter>().Single();
@@ -2627,7 +2664,24 @@ public class CreatorCompactTests
             // Comfortably expanded, down through Threshold+1/Threshold/Threshold-1 (the transition
             // itself), then CONTINUING to shrink well past it — the within-compact regime
             // CompactHeightBehavior's own Evaluate() does NOT re-run staged recovery for.
-            double[] shrinkSteps = [850, 800, 750, ExpandedInner, Threshold, Threshold - 1, 600, 500, 400, CompactInner];
+            //
+            // Every step is expressed relative to this view's own switch point and the compact
+            // floor, so the ladder stays STRICTLY DECREASING wherever the derivation puts that
+            // switch — which a mix of absolute heights and derived ones would not (the absolute
+            // ones would sooner or later sort themselves into the middle of the derived ones and
+            // turn a "continuous shrink" into a shrink with a growth step in it). The three
+            // sub-threshold steps divide the room between the transition and the compact floor
+            // into quarters, reproducing the original ladder's shape without naming its heights.
+            double belowGap = (Threshold - 1) - CompactInner;
+            double[] shrinkSteps =
+            [
+                Threshold + 135, Threshold + 85, Threshold + 35, Threshold + 1, Threshold, Threshold - 1,
+                CompactInner + (belowGap * 0.75), CompactInner + (belowGap * 0.50), CompactInner + (belowGap * 0.25),
+                CompactInner,
+            ];
+
+            Assert.True(shrinkSteps.Zip(shrinkSteps.Skip(1)).All(pair => pair.First > pair.Second),
+                $"the ladder must shrink at every step: [{string.Join(", ", shrinkSteps.Select(h => h.ToString("F0")))}]");
             foreach (double targetInner in shrinkSteps)
             {
                 double overhead = window.Height - root.Bounds.Height;

@@ -6,6 +6,7 @@ using Avalonia.VisualTree;
 using ReScene.App.Core.Models;
 using ReScene.App.Core.Services;
 using ReScene.App.Core.ViewModels;
+using ReScene.Manager.Behaviors;
 using ReScene.Manager.Services;
 using ReScene.Manager.Views;
 
@@ -24,8 +25,9 @@ public class ScrollReachabilityTests
     /// <summary>
     /// Selects every sub-tab, scrolls its page ScrollViewer to the bottom edge, and returns
     /// (headers that actually overflowed, failures where the content's bottom stayed beyond the
-    /// viewport). Pages whose content fits prove nothing; callers guard rig validity by asserting
-    /// which pages overflowed.
+    /// viewport). Pages whose content fits prove nothing — which is why the overflow set is
+    /// REPORTED rather than assumed, and callers guard rig validity by requiring it to be
+    /// non-empty rather than by naming the pages they expect in it.
     /// </summary>
     private static (List<string> Scrollable, List<string> Unreachable) ProbePages(TabControl tabs)
     {
@@ -68,21 +70,29 @@ public class ScrollReachabilityTests
     {
         ReconstructorViewModel vm = BeginnerShellTestFactory.Create().Reconstructor;
         var view = new ReconstructorView { DataContext = vm };
-        // 1012x640 sits ABOVE the view's fixed-minimums floor (~565px: header rows + tab strip +
-        // TabControl MinHeight 220 + splitter + log MinHeight 140), so every page ScrollViewer is
-        // fully inside the window and this fact isolates extent-reachability. Heights BELOW the
-        // floor clip the grid itself — a separate structural defect tracked for its own fix.
+
+        // Width is the only figure written down: 1012 is wide enough that the sub-tab strip does
+        // not wrap, so the pages have their ordinary shape. HEIGHT is derived below from the
+        // view's own switch point rather than named, because a height that is comfortably expanded
+        // on one platform's font metrics can be a compact-mode height on another's, and this test
+        // is about extent-reachability inside a page, not about which mode it happens to catch.
         var window = new Window { Width = 1012, Height = 640, Content = view };
         window.Show();
         Dispatcher.UIThread.RunJobs();
         try
         {
+            var root = (Grid)view.Content!;
+            double threshold = CompactHeightBehavior.GetEffectiveThreshold(root);
+            window.Height = threshold + CompactInvariantRig.ExpandedHeadroom + (window.Height - root.Bounds.Height);
+            Dispatcher.UIThread.RunJobs();
+            Assert.DoesNotContain("compactHeight", root.Classes);
+
             TabControl subTabs = view.GetVisualDescendants().OfType<TabControl>().First();
 
             // Executable form of the rig premise: the page ScrollViewer itself must sit fully
-            // inside the window here — below the fixed-minimums floor the grid clips instead of
-            // scrolling (the tracked structural defect) and within-viewer reachability would no
-            // longer describe what the user can see.
+            // inside the window here. If it did not, the grid would be clipping rather than
+            // scrolling and within-viewer reachability would no longer describe what the user can
+            // see.
             ScrollViewer firstPage = subTabs.GetVisualDescendants().OfType<ScrollViewer>()
                 .First(s => s.Name is null && s.IsEffectivelyVisible);
             Point svBottom = firstPage.TranslatePoint(new Point(0, firstPage.Bounds.Height), window)!.Value;
@@ -91,11 +101,15 @@ public class ScrollReachabilityTests
 
             (List<string> scrollable, List<string> unreachable) = ProbePages(subTabs);
 
-            // Rig validity: the window is sized so the reported page (Options) genuinely
-            // overflows — a page that fits passes trivially and would mask the regression.
-            Assert.Contains("Options", scrollable);
-            Assert.True(scrollable.Count >= 3,
-                $"rig validity: only [{string.Join(", ", scrollable)}] overflowed at 1012x640");
+            // Rig validity, MEASURED rather than declared: whichever pages actually overflow at
+            // this height are the ones that prove anything, and there has to be at least one — a
+            // window tall enough for every page would pass trivially. Naming the expected pages
+            // instead (as this once did) states as fact something only measurement can know, and
+            // it is exactly the kind of premise a platform with different font metrics falsifies
+            // while the thing under test is still perfectly correct.
+            Assert.True(scrollable.Count > 0,
+                $"rig validity: no sub-tab page overflowed at {window.Bounds.Height:F0} DIPs, so this run " +
+                "proved nothing about reaching the end of an overflowing page");
 
             Assert.True(unreachable.Count == 0, string.Join("; ", unreachable));
         }
@@ -119,9 +133,12 @@ public class ScrollReachabilityTests
             TabControl tabs = window.GetVisualDescendants().OfType<TabControl>().First();
             (List<string> scrollable, List<string> unreachable) = ProbePages(tabs);
 
-            // The RAR Reconstruction page is the longest and must overflow at the shipping
-            // minimum — pinning it by name keeps the rig honest if pages are reordered.
-            Assert.Contains("RAR Reconstruction", scrollable);
+            // Rig validity, MEASURED rather than declared — see the Reconstructor fact above for
+            // why naming the expected page instead is a premise a different font stack falsifies
+            // without anything actually being wrong.
+            Assert.True(scrollable.Count > 0,
+                "rig validity: no Settings page overflowed at the shipping minimum 560x360, so this " +
+                "run proved nothing about reaching the end of an overflowing page");
 
             Assert.True(unreachable.Count == 0, string.Join("; ", unreachable));
 

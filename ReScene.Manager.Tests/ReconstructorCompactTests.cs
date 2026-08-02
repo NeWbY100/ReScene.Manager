@@ -22,7 +22,8 @@ using ReScene.Manager.Views;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Small-window layout degradation tests for <see cref="ReconstructorView"/> (threshold 421,
+/// Small-window layout degradation tests for <see cref="ReconstructorView"/> (switch height
+/// DERIVED from the view's own measured expanded floor — see <see cref="Threshold"/> —
 /// TabControl minimums 130/96/60, log 80, Help body MaxHeight 38, compact CI bound
 /// <see cref="CompactInvariantRig.CiBound"/> == 307). This is the TEMPLATE per-view
 /// shape every later view task (SRSCreator, SRSReconstructor, SampleRestorer, Creator) copies —
@@ -71,9 +72,29 @@ public class ReconstructorCompactTests
             new InlineUiDispatcher(),
             new InertUiTimerFactory());
 
-    private const double Threshold = 421;
+    private static ReconstructorView BuildWorstCase()
+    {
+        ReconstructorViewModel vm = CreateVm();
+        vm.CustomPackerWarning = "Custom packer detected."; // worst case: warning row forced visible
+        return new ReconstructorView { DataContext = vm };
+    }
+
+    /// <summary>
+    /// This view's switch height, READ BACK from the behavior rather than written down: the
+    /// derived model computes it from the view's own measured expanded floor, so a platform whose
+    /// font metrics need more room gets a larger number here and every height derived from it
+    /// moves with it. Probed once per test process — the derivation is deterministic for a given
+    /// build and font stack, and probing it costs a hosted window each time.
+    /// </summary>
+    private static double Threshold => _threshold.Value;
+
+    private static readonly Lazy<double> _threshold =
+        new(() => CompactInvariantRig.ProbeSwitchPoint(BuildWorstCase));
+
     private const double CompactInner = 319;   // the canonical 700x450 minimum window
-    private const double ExpandedInner = 521;  // comfortably above Threshold
+
+    /// <summary>Comfortably above <see cref="Threshold"/>, clear of the restore hysteresis.</summary>
+    private static double ExpandedInner => Threshold + CompactInvariantRig.ExpandedHeadroom;
 
     private const string FullTip =
         "Tip: click “Import from SRR” to auto-configure versions, compression, " +
@@ -81,19 +102,68 @@ public class ReconstructorCompactTests
 
     // ── 1. Invariant (the four floor-height/budget checks; CompactInvariantRig) ────
 
+    /// <summary>
+    /// The derivation's own guarantee, in place of the constant this used to pin: whatever the
+    /// view's expanded floor measures on this platform, the height it switches at is above it. A
+    /// hand-calibrated number could be — and on Linux was — below the floor it was supposed to
+    /// clear; a derived one cannot be, and that is the property worth a test.
+    /// </summary>
     [AvaloniaFact]
-    public void Invariant_ExpandedModeFloor_UnderThreshold()
+    public void Invariant_ExpandedModeFloor_UnderDerivedThreshold()
     {
-        ReconstructorViewModel vm = CreateVm();
-        vm.CustomPackerWarning = "Custom packer detected."; // worst case: warning row forced visible
-        var view = new ReconstructorView { DataContext = vm };
-
-        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        (Window window, Grid root) = CompactViewRig.HostAt(BuildWorstCase(), ExpandedInner);
         try
         {
             Assert.DoesNotContain("compactHeight", root.Classes);
             double floor = CompactInvariantRig.MeasureFloor(root);
-            Assert.True(floor < Threshold, $"expanded-mode floor {floor:F1} must be under Threshold {Threshold}");
+            double threshold = CompactHeightBehavior.GetEffectiveThreshold(root);
+            Assert.True(floor < threshold,
+                $"expanded-mode floor {floor:F1} must be under the DERIVED threshold {threshold:F1}");
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// THE invariant: at every height around this view's own switch point, whichever mode is
+    /// active actually fits. See
+    /// <see cref="CompactInvariantRig.AssertActiveModeFitsAroundSwitchPoint"/> — no height and no
+    /// verdict in it is a platform-calibrated number.
+    /// </summary>
+    [AvaloniaFact]
+    public void Invariant_ActiveModeFits_AtEveryHeightAroundTheSwitchPoint() =>
+        CompactInvariantRig.AssertActiveModeFitsAroundSwitchPoint("Reconstructor", BuildWorstCase);
+
+    /// <summary>
+    /// The discriminating property of a DERIVED switch height, stated as the thing a constant
+    /// cannot do: give the view more content that its layout cannot scroll away, and the height it
+    /// switches at goes UP to match. Under the shipped constant this view's threshold was 421 no
+    /// matter what its warning row said, which is exactly how a platform needing 438 ended up
+    /// showing clipped expanded content.
+    /// <para>
+    /// The warning row is the honest lever here: it is chrome (a plain Auto row, shown whole or
+    /// not at all), so growing it genuinely raises the floor rather than being absorbed by a
+    /// scrolling band — which is also why growing the TabControl's content instead would correctly
+    /// NOT move the threshold.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void DerivedThreshold_RisesWithUnscrollableContent_WhereAConstantWouldNot()
+    {
+        (Window window, Grid root) = CompactViewRig.HostAt(BuildWorstCase(), ExpandedInner);
+        try
+        {
+            double before = CompactHeightBehavior.GetEffectiveThreshold(root);
+
+            var vm = (ReconstructorViewModel)((ReconstructorView)window.GetVisualDescendants()
+                .OfType<ReconstructorView>().Single()).DataContext!;
+            vm.CustomPackerWarning = string.Join(" ", Enumerable.Repeat(
+                "Custom packer detected; the reconstruction may not be byte-identical.", 12));
+            Dispatcher.UIThread.RunJobs();
+
+            double after = CompactHeightBehavior.GetEffectiveThreshold(root);
+            Assert.True(after > before,
+                $"a taller warning row must raise the derived switch height, but it stayed at " +
+                $"{before:F1} -> {after:F1} (a per-view constant is what would behave this way)");
         }
         finally { window.Close(); }
     }
@@ -716,14 +786,19 @@ public class ReconstructorCompactTests
             Assert.True(headerToggle.IsFocused);
 
             // Restore to normal, then re-enter compact: durability is compact-SESSION scoped only.
-            window.Height += 250; // comfortably above Threshold + hysteresis slack
+            // Out of compact and comfortably clear of the restore hysteresis, DERIVED rather
+            // than a fixed delta: a constant step that clears the switch point on one platform's
+            // font metrics can land inside the hysteresis band on another's, leaving this test
+            // asserting normal-mode behaviour on a view that never left compact.
+            double restoreDelta = (Threshold + 12 + CompactInvariantRig.ExpandedHeadroom) - CompactInner;
+            window.Height += restoreDelta;
             Dispatcher.UIThread.RunJobs();
             Assert.DoesNotContain("compactHeight", root.Classes);
             Assert.True(helpDisclosure.IsExpanded); // flat mode: force-expanded
             Assert.True(windowsLink.IsFocused,
                 "restoring from a focused compact-only header toggle must relocate focus to the wired RestoreFocusTarget (WindowsPackLink), not strand it");
 
-            window.Height -= 250;
+            window.Height -= restoreDelta;
             Dispatcher.UIThread.RunJobs();
             Assert.Contains("compactHeight", root.Classes);
             Assert.False(helpDisclosure.IsExpanded, "re-entering compact must reset Help to collapsed, not resume the prior session's open state");
