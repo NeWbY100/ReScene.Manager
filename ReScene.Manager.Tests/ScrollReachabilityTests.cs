@@ -132,33 +132,171 @@ public class ScrollReachabilityTests
             // leave the window at that same minimum. No compact machinery (CompactHeightBehavior)
             // is added here — this proves none is needed; a failure here means the audit's
             // premise is wrong and the spec needs a change, not a silent workaround.
-            for (int i = 0; i < tabs.ItemCount; i++)
-            {
-                tabs.SelectedIndex = i;
-                Dispatcher.UIThread.RunJobs();
-                string header = (tabs.Items[i] as TabItem)?.Header as string ?? $"#{i}";
-
-                // Same "the unnamed, currently-visible ScrollViewer is this page's own" technique
-                // ProbePages uses above — only the SELECTED TabItem's content is realized, so this
-                // naturally scopes the search to the active page rather than a stale prior one.
-                ScrollViewer? sv = tabs.GetVisualDescendants().OfType<ScrollViewer>()
-                    .FirstOrDefault(s => s.Name is null && s.IsEffectivelyVisible);
-                Assert.NotNull(sv);
-
-                Control sentinel = sv!.GetVisualDescendants().OfType<Control>()
-                    .First(c => c.Focusable && c.IsEffectivelyVisible);
-
-                // Forward (Tab) then reverse (Shift+Tab) from the page's own first control;
-                // throws naming the offending control if any focused stop's bounds spill outside
-                // the intersection of every clipping ancestor's viewport and the window.
-                CompactViewRig.AssertTabWalkStaysVisible(window, sentinel);
-            }
+            //
+            // Whole-branch review (MAJOR): the original retrofit called AssertTabWalkStaysVisible
+            // with no expected-stop sets (completeness unchecked — a stable-but-early trap could
+            // pass) and no reverse anchor (the reverse pass re-used the forward sentinel, which is
+            // first-in-scope on every one of these four tabs, so it was a trivial no-op — see each
+            // helper below). Retrofitted per-tab: every stop is resolved INDEPENDENTLY (bound
+            // command reference for Buttons; Content text for Cancel/Save/RadioButtons/links; a
+            // unique marker value written into the bound VM property, then matched back off the
+            // realized TextBox's own Text, for the two path fields with neither an x:Name nor a
+            // distinguishing XAML attribute) — never derived from the walk's own output, matching
+            // e.g. SRSCreatorCompactTests.ResolveIndependentExpectedOrder's technique. Each tab's
+            // reverse pass is anchored at the forward walk's own PROVEN last stop (a throwaway
+            // diagnostic probe against this exact geometry established which control that is,
+            // once, per the rig's "PROVEN first, not presumed" convention — see CompactViewRig's
+            // own remarks on RunTabPass/reverseSentinel) rather than the sentinel, so each reverse
+            // pass genuinely retraces the page instead of immediately re-landing on itself.
+            AssertInterfaceTabWalk(window, tabs);
+            AssertGeneralTabWalk(window, tabs, vm);
+            AssertInspectorAndCompareTabWalk(window, tabs, vm);
+            AssertRarReconstructionTabWalk(window, tabs, vm);
         }
         finally
         {
             window.Close();
         }
     }
+
+    /// <summary>
+    /// PROVEN (throwaway diagnostic probe against this exact 560×360 geometry, not committed):
+    /// forward from Beginner visits [Beginner, Advanced, Cancel, Save], then a stable loop closes
+    /// back on Advanced — re-entering the RadioButton group lands on the CHECKED item, not the
+    /// group's first member, so Beginner itself never recurs going forward. Reverse anchored at
+    /// Save (the forward walk's own last NEW stop) retraces [Save, Cancel, Advanced, Beginner]
+    /// and closes on Beginner itself: it is first in its own keyboard-navigation scope, so
+    /// Shift+Tab from it cannot move further — the identical phenomenon
+    /// <see cref="CompactViewRig"/>'s own <c>reverseSentinel</c> remarks document.
+    /// </summary>
+    private static void AssertInterfaceTabWalk(Window window, TabControl tabs)
+    {
+        tabs.SelectedIndex = 0;
+        Dispatcher.UIThread.RunJobs();
+
+        Button cancel = ResolveCancelButton(window);
+        Button save = ResolveSaveButton(window);
+        RadioButton beginner = window.GetVisualDescendants().OfType<RadioButton>().Single(r => r.Content as string == "Beginner");
+        RadioButton advanced = window.GetVisualDescendants().OfType<RadioButton>().Single(r => r.Content as string == "Advanced");
+
+        List<Control> stops = [beginner, advanced, cancel, save];
+        CompactViewRig.AssertTabWalkStaysVisible(window, beginner,
+            expectedForwardStops: stops, expectedReverseStops: stops, reverseSentinel: save);
+    }
+
+    /// <summary>
+    /// PROVEN (throwaway diagnostic probe, not committed): forward from DefaultAppName's TextBox
+    /// (document order places it before the Browse+DefaultOutputDirectory DockPanel) visits
+    /// [AppName, Browse, OutputDir, RecentFilesLimit's own PART_TextBox, Cancel, Save], then a
+    /// stable loop closes back on RecentFilesLimit's PART_TextBox — its NumericUpDown's editable
+    /// part is a separate, later keyboard-navigation scope from the rest of the tab, the same
+    /// "closes on a middle stop, not the sentinel" phenomenon the Interface tab's RadioButton
+    /// group shows. Reverse anchored at Save retraces the same six stops backwards and closes
+    /// back on AppName's own TextBox (first in its own scope).
+    /// </summary>
+    private static void AssertGeneralTabWalk(Window window, TabControl tabs, SettingsViewModel vm)
+    {
+        tabs.SelectedIndex = 1;
+        Dispatcher.UIThread.RunJobs();
+
+        Button cancel = ResolveCancelButton(window);
+        Button save = ResolveSaveButton(window);
+        Button browseOutputDir = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseOutputDirCommand));
+
+        // Neither path TextBox carries an x:Name or a distinguishing XAML attribute (the
+        // review's own citation) — resolved instead via a unique marker value written into each
+        // bound VM property, then matched back off the realized TextBox's own Text: a
+        // reference-independent identity exactly like the command references above, never
+        // derived from the walk.
+        vm.DefaultAppName = "TabWalkMarker_AppName";
+        vm.DefaultOutputDirectory = "TabWalkMarker_OutputDir";
+        Dispatcher.UIThread.RunJobs();
+        TextBox appNameTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Text == "TabWalkMarker_AppName");
+        TextBox outputDirTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Text == "TabWalkMarker_OutputDir");
+
+        // RecentFilesLimit's own editable part likewise has no x:Name; it is the only realized
+        // PART_TextBox in this tab's scope.
+        TextBox recentFilesLimitPart = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "PART_TextBox");
+
+        List<Control> stops = [appNameTextBox, browseOutputDir, outputDirTextBox, recentFilesLimitPart, cancel, save];
+        CompactViewRig.AssertTabWalkStaysVisible(window, appNameTextBox,
+            expectedForwardStops: stops, expectedReverseStops: stops, reverseSentinel: save);
+    }
+
+    /// <summary>
+    /// PROVEN (throwaway diagnostic probe, not committed): forward from the NumericUpDown visits
+    /// [NumericUpDown, Cancel, Save, its OWN PART_TextBox] — the editable part is again a
+    /// separate, later scope from the outer control — then a stable loop closes back on Cancel.
+    /// The reverse walk anchored at that same PART_TextBox is genuinely, honestly DEGENERATE: a
+    /// single-entry self-loop (Shift+Tab from it cannot move at all — first in its own scope,
+    /// identical to every other tab's own reverse boundary here), so its expected-stop set is
+    /// correctly just itself rather than padded out to match the forward set's size — the same
+    /// "deliberately single-entry... an honest reflection of this VERIFIED reality, not an
+    /// oversight" disposition <see cref="CompactViewRig"/>'s own remarks record elsewhere.
+    /// </summary>
+    private static void AssertInspectorAndCompareTabWalk(Window window, TabControl tabs, SettingsViewModel vm)
+    {
+        tabs.SelectedIndex = 2;
+        Dispatcher.UIThread.RunJobs();
+
+        Button cancel = ResolveCancelButton(window);
+        Button save = ResolveSaveButton(window);
+
+        vm.MKVMaxElements = 54321; // unique marker; not otherwise load-bearing here
+        Dispatcher.UIThread.RunJobs();
+        NumericUpDown mkvMaxElements = window.GetVisualDescendants().OfType<NumericUpDown>().Single();
+        TextBox mkvMaxElementsPart = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "PART_TextBox");
+
+        List<Control> forwardStops = [mkvMaxElements, cancel, save, mkvMaxElementsPart];
+        List<Control> reverseStops = [mkvMaxElementsPart];
+        CompactViewRig.AssertTabWalkStaysVisible(window, mkvMaxElements,
+            expectedForwardStops: forwardStops, expectedReverseStops: reverseStops, reverseSentinel: mkvMaxElementsPart);
+    }
+
+    /// <summary>
+    /// PROVEN (throwaway diagnostic probe, not committed): forward from the WinRAR Browse button
+    /// (document order places the <c>DockPanel.Dock="Right"</c> Button before its TextBox, so it
+    /// — not the path field — is first in tab order) visits all ten controls in document order,
+    /// then a stable loop closes back on the CheckBox. Reverse anchored at Save retraces the same
+    /// ten stops backwards and closes back on the WinRAR Browse button itself (first in its own
+    /// scope, the same phenomenon every other tab above shows).
+    /// </summary>
+    private static void AssertRarReconstructionTabWalk(Window window, TabControl tabs, SettingsViewModel vm)
+    {
+        tabs.SelectedIndex = 3;
+        Dispatcher.UIThread.RunJobs();
+
+        Button cancel = ResolveCancelButton(window);
+        Button save = ResolveSaveButton(window);
+        Button browseWinRAR = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseReconstructWinRARCommand));
+        Button browseOutput = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseReconstructOutputCommand));
+        Button windowsLink = window.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "Extracted files for Windows (ready to use)");
+        Button linuxLink = window.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "Extracted files for Linux (ready to use)");
+        Button ftpLink = window.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "Original files from RAR FTP (Windows)");
+        CheckBox cleanupCheckBox = window.GetVisualDescendants().OfType<CheckBox>().Single();
+
+        vm.ReconstructWinRARPath = "TabWalkMarker_WinRARPath";
+        vm.ReconstructOutputPath = "TabWalkMarker_OutputPath";
+        Dispatcher.UIThread.RunJobs();
+        TextBox winRarPathTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Text == "TabWalkMarker_WinRARPath");
+        TextBox outputPathTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Text == "TabWalkMarker_OutputPath");
+
+        List<Control> stops =
+        [
+            browseWinRAR, winRarPathTextBox, windowsLink, linuxLink, ftpLink,
+            browseOutput, outputPathTextBox, cleanupCheckBox, cancel, save,
+        ];
+        CompactViewRig.AssertTabWalkStaysVisible(window, browseWinRAR,
+            expectedForwardStops: stops, expectedReverseStops: stops, reverseSentinel: save);
+    }
+
+    // Cancel/Save use Click handlers, not bound Commands, so they are resolved by their own
+    // (unique, window-wide) Content text — shared across all four tabs' helpers above.
+    private static Button ResolveCancelButton(Window window) =>
+        window.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "Cancel");
+
+    private static Button ResolveSaveButton(Window window) =>
+        window.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "Save");
 
     private sealed class InertAppSettingsService : IAppSettingsService
     {

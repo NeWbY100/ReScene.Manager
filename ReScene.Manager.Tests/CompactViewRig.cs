@@ -673,8 +673,12 @@ internal static class CompactViewRig
     /// CompactHeightBehavior.GetClipVisibility's own XML doc for the counter-example (the shared
     /// geometry walk that IsObscured now answers from; fix round 4 moved the explanation there
     /// when the same walk gained the finer partially-clipped verdict this helper's own bar needs).
+    /// Widened from <c>private</c> to <c>internal</c> (whole-branch review, MAJOR): a board-level
+    /// test needs this exact per-element clip-aware check to walk an entire subtree recursively
+    /// (nested bands, not just a root's direct children) rather than forking a parallel variant of
+    /// the same geometry walk.
     /// </summary>
-    private static bool IsFullyVisibleWithinWindow(Control element, Window window)
+    internal static bool IsFullyVisibleWithinWindow(Control element, Window window)
     {
         if (!element.IsAttachedToVisualTree() || !element.IsEffectivelyVisible)
         {

@@ -127,13 +127,17 @@ public class SmallWindowBoardTests
 
             ApplyEnlargedWindowFontStyle(window);
 
-            // "each view's pinned/action band and log header remain unclipped": AssertArrangesWithin
-            // is the SAME structural no-clip proof every per-view *CompactTests file already uses as
-            // its own criterion-B check — measured against root.Bounds.Height (the WINDOW never
-            // resizes here; only the font, and therefore the CONTENT inside it, grows), so no
-            // top-level row or band — including the pinned band and the log band's header — may
-            // render past the bottom edge under the enlarged text.
+            // "each view's pinned/action band and log header remain unclipped": two complementary
+            // checks. AssertArrangesWithin is the SAME structural no-clip proof every per-view
+            // *CompactTests file already uses as its own criterion-B check — measured against
+            // root.Bounds.Height (the WINDOW never resizes here; only the font, and therefore the
+            // CONTENT inside it, grows) — but it only looks at ROOT's DIRECT children. Whole-branch
+            // review (MAJOR): that alone is non-discriminating for anything nested deeper — a
+            // clipping regression inside the log band's HEADER specifically (docked above its
+            // ListBox, itself several levels below root) would leave the outer log band's own
+            // bounds untouched and pass undetected. AssertNoDescendantIsClipped closes that gap.
             CompactInvariantRig.AssertArrangesWithin(root, root.Bounds.Height);
+            AssertNoDescendantIsClipped(window, root);
 
             // "the per-view... reachability assertions still hold": RestoreFocusTarget is the
             // behavior's OWN restore-direction fallback target (spec §1) — a view-agnostic probe
@@ -185,6 +189,40 @@ public class SmallWindowBoardTests
         {
             window.Close();
         }
+    }
+
+    /// <summary>
+    /// Recurses over EVERY descendant of <paramref name="root"/> — not just its direct
+    /// children, closing the whole-branch review's MAJOR gap — and requires each one that is
+    /// currently rendered to be fully visible, using the exact same clip-aware bar
+    /// <see cref="CompactViewRig"/>'s own criterion-C walk already uses
+    /// (<see cref="CompactViewRig.IsFullyVisibleWithinWindow"/>, reused rather than forked).
+    /// Descendants of any <see cref="ScrollViewer"/> are excluded: a scrollable region's content
+    /// legitimately extends beyond its own viewport by design — that is what "growth absorbed by
+    /// scrolling regions" (spec Testing) means, and flagging it would be a false positive, not a
+    /// finding. What remains after that exclusion is exactly the surface this board case already
+    /// claims to cover: every ALWAYS-visible, non-scrolling element anywhere in the view — the
+    /// pinned/action band(s) and the log band's header among them, not merely root's own
+    /// direct children.
+    /// </summary>
+    private static void AssertNoDescendantIsClipped(Window window, Control root)
+    {
+        List<string> clipped = [];
+        foreach (Control descendant in root.GetVisualDescendants().OfType<Control>())
+        {
+            if (!descendant.IsEffectivelyVisible || descendant.GetVisualAncestors().OfType<ScrollViewer>().Any())
+            {
+                continue;
+            }
+
+            if (!CompactViewRig.IsFullyVisibleWithinWindow(descendant, window))
+            {
+                clipped.Add(CompactViewRig.Describe(descendant));
+            }
+        }
+
+        Assert.True(clipped.Count == 0,
+            $"font growth clipped {clipped.Count} always-visible (non-scrolling) descendant(s): {string.Join("; ", clipped)}");
     }
 
     // ── Case 2: RenderScaling sweep — distinct from the 1.0x every per-view invariant test
