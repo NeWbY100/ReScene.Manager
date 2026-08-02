@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ReScene.Manager.Behaviors;
@@ -405,6 +406,111 @@ public class CompactHeightBehaviorTests
             Assert.Equal(2, classChanges);
         }
         finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// The focus half of the failed-restore story, which
+    /// <see cref="RestoreThatNoLongerFits_ReturnsToCompact_AndThenRests"/> deliberately says
+    /// nothing about: it asserts where the CLASS ends up, and a run that ends compact can still
+    /// have thrown keyboard focus away on the way there.
+    /// <para>
+    /// A failed restore is the one place two transitions land back to back with no user input in
+    /// between, and the restore's own staged recovery is the only job holding a capture of what
+    /// the restore hid. If the re-validation ran first it would hide the compact-only control the
+    /// restore had just revealed, bump the generation so that recovery rejects itself as stale, and
+    /// find nothing of its own to capture — focus cleared by the behavior and left cleared. So the
+    /// recovery is queued first and this test is what says so.
+    /// </para>
+    /// <para>
+    /// The landing asserted is specific: the wired <c>RestoreFocusTarget</c>. The restore's
+    /// recovery relocates there because the compact-only holder went invisible; the re-compaction
+    /// then captures it, finds it perfectly usable in compact too, and leaves it alone.
+    /// <see cref="ReconstructorCompactTests"/> covers the other direction on the real view, where
+    /// the restore target is itself unusable in compact and the chain carries on to the Help header
+    /// toggle.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void FailedRestore_NeverLeavesFocusCleared_AndLandsOnTheRestoreTarget()
+    {
+        // Four rows rather than the usual three: the restore target gets its own, ABOVE the
+        // growable body. A grid whose floor exceeds its height overflows downwards, so a restore
+        // target below the body would be clipped out at exactly the moment the failed restore needs
+        // it and the chain would fall through to the root terminal — a valid landing, but not the
+        // one the real views have, where the target sits in an always-visible band.
+        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*") };
+        root.RowDefinitions[3].MinHeight = DerivedStarFloor;
+
+        // Sized under the chrome row's own height so its visibility never moves the floor — this
+        // test is about focus, and a compact-only control that also changed the switch point would
+        // make the sequence harder to read without testing anything more.
+        var compactOnly = new Button { Content = "compact only", Height = 24, [Grid.RowProperty] = 0 };
+        compactOnly.Classes.Add("compactOnly");
+        var restoreTarget = new Button { Content = "restore target", [Grid.RowProperty] = 1 };
+        var body = new Border { Height = 150, [Grid.RowProperty] = 2 };
+
+        root.Children.Add(new Border { Height = DerivedChromeHeight, [Grid.RowProperty] = 0 });
+        root.Children.Add(compactOnly);
+        root.Children.Add(restoreTarget);
+        root.Children.Add(body);
+        root.Children.Add(new Border { [Grid.RowProperty] = 3 });
+
+        CompactHeightBehavior.SetEnabled(root, true);
+        CompactHeightBehavior.SetRestoreFocusTarget(root, restoreTarget);
+
+        var window = new Window { Width = 700, Height = 600, Content = root };
+
+        // The production pattern for a compact-only control: base style hides it, a class-scoped
+        // style under the root's own compactHeight reveals it. Added before Show so the very first
+        // evaluation sees the same rules every later one does.
+        window.Styles.Add(new Style(x => x.OfType<Button>().Class("compactOnly"))
+        {
+            Setters = { new Setter(Visual.IsVisibleProperty, false) },
+        });
+        window.Styles.Add(new Style(x => x.OfType<Grid>().Class("compactHeight").Descendant().OfType<Button>().Class("compactOnly"))
+        {
+            Setters = { new Setter(Visual.IsVisibleProperty, true) },
+        });
+
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            double staleThreshold = CompactHeightBehavior.GetEffectiveThreshold(root);
+            SetInnerHeight(window, root, staleThreshold - 1);
+            Assert.Contains("compactHeight", root.Classes);
+            Assert.True(compactOnly.IsEffectivelyVisible, "test precondition: the compact-only control must be shown while compact");
+
+            compactOnly.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(compactOnly.IsFocused, "test precondition: the compact-only control must genuinely take focus");
+
+            // Content grows while compact, where the expanded floor cannot be observed at all.
+            body.Height = 400;
+            Dispatcher.UIThread.RunJobs();
+
+            List<Control?> focusTrail = [];
+            window.Height = (staleThreshold + 12) + (window.Height - root.Bounds.Height);
+            for (int i = 0; i < 8; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+                focusTrail.Add(window.FocusManager?.GetFocusedElement() as Control);
+            }
+
+            Assert.Contains("compactHeight", root.Classes);
+
+            Control? landed = focusTrail[^1];
+            Assert.True(landed is not null,
+                "a failed restore left focus cleared: the trail was [" +
+                string.Join(", ", focusTrail.Select(c => c is null ? "<none>" : c.GetType().Name)) + "]");
+            Assert.True(ReferenceEquals(landed, restoreTarget),
+                $"focus should have settled on the wired RestoreFocusTarget, not {landed!.GetType().Name}");
+
+            // No dead window: once both transitions have settled, focus stays put rather than
+            // being cleared and left cleared by whichever of them ran last.
+            Assert.All(focusTrail.Skip(2), f => Assert.NotNull(f));
+        }
+        finally { window.Close(); }
     }
 
     /// <summary>

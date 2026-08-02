@@ -806,6 +806,75 @@ public class ReconstructorCompactTests
         finally { window.Close(); }
     }
 
+    /// <summary>
+    /// A restore that the derivation immediately overturns must still honour the staged-focus
+    /// contract end to end. The sequence is the one place two transitions land back to back with
+    /// no user input in between: the restore hides the compact-only header toggle (flat mode's
+    /// styles), which clears focus, and the re-validation then re-compacts. If the re-compaction
+    /// were allowed to run first it would bump the generation and no-op the restore's own queued
+    /// recovery, while having nothing of its own to capture — focus cleared by the behavior and
+    /// left cleared, which is exactly the stranding the staged-focus contract exists to prevent.
+    /// <para>
+    /// The end state asserted is specific, not merely "something is focused": back in compact,
+    /// with focus on the header toggle. That is where the rules put it — the restore's recovery
+    /// relocates the hidden toggle to the wired RestoreFocusTarget (WindowsPackLink), and the
+    /// re-compaction then finds that link inside the collapsed Help body and hands off through the
+    /// compact direction's target, which is the header toggle again.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void FailedRestore_FromTheFocusedHeaderToggle_EndsCompactWithFocusOnTheHeaderToggle()
+    {
+        ReconstructorView view = BuildWorstCase();
+        var vm = (ReconstructorViewModel)view.DataContext!;
+        (Window window, Grid root) = CompactViewRig.HostAt(view, CompactInner);
+        try
+        {
+            Assert.Contains("compactHeight", root.Classes);
+            double staleThreshold = CompactHeightBehavior.GetEffectiveThreshold(root);
+
+            Expander helpDisclosure = root.GetVisualDescendants().OfType<Expander>().Single(e => e.Name == "HelpDisclosure");
+            ToggleButton headerToggle = helpDisclosure.GetVisualDescendants().OfType<ToggleButton>().Single();
+            headerToggle.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(headerToggle.IsFocused, "test precondition: the compact-only header toggle must genuinely take focus");
+
+            // Grow the warning row — chrome, so it raises the floor rather than being absorbed by a
+            // scrolling band — while COMPACT, where the expanded floor cannot be observed at all.
+            vm.CustomPackerWarning = string.Join(" ", Enumerable.Repeat(
+                "Custom packer detected; the reconstruction may not be byte-identical.", 12));
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(staleThreshold, CompactHeightBehavior.GetEffectiveThreshold(root), 1);
+
+            // Enough to clear the STALE threshold and its restore slack, nowhere near the true one.
+            List<Control?> focusTrail = [];
+            window.Height = (staleThreshold + 12) + (window.Height - root.Bounds.Height);
+            for (int i = 0; i < 8; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+                focusTrail.Add(window.FocusManager?.GetFocusedElement() as Control);
+            }
+
+            Assert.Contains("compactHeight", root.Classes);
+            Assert.True(CompactHeightBehavior.GetEffectiveThreshold(root) > staleThreshold + 12,
+                "precondition for this being a FAILED restore: the re-measured floor must put the threshold " +
+                "above the height that produced it");
+
+            Control? landed = focusTrail[^1];
+            Assert.True(landed is not null,
+                "a failed restore left focus cleared: the trail was [" +
+                string.Join(", ", focusTrail.Select(c => c is null ? "<none>" : CompactViewRig.Describe(c))) + "]");
+            Assert.True(ReferenceEquals(landed, headerToggle),
+                $"focus should have settled on the compact direction's target (the header toggle), not " +
+                $"{CompactViewRig.Describe(landed!)}");
+
+            // No dead window: once the two transitions have settled, focus stays put rather than
+            // being cleared and left cleared by whichever of them ran last.
+            Assert.All(focusTrail.Skip(2), f => Assert.NotNull(f));
+        }
+        finally { window.Close(); }
+    }
+
     /// <summary>Records every launcher call so a test can assert an invocation actually fired.</summary>
     private sealed class RecordingLauncherService : ILauncherService
     {
