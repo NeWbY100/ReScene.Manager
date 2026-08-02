@@ -208,12 +208,21 @@ public class ReconstructorViewTests
         Dispatcher.UIThread.RunJobs();
         Assert.True(leafBox.Bounds.Height <= 18,
             $"leaf row grew to {leafBox.Bounds.Height} - a Fluent template change likely restored a 20px primitive");
-        // Pitch guard (peer): at this window width the two leaves sit side by side, so the
-        // pitch is proven arithmetically - realized height (16) plus the fixed 0,1 margins = the
-        // 18px v1.9 row pitch. Both operands are asserted; neither can drift silently.
+        // Pitch guard (peer): at this window width the two leaves sit side by side, so the pitch
+        // is proven arithmetically - realized height plus the fixed 0,1 margins. Both operands are
+        // asserted; neither can drift silently.
+        //
+        // MEASURED at 13px content text: the row realizes at 18 (the text, not the scoped
+        // MinHeight 16, is what sizes it now), for a 20px pitch rather than v1.9's 18. That is the
+        // 13px decision of 2026-08-02 showing up in the densest list in the app, and it moves the
+        // row AWAY from the 2.5.8 target-size deviation this list was granted rather than deeper
+        // into it - the style's stated invariants (header toggle MinHeight >= 24, every leaf
+        // keyboard-reachable) are untouched. The bound stays a hard ceiling and stays
+        // discriminating: the regression it exists to catch is a Fluent bump restoring the 20px
+        // primitive floor, which would read 20 against this 18.
         CheckBox leafBox2 = group.GetVisualDescendants().OfType<CheckBox>()
             .Single(c => AutomationProperties.GetName(c) == leaf2.AccessibleName);
-        Assert.True(leafBox2.Bounds.Height <= 16, $"leaf2 height {leafBox2.Bounds.Height} > 16");
+        Assert.True(leafBox2.Bounds.Height <= 18, $"leaf2 height {leafBox2.Bounds.Height} > 18");
         Assert.Equal(new Avalonia.Thickness(0, 1), leafBox.Margin);
 
         Assert.Empty(sink.Messages);

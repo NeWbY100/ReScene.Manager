@@ -53,11 +53,18 @@ public class CheckBoxGlyphTests
     }
 
     [AvaloniaFact]
-    public void VersionsDensityRow_GlyphCentersWithOnePixelShift()
+    public void VersionsDensityRow_GlyphCentersInTheRow()
     {
-        // The versions tree's scoped MinHeight=16 leaves (16-14)/2 = 1px of slack: centering
-        // moves those glyphs DOWN exactly 1px vs the old top alignment — assert the shift is
-        // exactly that, not "unchanged" (a11y review correction).
+        // The versions tree's dense row: the 14px glyph must sit on the row's centerline rather
+        // than top-aligned, which is where Fluent leaves it once the cell is shrunk below the row.
+        //
+        // The SLACK is measured, not assumed. This row is sized max(MinHeight 16, content), so the
+        // content text decides it, and the app-wide content size is a design choice that has moved
+        // (12 -> 13 on 2026-08-02) and can move again. MEASURED at 13px: row 18.00, glyph 14.00,
+        // so the glyph sits 2.00 from the top — where the same rule gave 1.00 at 12px with a 16px
+        // row. Deriving the expectation keeps the assertion about CENTERING instead of about a
+        // particular font size, at the same one-decimal tolerance as before: a regression to top
+        // alignment reads 0 against an expected 2 and still fails.
         var cb = new CheckBox { Content = "3.00 b1", MinHeight = 16 };
         var window = new Window { Width = 300, Height = 100, Content = new StackPanel { Children = { cb } } };
         window.Show();
@@ -65,8 +72,16 @@ public class CheckBoxGlyphTests
         try
         {
             Border box = GlyphBox(cb);
+            double slack = cb.Bounds.Height - box.Bounds.Height;
+
+            // Without slack, centered and top-aligned are the same position and this proves
+            // nothing — so the premise is asserted rather than assumed.
+            Assert.True(slack >= 1.0,
+                $"row {cb.Bounds.Height:F2} vs glyph {box.Bounds.Height:F2} leaves {slack:F2} of slack — " +
+                "too little for centering to be distinguishable from top alignment");
+
             Avalonia.Point boxTop = box.TranslatePoint(default, cb)!.Value;
-            Assert.Equal(1, boxTop.Y, 1);
+            Assert.Equal(slack / 2, boxTop.Y, 1);
         }
         finally
         {
