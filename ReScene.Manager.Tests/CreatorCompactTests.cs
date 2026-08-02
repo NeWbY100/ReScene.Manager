@@ -177,6 +177,57 @@ public class CreatorCompactTests
     }
 
     /// <summary>
+    /// The reported defect, on the view it was reported against: clicking into the SRR Creator tab
+    /// at a height that calls for compact showed one frame of the expanded layout first.
+    /// <para>
+    /// A tab's content is not laid out until the tab is first selected, so that selection is the
+    /// view's first ever layout — modelled here by attaching the view to a host that starts empty,
+    /// which is the same thing without the tab strip's arithmetic in the way. A frame is built from
+    /// a completed layout pass, so the executable form of "no flash" is that no completed pass ever
+    /// gave this root a real height while it carried the wrong mode.
+    /// </para>
+    /// <para>
+    /// Worth having on the real view and not only on the behavior's own rig: this view runs its own
+    /// <c>LayoutUpdated</c> handler to cap the config scroller, and the fix decides in line DURING
+    /// a layout pass — so the two now run against each other on every first attach.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void FirstVisitToTheTab_BelowTheSwitchPoint_NeverPresentsAnExpandedFrame()
+    {
+        CreatorView view = BuildWorstCase();
+        var root = (Grid)view.Content!;
+
+        List<(double Height, bool Compact)> passes = [];
+        root.LayoutUpdated += (_, _) => passes.Add((root.Bounds.Height, root.Classes.Contains("compactHeight")));
+
+        var host = new Decorator();
+        var window = new Window { Width = 700, Height = Threshold - 30, Content = host };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            Assert.Empty(passes);   // precondition: never laid out while the "tab" was unselected
+
+            host.Child = view;      // the click into the tab
+            for (int i = 0; i < 6; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            Assert.Contains("compactHeight", root.Classes);
+            Assert.True(passes.Exists(p => p.Height > 0), "no layout pass ever sized the view");
+
+            List<double> expandedFrames = [.. passes.Where(p => p.Height > 0 && !p.Compact).Select(p => p.Height)];
+            Assert.True(expandedFrames.Count == 0,
+                $"{expandedFrames.Count} of {passes.Count} layout passes were presentable frames in EXPANDED " +
+                $"mode below the switch point ({Threshold:F0}) — at heights " +
+                string.Join(", ", expandedFrames.Select(h => h.ToString("F0"))));
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
     /// THE invariant: at every height around this view's own switch point, whichever mode is
     /// active actually fits. See
     /// <see cref="CompactInvariantRig.AssertActiveModeFitsAroundSwitchPoint"/> — no height and no

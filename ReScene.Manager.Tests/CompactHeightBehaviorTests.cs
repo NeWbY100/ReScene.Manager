@@ -124,6 +124,19 @@ public class CompactHeightBehaviorTests
     private static (Window Window, Grid Root, Border Body) DerivedHost(
         double height, double bodyHeight, IReadOnlyList<CompactRowSize>? rows = null)
     {
+        (Grid root, Border body) = BuildDerivedRoot(bodyHeight, rows);
+
+        var window = new Window { Width = 700, Height = height, Content = root };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        return (window, root, body);
+    }
+
+    /// <summary>The <see cref="DerivedHost"/> tree on its own, unattached — for tests that need to
+    /// watch what happens as it is put into a live tree for the first time.</summary>
+    private static (Grid Root, Border Body) BuildDerivedRoot(
+        double bodyHeight, IReadOnlyList<CompactRowSize>? rows = null)
+    {
         var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*") };
         root.RowDefinitions[2].MinHeight = DerivedStarFloor;
 
@@ -138,11 +151,35 @@ public class CompactHeightBehaviorTests
         }
 
         CompactHeightBehavior.SetEnabled(root, true);
+        return (root, body);
+    }
 
-        var window = new Window { Width = 700, Height = height, Content = root };
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
-        return (window, root, body);
+    /// <summary>
+    /// Every completed layout pass, as (height the pass gave the root, whether the compact class
+    /// was on it at that moment). A frame is rendered from a completed layout pass, so a recorded
+    /// pass with a real height and the wrong mode IS a frame the user can see in the wrong mode —
+    /// which is what the flash tests below assert never happens.
+    /// </summary>
+    private static List<(double Height, bool Compact)> RecordLayoutPasses(Grid root)
+    {
+        List<(double Height, bool Compact)> passes = [];
+        root.LayoutUpdated += (_, _) => passes.Add((root.Bounds.Height, root.Classes.Contains("compactHeight")));
+        return passes;
+    }
+
+    private static void AssertNoPassShowedTheWrongMode(
+        List<(double Height, bool Compact)> passes, bool expectedCompact, string context)
+    {
+        Assert.True(passes.Exists(p => p.Height > 0),
+            $"{context}: no layout pass ever gave the root a height, so this proved nothing");
+
+        List<(double Height, bool Compact)> wrong =
+            [.. passes.Where(p => p.Height > 0 && p.Compact != expectedCompact)];
+
+        Assert.True(wrong.Count == 0,
+            $"{context}: {wrong.Count} of {passes.Count} layout passes were presentable frames in the " +
+            $"WRONG mode (expected {(expectedCompact ? "compact" : "expanded")}) — at heights " +
+            string.Join(", ", wrong.Select(p => p.Height.ToString("F0"))));
     }
 
     /// <summary>
@@ -159,6 +196,156 @@ public class CompactHeightBehaviorTests
         {
             Dispatcher.UIThread.RunJobs();
         }
+    }
+
+    /// <summary>
+    /// A view put into a live tree for the first time must reach its verdict in the SAME layout
+    /// pass that first gives it a size — never one pass showing the expanded default at a height
+    /// that calls for compact, which is a frame the user sees.
+    /// <para>
+    /// This is the tab-flash the derived model made structural. A posted evaluation cannot make
+    /// that first frame: the first post arrives while the bounds are still zero and returns having
+    /// done nothing, and the one after it runs only once the layout pass it is reacting to has
+    /// already completed and been presented. The first bounds notification is the last moment at
+    /// which the decision can still be part of the frame, so that is where it is now made.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void FirstAttach_ReachesItsVerdictInTheSameLayoutPassThatFirstSizesTheView()
+    {
+        (Grid root, _) = BuildDerivedRoot(bodyHeight: 150);   // floor 250, so the switch is at 270
+        List<(double Height, bool Compact)> passes = RecordLayoutPasses(root);
+
+        var host = new Decorator();
+        var window = new Window { Width = 700, Height = 200, Content = host };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            // The "click into the tab" moment: the root has never been laid out anywhere.
+            host.Child = root;
+            for (int i = 0; i < 5; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            Assert.Contains("compactHeight", root.Classes);
+            AssertNoPassShowedTheWrongMode(passes, expectedCompact: true, "first attach below the switch point");
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// The same guarantee in the other direction, which the flash's own symmetry demands: a view
+    /// whose remembered verdict is compact, re-attached into a window that has since grown, must
+    /// not present a compact frame at the larger size either.
+    /// <para>
+    /// Restoring is the harder direction because the remembered floor is what the view measured
+    /// before it went compact, and the expanded layout is not there to re-measure until it has been
+    /// put back. It works because the floor SURVIVES the detach — see
+    /// <see cref="RememberedVerdict_SurvivesDetachAndReattach"/> — so the switch height is known at
+    /// the first bounds notification rather than one layout pass later.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void Reattach_IntoAWindowThatGrew_RestoresWithoutPresentingACompactFrame()
+    {
+        (Grid root, _) = BuildDerivedRoot(bodyHeight: 150);   // switch at 270
+
+        var host = new Decorator { Child = root };
+        var window = new Window { Width = 700, Height = 200, Content = host };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            Assert.Contains("compactHeight", root.Classes);
+
+            host.Child = null;                 // tab switched away
+            Dispatcher.UIThread.RunJobs();
+
+            window.Height = 600;               // ...and the window grew while it was away
+            Dispatcher.UIThread.RunJobs();
+
+            List<(double Height, bool Compact)> passes = RecordLayoutPasses(root);
+            host.Child = root;                 // tab switched back
+            for (int i = 0; i < 5; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            Assert.DoesNotContain("compactHeight", root.Classes);
+            AssertNoPassShowedTheWrongMode(passes, expectedCompact: false, "reattach into a grown window");
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// And the converse: a remembered EXPANDED verdict re-attached into a window that has since
+    /// shrunk must not present an expanded frame at the smaller size.
+    /// </summary>
+    [AvaloniaFact]
+    public void Reattach_IntoAWindowThatShrank_CompactsWithoutPresentingAnExpandedFrame()
+    {
+        (Grid root, _) = BuildDerivedRoot(bodyHeight: 150);   // switch at 270
+
+        var host = new Decorator { Child = root };
+        var window = new Window { Width = 700, Height = 600, Content = host };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            Assert.DoesNotContain("compactHeight", root.Classes);
+
+            host.Child = null;
+            Dispatcher.UIThread.RunJobs();
+
+            window.Height = 200;
+            Dispatcher.UIThread.RunJobs();
+
+            List<(double Height, bool Compact)> passes = RecordLayoutPasses(root);
+            host.Child = root;
+            for (int i = 0; i < 5; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            Assert.Contains("compactHeight", root.Classes);
+            AssertNoPassShowedTheWrongMode(passes, expectedCompact: true, "reattach into a shrunken window");
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// Why the reattach cases above can decide immediately: the verdict and the measured floor
+    /// outlive a detach. Per-control state lives in a <c>ConditionalWeakTable</c> keyed by the
+    /// control and the style class sits on the control itself, so a view that leaves the tree and
+    /// comes back is not starting over — it re-applies what it already knew and re-validates from
+    /// there. Nothing extra is retained to make that true, which is why the detachment guarantees
+    /// (no phantom root Tab stop, no recovery acting on a dead tree) are unaffected.
+    /// </summary>
+    [AvaloniaFact]
+    public void RememberedVerdict_SurvivesDetachAndReattach()
+    {
+        (Grid root, _) = BuildDerivedRoot(bodyHeight: 150);
+
+        var host = new Decorator { Child = root };
+        var window = new Window { Width = 700, Height = 200, Content = host };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            double threshold = CompactHeightBehavior.GetEffectiveThreshold(root);
+            Assert.Contains("compactHeight", root.Classes);
+
+            host.Child = null;
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(root.IsAttachedToVisualTree());
+            Assert.Contains("compactHeight", root.Classes);
+            Assert.Equal(threshold, CompactHeightBehavior.GetEffectiveThreshold(root), 1);
+            Assert.False(root.Focusable, "a detached root must never keep transient focusability");
+        }
+        finally { window.Close(); }
     }
 
     /// <summary>
