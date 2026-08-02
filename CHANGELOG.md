@@ -4,6 +4,8 @@ All notable changes to ReScene Manager (formerly ReScene.NET) are documented her
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-08-02
+
 ### Changed
 
 - Content text is now 13px, up from the 12px inherited from the WPF app — more readable without
