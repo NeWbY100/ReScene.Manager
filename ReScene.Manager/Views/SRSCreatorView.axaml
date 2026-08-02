@@ -27,7 +27,7 @@
          instance rather than the shared helpDisclosure style — a shared-style change would also
          alter Reconstructor's own already-approved frame-rig numbers; no compact-mode override
          ever touches these two properties, so a local value here carries no house-rule risk. -->
-    <Expander Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
+    <controls:HelpDisclosure Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
               HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
               AutomationProperties.Name="Help">
       <Expander.Header>
@@ -45,7 +45,7 @@
                    Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
                    TextWrapping="Wrap" />
       </ScrollViewer>
-    </Expander>
+    </controls:HelpDisclosure>
 
     <!-- ── Config band (always-present; squeezes + scrolls in compact via AutoToStar) ──
          Content renders at natural height at normal size (row is Auto), no scrollbar shown. -->

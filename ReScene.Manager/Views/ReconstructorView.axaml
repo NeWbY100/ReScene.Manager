@@ -33,7 +33,7 @@
          change would also alter SRSCreator's (Task 3's) Expander and its own already-approved
          frame-rig numbers — no compact-mode override ever touches these two properties, so a
          local value here carries no house-rule risk. -->
-    <Expander Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
+    <controls:HelpDisclosure Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
               HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
               AutomationProperties.Name="Help &amp; links">
       <Expander.Header>
@@ -78,7 +78,7 @@
           </WrapPanel>
         </StackPanel>
       </ScrollViewer>
-    </Expander>
+    </controls:HelpDisclosure>
 
     <!-- ── Persistent action bar ─────────────────────────────
          Margin is NOT a local value (same reason as the Expander above: a compact-mode

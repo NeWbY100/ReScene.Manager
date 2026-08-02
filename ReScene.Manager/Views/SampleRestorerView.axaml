@@ -24,7 +24,7 @@
          HorizontalAlignment/HorizontalContentAlignment ARE local values (the hug-bug fix):
          Fluent's Expander defaults to Left, so without this it hugs its own content's width
          instead of filling the Grid column. -->
-    <Expander Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
+    <controls:HelpDisclosure Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
               HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
               AutomationProperties.Name="Help">
       <Expander.Header>
@@ -47,7 +47,7 @@
                    Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
                    TextWrapping="Wrap" />
       </ScrollViewer>
-    </Expander>
+    </controls:HelpDisclosure>
 
     <!-- ── Config band (always-present; squeezes + scrolls in compact via AutoToStar) ──
          Content renders at natural height at normal size (row is Auto), no scrollbar shown.

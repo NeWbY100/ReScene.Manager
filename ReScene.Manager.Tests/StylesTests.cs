@@ -10,6 +10,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ReScene.Manager.Behaviors;
+using ReScene.Manager.Controls;
 
 namespace ReScene.Manager.Tests;
 
@@ -165,7 +166,7 @@ public class StylesTests
         const string HelpName = "Help & links";
         const double Threshold = 300;
 
-        var expander = new Expander { Classes = { "helpDisclosure" } };
+        var expander = new HelpDisclosure { Classes = { "helpDisclosure" } };
         var body = new TextBlock { Text = "help body" };
         expander.Content = body;
         AutomationProperties.SetName(expander, HelpName);
@@ -189,23 +190,28 @@ public class StylesTests
 
             AutomationPeer expanderPeer = ControlAutomationPeer.CreatePeerForElement(expander);
             Assert.Equal(HelpName, expanderPeer.GetName());
-            Assert.False(expanderPeer.IsKeyboardFocusable(), "the Expander itself is not a Tab stop");
+            Assert.False(expanderPeer.IsKeyboardFocusable(), "the container is not a Tab stop");
             Assert.DoesNotContain(DescendantPeers(expanderPeer), p => OwnerOf(p) is ToggleButton);
             Assert.Contains(expander.GetVisualDescendants(), v => ReferenceEquals(v, toggle));
             // ^ the toggle CONTROL is still in the visual tree, so its peer's absence is genuine UIA
             //   pruning of an invisible control rather than the template not creating it at all.
 
-            // THE LOAD-BEARING SCENARIO: an AT invokes the container's Collapse at normal size.
-            var expandCollapse = Assert.IsAssignableFrom<IExpandCollapseProvider>(expanderPeer);
-            expandCollapse.Collapse();
-            Dispatcher.UIThread.RunJobs();
+            // THE LOAD-BEARING ASSERTION: the container offers NO way for an assistive technology to
+            // collapse this region. GetProvider is the route the platform's UIA bridge resolves
+            // patterns through, so a null here is the pattern genuinely withheld, not merely
+            // unoffered by the visuals.
+            Assert.Null(expanderPeer.GetProvider<IExpandCollapseProvider>());
+            Assert.Equal(AutomationControlType.Group, expanderPeer.GetAutomationControlType());
 
+            // The round-2 invariant guard stays as the PROGRAMMATIC defense (nothing in the UI or
+            // the UIA tree can now reach it, but code still can): a collapse at normal size never
+            // costs the user their Help.
+            expander.IsExpanded = false;
+            Dispatcher.UIThread.RunJobs();
             Assert.True(body.IsEffectivelyVisible,
-                "Collapse() at normal size must be a no-op: the header toggle is pruned from both " +
-                "trees here, so a collapse would hide Help with no affordance in any modality to " +
-                "restore it — a state the visual design says cannot exist");
+                "flat mode force-expands the body, so a programmatic collapse must not survive — " +
+                "the header toggle is hidden here, leaving no affordance in any modality to undo it");
             Assert.True(expander.IsExpanded);
-            Assert.Equal(ExpandCollapseState.Expanded, expandCollapse.ExpandCollapseState);
             Assert.False(toggle.IsVisible, "and it must not have revealed the toggle as a side effect");
 
             // ── COMPACT: real disclosure. Toggle appears; the behavior resets it collapsed. ──
@@ -216,8 +222,13 @@ public class StylesTests
             Assert.False(expander.IsExpanded, "compact entry starts collapsed (condition 5)");
 
             AutomationPeer compactExpanderPeer = ControlAutomationPeer.CreatePeerForElement(expander);
-            var compactExpandCollapse = Assert.IsAssignableFrom<IExpandCollapseProvider>(compactExpanderPeer);
-            Assert.Equal(ExpandCollapseState.Collapsed, compactExpandCollapse.ExpandCollapseState);
+
+            // STABLE topology: the container withholds ExpandCollapse in BOTH modes, not per-mode.
+            // A peer whose advertised patterns shift underneath a client that has already resolved
+            // them is worse than one that never offered them, and a window resize is not something
+            // the assistive technology initiated.
+            Assert.Null(compactExpanderPeer.GetProvider<IExpandCollapseProvider>());
+            Assert.Equal(AutomationControlType.Group, compactExpanderPeer.GetAutomationControlType());
 
             AutomationPeer togglePeer = Assert.Single(
                 DescendantPeers(compactExpanderPeer), p => OwnerOf(p) is ToggleButton);
@@ -225,27 +236,39 @@ public class StylesTests
             Assert.Equal(AutomationControlType.Button, togglePeer.GetAutomationControlType());
             Assert.True(togglePeer.IsEnabled());
             Assert.False(togglePeer.IsOffscreen());
-            Assert.IsAssignableFrom<IToggleProvider>(togglePeer);
 
-            // ONE authoritative action: the toggle is the only keyboard-focusable peer, so it is the
-            // only one an AT announces as actionable on focus...
+            // THE SINGLE ACTIONABLE ROUTE, and the only one: Toggle on the header button, which is
+            // also the only keyboard-focusable peer in the region.
+            IToggleProvider? toggleProvider = togglePeer.GetProvider<IToggleProvider>();
+            Assert.NotNull(toggleProvider);
             Assert.True(togglePeer.IsKeyboardFocusable());
             Assert.False(compactExpanderPeer.IsKeyboardFocusable());
 
-            // ...and the container's pattern is not a SECOND, independent action: it moves the very
-            // same state, which the toggle and the behavior both follow.
-            compactExpandCollapse.Expand();
+            // Driving that one route moves the whole region coherently — the expander's state, the
+            // toggle's own reported state, and the behavior's donation — and the automation event
+            // stream never ends on a value that contradicts what the region actually is. (The
+            // contradiction this pins was real before the pattern was withheld: an AT-driven
+            // Collapse at normal size produced Expanded -> Collapsed while the body stayed visible,
+            // because the invariant guard's revert re-entered ahead of the peer's own subscription.
+            // With no provider to invoke, that path no longer exists to be raced.)
+            var stateEvents = new List<object?>();
+            compactExpanderPeer.PropertyChanged += (_, e) => stateEvents.Add(e.NewValue);
+            togglePeer.PropertyChanged += (_, e) => stateEvents.Add(e.NewValue);
+
+            toggleProvider!.Toggle();
             Dispatcher.UIThread.RunJobs();
             Assert.True(expander.IsExpanded);
-            Assert.True(toggle.IsChecked, "the toggle reports the same state the container just set");
+            Assert.True(toggle.IsChecked, "the toggle reports the state it just set");
             Assert.True(CompactHeightBehavior.GetHelpOpen(host), "and the behavior's donation follows it");
-            Assert.Equal(ExpandCollapseState.Expanded, compactExpandCollapse.ExpandCollapseState);
+            Assert.DoesNotContain(ExpandCollapseState.Collapsed, stateEvents.OfType<ExpandCollapseState>());
 
-            compactExpandCollapse.Collapse();
+            stateEvents.Clear();
+            toggleProvider.Toggle();
             Dispatcher.UIThread.RunJobs();
             Assert.False(expander.IsExpanded, "collapsing IS allowed in compact — the toggle is right there");
             Assert.False(toggle.IsChecked);
             Assert.False(CompactHeightBehavior.GetHelpOpen(host));
+            Assert.DoesNotContain(ExpandCollapseState.Expanded, stateEvents.OfType<ExpandCollapseState>());
         }
         finally { window.Close(); }
     }

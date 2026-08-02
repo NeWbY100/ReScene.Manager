@@ -69,7 +69,7 @@
        control instead. Zero chrome (no border/background/padding/corner radius) in either
        mode — a plain collapsible section, never a bordered card — so normal/flat mode stays
        pixel-identical to the pre-disclosure StackPanel (criterion F). -->
-  <Style Selector="Expander.helpDisclosure">
+  <Style Selector=":is(Expander).helpDisclosure">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="Padding" Value="0" />
@@ -112,13 +112,13 @@
       </ControlTemplate>
     </Setter>
   </Style>
-  <Style Selector="Expander.helpDisclosure /template/ ToggleButton">
+  <Style Selector=":is(Expander).helpDisclosure /template/ ToggleButton">
     <Setter Property="IsVisible" Value="False" />
   </Style>
-  <Style Selector="Grid.compactHeight Expander.helpDisclosure /template/ ToggleButton">
+  <Style Selector="Grid.compactHeight :is(Expander).helpDisclosure /template/ ToggleButton">
     <Setter Property="IsVisible" Value="True" />
   </Style>
-  <Style Selector="Expander.helpDisclosure:expanded /template/ Path#HelpChevron">
+  <Style Selector=":is(Expander).helpDisclosure:expanded /template/ Path#HelpChevron">
     <Setter Property="RenderTransform">
       <RotateTransform Angle="90" />
     </Setter>
@@ -131,7 +131,7 @@
   <Style Selector="DockPanel.actionBar">
     <Setter Property="Margin" Value="0,0,0,4" />
   </Style>
-  <Style Selector="Grid.compactHeight Expander.helpDisclosure">
+  <Style Selector="Grid.compactHeight :is(Expander).helpDisclosure">
     <Setter Property="Margin" Value="0" />
   </Style>
   <Style Selector="Grid.compactHeight DockPanel.actionBar">
