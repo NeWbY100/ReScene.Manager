@@ -24,8 +24,8 @@ using ReScene.SRS;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Small-window layout degradation tests for <see cref="SampleRestorerView"/> (task-5 brief:
-/// threshold 535, config row AutoToStar 110 compact / 80 help-open, log 80, Help body MaxHeight
+/// Small-window layout degradation tests for <see cref="SampleRestorerView"/> (threshold 535,
+/// config row AutoToStar 110 compact / 80 help-open, log 80, Help body MaxHeight
 /// 40, compact CI bound <see cref="CompactInvariantRig.CiBound"/> == 307, pinned band ceiling
 /// 75). This is the view whose action row and log measured 0px at 700×450 BASE state under
 /// today's DockPanel — the headline defect (section 5 below).
@@ -119,17 +119,17 @@ public class SampleRestorerCompactTests
     }
 
     /// <summary>
-    /// The brief's own worst case (case 1): all conditionals forced together. FieldStatusLines
+    /// The worst case (case 1): all conditionals forced together. FieldStatusLines
     /// (SRR/Media — Output carries none today) set with realistic wrapping-length messages;
     /// IsRestoring + ShowProgress true (forces Cancel/ProgressMessage/ProgressBar visible);
     /// SRSEntries populated to 12 rows (overflows the grid's own 250-DIP MaxHeight, so it renders
-    /// AT that cap) — restored to the brief's own literal figure (fix round 1, codex finding 1;
-    /// an earlier version of this method used a modest 2-row population instead, which codex
-    /// correctly identified as weakening the fixture to hide a genuine defect rather than fixing
-    /// it: MEASURED, with 12 rows and NO production fix, that inner heights from Threshold+1 (536)
-    /// up to ~640 leave the ENTIRE log band (row 3) — not merely clipped, but translated fully
-    /// below the window's own bottom edge (e.g. at 536: log at window-Y [693,773] against a
-    /// 675-tall window). <see cref="SampleRestorerView"/>'s own constructor now fixes this with a
+    /// AT that cap) — a real row count, not a token one: an earlier version of this method used a
+    /// modest 2-row population instead, which weakened the fixture enough to hide a genuine
+    /// defect rather than exercising it: MEASURED, with 12 rows and NO production fix, that inner
+    /// heights from Threshold+1 (536) up to ~640 leave the ENTIRE log band (row 3) — not merely
+    /// clipped, but translated fully below the window's own bottom edge (e.g. at 536: log at
+    /// window-Y [693,773] against a 675-tall window). <see cref="SampleRestorerView"/>'s own
+    /// constructor now fixes this with a
     /// dynamic, window-height-aware cap on the config ScrollViewer (see its own remarks) — proven
     /// safe across that exact previously-unsafe range by
     /// <see cref="Invariant_ExpandedMode_NeverClipsAcrossUnsafeHeightRange"/> below, using REAL
@@ -150,7 +150,7 @@ public class SampleRestorerCompactTests
         }
     }
 
-    // ── 1. Invariant (spec §1's four checks; CompactInvariantRig) — RED-FIRST against today's DockPanel ──
+    // ── 1. Invariant (the four one-sum checks; CompactInvariantRig) — RED-FIRST against today's DockPanel ──
 
     [AvaloniaFact]
     public void Invariant_ExpandedModeFloor_UnderThreshold()
@@ -171,7 +171,7 @@ public class SampleRestorerCompactTests
 
     /// <summary>
     /// The REAL, user-facing guarantee <see cref="Invariant_ExpandedModeFloor_UnderThreshold"/>'s
-    /// own <c>MeasureFloor</c> methodology cannot directly observe (fix round 1, codex finding 1):
+    /// own <c>MeasureFloor</c> methodology cannot directly observe:
     /// MEASURED that <c>MeasureFloor</c>'s bare, unconstrained <c>Measure(Infinity)</c> call
     /// reports each Auto row's own UNCONSTRAINED desired height, while a REAL Grid arrange pass
     /// additionally SHRINKS Auto rows when the total genuinely exceeds available space — a
@@ -183,7 +183,7 @@ public class SampleRestorerCompactTests
     /// <see cref="AssertFullyWithinWindow"/> across the EXACT range measured unsafe before the
     /// production fix (Threshold+1 through ~640 — the entire log band, row 3, previously
     /// translated fully below the window's own bottom edge in that range with a 12-row grid and no
-    /// fix), plus a comfortably-larger height, to prove the actual defect this task exists to fix
+    /// fix), plus a comfortably-larger height, to prove the actual defect this change exists to fix
     /// is gone — not merely that one abstract number moved.
     /// </summary>
     [AvaloniaTheory]
@@ -302,7 +302,7 @@ public class SampleRestorerCompactTests
     }
 
     /// <summary>
-    /// Criterion A for the two targets the brief names explicitly: the GRID's OWN last-row
+    /// Criterion A for this view's two hardest-to-reach targets: the GRID's OWN last-row
     /// checkbox (a virtualized target — see this class's own remarks: no realized Control exists
     /// for it until the grid's own internal scroll creates one, so
     /// <c>CompactViewRig.AssertReachableByWheel/Keyboard/Thumb</c> cannot be used verbatim; genuine
@@ -663,12 +663,11 @@ public class SampleRestorerCompactTests
             Assert.True(srrFileTextBox.IsFocused,
                 "restoring from a focused compact body must relocate focus to the wired RestoreFocusTarget (SRRFileTextBox), not strand it");
 
-            // Closes a standing a11y-debt item (fix round 1, codex finding 3): the resize-driven
-            // focus-recovery target had no accessible name at all before this round. Same
-            // resolution technique as SRSEntriesGrid_UIAName_ResolvesToEmbeddedSRSFilesHeader
-            // above (the real AutomationPeer, not the raw attached property) so this proves what a
-            // screen reader actually announces on landing here, not merely that a XAML attribute
-            // exists.
+            // The resize-driven focus-recovery target must have an accessible name — before this
+            // fix it had none at all. Same resolution technique as
+            // SRSEntriesGrid_UIAName_ResolvesToEmbeddedSRSFilesHeader above (the real
+            // AutomationPeer, not the raw attached property) so this proves what a screen reader
+            // actually announces on landing here, not merely that a XAML attribute exists.
             Assert.Equal("SRR file path", ControlAutomationPeer.CreatePeerForElement(srrFileTextBox).GetName());
 
             window.Height -= 250;
@@ -795,7 +794,7 @@ public class SampleRestorerCompactTests
     // ── 5. Pinned band (the defect this task exists to fix) ────────────
 
     /// <summary>
-    /// Directly asserts the defect the whole task exists to fix: with band 1 (config, holding the
+    /// Directly asserts the defect this change exists to fix: with band 1 (config, holding the
     /// SRR/Media/Output sections AND the SRSEntriesGrid) independently scrolled to its top AND its
     /// bottom extreme, the pinned Restore All button, the Cancel button, and the ProgressBar —
     /// translated into window coordinates — stay fully inside the window the entire time, with
@@ -803,7 +802,7 @@ public class SampleRestorerCompactTests
     /// own height, and the exact conditions that render the Cancel button and ProgressBar at
     /// all). RED-FIRST: this is the strongest red in the feature — pre-change (today's DockPanel,
     /// no Grid rows / scroll clipping at all), the action row and log measured 0px at 700×450
-    /// BASE state with ZERO conditionals even forced (see task report for the measured evidence).
+    /// BASE state with ZERO conditionals even forced.
     /// </summary>
     [AvaloniaFact]
     public void PinnedActionBand_RestoreAllCancelAndProgressBarStayWithinWindow_BandOneScrolledToTopAndBottom()
@@ -842,7 +841,7 @@ public class SampleRestorerCompactTests
     }
 
     /// <summary>
-    /// CLIP-AWARE (fix round 1, codex finding 4): a naive "translated point within the window's
+    /// CLIP-AWARE: a naive "translated point within the window's
     /// own outer rectangle" check can false-PASS a control that is genuinely obscured by an
     /// INTERMEDIATE <c>ClipToBounds</c> ancestor — e.g. a target nested inside the config band's
     /// own <see cref="ScrollViewer"/> can translate to a point that numerically falls inside the
@@ -855,7 +854,7 @@ public class SampleRestorerCompactTests
     /// <para>
     /// A degenerate (zero-width or zero-height) control translates to a single point, which
     /// trivially satisfies any containment check — exactly the pre-change defect (the action row
-    /// and log measuring zero height, per the brief's own headline-defect framing) would have
+    /// and log measuring zero height) would have
     /// slipped past a containment-only check. Effective visibility and a positive size are
     /// asserted FIRST, unconditionally.
     /// </para>
@@ -905,8 +904,8 @@ public class SampleRestorerCompactTests
     /// dead-end at the grid's own edge) that must keep a regression guard regardless of which code
     /// provides it.
     /// <para>
-    /// NOT a <see cref="ScrollHandoffBehavior"/> test (renamed and re-documented, fix round 2):
-    /// this behavior's own wheel mechanism was removed — codex's final ruling found it not merely
+    /// NOT a <see cref="ScrollHandoffBehavior"/> test (renamed and re-documented):
+    /// this behavior's own wheel mechanism was removed — investigation found it not merely
     /// redundant with Avalonia's native <c>ScrollViewer.IsScrollChainingEnabled</c> default (true,
     /// never overridden in this app) but incapable of ever providing the "future insurance" it was
     /// kept for (see <see cref="ScrollHandoffBehavior"/>'s own remarks). This test still passes
@@ -1032,7 +1031,7 @@ public class SampleRestorerCompactTests
     }
 
     /// <summary>
-    /// The brief's own scenario: focus a bottom-row cell while the grid is half-clipped by the
+    /// Focuses a bottom-row cell while the grid is half-clipped by the
     /// band — real Down-arrow presses walk cell "currency" deeper into the (virtualized) grid;
     /// <see cref="ScrollHandoffBehavior"/> chains <c>BringIntoView</c> to the config band's own
     /// ScrollViewer each time the current row changes, so the row ends fully visible even though
@@ -1076,8 +1075,7 @@ public class SampleRestorerCompactTests
     }
 
     /// <summary>
-    /// "Inner arrow-key navigation stays inside the grid" (brief, item 6's own closing clause):
-    /// with only a few SRSEntries (comfortably realized within the grid's own 250-DIP box without
+    /// "Inner arrow-key navigation stays inside the grid": with only a few SRSEntries (comfortably realized within the grid's own 250-DIP box without
     /// ever needing the grid's OWN internal virtualization scroll to kick in), navigating between
     /// them must never move the grid's OWN internal offset off zero — the grid's virtualization
     /// mechanism must not activate for a movement that never needed it.
@@ -1199,7 +1197,7 @@ public class SampleRestorerCompactTests
     }
 
     /// <summary>
-    /// Extends the raster comparison beyond row 0 (fix round 1, codex finding 2): row 0 alone
+    /// Extends the raster comparison beyond row 0: row 0 alone
     /// never exercised the config band's own <c>StackPanel</c>, whose local, unconditional
     /// <c>Margin="0,0,4,0"</c> (an earlier version of this markup) DID change expanded-mode
     /// rendering — a real defect the row-0-only comparison structurally could not see. The SRR
@@ -1248,7 +1246,7 @@ public class SampleRestorerCompactTests
 
     /// <summary>
     /// Verbatim reconstruction of SampleRestorerView.axaml's SRR File caption TextBlock before this
-    /// task (git history). DIAGNOSED (fix round 1): the two &lt;Run&gt; elements sit on separate
+    /// task (git history). DIAGNOSED: the two &lt;Run&gt; elements sit on separate
     /// source lines in the XAML, and Avalonia's XAML parser collapses the inter-tag newline +
     /// indentation into a THIRD, implicit whitespace-only <see cref="Run"/> (plain, default-styled
     /// — it does not inherit the preceding Run's own local FontWeight) in the real
@@ -1413,12 +1411,12 @@ public class SampleRestorerCompactTests
     }
 
     // ── Fixtures (captured from real, green CompactViewRig.CaptureTabOrderControls runs against
-    // this task's finished implementation — see task report for the capture method). Each entry
+    // the finished view). Each entry
     // is CompactViewRig.Describe's own format (real automation peer name plus x:Name, reported
     // separately) — a human-readable regression net, NOT the discriminating check itself.
     // Same-typed siblings that describe identically (the three "Browse" buttons, both grid row
     // checkboxes) are disambiguated by AssertTabWalk's OWN independent, reference-based checks.
-    // SRRFileTextBox's own entry updated (fix round 1, codex finding 3): its automation peer name
+    // SRRFileTextBox's own entry updated: its automation peer name
     // went from "" to "SRR file path" once AutomationProperties.Name was added; MediaDirTextBox
     // and OutputDirTextBox are untouched pre-existing a11y debt, out of this task's scope. ──
 
@@ -1443,7 +1441,7 @@ public class SampleRestorerCompactTests
     ];
 
     /// <summary>
-    /// Compact order (spec §2): disclosure header toggle → (body skipped: Help starts collapsed
+    /// Compact order: disclosure header toggle → (body skipped: Help starts collapsed
     /// per condition 5, so the plain-prose body is IsVisible=false and correctly excluded from Tab
     /// order) → identical tail to normal mode.
     /// </summary>

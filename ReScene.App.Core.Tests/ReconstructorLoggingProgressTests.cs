@@ -211,7 +211,7 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
         Assert.Equal("Cancelled", vm.PhaseDescription);
     }
 
-    // ── Completion heading carries the run-wide "N could not run" error aggregate (§4a / WCAG 4.1.3) ──
+    // ── Completion heading carries the run-wide "N could not run" error aggregate (WCAG 4.1.3) ──
 
     [Fact]
     public async Task Completion_WithErroredCombo_HeadingIncludesCouldNotRunCount()

@@ -26,8 +26,7 @@ public partial class CreatorView : UserControl
     // constant/rationale.
     private const double LogRowMinHeight = 80;
 
-    // BORROWED, not independently measured for THIS view (fix round 1, codex finding 6 — the
-    // wording here previously read "MEASURED", which overclaimed): this is SampleRestorerView's
+    // BORROWED, not independently measured for THIS view: this is SampleRestorerView's
     // own ArrangeRoundingSlack VALUE, reused verbatim because the underlying MECHANISM is
     // identical in kind — CompactInvariantRig.MeasureFloor's bare Measure(Infinity) call reports
     // each Auto row's UNCONSTRAINED desired height, while a REAL Grid arrange pass additionally
@@ -56,7 +55,7 @@ public partial class CreatorView : UserControl
         grid.AddHandler(DragDrop.DragOverEvent, OnStoredFilesDragOver);
         grid.AddHandler(DragDrop.DropEvent, OnStoredFilesDrop);
 
-        // Small-window layout degradation (task-6 brief): compact below 720 inner DIPs — the
+        // Small-window layout degradation: compact below 720 inner DIPs — the
         // largest converted view. x:CompileBindings="False" means x:Name elements are NOT wired
         // to auto-generated fields (same as every other ported view in this project) — resolved
         // once via FindControl instead.
@@ -77,13 +76,12 @@ public partial class CreatorView : UserControl
         Behaviors.CompactHeightBehavior.SetHelpExpander(root, helpDisclosure);
         Behaviors.CompactHeightBehavior.SetHelpBodyMaxHeight(root, 40);
 
-        // RestoreFocusTarget is OutputTextBox, NOT InputTextBox (fix round 1, codex finding 1 — a
-        // genuinely harmful wiring the trap-finding in the task report exposed): InputTextBox is
-        // one of the Input row's three TabIndex-trapped controls (TabIndex="0"; Browse
-        // file="1"; Browse folder="2" — see the report's own "headline finding"). Landing a
+        // RestoreFocusTarget is OutputTextBox, NOT InputTextBox — that wiring would be genuinely
+        // harmful: InputTextBox is one of the Input row's three TabIndex-trapped controls
+        // (TabIndex="0"; Browse file="1"; Browse folder="2"). Landing a
         // resize-triggered focus recovery THERE would deposit a keyboard user one single Tab press
         // from the documented stable trap loop (Browse folder <-> the shell's "_File" menu <-> the
-        // status bar) — a NEW harmful path this task's own behavior wiring would have created,
+        // status bar) — a NEW harmful path this behavior's own wiring would have created,
         // distinct from the pre-existing trap itself (which stays deferred to its own follow-up
         // per criterion F). OutputTextBox sits safely inside this view's OWN (default-TabIndex)
         // "safe run" — CreatorCompactTests.RestoreFocusTarget_IsNotOneOfTheThreeTrappedControls
@@ -91,9 +89,9 @@ public partial class CreatorView : UserControl
         Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(root, outputTextBox);
 
         // EXPANDED-mode safety cap (the same categorical issue SampleRestorerView's own ctor
-        // remarks flagged as the most likely SECOND consumer: "Task 6's CreatorView, whose own
-        // StoredFilesGrid could face the identical problem"). MEASURED directly: with the brief's
-        // own worst case forced (12 detected sets capped at 96, 8 stored files, both
+        // remarks flagged as the most likely second consumer — this view's own StoredFilesGrid
+        // could face the identical problem). MEASURED directly: with the worst case forced
+        // (12 detected sets capped at 96, 8 stored files, both
         // FieldStatusLines non-None, Cancel+ProgressMessage+ProgressBar visible), this view's
         // config content — Input, Stored Files header/grid/splitter, Output, and all 7 Options
         // checkboxes plus the App name row, none of which scroll independently in EXPANDED mode —

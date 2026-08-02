@@ -6,14 +6,14 @@ using ReScene.SRS;
 namespace ReScene.App.Core.Tests;
 
 /// <summary>
-/// Task 9's test matrix (design plan 2026-07-19-multiset-srr-creation.md, Task 9 section; brief
-/// task-9-brief.md): folder mode's generated-artifact staging on <see cref="CreatorViewModel"/> —
-/// extension-swap naming, the excerpt's <c>same_srs_name</c> collision keying, pre-existing-.srs
-/// supersede, SRS-failure .txt storage, multi-SRR subtitle append, a RAR-backed .vob sample's
-/// nested SRR, working-dir cleanup on cancellation, and the pass-10 proof-before-sfv reorder over
-/// the complete merged list. <see cref="CreatorViewModelFolderModeTests"/> covers the surrounding
-/// scan/Create-call plumbing this file assumes already works; this file only exercises the staging
-/// step (invoked via <see cref="CreatorViewModel.CreateSRRCommand"/> when samples/subtitles exist).
+/// Test matrix for folder mode's generated-artifact staging on <see cref="CreatorViewModel"/> (see
+/// docs/superpowers/plans/2026-07-19-multiset-srr-creation.md) — extension-swap naming,
+/// generate_srr's <c>same_srs_name</c> collision keying, pre-existing-.srs supersede, SRS-failure
+/// .txt storage, multi-SRR subtitle append, a RAR-backed .vob sample's nested SRR, working-dir
+/// cleanup on cancellation, and the proof-before-sfv reorder over the complete merged list.
+/// <see cref="CreatorViewModelFolderModeTests"/> covers the surrounding scan/Create-call plumbing
+/// this file assumes already works; this file only exercises the staging step (invoked via
+/// <see cref="CreatorViewModel.CreateSRRCommand"/> when samples/subtitles exist).
 /// </summary>
 public sealed class CreatorViewModelArtifactTests : TempDirTestBase
 {
@@ -74,15 +74,14 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         /// <summary>
         /// The <see cref="SRRCreationOptions"/> actually passed to each <see cref="CreateFromRARAsync"/>
         /// call, in call order — lets a test verify a NESTED SRR call received its own, possibly
-        /// different, options rather than just the outer run's (E6, Task 9 second fix round).
+        /// different, options rather than just the outer run's.
         /// </summary>
         public List<SRRCreationOptions> RarCallOptions { get; } = [];
 
         /// <summary>
         /// The <see cref="SRRCreationOptions"/> passed to each <see cref="CreateFromSFVAsync"/> call,
-        /// parallel to <see cref="SfvCalls"/> — lets the wizard-placeholder E6 test verify the nested
-        /// subtitle SRR call forced ComputeOSOHashes off even when the outer run enabled it (Task 9
-        /// fix-4).
+        /// parallel to <see cref="SfvCalls"/> — lets the wizard-placeholder test verify the nested
+        /// subtitle SRR call forced ComputeOSOHashes off even when the outer run enabled it.
         /// </summary>
         public List<SRRCreationOptions> SfvCallOptions { get; } = [];
 
@@ -197,10 +196,10 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
             new NoOpAppSettingsService(), new TestUiDispatcher(), new StubReleaseScanner(scan), () => workDir)
         {
             AutoIncludeFiles = false,
-            // Follow-up B1/B2: folder mode now GATES sample-SRS staging on AutoCreateSRS and
-            // nested-subtitle-SRR generation on CreateVobsubSRR. These staging tests exercise those
-            // artifacts, so both must be ON (the production default) — a gating test flips the one
-            // it targets to false explicitly. StoreFixRAR has no folder-mode staging effect (B3).
+            // Folder mode GATES sample-SRS staging on AutoCreateSRS and nested-subtitle-SRR
+            // generation on CreateVobsubSRR. These staging tests exercise those artifacts, so both
+            // must be ON (the production default) — a gating test flips the one it targets to false
+            // explicitly. StoreFixRAR has no folder-mode staging effect.
             AutoCreateSRS = true,
             CreateVobsubSRR = true,
             StoreFixRAR = false,
@@ -316,9 +315,9 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
     [Fact]
     public async Task SrsFailure_NonEmptySample_TxtStored_ZeroByteSample_NothingStored()
     {
-        // D3 (peer F2): excerpt L714-722 gates the failure .txt on `os.path.getsize(sample) > 0`
-        // — the SAMPLE FILE's own size — unconditionally on the error text. A genuinely 0-byte
-        // sample must suppress the .txt even when the error message itself is non-empty.
+        // generate_srr gates the failure .txt on `os.path.getsize(sample) > 0` — the SAMPLE FILE's
+        // own size — unconditionally on the error text. A genuinely 0-byte sample must suppress the
+        // .txt even when the error message itself is non-empty.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         string failingSample = Touch(Path.Combine(root, "Sample", "bad.mkv")); // 1 byte, non-empty
         string zeroByteSample = WriteBytes(Path.Combine(root, "Sample", "empty.mkv"), []); // 0 bytes
@@ -356,7 +355,7 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
     [Fact]
     public async Task UppercaseVOB_RarBacked_DoesNotGetNestedSrr_CaseSensitiveExtensionCheck()
     {
-        // excerpt L744: sample.endswith(".vob") is case-SENSITIVE — a ".VOB" sample never matches,
+        // generate_srr: sample.endswith(".vob") is case-SENSITIVE — a ".VOB" sample never matches,
         // even though its leading bytes are the same RAR marker.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         string vobSample = WriteBytes(Path.Combine(root, "Sample", "clip.VOB"), [(byte)'R', (byte)'a', (byte)'r', (byte)'!', 0x1A, 0x07, 0x00]);
@@ -373,13 +372,13 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
     [Fact]
     public async Task RarBackedVobSample_NestedSrr_ForcesComputeOSOHashesFalse_RegardlessOfOuterSetting()
     {
-        // C1 (fix4-nit1, PARITY): pyrescene's create_srr_single_volume (main.py:588-640) writes
-        // ONLY SrrHeaderBlock + SrrRarFileBlock + raw RAR block bytes — it has NO oso_hash
-        // parameter or logic AT ALL, so a .vob/single-volume nested SRR NEVER contains OSO blocks.
-        // Forwarding the OUTER `options` (ComputeOSOHashes on) into the .vob nested CreateFromRARAsync
-        // would emit OSO blocks pyrescene omits — a byte divergence the golden can't catch (it runs
-        // oso-off + a .ts sample, not a .vob). Mirrors the E6 sibling tests: the nested call must
-        // force oso off regardless of the outer run's setting.
+        // pyrescene's create_srr_single_volume (main.py) writes ONLY SrrHeaderBlock +
+        // SrrRarFileBlock + raw RAR block bytes — it has NO oso_hash parameter or logic AT ALL, so a
+        // .vob/single-volume nested SRR NEVER contains OSO blocks. Forwarding the OUTER `options`
+        // (ComputeOSOHashes on) into the .vob nested CreateFromRARAsync would emit OSO blocks
+        // pyrescene omits — a byte divergence the golden can't catch (it runs oso-off + a .ts
+        // sample, not a .vob). Mirrors the sibling nested-SRR tests: the nested call must force oso
+        // off regardless of the outer run's setting.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         string vobSample = WriteBytes(Path.Combine(root, "Sample", "clip.vob"), [(byte)'R', (byte)'a', (byte)'r', (byte)'!', 0x1A, 0x07, 0x00]);
         var scan = new ReleaseScanResult([], [vobSample], [], [], [], []);
@@ -412,41 +411,39 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
 
         await vm.CreateSRRCommand.ExecuteAsync(null);
 
-        // E5 (codex #5, second round): the command's OWN Task completes normally either way (this
-        // codebase's established convention — see ReconstructorViewModel/FileCompareViewModel —
-        // is to swallow OCE and report it through VM state, not rethrow), so "observably
-        // cancelled" is proven via that state instead: IsCreating resets (the command is runnable
-        // again, not stuck "in progress" forever) and BuildSucceeded/ProgressMessage below never
-        // read as a normal completion.
+        // The command's OWN Task completes normally either way (this codebase's established
+        // convention — see ReconstructorViewModel/FileCompareViewModel — is to swallow OCE and
+        // report it through VM state, not rethrow), so "observably cancelled" is proven via that
+        // state instead: IsCreating resets (the command is runnable again, not stuck "in progress"
+        // forever) and BuildSucceeded/ProgressMessage below never read as a normal completion.
         Assert.False(vm.IsCreating);
         // The staging code's own `finally` must have deleted the working dir it created — a
         // swallowed OCE (or one that skipped the finally) would leave it behind.
         Assert.False(Directory.Exists(workDir));
-        // The VM's own top-level catch (D6-fixed to distinguish cancellation from a real error) is
-        // what ultimately absorbs the exception — but if my inner staging code had SWALLOWED it
-        // instead of letting it propagate, the run would incorrectly report success.
+        // The VM's own top-level catch (which distinguishes cancellation from a real error) is what
+        // ultimately absorbs the exception — but if my inner staging code had SWALLOWED it instead
+        // of letting it propagate, the run would incorrectly report success.
         Assert.False(vm.BuildSucceeded);
         Assert.Null(srr.LastAdditionalFiles); // CreateFromInputsAsync never reached
         Assert.Equal("Cancelled.", vm.ProgressMessage);
         Assert.DoesNotContain(vm.LogEntries, e => e.Contains("ERROR", StringComparison.Ordinal));
     }
 
-    // ── 9. Pass-10 reorder over the complete merged list ────────
+    // ── 9. Proof-before-sfv reorder over the complete merged list ────────
 
     [Fact]
     public async Task SubtitleNestedSrr_NaturallyPrecedesItsSfv_InTheMergedList()
     {
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         string nfo = Touch(Path.Combine(root, "release.nfo"));
-        // A genuine SFV listing (E4: GenerateNestedSubtitleSrrsAsync now parses this SFV's OWN
-        // entries for real, to discover its RAR chain(s) — a plain Touch'd placeholder file, valid
-        // under the pre-E4 code (which never inspected the SFV's content itself), no longer is.
+        // A genuine SFV listing: GenerateNestedSubtitleSrrsAsync parses this SFV's OWN entries for
+        // real, to discover its RAR chain(s) — a plain Touch'd placeholder file, valid when the SFV
+        // content itself was never inspected, no longer is.
         string subSfv = WriteSfv(Path.Combine(root, "Subs", "subs.sfv"), "subs.rar");
         Touch(Path.Combine(root, "Subs", "subs.rar"));
-        // D4 fix: the scanner's pass-10 ALREADY stores every sfv, including excluded/subtitle
-        // ones — the subtitle sfv IS in the baseline StoredFiles a real scan would hand back (no
-        // longer omitted the way a pre-D4 stub result could get away with, since
-        // GenerateSubtitleArtifactsAsync no longer re-adds it itself).
+        // The scanner's pass-10 ALREADY stores every sfv, including excluded/subtitle ones — the
+        // subtitle sfv IS in the baseline StoredFiles a real scan would hand back (it must not be
+        // re-added by GenerateSubtitleArtifactsAsync itself).
         var scan = new ReleaseScanResult([], [], [subSfv], [nfo, subSfv], [], []);
         (CreatorViewModel vm, _, RecordingSRRCreationService srr, _) = CreateVm(scan);
 
@@ -457,7 +454,7 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         int sfvIndex = names.IndexOf("Subs/subs.sfv");
         Assert.True(srrIndex >= 0 && sfvIndex >= 0);
         Assert.Equal(sfvIndex - 1, srrIndex);
-        // D4: the sfv is stored exactly ONCE — no redundant re-add on top of the baseline's own.
+        // The sfv is stored exactly ONCE — no redundant re-add on top of the baseline's own.
         Assert.Single(names, n => n == "Subs/subs.sfv");
         // nfo (unrelated to the reorder) keeps its own position ahead of everything else.
         Assert.Equal(0, names.IndexOf("release.nfo"));
@@ -492,15 +489,15 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         Assert.Equal(sfvIndex - 1, rarIndex);
     }
 
-    // ── 10. D2: splice anchors use PROOF-DIRECTORY classification, not a name substring ──
+    // ── 10. Splice anchors use PROOF-DIRECTORY classification, not a name substring ──
 
     [Fact]
     public async Task ProofSubstringInFilenames_NotMisclassifiedAsProofDirectory()
     {
-        // D2 (codex #2): FindSampleArtifactSpliceIndex used to skip any entry whose STORED NAME
-        // merely CONTAINED "proof" as a splice anchor — misclassifying a main `proofread.sfv` or a
-        // conditional fix RAR named `movie.proof.fix.rar` (both contain "proof" as PART of a
-        // filename, not as a directory) as proof entries, splicing the sample at the wrong index.
+        // FindSampleArtifactSpliceIndex used to skip any entry whose STORED NAME merely CONTAINED
+        // "proof" as a splice anchor — misclassifying a main `proofread.sfv` or a conditional fix
+        // RAR named `movie.proof.fix.rar` (both contain "proof" as PART of a filename, not as a
+        // directory) as proof entries, splicing the sample at the wrong index.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         string mainSfv = Touch(Path.Combine(root, "proofread.sfv"));
         string fixRar = Touch(Path.Combine(root, "movie.proof.fix.rar"));
@@ -518,19 +515,19 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
             "the sample must splice BEFORE the non-proof-directory fix RAR anchor, not skip past it as if it were a proof entry");
     }
 
-    // ── 10b. E2 (codex #2, second round): splice anchor reconciles with the scanner's OWN
-    //         proof-before-sfv reorder — a proof pair already relocated into the final-SFV region
-    //         must not be treated as an un-anchored "early proof category" blob. ──
+    // ── 10b. Splice anchor reconciles with the scanner's OWN proof-before-sfv reorder — a proof
+    //         pair already relocated into the final-SFV region must not be treated as an
+    //         un-anchored "early proof category" blob. ──
 
     [Fact]
     public async Task ProofPair_AlreadyRelocatedIntoFinalSfvRegion_SampleSplicesBeforeTheWholeTail()
     {
-        // E2 (codex #2): a REAL ReleaseScanner.Scan already applies its own proof-before-sfv
-        // reorder (ApplyProofBeforeSfvReorder) BEFORE handing back StoredFiles — so a proof
-        // RAR/SFV pair sits ADJACENT, with the RAR immediately before its matching SFV, as part of
-        // pass-10's final-SFV tail. This stub reproduces exactly that already-reordered shape (the
-        // stub bypasses the scanner, so the test sets it up directly) rather than the pre-reorder
-        // "proof category, then main sfv" shape D2's test used. The old splice logic treated ANY
+        // A REAL ReleaseScanner.Scan already applies its own proof-before-sfv reorder
+        // (ApplyProofBeforeSfvReorder) BEFORE handing back StoredFiles — so a proof RAR/SFV pair
+        // sits ADJACENT, with the RAR immediately before its matching SFV, as part of the final-SFV
+        // tail. This stub reproduces exactly that already-reordered shape (the stub bypasses the
+        // scanner, so the test sets it up directly) rather than the pre-reorder "proof category,
+        // then main sfv" shape the previous test used. The old splice logic treated ANY
         // proof-directory entry as unanchored regardless of this relocation (the `.rar` branch had
         // no reconciliation, and the `.sfv` branch still excluded proof-linked sfvs) — so the
         // sample would splice at the tail's very end (after main.sfv) instead of before the whole
@@ -559,14 +556,14 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
             "sanity: the scanner's own reorder (rar immediately before its matching sfv) is undisturbed by splicing");
     }
 
-    // ── 11. D4: a REAL ReleaseScanner (not a stub) exercises the actual pass-10/staging contract ──
+    // ── 11. A REAL ReleaseScanner (not a stub) exercises the actual pass-10/staging contract ──
 
     [Fact]
     public async Task RealScanner_SubtitleSfv_StoredExactlyOnce_NestedSrrImmediatelyBeforeIt()
     {
-        // D4 (peer F1): every other test in this file uses StubReleaseScanner with hand-built
-        // results, which never actually exercised the real scanner's pass-10 (which ALREADY stores
-        // every sfv, including excluded/subtitle ones) — so a redundant re-add in
+        // Every other test in this file uses StubReleaseScanner with hand-built results, which
+        // never actually exercised the real scanner's pass-10 (which ALREADY stores every sfv,
+        // including excluded/subtitle ones) — so a redundant re-add in
         // GenerateSubtitleArtifactsAsync went untested against the real contract. Wires a REAL
         // ReleaseScanner through CreatorViewModel end-to-end.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
@@ -582,7 +579,7 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
             new NoOpAppSettingsService(), new TestUiDispatcher(), realScanner, () => workDir)
         {
             AutoIncludeFiles = false,
-            // Follow-up B1/B2: this test asserts the nested subtitle SRR is staged, so folder mode's
+            // This test asserts the nested subtitle SRR is staged, so folder mode's
             // AutoCreateSRS/CreateVobsubSRR gates must be ON (the production default).
             AutoCreateSRS = true,
             CreateVobsubSRR = true,
@@ -599,23 +596,22 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         Assert.Equal(sfvIdx - 1, srrIdx);
     }
 
-    // ── 11b. E4 (codex #4, second round): a subtitle SFV listing MULTIPLE RAR chains yields ONE
-    //        nested SRR PER CHAIN, each named by that chain's own first-RAR basename ──
+    // ── 11b. A subtitle SFV listing MULTIPLE RAR chains yields ONE nested SRR PER CHAIN, each
+    //        named by that chain's own first-RAR basename ──
 
     [Fact]
     public async Task SubtitleSfv_MultipleRarChains_YieldsOneNestedSrrPerChain_NamedByEachChainsOwnBasename()
     {
-        // E4 (codex #4): REVERSES the first round's D5 adjudication, which wrongly dismissed
-        // multi-chain subtitle SFVs as dead/out-of-scope test seam — spec §3 L233-234 and
-        // pyrescene's create_srr_for_subs (excerpt L1072-1204) both require this: a two-language
-        // subtitle SFV ("eng.rar" + a separate "jpn.rar", NOT one merged archive) must produce TWO
-        // nested SRRs, "eng.srr" and "jpn.srr" — never a single "subs.srr" wrapping both chains.
+        // Multi-chain subtitle SFVs are in scope, not a dead/out-of-scope test seam — pyrescene's
+        // create_srr_for_subs requires this: a two-language subtitle SFV ("eng.rar" + a separate
+        // "jpn.rar", NOT one merged archive) must produce TWO nested SRRs, "eng.srr" and "jpn.srr"
+        // — never a single "subs.srr" wrapping both chains.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         string nfo = Touch(Path.Combine(root, "release.nfo"));
         string subSfv = WriteSfv(Path.Combine(root, "Subs", "subs.sfv"), "eng.rar", "jpn.rar");
         Touch(Path.Combine(root, "Subs", "eng.rar"));
         Touch(Path.Combine(root, "Subs", "jpn.rar"));
-        // D4 fix: the scanner's pass-10 already stores the subtitle sfv itself.
+        // The scanner's pass-10 already stores the subtitle sfv itself.
         var scan = new ReleaseScanResult([], [], [subSfv], [nfo, subSfv], [], []);
         (CreatorViewModel vm, _, RecordingSRRCreationService srr, _) = CreateVm(scan);
 
@@ -625,15 +621,15 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         Assert.Single(names, n => n == "Subs/eng.srr");
         Assert.Single(names, n => n == "Subs/jpn.srr");
         Assert.DoesNotContain("Subs/subs.srr", names);
-        // The sfv itself is still stored exactly once (pass-10's baseline, D4/E3 — not re-added
-        // per chain just because there happen to be two of them now).
+        // The sfv itself is still stored exactly once (pass-10's baseline — not re-added per chain
+        // just because there happen to be two of them now).
         Assert.Single(names, n => n == "Subs/subs.sfv");
         // Both chains' RAR volumes were actually handed to the writer as TWO SEPARATE calls (one
         // nested SRR per chain), not folded into a single call covering both.
         Assert.Equal(2, srr.RarCalls.Count);
     }
 
-    // ── 12. D6: cancellation is reported as "Cancelled.", not swallowed as a generic error ──
+    // ── 12. Cancellation is reported as "Cancelled.", not swallowed as a generic error ──
 
     [Fact]
     public async Task Cancellation_ReportsCancelled_NotSwallowedAsGenericError()
@@ -654,35 +650,35 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         Assert.False(vm.BuildSucceeded);
         Assert.DoesNotContain(vm.LogEntries, e => e.Contains("ERROR", StringComparison.Ordinal));
         Assert.Contains(vm.LogEntries, e => e.Contains("Cancelled", StringComparison.Ordinal));
-        // E5 (codex #5, second round): the command's Task itself completes normally either way
-        // (this codebase's established swallow-and-report convention, not an omission — see the
-        // catch block's own remarks); IsCreating resetting to false is what proves the run is
-        // actually OVER, not stuck "in progress" while silently having given up.
+        // The command's Task itself completes normally either way (this codebase's established
+        // swallow-and-report convention, not an omission — see the catch block's own remarks);
+        // IsCreating resetting to false is what proves the run is actually OVER, not stuck "in
+        // progress" while silently having given up.
         Assert.False(vm.IsCreating);
     }
 
-    // ── 13. D7/E3: a manually-added subtitle source OUTSIDE the release root gets a valid name
-    //       AND is actually stored (E3, codex #3, second round) ──
+    // ── 13. A manually-added subtitle source OUTSIDE the release root gets a valid name AND is
+    //       actually stored ──
 
     [Fact]
     public async Task SubtitleSfv_OutsideReleaseRoot_UsesSubsFallbackName_AndIsStoredExactlyOnce()
     {
-        // D7 (codex #5): ExtraSubtitleSfvFiles is shared with the file-mode Advanced tab's "Add
-        // Subtitle" command — a user in folder mode can still append an out-of-root subtitle file
-        // without triggering a re-scan. The raw root-relative name would keep an invalid "../"
-        // prefix the writer's CanonicalizeRelative rejects; FolderRelativeStem falls back to
-        // "Subs/<basename>" instead, matching the pre-existing GeneratedStoredName convention.
+        // ExtraSubtitleSfvFiles is shared with the file-mode Advanced tab's "Add Subtitle" command
+        // — a user in folder mode can still append an out-of-root subtitle file without triggering
+        // a re-scan. The raw root-relative name would keep an invalid "../" prefix the writer's
+        // CanonicalizeRelative rejects; FolderRelativeStem falls back to "Subs/<basename>" instead,
+        // matching the pre-existing GeneratedStoredName convention.
         //
-        // E3 (codex #3, second round): this scenario is ALSO the exact regression D4 introduced —
-        // a manually-added subtitle (unlike a scanner-origin one) never reaches the scanner's
-        // pass-10 sfv storage at all, so dropping the unconditional re-add left it stored NOWHERE.
-        // The stub scan below has an EMPTY StoredFiles/SubtitleSfvs (this sfv was never seen by any
-        // scanner — exactly the manual-add case), so this .sfv reaching the merged list can only be
-        // this fix, not pass-10 baseline storage.
+        // This scenario is also the regression introduced by relying on pass-10 baseline storage
+        // instead of an unconditional re-add: a manually-added subtitle (unlike a scanner-origin
+        // one) never reaches the scanner's pass-10 sfv storage at all, so dropping the unconditional
+        // re-add left it stored NOWHERE. The stub scan below has an EMPTY StoredFiles/SubtitleSfvs
+        // (this sfv was never seen by any scanner — exactly the manual-add case), so this .sfv
+        // reaching the merged list can only be this fix, not pass-10 baseline storage.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        // A genuine SFV listing (E4: GenerateNestedSubtitleSrrsAsync parses this SFV's OWN entries
-        // for real) — OUTSIDE root, alongside its one RAR chain.
+        // A genuine SFV listing (GenerateNestedSubtitleSrrsAsync parses this SFV's OWN entries for
+        // real) — OUTSIDE root, alongside its one RAR chain.
         string outsideSfv = WriteSfv(Path.Combine(TempDir, "external-subs.sfv"), "external-subs.rar");
         Touch(Path.Combine(TempDir, "external-subs.rar"));
         var scan = new ReleaseScanResult([], [], [], [], [], []);
@@ -701,15 +697,15 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         Assert.DoesNotContain(additionalFiles, e => e.StoredName.Contains("..", StringComparison.Ordinal));
     }
 
-    // ── 14. D8: skip a nested SRR when a same-stem RAR is already stored ──
+    // ── 14. Skip a nested SRR when a same-stem RAR is already stored ──
 
     [Fact]
     public async Task SubtitleSfv_SameStemRarAlreadyStored_NestedSrrSkipped_SfvStillStoredOnce()
     {
-        // D8 (excerpt L805-811, peer F3): "not for Proof RARs that are already stored inside the
-        // SRR" — a subtitle SFV whose basename-stem-swapped-to-.rar is already present in the
-        // stored list (e.g. an independently-discovered proof RAR sharing the excluded SFV's
-        // stem) must not ALSO get a redundant nested SRR wrapping that same RAR content.
+        // generate_srr: "not for Proof RARs that are already stored inside the SRR" — a subtitle
+        // SFV whose basename-stem-swapped-to-.rar is already present in the stored list (e.g. an
+        // independently-discovered proof RAR sharing the excluded SFV's stem) must not ALSO get a
+        // redundant nested SRR wrapping that same RAR content.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         string subSfv = Touch(Path.Combine(root, "Subs", "subs.sfv"));
         string alreadyStoredRar = Touch(Path.Combine(root, "Subs", "subs.rar"));
@@ -723,16 +719,16 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         Assert.Empty(srr.SfvCalls); // nested-SRR creation never even attempted
     }
 
-    // ── 15. E6 (codex #6, second round): the nested subtitle SRR forces ComputeOSOHashes off,
-    //        regardless of the outer run's own setting ──
+    // ── 15. The nested subtitle SRR forces ComputeOSOHashes off, regardless of the outer run's
+    //        own setting ──
 
     [Fact]
     public async Task SubtitleNestedSrr_ForcesComputeOSOHashesFalse_RegardlessOfOuterSetting()
     {
-        // E6 (codex #6): excerpt L1489 HARDCODES oso_hash=False for create_srr_for_subs's own
-        // nested-creation call — it does NOT forward whichever setting the outer SRR happens to
-        // use. A user enabling ComputeOSOHashes for the OUTER SRR must not leak OSO blocks into a
-        // nested subtitle SRR that pyrescene never adds them to.
+        // create_srr_for_subs HARDCODES oso_hash=False for its own nested-creation call — it does
+        // NOT forward whichever setting the outer SRR happens to use. A user enabling
+        // ComputeOSOHashes for the OUTER SRR must not leak OSO blocks into a nested subtitle SRR
+        // that pyrescene never adds them to.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         string subSfv = WriteSfv(Path.Combine(root, "Subs", "subs.sfv"), "subs.rar");
         Touch(Path.Combine(root, "Subs", "subs.rar"));
@@ -746,10 +742,10 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         Assert.False(nestedOptions.ComputeOSOHashes);
     }
 
-    // ── 16. G2 (codex Task 9 fix-3): a subtitle SFV's nested SRR is emitted BEFORE the SFV's own
-    //        entry — pyrescene pass 9 (nested SRRs) precedes pass 10 (subtitle SFV tail). The
-    //        same-stem reorder cannot repair a DIFFERENTLY-named pair (subs.sfv listing eng.rar),
-    //        so the artifact-block ORDER itself must be right. ──
+    // ── 16. A subtitle SFV's nested SRR is emitted BEFORE the SFV's own entry — pyrescene pass 9
+    //        (nested SRRs) precedes pass 10 (subtitle SFV tail). The same-stem reorder cannot
+    //        repair a DIFFERENTLY-named pair (subs.sfv listing eng.rar), so the artifact-block
+    //        ORDER itself must be right. ──
 
     [Fact]
     public async Task ManualSubtitleSfv_DifferentlyNamedChain_NestedSrrImmediatelyPrecedesSfv()
@@ -783,9 +779,9 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
     [Fact]
     public async Task TwoManualSubtitleSfvs_AllNestedSrrsPrecedeAllSfvEntries()
     {
-        // G2 grouping for the >=2-subtitle-SFV case: pyrescene's vobsub loop creates EVERY nested
-        // SRR (pass 9), THEN the tail loop appends EVERY subtitle SFV (pass 10) — two passes, not
-        // per-SFV interleaving. So both nested SRRs must precede both SFV entries.
+        // The >=2-subtitle-SFV case: pyrescene's vobsub loop creates EVERY nested SRR (pass 9),
+        // THEN the tail loop appends EVERY subtitle SFV (pass 10) — two passes, not per-SFV
+        // interleaving. So both nested SRRs must precede both SFV entries.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         string subA = WriteSfv(Path.Combine(root, "Subs", "subsA.sfv"), "aaa.rar");
@@ -813,8 +809,8 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
             "ALL nested SRRs must precede ALL subtitle-SFV entries (pyrescene pass 9 then pass 10)");
     }
 
-    // ── 17. G3 (codex Task 9 fix-3): a spaced RAR name in a subtitle SFV must group as ONE chain,
-    //        not throw and drop the whole chain (the old SFVFile.ReadFile split every space). ──
+    // ── 17. A spaced RAR name in a subtitle SFV must group as ONE chain, not throw and drop the
+    //        whole chain (the old SFVFile.ReadFile split every space). ──
 
     [Fact]
     public async Task SubtitleSfv_SpacedRarName_ParsedAsOneChain_NotDropped()
@@ -838,9 +834,9 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         Assert.Single(srr.RarCalls); // exactly one chain handed to the writer, not dropped
     }
 
-    // ── 18. G4 (codex Task 9 fix-3): a `.\`-prefixed continuation must RESOLVE onto the same chain
-    //        as its head, not split into a second same-named SRR (the old raw Path.Combine kept the
-    //        `.\`, giving a distinct archive-set key and a duplicate "eng.srr"). ──
+    // ── 18. A `.\`-prefixed continuation must RESOLVE onto the same chain as its head, not split
+    //        into a second same-named SRR (the old raw Path.Combine kept the `.\`, giving a
+    //        distinct archive-set key and a duplicate "eng.srr"). ──
 
     [Fact]
     public async Task SubtitleSfv_DotSlashContinuation_GroupsWithHead_OneChainOneName()
@@ -863,11 +859,11 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         Assert.Single(srr.RarCalls); // ONE chain: eng.rar + eng.r00 folded together
     }
 
-    // ── 19. Part C / F3 (codex Task 9 fix-4): a folder with BOTH a scanner-discovered subtitle SFV
-    //        AND a manually-added one stores EACH subtitle SFV exactly once. The relative ORDER of a
-    //        manually-added SFV vs a scanner-origin one is an accepted [DIVERGENCE: determinism]
-    //        (pyrescene has no manual-add feature — no parity target); the invariant that matters is
-    //        exactly-once storage (no dup, none dropped). ──
+    // ── 19. A folder with BOTH a scanner-discovered subtitle SFV AND a manually-added one stores
+    //        EACH subtitle SFV exactly once. The relative ORDER of a manually-added SFV vs a
+    //        scanner-origin one is an accepted [DIVERGENCE: determinism] (pyrescene has no
+    //        manual-add feature — no parity target); the invariant that matters is exactly-once
+    //        storage (no dup, none dropped). ──
 
     [Fact]
     public async Task MixedScannerAndManualSubtitleSfvs_EachStoredExactlyOnce()
@@ -900,10 +896,9 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         Assert.Single(names, n => n == "Subs/manual.sfv");
     }
 
-    // ── 20. Part D (Task 9 fix-4, user-approved): the Advanced-tab create-time vobsub scan
-    //        (CreateVobsubSRRsAsync) now produces one nested SRR PER RAR CHAIN via
-    //        GenerateNestedSubtitleSrrsAsync (E4), with oso forced off (E6) — like folder mode, not
-    //        the old single-merged GenerateNestedSRRFileAsync. ──
+    // ── 20. The Advanced-tab create-time vobsub scan (CreateVobsubSRRsAsync) now produces one
+    //        nested SRR PER RAR CHAIN via GenerateNestedSubtitleSrrsAsync, with oso forced off —
+    //        like folder mode, not the old single-merged GenerateNestedSRRFileAsync. ──
 
     [Fact]
     public async Task AdvancedTab_VobsubScan_MultiChainSubtitleSfv_YieldsOneNestedSrrPerChain()
@@ -945,11 +940,11 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         await vm.CreateSRRCommand.ExecuteAsync(null);
 
         SRRCreationOptions nested = Assert.Single(srr.RarCallOptions);
-        Assert.False(nested.ComputeOSOHashes); // E6: nested subtitle SRR forces oso off
+        Assert.False(nested.ComputeOSOHashes); // nested subtitle SRR forces oso off
     }
 
-    // ── 21. Part D — wizard-placeholder path (GenerateNestedSRRFileAsync): E4 (multi-chain) stays
-    //        deferred to Task 10 (placeholder model is 1:1), but E6 (oso-off) IS applied now. ──
+    // ── 21. Wizard-placeholder path (GenerateNestedSRRFileAsync): multi-chain support stays
+    //        deferred (the placeholder model is 1:1), but oso-off IS applied now. ──
 
     [Fact]
     public async Task WizardPlaceholder_NestedSubtitleSrr_OuterOsoTrue_HasNoOso()
@@ -976,21 +971,21 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         // Two CreateFromSFVAsync calls: the nested placeholder (subs.sfv) and the outer main SRR.
         int nestedIdx = srr.SfvCalls.IndexOf(subSfv);
         Assert.True(nestedIdx >= 0, "the nested subtitle SRR was materialized via CreateFromSFVAsync");
-        Assert.False(srr.SfvCallOptions[nestedIdx].ComputeOSOHashes); // E6: nested forces oso off
+        Assert.False(srr.SfvCallOptions[nestedIdx].ComputeOSOHashes); // nested forces oso off
         // Sanity: the OUTER main SRR still carries the user's setting (proves the two are distinct).
         int mainIdx = srr.SfvCalls.IndexOf(mainSfv);
         Assert.True(srr.SfvCallOptions[mainIdx].ComputeOSOHashes);
     }
 
-    // ── 22. Follow-up B1 (pyrescene --no-srs parity): folder mode honors AutoCreateSRS, just as
-    //        file mode already does (CreatorViewModel.cs L826). OFF → no sample .srs is staged. ──
+    // ── 22. pyrescene --no-srs parity: folder mode honors AutoCreateSRS, just as file mode already
+    //        does. OFF → no sample .srs is staged. ──
 
     [Fact]
     public async Task Sample_AutoCreateSrsOff_NoSrsStaged_MediaNotStoredEither()
     {
-        // B1: with AutoCreateSRS off, folder mode generates no sample SRS artifacts (a sample's
-        // ONLY stored output is its .srs — the sample MEDIA itself is never stored), matching
-        // pyrescene --no-srs. GenerateSampleArtifactsAsync must not even run.
+        // With AutoCreateSRS off, folder mode generates no sample SRS artifacts (a sample's ONLY
+        // stored output is its .srs — the sample MEDIA itself is never stored), matching pyrescene
+        // --no-srs. GenerateSampleArtifactsAsync must not even run.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         string sample = Touch(Path.Combine(root, "Sample", "clip.mkv"));
         var scan = new ReleaseScanResult([], [sample], [], [], [], []);
@@ -1007,7 +1002,7 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
     [Fact]
     public async Task Sample_AutoCreateSrsOn_SrsStaged_RegressionGuard()
     {
-        // B1 regression guard: the default (AutoCreateSRS = true) still stages the sample .srs.
+        // Regression guard: the default (AutoCreateSRS = true) still stages the sample .srs.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         string sample = Touch(Path.Combine(root, "Sample", "clip.mkv"));
         var scan = new ReleaseScanResult([], [sample], [], [], [], []);
@@ -1018,17 +1013,17 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
         Assert.Contains(additionalFiles, e => e.StoredName == "Sample/clip.srs");
     }
 
-    // ── 23. Follow-up B2 (pyrescene --vobsub-srr parity): folder mode gates ONLY the nested-SRR
-    //        generation (pass 9) on CreateVobsubSRR; the subtitle-SFV storage (pass 10) always runs,
-    //        so scanner-origin AND manually-added subs stay stored even with vobsub off. ──
+    // ── 23. pyrescene --vobsub-srr parity: folder mode gates ONLY the nested-SRR generation (pass
+    //        9) on CreateVobsubSRR; the subtitle-SFV storage (pass 10) always runs, so
+    //        scanner-origin AND manually-added subs stay stored even with vobsub off. ──
 
     [Fact]
     public async Task SubtitleSfv_VobsubSrrOff_NoNestedSrr_ButScannerSfvStillStored()
     {
-        // B2 case 1: with CreateVobsubSRR off, no nested .srr is produced, but pass 10 still runs
-        // so the subtitle SFV itself stays stored — here via the scanner's own pass-10 baseline
-        // (the scan already lists it in StoredFiles). Matches pyrescene without --vobsub-srr: it
-        // still stores extra_sfvs, only skipping create_srr_for_subs.
+        // With CreateVobsubSRR off, no nested .srr is produced, but pass 10 still runs so the
+        // subtitle SFV itself stays stored — here via the scanner's own pass-10 baseline (the scan
+        // already lists it in StoredFiles). Matches pyrescene without --vobsub-srr: it still stores
+        // extra_sfvs, only skipping create_srr_for_subs.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         string nfo = Touch(Path.Combine(root, "release.nfo"));
         string subSfv = WriteSfv(Path.Combine(root, "Subs", "subs.sfv"), "subs.rar");
@@ -1048,7 +1043,7 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
     [Fact]
     public async Task SubtitleSfv_VobsubSrrOn_NestedSrrPresent_RegressionGuard()
     {
-        // B2 regression guard: the default (CreateVobsubSRR = true) still generates the nested
+        // Regression guard: the default (CreateVobsubSRR = true) still generates the nested
         // subtitle SRR before the SFV's own entry.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         string nfo = Touch(Path.Combine(root, "release.nfo"));
@@ -1067,10 +1062,10 @@ public sealed class CreatorViewModelArtifactTests : TempDirTestBase
     [Fact]
     public async Task ManualSubtitleSfv_VobsubSrrOff_SfvStillStoredExactlyOnce_NoNestedSrr()
     {
-        // B2 case 3: a MANUALLY-added subtitle SFV never reaches the scanner's pass-10, so its
-        // storage happens in GenerateSubtitleArtifactsAsync's own pass 10 — which must stay
-        // independent of the CreateVobsubSRR gate. With vobsub off, the SFV is still stored exactly
-        // once and no nested .srr is produced.
+        // A MANUALLY-added subtitle SFV never reaches the scanner's pass-10, so its storage happens
+        // in GenerateSubtitleArtifactsAsync's own pass 10 — which must stay independent of the
+        // CreateVobsubSRR gate. With vobsub off, the SFV is still stored exactly once and no nested
+        // .srr is produced.
         string root = Path.Combine(TempDir, "release-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         string manualSfv = WriteSfv(Path.Combine(TempDir, "external-subs.sfv"), "external-subs.rar");

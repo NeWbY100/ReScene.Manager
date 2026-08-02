@@ -19,7 +19,7 @@ namespace ReScene.Manager.Tests;
 /// context menu, the Open-Folder button's visibility tracks <c>LastRunSucceeded</c>, and the
 /// Stop/Close button flips state (content/style/enabled) when <c>IsRunning</c> goes false. Live
 /// clipboard copy, live auto-scroll, and the Stop command actually cancelling a run need a real
-/// owning Window/process and are the Reconstructor tab's (T4.4b) launch-smoke, not exercised here.
+/// owning Window/process and are covered by the Reconstructor tab's own launch-smoke check, not exercised here.
 /// </summary>
 public class BruteForceProgressWindowTests
 {
@@ -92,7 +92,7 @@ public class BruteForceProgressWindowTests
     [AvaloniaFact]
     public void PhaseHeading_IsPoliteLiveRegion_SoCompletionAndErrorAggregateAnnounceOnce()
     {
-        // §4a / WCAG 4.1.3: the Row-0 phase/completion heading is a Polite live region so the run's
+        // WCAG 4.1.3: the Row-0 phase/completion heading is a Polite live region so the run's
         // completion status — including the "N could not run" error aggregate baked into
         // PhaseDescription — is announced without focus, and without the per-cell grid chatter a
         // per-row live region would cause (grid Status/Result stay plain 4.1.2 content).
@@ -143,8 +143,8 @@ public class BruteForceProgressWindowTests
             grid.Columns.Select(c => c.Header).ToArray());
         Assert.True(grid.IsReadOnly);
         // Explicitly off: this was the ONE grid inheriting Avalonia's CanUserSortColumns=True
-        // default — live click-to-sort on the flat header band with no assessed affordance
-        // (peer finding); all nine grids now agree. Re-gate before enabling sorting anywhere.
+        // default — live click-to-sort on the flat header band has no assessed affordance;
+        // all nine grids now agree. Re-gate before enabling sorting anywhere.
         Assert.False(grid.CanUserSortColumns);
         Assert.Same(vm.VersionEntries, grid.ItemsSource);
 

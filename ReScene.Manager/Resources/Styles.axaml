@@ -51,14 +51,14 @@
     <Setter Property="VerticalAlignment" Value="Top" />
   </Style>
 
-  <!-- Small-window chrome (spec rev 12 §2): the Help disclosure renders FLAT at normal
+  <!-- Small-window chrome: the Help disclosure renders FLAT at normal
        size — header hidden, body pinned expanded by CompactHeightBehavior — so the page
        is pixel-identical to the pre-disclosure layout. Under .compactHeight the header
        shows and the body obeys the behavior (collapsed on entry, donation while open).
 
-       CUSTOM RE-TEMPLATE (brief's documented fallback, invoked): Fluent's stock Expander
-       carries several hardcoded floors that keep a COLLAPSED header well above the spec's
-       ~24-DIP budget regardless of style overrides layered on individual template parts —
+       CUSTOM RE-TEMPLATE: Fluent's stock Expander
+       carries several hardcoded floors that keep a COLLAPSED header well above the
+       ~24-DIP compact-header budget regardless of style overrides layered on individual template parts —
        measured: the Expander control itself defaults MinHeight 48, and its header's own
        chevron cell reserves 32 DIPs, both independent of (and un-reachable through) the
        Expander's own Padding/the header ToggleButton's own Padding/MinHeight. Overriding
@@ -68,7 +68,7 @@
        IsChecked TemplateBinding, same visibility-gated content wrapper) gives deterministic
        control instead. Zero chrome (no border/background/padding/corner radius) in either
        mode — a plain collapsible section, never a bordered card — so normal/flat mode stays
-       pixel-identical to the pre-disclosure StackPanel (criterion F). -->
+       pixel-identical to the pre-disclosure StackPanel. -->
   <Style Selector=":is(Expander).helpDisclosure">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
@@ -82,7 +82,7 @@
           <!-- Header: content sized only, no theme-imposed floor. The toggle's OWN
                accessible name mirrors whatever AutomationProperties.Name the CALLER put on
                the Expander itself (every helpDisclosure caller sets one — "Help & links" on
-               Reconstructor, "Help" elsewhere, per spec §2) — Tab lands on THIS element, a
+               Reconstructor, "Help" elsewhere) — Tab lands on THIS element, a
                separate focusable peer from the Expander's own, so it needs its own name. -->
           <ToggleButton IsChecked="{TemplateBinding IsExpanded, Mode=TwoWay}"
                         AutomationProperties.Name="{TemplateBinding (AutomationProperties.Name)}"
@@ -123,8 +123,8 @@
       <RotateTransform Angle="90" />
     </Setter>
   </Style>
-  <!-- Compact-mode-ONLY margin tightening (never touches normal mode, so criterion F's
-       pixel-parity requirement for TODAY's rendering is untouched — these rows' base margins
+  <!-- Compact-mode-ONLY margin tightening (never touches normal mode, so
+       pixel-parity for TODAY's rendering is untouched — these rows' base margins
        are pre-existing, unchanged markup). Recovers a few DIPs toward the 307 CI bound from
        rows whose own content chrome (Button padding, caption line-height) runs a little over
        the design doc's own rough per-row estimates once actually measured. -->
@@ -137,10 +137,10 @@
   <Style Selector="Grid.compactHeight DockPanel.actionBar">
     <Setter Property="Margin" Value="0" />
   </Style>
-  <!-- SRSReconstructor's pinned band (task 4): base values are today's pre-existing, unchanged
+  <!-- SRSReconstructor's pinned band: base values are today's pre-existing, unchanged
        markup (Border Padding="8,6" Margin="0,0,0,4"; separator Margin="0,4") — normal-mode
        rendering is untouched. Compact tightening closes a MEASURED gap: with the result
-       banner's own 2-line MaxLines cap genuinely in play (a11y rev-3 NEW-4), the pinned band's
+       banner's own 2-line MaxLines cap genuinely in play, the pinned band's
        natural height ran to 92 DIPs against the spec's <=75 ceiling; this recovers 20. -->
   <Style Selector="Border.resultBanner">
     <Setter Property="Padding" Value="8,6" />
@@ -156,8 +156,8 @@
   <Style Selector="Grid.compactHeight Border.pinnedSeparator">
     <Setter Property="Margin" Value="0,2" />
   </Style>
-  <!-- SampleRestorer's config band (task 5, fix round 1): the base value is ZERO — the config
-       band's own StackPanel did not exist before this task's conversion (its content was a
+  <!-- SampleRestorer's config band: the base value is ZERO — the config
+       band's own StackPanel did not exist before this conversion (its content was a
        plain, unindented DockPanel column), so zero is the genuine "unchanged from today" value,
        not merely a convenient default. The 4px right-inset (the same scrollbar-clearance
        rationale as every other converted view's own house-rule content-panel inset) applies
@@ -171,13 +171,13 @@
   </Style>
   <!-- No Expander-level MaxHeight: the behavior applies HelpBodyMaxHeight to the BODY's
        internal ScrollViewer only (a whole-control cap would squeeze the header). -->
-  <!-- Body-scroller focusability is COMPACT-SCOPED (criterion F: no new normal-mode
+  <!-- Body-scroller focusability is COMPACT-SCOPED (no new normal-mode
        Tab stop). The Reconstructor's body never takes this class-pair — its links are
        the route. ScrollViewerHomeEndKeys.Enabled closes a real platform gap (see that
        behavior's own doc): Avalonia's stock ScrollViewer.OnKeyDown wires PageUp/PageDown to
        its own paging methods but never wires Home/End to its own ScrollToHome/ScrollToEnd,
-       despite the design doc's assumption that they "just work" alongside the Page keys
-       (spec rev 12 §2). Set here (not per-view code-behind) so every task's own compact Help
+       despite the design doc's assumption that they "just work" alongside the Page keys.
+       Set here (not per-view code-behind) so every view's own compact Help
        body inherits it for free. -->
   <Style Selector="ScrollViewer.helpBody">
     <Setter Property="Focusable" Value="False" />
@@ -188,7 +188,7 @@
     <Setter Property="behaviors:ScrollViewerHomeEndKeys.Enabled" Value="True" />
   </Style>
 
-  <!-- Compact tip (a11y conditions 1/2: trimming is VISUAL-ONLY over the full bound
+  <!-- Compact tip (trimming is VISUAL-ONLY over the full bound
        text; HelpText carries it for AT; the tip is never a budget donor). Base Wrap value
        lives HERE (not as a local XAML value) so the compact override below can win — a local
        value on the element would outrank both style rules regardless of specificity. -->
@@ -625,8 +625,8 @@
   <!-- v1.9 leaf density (user-measured: old pitch 18px, new 22px). The 14px GLYPH half of this
        treatment was promoted app-wide 2026-07-29 (global CheckBox template styles above +
        CheckBoxGlyphSize token) — what stays scoped here is the DENSITY half: MinHeight 16 rows
-       (16 + 2 margin = 18px pitch), blessed as a 2.5.8 deviation for THIS dense version list
-       only ("scoped here only" — recorded in the ledger); invariants: header toggle keeps
+       (16 + 2 margin = 18px pitch), accepted as a 2.5.8 deviation scoped to THIS dense version list
+       only; invariants: header toggle keeps
        MinHeight >= 24, every leaf stays keyboard-reachable. FontSize 12 is enforcement against
        theme drift (content is 12 app-wide; see ControlContentThemeFontSize). Brushes remain
        untouched throughout, so the original contrast analysis carries. -->

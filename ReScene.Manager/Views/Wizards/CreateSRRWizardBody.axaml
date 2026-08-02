@@ -15,7 +15,7 @@
            subfolders, for RAR sets — not an exhaustive guarantee; see the scanner's SFV gating and
            skip-unreadable rules). The bold Runs match the button labels exactly (incl. the "…"). This
            caption is not in the tab path, so the same guidance also rides on each button's HelpText
-           below for screen-reader users (§4a accessibility review). -->
+           below for screen-reader users. -->
       <TextBlock Foreground="{DynamicResource ForegroundSecondary}"
                  FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,8">
@@ -28,7 +28,7 @@
       <TextBlock x:Name="WizInputHeader" Text="Release .sfv, first .rar, or folder" FontWeight="SemiBold" Margin="0,0,0,2" />
       <!-- Docked right in declaration order (rightmost first): folder Browse sits to the right of the
            file Browse. Explicit TabIndex keeps keyboard order = visual order = TextBox → Browse file
-           → Browse folder (§4a accessibility review P3#8). -->
+           → Browse folder. -->
       <DockPanel Margin="0,0,0,2">
         <Button DockPanel.Dock="Right" Content="Browse folder…" Command="{Binding BrowseInputFolderCommand}"
                 Classes="ghost" TabIndex="2"

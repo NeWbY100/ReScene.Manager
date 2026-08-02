@@ -22,8 +22,8 @@ namespace ReScene.Manager.Tests;
 /// </summary>
 /// <remarks>
 /// The <see cref="BeginnerRestoreViewModel.BulkRestorer"/> / <see cref="BeginnerRestoreViewModel.SingleRebuilder"/>
-/// sub-VMs are assigned here with inert doubles, mirroring how the T5.2 wizard controller wires them
-/// (the VM's own null-checks are defensive). This departs from the brief's assumption that leaving them
+/// sub-VMs are assigned here with inert doubles, mirroring how the wizard controller wires them
+/// (the VM's own null-checks are defensive). This departs from the assumption that leaving them
 /// null still yields zero binding errors: in practice a reflection binding whose intermediate step
 /// (<c>BulkRestorer.*</c>) is null <b>does</b> log a binding warning, so the doubles are supplied to
 /// keep the zero-binding-errors gate meaningful. On step 0 <c>Kind=Unknown</c>, so <c>IsBulk</c>/
@@ -74,7 +74,7 @@ public class RestoreWizardBodyTests
         var dispatcher = new InlineUiDispatcher();
         return new BeginnerRestoreViewModel(fileDialog)
         {
-            // Mirror the T5.2 controller: both sub-flows are wired up front; the input file later routes
+            // Mirror the controller: both sub-flows are wired up front; the input file later routes
             // to one of them. Kind stays Unknown until a file is picked, so both stay collapsed.
             BulkRestorer = new SampleRestorerViewModel(new InertSampleRestorerService(), fileDialog, dispatcher),
             SingleRebuilder = new SRSReconstructorViewModel(

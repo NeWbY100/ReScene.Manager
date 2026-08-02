@@ -25,7 +25,7 @@ public partial class SRSReconstructorView : UserControl
 
         DataContextChanged += OnDataContextChanged;
 
-        // Small-window layout degradation (spec rev 12 §1/§2): compact below 450 inner DIPs.
+        // Small-window layout degradation: compact below 450 inner DIPs.
         // x:CompileBindings="False" means x:Name elements are NOT wired to auto-generated fields
         // here (same as every other ported view in this project — see SRSCreatorView's own
         // note); resolved once via FindControl instead.

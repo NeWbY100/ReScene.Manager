@@ -5,14 +5,14 @@ using ReScene.RAR;
 namespace ReScene.App.Core.Tests;
 
 /// <summary>
-/// Task 7's test matrix (design plan 2026-07-19-multiset-srr-creation.md L1043-1064): the §2d
-/// stored-file chain — nfo/m3u/proof-images/proof-RARs/log/cue/pre-existing-srs/fix-RAR/input-SFV
-/// passes, one Fact per row. Extends <see cref="ReleaseScannerMainSetTests"/>/
-/// <see cref="ReleaseScannerMediaTests"/> — none of the §2a-§2c mechanics are re-tested here.
-/// Release folder names deliberately avoid '-' (unlike the "Some.Release-GRP" convention used by
-/// Tasks 5-6's tests) so <c>similar_to_good_name</c>'s full-path group-name-fallback split (which
-/// operates on the WHOLE path, not just the image's own basename) can never accidentally bleed
-/// into the release directory's own name.
+/// Test matrix for the stored-file chain — nfo/m3u/proof-images/proof-RARs/log/cue/
+/// pre-existing-srs/fix-RAR/input-SFV passes, one Fact per row (see
+/// docs/superpowers/plans/2026-07-19-multiset-srr-creation.md). Extends
+/// <see cref="ReleaseScannerMainSetTests"/>/<see cref="ReleaseScannerMediaTests"/> — none of their
+/// mechanics are re-tested here. Release folder names deliberately avoid '-' (unlike the
+/// "Some.Release-GRP" convention used elsewhere) so <c>similar_to_good_name</c>'s full-path
+/// group-name-fallback split (which operates on the WHOLE path, not just the image's own basename)
+/// can never accidentally bleed into the release directory's own name.
 /// </summary>
 public class ReleaseScannerStoredTests : TempDirTestBase
 {
@@ -87,7 +87,7 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         return bytes;
     }
 
-    // --- nfo pass (excerpt: generate_srr L608-617) -----------------------------------------------
+    // --- nfo pass (generate_srr) ------------------------------------------------------------------
 
     [Fact]
     public void Nfo_ImdbAndTvmazeExcluded_CaseInsensitive_OthersStored()
@@ -105,8 +105,8 @@ public class ReleaseScannerStoredTests : TempDirTestBase
     [Fact]
     public void NoNfo_SizeExactlyEight_Skipped_OffByOneStored()
     {
-        // excerpt: generate_srr L611-614 — a "no.nfo" that IS exactly 8 bytes (the placeholder
-        // text "no.nfo\r\n"-ish content) is skipped; any other size is stored.
+        // generate_srr: a "no.nfo" that IS exactly 8 bytes (the placeholder text "no.nfo\r\n"-ish
+        // content) is skipped; any other size is stored.
         string root = CreateRoot("SomeRelease");
         string skip = WriteSized(Path.Combine(root, "A", "no.nfo"), 8);
         string store = WriteSized(Path.Combine(root, "B", "no.nfo"), 7);
@@ -120,9 +120,9 @@ public class ReleaseScannerStoredTests : TempDirTestBase
     [Fact]
     public void NoNfo_SubstringVariants_EightBytes_Skipped_LongerStored()
     {
-        // Fix F1: excerpt L611 `in ("no.nfo")` is a parenthesized STRING (no comma), so Python's
-        // `in` is SUBSTRING membership, not equality — basenames ".nfo" and "o.nfo" (both
-        // substrings of "no.nfo") also enter the size==8 skip, not just "no.nfo" itself.
+        // generate_srr's `in ("no.nfo")` is a parenthesized STRING (no comma), so Python's `in` is
+        // SUBSTRING membership, not equality — basenames ".nfo" and "o.nfo" (both substrings of
+        // "no.nfo") also enter the size==8 skip, not just "no.nfo" itself.
         string root = CreateRoot("SomeRelease");
         string dotNfoSkip = WriteSized(Path.Combine(root, "A", ".nfo"), 8);
         string oNfoSkip = WriteSized(Path.Combine(root, "B", "o.nfo"), 8);
@@ -154,8 +154,7 @@ public class ReleaseScannerStoredTests : TempDirTestBase
     [Fact]
     public void Log_BlacklistedName_NotStored_NonBlacklistedStored()
     {
-        // excerpt: generate_srr L626-631 — exact blacklist (case-insensitive) + a leading-dot
-        // hidden-file check.
+        // generate_srr: exact blacklist (case-insensitive) + a leading-dot hidden-file check.
         string root = CreateRoot("SomeRelease");
         Touch(Path.Combine(root, "rushchk.log"));
         Touch(Path.Combine(root, ".upchk.log"));
@@ -168,7 +167,7 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         Assert.Equal([kept], result.StoredFiles);
     }
 
-    // --- proof images: keyword bypass (excerpt: filter_proof_image_files L95-112) -----------------
+    // --- proof images: keyword bypass (filter_proof_image_files) -----------------------------------
 
     [Fact]
     public void KeywordPath_ProofFolderJpg_StoredBeforeAlwaysSkip()
@@ -183,7 +182,7 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         Assert.Equal([img], result.StoredFiles);
     }
 
-    // --- proof images: always_skip (excerpt L114-127) -----------------------------------------------
+    // --- proof images: always_skip -------------------------------------------------------------------
 
     [Fact]
     public void AlwaysSkip_AllFivePredicates_Skipped()
@@ -214,7 +213,7 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         Assert.Equal([img], result.StoredFiles);
     }
 
-    // --- proof images: store_rls_root prefix branch (excerpt L135-136) ------------------------------
+    // --- proof images: store_rls_root prefix branch --------------------------------------------------
 
     [Fact]
     public void ZeroPrefixedImage_StoredRegardlessOfSize()
@@ -227,7 +226,7 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         Assert.Equal([img], result.StoredFiles);
     }
 
-    // --- proof images: similar_to_good_name (excerpt L172-196) -------------------------------------
+    // --- proof images: similar_to_good_name -----------------------------------------------------
 
     [Fact]
     public void SimilarToSfv_TenCharSharedPrefix_Stored()
@@ -285,8 +284,9 @@ public class ReleaseScannerStoredTests : TempDirTestBase
     [Fact]
     public void SimilarToSfv_NineCharSharedPrefix_BoundaryNegative_Skipped()
     {
-        // "grp-movie" is exactly 9 characters — one short of the 10-character slice the excerpt
-        // compares, so this must NOT match despite the obvious visual similarity.
+        // "grp-movie" is exactly 9 characters — one short of the 10-character slice
+        // similar_to_good_name compares, so this must NOT match despite the obvious visual
+        // similarity.
         string root = CreateRoot("SomeRelease");
         WriteSfv(Path.Combine(root, "grp-movie.sfv"), "grp-movie.rar");
         string img = WriteSized(Path.Combine(root, "grp-movie-front.jpg"), 150_000);
@@ -296,7 +296,7 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         Assert.DoesNotContain(img, result.StoredFiles);
     }
 
-    // --- proof images: fixed_resolution_cover (excerpt L238-244) ------------------------------------
+    // --- proof images: fixed_resolution_cover ---------------------------------------------------------
 
     [Fact]
     public void FixedResolutionCover_630x1200_Skipped()
@@ -316,12 +316,12 @@ public class ReleaseScannerStoredTests : TempDirTestBase
     [Fact]
     public void FixedResolutionCover_MarkerFirstJpeg_DivergesFromPyrescene_CurrentlySkipped()
     {
-        // Fix F3 (pinning test): a bare-SOI JPEG with an SOF0 segment but no JFIF/Exif/ICC_PROFILE/
-        // Adobe marker anywhere — real pyrescene's imghdr would NOT recognize this as a JPEG at
-        // all, so fixed_resolution_cover would report False and pyrescene would STORE it. This
-        // scanner's simplified "any SOI-starting file is a JPEG" probe DOES recognize it and skips
-        // it as a fixed-resolution cover — a deliberate, documented [DIVERGENCE: simplified]
-        // (see TryGetImageSize's remarks). This test locks the current, intentional behavior.
+        // A bare-SOI JPEG with an SOF0 segment but no JFIF/Exif/ICC_PROFILE/Adobe marker anywhere —
+        // real pyrescene's imghdr would NOT recognize this as a JPEG at all, so
+        // fixed_resolution_cover would report False and pyrescene would STORE it. This scanner's
+        // simplified "any SOI-starting file is a JPEG" probe DOES recognize it and skips it as a
+        // fixed-resolution cover — a deliberate, documented [DIVERGENCE: simplified] (see
+        // TryGetImageSize's remarks). This pinning test locks the current, intentional behavior.
         string root = CreateRoot("SomeRelease");
         WriteSfv(Path.Combine(root, "grp-movienight.sfv"), "grp-movienight.rar");
         string img = WriteSized(
@@ -332,7 +332,7 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         Assert.DoesNotContain(img, result.StoredFiles);
     }
 
-    // --- proof images: size boundary (excerpt L140, strictly greater than 100000) -------------------
+    // --- proof images: size boundary (strictly greater than 100000) ---------------------------------
 
     [Fact]
     public void SizeBoundary_ExactlyOneHundredThousand_Skipped_OneMoreByte_Stored()
@@ -388,7 +388,7 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         Assert.Equal([png, jpg], result.StoredFiles);
     }
 
-    // --- proof RARs: independent pass (excerpt: filter_proof_rar_files L204-211) --------------------
+    // --- proof RARs: independent pass (filter_proof_rar_files) ---------------------------------------
 
     [Fact]
     public void ProofRar_ReaderReportsImage_Stored()
@@ -433,17 +433,17 @@ public class ReleaseScannerStoredTests : TempDirTestBase
     [Fact]
     public void ProofRar_AlreadyStoredByRule4_NotDoubleAdded()
     {
-        // Task-5-dedup: a Proof/p.rar already stored by rule 4 (its linked singleton proof SFV
-        // resolves to an image-ending RAR) must not be added a second time by the independent
+        // A Proof/p.rar already stored by rule 4 (its linked singleton proof SFV resolves to an
+        // image-ending RAR) must not be added a second time by the independent
         // filter_proof_rar_files pass, even though it independently also matches "proof"-in-path
         // plus AnyImage.
         //
-        // FINAL order (D1 fix, excerpt L601-603 clear-and-rebuild + tail L1240-1251 reorder): rule
-        // 4's proof RAR joins the proof-RAR CATEGORY position (not the front of the list); the
-        // proof SFV is picked up by pass-10's final-SFV pass (also not the front — simply never
-        // added to `main`). With only these two entries in this tiny tree, the category-ordered
-        // result is `[rar, sfv]` before any reorder is even needed; the pass-10 reorder confirms it
-        // stays that way (the rar's stem matches the sfv, so it would be relocated here regardless).
+        // Final order: rule 4's proof RAR joins the proof-RAR CATEGORY position (not the front of
+        // the list); the proof SFV is picked up by pass-10's final-SFV pass (also not the front —
+        // simply never added to `main`). With only these two entries in this tiny tree, the
+        // category-ordered result is `[rar, sfv]` before any reorder is even needed; the pass-10
+        // reorder confirms it stays that way (the rar's stem matches the sfv, so it would be
+        // relocated here regardless).
         string root = CreateRoot("SomeRelease");
         string sfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
         string rar = Touch(Path.Combine(root, "Proof", "p.rar"));
@@ -459,13 +459,12 @@ public class ReleaseScannerStoredTests : TempDirTestBase
     [Fact]
     public void ProofRarAndSfv_WithNfo_LandInCorrectCategoryPositions_NotPreSeededAtFront()
     {
-        // D1 (codex #1): before the fix, rule-4 pre-seeded the proof sfv+rar at the FRONT of
-        // `stored` (during SFV classification, which runs before any category pass) — for a tree
-        // with an nfo too, that produced [rar, sfv, nfo], contradicting the excerpt's category
-        // order (nfo is category 1; proof rar is category 3; the sfv, being "not main", is only
-        // ever picked up by the FINAL sfv pass, category 10). The pass-10 reorder alone can't fix
-        // this: it only relocates a mover relative to its sfv, it can't relocate the sfv (or the
-        // whole pair) relative to nfo.
+        // Before this fix, rule 4 pre-seeded the proof sfv+rar at the FRONT of `stored` (during SFV
+        // classification, which runs before any category pass) — for a tree with an nfo too, that
+        // produced [rar, sfv, nfo], contradicting generate_srr's category order (nfo is category 1;
+        // proof rar is category 3; the sfv, being "not main", is only ever picked up by the FINAL
+        // sfv pass, category 10). The pass-10 reorder alone can't fix this: it only relocates a
+        // mover relative to its sfv, it can't relocate the sfv (or the whole pair) relative to nfo.
         string root = CreateRoot("SomeRelease");
         string nfo = Touch(Path.Combine(root, "release.nfo"));
         string sfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
@@ -478,7 +477,7 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         Assert.Equal([nfo, rar, sfv], result.StoredFiles);
     }
 
-    // --- fix RAR (excerpt: is_storable_fix L516-524, generate_srr L784-798) -------------------------
+    // --- fix RAR (is_storable_fix, generate_srr) ------------------------------------------------------
 
     [Fact]
     public void FixRar_StorableFixName_SingleEntrySfv_Stored()
@@ -508,7 +507,7 @@ public class ReleaseScannerStoredTests : TempDirTestBase
     [Fact]
     public void FixRar_PartStyleFirstVolume_Part01_Stored()
     {
-        // Fix F2: a new-style ".partNN.rar" entry with N == 1 IS a true first volume.
+        // A new-style ".partNN.rar" entry with N == 1 IS a true first volume.
         string root = CreateRoot("Movie.FIX-GRP");
         WriteSfv(Path.Combine(root, "x.sfv"), "x.part01.rar");
         string rar = Touch(Path.Combine(root, "x.part01.rar"));
@@ -521,12 +520,12 @@ public class ReleaseScannerStoredTests : TempDirTestBase
     [Fact]
     public void FixRar_PartStyleNonFirstVolume_Part02_NoPart01OnDisk_NotStored()
     {
-        // Fix F2: ReleaseScanner.cs previously accepted this — Path.GetExtension("x.part02.rar")
-        // is ".rar" and RARVolumeIdentifier.IsRARVolume passes it, so a non-first ".partNN.rar"
-        // slipped through. pyrescene's first_rars identifies "first" from the SFV's LISTED ENTRY
-        // NAME alone (never by scanning the disk for a lower-numbered sibling), so "part02" must
-        // be rejected purely by its own name — this test deliberately does NOT create
-        // "x.part01.rar" on disk, proving the rejection isn't a disk chain-walk in disguise.
+        // ReleaseScanner.cs previously accepted this — Path.GetExtension("x.part02.rar") is ".rar"
+        // and RARVolumeIdentifier.IsRARVolume passes it, so a non-first ".partNN.rar" slipped
+        // through. pyrescene's first_rars identifies "first" from the SFV's LISTED ENTRY NAME alone
+        // (never by scanning the disk for a lower-numbered sibling), so "part02" must be rejected
+        // purely by its own name — this test deliberately does NOT create "x.part01.rar" on disk,
+        // proving the rejection isn't a disk chain-walk in disguise.
         string root = CreateRoot("Movie.FIX-GRP");
         WriteSfv(Path.Combine(root, "x.sfv"), "x.part02.rar");
         string rar = Touch(Path.Combine(root, "x.part02.rar"));
@@ -536,7 +535,7 @@ public class ReleaseScannerStoredTests : TempDirTestBase
         Assert.DoesNotContain(rar, result.StoredFiles);
     }
 
-    // --- pass-10 skeleton: input SFVs appended ------------------------------------------------------
+    // --- generate_srr's pass-10: input SFVs appended ------------------------------------------------
 
     [Fact]
     public void InputSfvs_Appended_AfterAllOtherCategories()
@@ -553,11 +552,11 @@ public class ReleaseScannerStoredTests : TempDirTestBase
     [Fact]
     public void MainSfv_DeferredToBottom_BehindANonMainProofSfv()
     {
-        // E1(a) (codex #1, second round; excerpt L1195-1204 "add RAR sfv files at the bottom"):
-        // pass-10 must NOT store every sfv in plain traversal order — non-main sfvs (here, the
-        // Proof/p.sfv, excluded as proof material by rule 4) are appended FIRST, and MAIN sfvs are
-        // DEFERRED to the very bottom. "CD1" sorts before "Proof" ordinally, so a plain-traversal
-        // bug would put main.sfv first; the correct, deferred order puts it last.
+        // generate_srr's pass-10 ("add RAR sfv files at the bottom") must NOT store every sfv in
+        // plain traversal order — non-main sfvs (here, the Proof/p.sfv, excluded as proof material
+        // by rule 4) are appended FIRST, and MAIN sfvs are DEFERRED to the very bottom. "CD1" sorts
+        // before "Proof" ordinally, so a plain-traversal bug would put main.sfv first; the correct,
+        // deferred order puts it last.
         string root = CreateRoot("SomeRelease");
         string mainSfv = WriteSfv(Path.Combine(root, "CD1", "main.sfv"), "main.rar");
         string proofSfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");

@@ -125,15 +125,15 @@ public class ScrollReachabilityTests
 
             Assert.True(unreachable.Count == 0, string.Join("; ", unreachable));
 
-            // Small-window-layout Task 7 audit: SettingsWindow owns its own MinWidth 560 /
+            // Small-window-layout audit: SettingsWindow owns its own MinWidth 560 /
             // MinHeight 360 and its pages already scroll (the fact above proves the LAST control
-            // is reachable by scroll). Criterion C, applied to Settings, is the remaining half of
-            // the audit — a genuine keyboard Tab walk from each page's first control must never
-            // leave the window at that same minimum. No compact machinery (CompactHeightBehavior)
+            // is reachable by scroll). Verifying that a genuine keyboard Tab walk from each page's
+            // first control never leaves the window at that same minimum is the remaining half of
+            // the audit. No compact machinery (CompactHeightBehavior)
             // is added here — this proves none is needed; a failure here means the audit's
             // premise is wrong and the spec needs a change, not a silent workaround.
             //
-            // Whole-branch review (MAJOR): the original retrofit called AssertTabWalkStaysVisible
+            // The original retrofit called AssertTabWalkStaysVisible
             // with no expected-stop sets (completeness unchecked — a stable-but-early trap could
             // pass) and no reverse anchor (the reverse pass re-used the forward sentinel, which is
             // first-in-scope on every one of these four tabs, so it was a trivial no-op — see each
@@ -203,8 +203,8 @@ public class ScrollReachabilityTests
         Button save = ResolveSaveButton(window);
         Button browseOutputDir = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseOutputDirCommand));
 
-        // Neither path TextBox carries an x:Name or a distinguishing XAML attribute (the
-        // review's own citation) — resolved instead via a unique marker value written into each
+        // Neither path TextBox carries an x:Name or a distinguishing XAML attribute
+        // — resolved instead via a unique marker value written into each
         // bound VM property, then matched back off the realized TextBox's own Text: a
         // reference-independent identity exactly like the command references above, never
         // derived from the walk.

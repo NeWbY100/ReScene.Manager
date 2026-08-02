@@ -22,13 +22,13 @@ using ReScene.SRS;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Small-window layout degradation tests for <see cref="SRSCreatorView"/> (spec rev 12; task
-/// brief numbers: threshold 520, config row AutoToStar 110 compact / 80 help-open, log 80, Help
-/// body MaxHeight 40, compact CI bound <see cref="CompactInvariantRig.CiBound"/> == 307, pinned
-/// band ceiling 75). Adapts <c>ReconstructorCompactTests</c>' five-part shape (Task 2's template)
-/// to this view's simpler, sub-tab-free three-band structure: no splitter section (this view has
-/// none), and a NEW pinned-band section (#5) asserting the actual defect this task fixes directly
-/// — the Create SRS button's bounds while band 1 is scrolled to both extremes.
+/// Small-window layout degradation tests for <see cref="SRSCreatorView"/> (threshold 520, config
+/// row AutoToStar 110 compact / 80 help-open, log 80, Help body MaxHeight 40, compact CI bound
+/// <see cref="CompactInvariantRig.CiBound"/> == 307, pinned band ceiling 75). Adapts
+/// <c>ReconstructorCompactTests</c>' five-part shape to this view's simpler, sub-tab-free
+/// three-band structure: no splitter section (this view has none), and a NEW pinned-band section
+/// (#5) asserting the actual defect this change fixes directly — the Create SRS button's bounds
+/// while band 1 is scrolled to both extremes.
 /// </summary>
 public class SRSCreatorCompactTests
 {
@@ -77,11 +77,11 @@ public class SRSCreatorCompactTests
     private const double ExpandedInner = 521;  // comfortably above Threshold
 
     /// <summary>
-    /// The brief's "corrected feedback inventory" worst case, forced together: ISO selection
-    /// visible, all three FieldStatusLines non-None (with realistic, wrapping-length messages —
-    /// FieldStatusLine's message TextBlock wraps, so a short message would understate the floor),
-    /// and Cancel + ProgressMessage + ProgressBar all visible. Used by every invariant/no-clip
-    /// check so "worst case" means the same thing everywhere it is asserted.
+    /// The worst-case layout, forced together: ISO selection visible, all three FieldStatusLines
+    /// non-None (with realistic, wrapping-length messages — FieldStatusLine's message TextBlock
+    /// wraps, so a short message would understate the floor), and Cancel + ProgressMessage +
+    /// ProgressBar all visible. Used by every invariant/no-clip check so "worst case" means the
+    /// same thing everywhere it is asserted.
     /// </summary>
     private static void ForceWorstCase(SRSCreatorViewModel vm)
     {
@@ -94,7 +94,7 @@ public class SRSCreatorCompactTests
         vm.ProgressMessage = "Profiling sample...";
     }
 
-    // ── 1. Invariant (spec §1's four checks; CompactInvariantRig) ────
+    // ── 1. Invariant (the four one-sum checks; CompactInvariantRig) ────
 
     [AvaloniaFact]
     public void Invariant_ExpandedModeFloor_UnderThreshold()
@@ -262,9 +262,9 @@ public class SRSCreatorCompactTests
     }
 
     /// <summary>
-    /// Codex finding (round 3, BLOCKING): fix round 2's reverse check derived its expectation
-    /// FROM the forward walk's own observation (<c>forwardOrder.Reverse()</c>) — a self-
-    /// referential, non-discriminating oracle. This view has THREE identically-described
+    /// A previous version of this reverse check derived its expectation FROM the forward walk's
+    /// own observation (<c>forwardOrder.Reverse()</c>) — a self-referential, non-discriminating
+    /// oracle. This view has THREE identically-described
     /// "Browse" buttons and TWO identically-described unnamed TextBoxes (MainFilePath, AppName);
     /// if any two same-described siblings were genuinely swapped in the tree, the forward walk
     /// would observe them in the swapped order, the derived reverse expectation would inherit
@@ -336,7 +336,7 @@ public class SRSCreatorCompactTests
 
             // REVERSE: anchored at the forward walk's own LAST stop (the unambiguous boundary),
             // never a presumed starting point. Checked against the INDEPENDENT order's own
-            // reversal — NOT forwardOrder.Reverse() (round 3's fixed finding) — so a genuine
+            // reversal — NOT forwardOrder.Reverse() — so a genuine
             // same-described-sibling swap cannot hide behind a self-referential oracle. Confirmed
             // by a real run: a single scope means the reverse walk genuinely retraces the whole
             // independent order and lands back on its first stop — the actual, empirical proof
@@ -397,7 +397,7 @@ public class SRSCreatorCompactTests
     /// the three identically-described "Browse" positions WITHIN THAT INDEPENDENT EXPECTATION
     /// (never within the observed walk) — simulating a hypothetical regression that reordered
     /// them in the tree while every description stayed the same, which a description-based
-    /// comparison (or fix round 2's forward-derived reverse oracle) could never catch. Asserts
+    /// comparison (or a forward-derived reverse oracle) could never catch. Asserts
     /// the mismatch fails, naming the specific position, then confirms the UNTAMPERED
     /// expectation still passes against the same real walk (the failure above was caused by the
     /// tampering, not a real defect).
@@ -553,10 +553,10 @@ public class SRSCreatorCompactTests
             Assert.True(inputTextBox.IsFocused,
                 "restoring from a focused compact body must relocate focus to the wired RestoreFocusTarget (InputTextBox), not strand it");
 
-            // A11y gate NEW-1: the resize-driven focus-recovery target must have an accessible
-            // name (WCAG 4.1.2) — same resolution technique as SampleRestorer's SRRFileTextBox
-            // and Creator's OutputTextBox (the real AutomationPeer, not the raw attached
-            // property), so this proves what a screen reader actually announces on landing here.
+            // The resize-driven focus-recovery target must have an accessible name (WCAG 4.1.2)
+            // — same resolution technique as SampleRestorer's SRRFileTextBox and Creator's
+            // OutputTextBox (the real AutomationPeer, not the raw attached property), so this
+            // proves what a screen reader actually announces on landing here.
             Assert.Equal("Sample file path", ControlAutomationPeer.CreatePeerForElement(inputTextBox).GetName());
 
             window.Height -= 250;
@@ -625,9 +625,9 @@ public class SRSCreatorCompactTests
     }
 
     /// <summary>
-    /// Codex round-5's wording (design doc line 5/201): Avalonia's ScrollViewer handles PAGE
-    /// keys, not arrows. All four built-ins exercised with genuine key input against a REAL,
-    /// attached ScrollViewer — never a synthetic Offset-setter poke.
+    /// Avalonia's ScrollViewer handles PAGE keys, not arrows. All four built-ins exercised with
+    /// genuine key input against a REAL, attached ScrollViewer — never a synthetic Offset-setter
+    /// poke.
     /// <para>
     /// MEASURED: this view's actual intro prose (172 characters) renders at ~35 DIPs at the
     /// app's own enforced minimum width (<c>MainWindow.MinWidth="700"</c>, confirmed in
@@ -691,13 +691,13 @@ public class SRSCreatorCompactTests
     // ── 5. Pinned band (the defect this task exists to fix) ───────────
 
     /// <summary>
-    /// Directly asserts the defect the whole task exists to fix: with band 1 (config)
+    /// Directly asserts the defect this change exists to fix: with band 1 (config)
     /// independently scrolled to its top AND its bottom extreme, the pinned Create SRS button's
     /// bounds — translated into window coordinates — stay fully inside the window the entire
     /// time, with Cancel/ProgressMessage/ProgressBar all forced visible (the worst case for the
     /// pinned band's own height). Pre-change (today's DockPanel), the equivalent button
-    /// collapsed to a zero-height sliver at the very bottom edge under these exact conditions
-    /// (measured red-phase evidence — see task report).
+    /// collapsed to a zero-height sliver at the very bottom edge under these exact conditions —
+    /// this test is verified to fail against that pre-change layout.
     /// </summary>
     [AvaloniaFact]
     public void PinnedActionBand_CreateSRSButtonStaysWithinWindow_BandOneScrolledToTopAndBottom()
@@ -734,10 +734,9 @@ public class SRSCreatorCompactTests
     /// <summary>
     /// A degenerate (zero-width or zero-height) control translates to a single point, which
     /// trivially satisfies any containment check — exactly the pre-change defect (the Create SRS
-    /// button collapsing to <c>Height=0</c>, see the task report's red evidence) would have
-    /// slipped past a containment-only check. Effective visibility and a positive size are
-    /// asserted FIRST, unconditionally, so a collapsed/invisible control fails outright instead
-    /// of being reported as "contained".
+    /// button collapsing to <c>Height=0</c>) would have slipped past a containment-only check.
+    /// Effective visibility and a positive size are asserted FIRST, unconditionally, so a
+    /// collapsed/invisible control fails outright instead of being reported as "contained".
     /// </summary>
     private static void AssertFullyWithinWindow(Control control, Window window)
     {
@@ -765,17 +764,17 @@ public class SRSCreatorCompactTests
     /// "Stretch" on the Expander — see the view's own XAML comment). Two figures, kept distinct:
     /// (1) the intro TextBlock's OWN inset — measured from the TextBlock itself, 4 DIPs, the
     /// documented "per house rule" margin; (2) the PIXEL comparison, which captures the FULL
-    /// HOSTED ROW (<c>newRow0</c>, the Expander) rather than the narrower TextBlock — round-3
-    /// codex finding: comparing only the cropped-to-672 inner TextBlock silently excluded the
-    /// 4-DIP trailing strip INSIDE the Expander's own bounds from any scrutiny ("full-row
-    /// reference parity remains unproven"). With the hug-bug fixed, <c>newRow0</c> itself is the
+    /// HOSTED ROW (<c>newRow0</c>, the Expander) rather than the narrower TextBlock: comparing
+    /// only the cropped-to-672 inner TextBlock would silently exclude the 4-DIP trailing strip
+    /// INSIDE the Expander's own bounds from any scrutiny — full-row reference parity would
+    /// remain unproven. With the hug-bug fixed, <c>newRow0</c> itself is the
     /// SAME 676 width as old's own natural width (asserted below, not assumed), so the full row —
     /// including that trailing strip — is genuinely compared byte-for-byte, no width-based crop.
     /// Uses <c>RenderTargetBitmap</c> + <c>CopyPixels</c>, the same technique as Reconstructor's
-    /// own retro-hardened version and HexViewControlTests — geometry alone cannot catch a shifted
+    /// own hardened version and HexViewControlTests — geometry alone cannot catch a shifted
     /// glyph, a recolored brush, or a stray border inside the surviving region.
     /// <para>
-    /// Round 4 removed the last exclusion pathway rather than merely leaving it unused: there is
+    /// The last exclusion pathway was removed entirely rather than merely left unused: there is
     /// no mask parameter any more, no crop and no intersection, and the two captures must
     /// rasterise to the SAME integer pixel size or the test fails naming both
     /// (<see cref="AssertFullRasterPixelIdentity"/>). MEASURED: both sides lay out at exactly
@@ -807,10 +806,9 @@ public class SRSCreatorCompactTests
             // 4-DIP figure below), but the PIXEL comparison captures the FULL HOSTED ROW
             // (newRow0, the Expander) — not the cropped-to-672 descendant TextBlock. Capturing
             // only the inner TextBlock would silently exclude the 4-DIP trailing strip inside
-            // the Expander's own bounds from ANY scrutiny (round-3 codex finding: "the old-only
-            // strip is cropped... full-row reference parity remains unproven") — that strip IS
-            // part of what a user sees, and a real defect confined to it (a stray border, wrong
-            // background) would never be caught by comparing only the narrower inner control.
+            // the Expander's own bounds from ANY scrutiny — that strip IS part of what a user
+            // sees, and a real defect confined to it (a stray border, wrong background) would
+            // never be caught by comparing only the narrower inner control.
             TextBlock newCaption = newRow0.GetVisualDescendants().OfType<TextBlock>().Single();
             Size newCaptionSize = newCaption.Bounds.Size;
 
@@ -837,11 +835,11 @@ public class SRSCreatorCompactTests
 
                 // The hosted ROW itself (the Expander, post-hug-bug-fix) is now the SAME 676
                 // width as old's own natural width — MEASURED, not assumed: this is exactly what
-                // the earlier "0.0 narrowing when comparing newRow0 directly" finding already
+                // the earlier "0.0 narrowing when comparing newRow0 directly" measurement already
                 // established. This is the readable DIP-level statement of that claim; it is NOT
-                // what licenses the pixel comparison below (round-4 codex finding: a rounded-DIP
-                // equality can hide a whole-raster-column disagreement). AssertFullRasterPixelIdentity
-                // re-derives and enforces agreement itself, exactly, in integer pixels.
+                // what licenses the pixel comparison below (a rounded-DIP equality can hide a
+                // whole-raster-column disagreement). AssertFullRasterPixelIdentity re-derives and
+                // enforces agreement itself, exactly, in integer pixels.
                 Assert.Equal(oldSize.Width, newRowSize.Width, precision: 0);
 
                 AssertFullRasterPixelIdentity(oldRow0, oldSize, newRow0, newRowSize);
@@ -854,11 +852,11 @@ public class SRSCreatorCompactTests
     /// <summary>
     /// Proves <see cref="AssertFullRasterPixelIdentity"/>'s size gate genuinely DISCRIMINATES —
     /// that a capture-size disagreement now fails loudly instead of silently shrinking the
-    /// compared region to the intersection, which is exactly what the round-4 codex finding said
-    /// could go unnoticed ("rounded width equality plus <c>Floor(Math.Min(...))</c> can silently
-    /// omit a terminal raster column/row; full-buffer parity remains unproven"). Two rounds
-    /// before this one each reported "byte-for-byte, zero excluded" with that pathway still open,
-    /// so the claim is made executable here rather than argued.
+    /// compared region to the intersection, which could otherwise go unnoticed ("rounded width
+    /// equality plus <c>Floor(Math.Min(...))</c> can silently omit a terminal raster column/row;
+    /// full-buffer parity remains unproven"). Earlier versions of this check each reported
+    /// "byte-for-byte, zero excluded" with that pathway still open, so the claim is made
+    /// executable here rather than argued.
     /// <para>
     /// Uses the REAL pair of controls the frame-rig test compares and perturbs only the SIZE
     /// handed to the helper, by a sub-DIP amount chosen (from the measured geometry, not
@@ -957,7 +955,7 @@ public class SRSCreatorCompactTests
     /// in) and requires true byte-for-byte identity of the ENTIRE buffer on BOTH sides. There is
     /// no mask, no crop, no intersection and no offset: every byte of both captures participates.
     /// <para>
-    /// Round-4 codex finding, and the reason this is written the way it is: the previous version
+    /// The reason this is written the way it is: the previous version
     /// checked size agreement only at ROUNDED DIP granularity
     /// (<c>Assert.Equal(w1, w2, precision: 0)</c>) and then derived its comparison region from
     /// <c>Floor(Math.Min(...))</c>. Those two facts combine into a silent exclusion pathway — a
@@ -1053,9 +1051,9 @@ public class SRSCreatorCompactTests
     }
 
     // ── Fixtures (captured from real, green CompactViewRig.CaptureTabOrderControls runs against
-    // this task's finished implementation, WITH Create SRS enabled — see task report for the
-    // capture method). Each entry is CompactViewRig.Describe's own format (real automation peer
-    // name plus x:Name, reported separately — see its own doc) — a human-readable regression net
+    // the finished view, WITH Create SRS enabled). Each entry is CompactViewRig.Describe's own
+    // format (real automation peer name plus x:Name, reported separately — see its own doc) — a
+    // human-readable regression net
     // (catches renames, additions, removals), NOT the discriminating check itself. Same-typed
     // siblings that describe identically (this view's three "Browse" buttons, two unnamed
     // TextBoxes) are disambiguated by AssertTabWalk's OWN independent, reference-based checks
@@ -1090,7 +1088,7 @@ public class SRSCreatorCompactTests
     ];
 
     /// <summary>
-    /// Compact order (spec §2): disclosure header toggle → (body skipped: Help starts collapsed
+    /// Compact order: disclosure header toggle → (body skipped: Help starts collapsed
     /// per condition 5, so the plain-prose body is IsVisible=false and correctly excluded from
     /// Tab order) → identical tail to normal mode (this walk starts one stop earlier, at the
     /// header toggle, rather than at Sample File's Browse button — likewise PROVEN first here by

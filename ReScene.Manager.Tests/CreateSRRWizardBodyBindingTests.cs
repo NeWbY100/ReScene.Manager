@@ -14,12 +14,12 @@ using ReScene.SRS;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Task 10 folder-input chrome on the Beginner "Create an SRR" wizard step 0
+/// Folder-input chrome on the Beginner "Create an SRR" wizard step 0
 /// (<see cref="CreateSRRWizardBody"/>): the new "Browse folder…" button wired to
 /// <c>BrowseInputFolderCommand</c>, the detected-sets <see cref="ItemsControl"/> bound to
-/// <c>DetectedSets</c>/<c>RelativeName</c>, and the §4a accessibility contract (accessible name on
+/// <c>DetectedSets</c>/<c>RelativeName</c>, and accessible-name coverage (accessible name on
 /// the input TextBox via <c>LabeledBy</c>, Label-in-Name on the folder button). Headless binding
-/// assertions only — runtime screen-reader announcement is Task 11.
+/// assertions only — runtime screen-reader announcement is out of scope here.
 /// </summary>
 public class CreateSRRWizardBodyBindingTests
 {

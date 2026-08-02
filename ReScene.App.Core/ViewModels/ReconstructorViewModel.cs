@@ -243,7 +243,7 @@ public partial class ReconstructorViewModel : ViewModelBase
         // async scan for this folder. Otherwise a config's pending version selection applied right
         // after this (the mapper sets WinRARPath, then LoadPendingVersionSelection) would be consumed
         // by ApplyReconcile against the STALE previous scan and lost before the new folder's scan
-        // lands, clearing the restored major toggles too. See audit #39.
+        // lands, clearing the restored major toggles too.
         HasScannedVersions = false;
         _scanToken++;
         TriggerVersionScan();
@@ -1680,7 +1680,7 @@ public partial class ReconstructorViewModel : ViewModelBase
         try
         {
             // Legend for the [P1]/[P2] provenance tags on engine phase lines — logged live (not only in
-            // the saved file) so a reader of the on-screen log can decode the tags (§4a).
+            // the saved file) so a reader of the on-screen log can decode the tags.
             Log(LogTarget.System, "[P1] = Phase 1 (comment filtering), [P2] = Phase 2 (RAR creation)");
             Log(LogTarget.System, "Starting brute-force...");
             Log(LogTarget.System, $"WinRAR: {WinRARPath}");

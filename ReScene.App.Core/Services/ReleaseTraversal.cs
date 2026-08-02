@@ -1,10 +1,10 @@
 namespace ReScene.App.Core.Services;
 
 /// <summary>
-/// Deterministic release-tree traversal that the release scanner (Tasks 5-7) walks to classify a
-/// release folder. [DIVERGENCE: determinism] — design spec §2 "Ordering" (rev 4): pyrescene's
+/// Deterministic release-tree traversal that the release scanner walks to classify a
+/// release folder. [DIVERGENCE: determinism] — pyrescene's
 /// byte order is raw <c>os.walk</c> enumeration (filesystem-dependent, not reproducible in
-/// general; pyrescene-rules-excerpt.txt lines 12-24, <c>get_files</c>) — this emulation instead
+/// general; pyrescene-rules-excerpt.txt, <c>get_files</c>) — this emulation instead
 /// sorts each directory level's subdirectory and file names with <see cref="StringComparer.Ordinal"/>
 /// (case-sensitive) and emits a directory's files before descending into its subdirectories,
 /// top-down, so identical trees produce identical output regardless of filesystem enumeration

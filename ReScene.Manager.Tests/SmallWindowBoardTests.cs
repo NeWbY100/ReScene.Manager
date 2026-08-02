@@ -16,7 +16,7 @@ using ReScene.Manager.Views;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Task 7 (small-window layout, whole-board close): cross-view regression guards that no single
+/// Small-window layout, whole-board close: cross-view regression guards that no single
 /// per-view <c>*CompactTests</c> file owns on its own — every named font source enlarged
 /// together, RenderScaling-driven layout-rounding jitter at 1.25/1.5x, and a reflection guard
 /// that every converted view still carries its own threshold-invariant coverage. Uses
@@ -26,7 +26,7 @@ namespace ReScene.Manager.Tests;
 public class SmallWindowBoardTests
 {
     // ── Case 1: font-enlargement (spec Testing: "a FontSize bump... must not clip the pinned
-    // band or log header") — task brief: every NAMED font source at once, not just one. ────────
+    // band or log header") — exercising every NAMED font source at once, not just one. ─────────
 
     /// <summary>
     /// Application-level resource overrides for the three DynamicResource-driven font sources the
@@ -44,7 +44,7 @@ public class SmallWindowBoardTests
 
         public FontResourceOverrideScope()
         {
-            Override("ControlContentThemeFontSize", 16.0); // 12 -> 16 (task brief)
+            Override("ControlContentThemeFontSize", 16.0); // 12 -> 16
             Override("FontSizeCaption", 17.0);              // 13 -> 17
             Override("MonoFontSize", 18.0);                 // 14 -> +4
             Override("FontSizeBody", 18.0);                 // 14 -> +4
@@ -131,8 +131,8 @@ public class SmallWindowBoardTests
             // checks. AssertArrangesWithin is the SAME structural no-clip proof every per-view
             // *CompactTests file already uses as its own criterion-B check — measured against
             // root.Bounds.Height (the WINDOW never resizes here; only the font, and therefore the
-            // CONTENT inside it, grows) — but it only looks at ROOT's DIRECT children. Whole-branch
-            // review (MAJOR): that alone is non-discriminating for anything nested deeper — a
+            // CONTENT inside it, grows) — but it only looks at ROOT's DIRECT children, and that
+            // alone is non-discriminating for anything nested deeper — a
             // clipping regression inside the log band's HEADER specifically (docked above its
             // ListBox, itself several levels below root) would leave the outer log band's own
             // bounds untouched and pass undetected. AssertNoDescendantIsClipped closes that gap.
@@ -140,11 +140,11 @@ public class SmallWindowBoardTests
             AssertNoDescendantIsClipped(window, root);
 
             // "the per-view... reachability assertions still hold": RestoreFocusTarget is the
-            // behavior's OWN restore-direction fallback target (spec §1) — a view-agnostic probe
+            // behavior's OWN restore-direction fallback target — a view-agnostic probe
             // rather than hand-picking each view's differently-shaped primary-action control. For
             // the three-band views it is the first input TextBox in the ALWAYS-visible config
-            // band, reachable unconditionally. The Reconstructor is one documented exception (spec
-            // §1): its target is the first link Button INSIDE the Help disclosure's body, which is
+            // band, reachable unconditionally. The Reconstructor is one documented exception:
+            // its target is the first link Button INSIDE the Help disclosure's body, which is
             // collapsed by default in compact mode — genuinely unreachable until Help is opened,
             // exactly like ReconstructorCompactTests' own Help-open cases open it first.
             if (isReconstructor)
@@ -161,7 +161,7 @@ public class SmallWindowBoardTests
             {
                 // Creator's SECOND, separately-documented exception: MEASURED here (cold-start Tab
                 // from nothing focused lands in the pre-existing Input-row TabIndex 0/1/2 loop with
-                // shell chrome, never reaching OutputTextBox — the ledgered, deferred a11y-gate
+                // shell chrome, never reaching OutputTextBox — a known, pre-existing accessibility
                 // defect, unrelated to font size and present at 1.0x too) — re-failing on it in
                 // THIS cross-cutting test would be noise, not a new finding, and would mask whatever
                 // font growth itself does to this view. Proven instead via direct Focus(): if the
@@ -175,8 +175,8 @@ public class SmallWindowBoardTests
 
             CompactViewRig.AssertReachableByKeyboard(window, restoreTarget);
 
-            // "the per-view tip... assertions still hold": only the Reconstructor has a "Tip:" line
-            // (spec §2); condition 1 requires the rendered UIA Name to stay the FULL bound text
+            // "the per-view tip... assertions still hold": only the Reconstructor has a "Tip:" line;
+            // condition 1 requires the rendered UIA Name to stay the FULL bound text
             // (trimming is visual-only) no matter how much wider the enlarged glyphs render.
             if (isReconstructor)
             {
@@ -193,7 +193,7 @@ public class SmallWindowBoardTests
 
     /// <summary>
     /// Recurses over EVERY descendant of <paramref name="root"/> — not just its direct
-    /// children, closing the whole-branch review's MAJOR gap — and requires each one that is
+    /// children, closing the gap left by checking direct children alone — and requires each one that is
     /// currently rendered to be fully visible, using the exact same clip-aware bar
     /// <see cref="CompactViewRig"/>'s own criterion-C walk already uses
     /// (<see cref="CompactViewRig.IsFullyVisibleWithinWindow"/>, reused rather than forked).
@@ -414,11 +414,12 @@ public class SmallWindowBoardTests
     // ── Case 3: cross-view invariant existence guard ──────────────────────────────────────────
 
     /// <summary>
-    /// The established per-view shape (Tasks 2-6, unchanged since the Reconstructor template):
+    /// The established per-view shape (unchanged since the Reconstructor template):
     /// <c>Invariant_ExpandedModeFloor_UnderThreshold</c>, <c>Invariant_CompactFloor_HelpClosed_
-    /// WithinCiBound</c>, and <c>Invariant_CompactFloor_HelpOpen_WithinCiBound_And...Sane</c> — the
-    /// spec §1 checks 1-3 (check 4, the pinned-band bound, is asserted inside the third). Below
-    /// this count a view has PARTIALLY dropped its invariant coverage even if it still has one.
+    /// WithinCiBound</c>, and <c>Invariant_CompactFloor_HelpOpen_WithinCiBound_And...Sane</c> —
+    /// checks 1-3 of the four one-sum invariant checks (check 4, the pinned-band bound, is
+    /// asserted inside the third). Below this count a view has PARTIALLY dropped its invariant
+    /// coverage even if it still has one.
     /// </summary>
     private const int MinInvariantMethodsPerView = 3;
 
@@ -426,7 +427,7 @@ public class SmallWindowBoardTests
     /// Guards against a future view task silently dropping (deleting, renaming past recognition,
     /// or gutting the body of) its own threshold-invariant coverage. Reflects over the whole test
     /// assembly for the established <c>*CompactTests</c> naming pattern (Reconstructor/
-    /// SRSCreator/SRSReconstructor/SampleRestorer/Creator — Tasks 2-6) rather than hardcoding the
+    /// SRSCreator/SRSReconstructor/SampleRestorer/Creator) rather than hardcoding the
     /// five type names, so the count assertion below is itself the guard against one going
     /// missing; then re-invokes each type's own <c>Invariant_*</c> <c>[AvaloniaFact]</c> methods
     /// directly (not merely confirms they exist by name) so a gutted-but-still-named method — an

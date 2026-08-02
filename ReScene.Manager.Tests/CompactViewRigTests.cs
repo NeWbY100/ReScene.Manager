@@ -8,24 +8,24 @@ namespace ReScene.Manager.Tests;
 /// <summary>
 /// Tests of <see cref="CompactViewRig"/>'s OWN correctness (as opposed to any specific view's
 /// behavior) — a separate file from any per-view test class since the rig is shared across
-/// Tasks 2-6 and its own guarantees deserve independent coverage.
+/// every per-view test and its own guarantees deserve independent coverage.
 /// </summary>
 public class CompactViewRigTests
 {
     /// <summary>
-    /// Round-2 retro-review: lap-reproduction alone (the round-1 fix for finding #2) proves a
-    /// terminal loop is STABLE, but not that it is COMPLETE — a genuinely stable early A→B→A trap
-    /// reproduces perfectly on the extra confirmation lap and would otherwise be accepted as a
-    /// legitimate end of the walk, even though later, real focusable controls were never reached.
-    /// This is exactly the class of bug a hijacked/misconfigured Tab handler could cause in a real
-    /// view. Builds a synthetic two-element trap (a plain Bubble-routed KeyDown handler on the
-    /// shared parent, added BEFORE Avalonia's own <c>KeyboardNavigationHandler</c> ever sees the
-    /// key — confirmed via decompile: <c>KeyboardNavigationHandler.SetOwner</c> subscribes to
-    /// <c>InputElement.KeyDownEvent</c> with a plain, default-Bubble <c>AddHandler</c> call at the
-    /// WINDOW itself, so a handler added on a closer ancestor runs first and, by setting
-    /// <c>Handled</c>, prevents the window's own handler from ever advancing focus normally) ahead
-    /// of two further, perfectly ordinary focusable controls, and asserts the walk fails loudly
-    /// naming exactly the controls the trap prevented it from ever reaching.
+    /// Lap-reproduction alone proves a terminal loop is STABLE, but not that it is COMPLETE — a
+    /// genuinely stable early A→B→A trap reproduces perfectly on the extra confirmation lap and
+    /// would otherwise be accepted as a legitimate end of the walk, even though later, real
+    /// focusable controls were never reached. This is exactly the class of bug a
+    /// hijacked/misconfigured Tab handler could cause in a real view. Builds a synthetic
+    /// two-element trap (a plain Bubble-routed KeyDown handler on the shared parent, added
+    /// BEFORE Avalonia's own <c>KeyboardNavigationHandler</c> ever sees the key — confirmed via
+    /// decompile: <c>KeyboardNavigationHandler.SetOwner</c> subscribes to
+    /// <c>InputElement.KeyDownEvent</c> with a plain, default-Bubble <c>AddHandler</c> call at
+    /// the WINDOW itself, so a handler added on a closer ancestor runs first and, by setting
+    /// <c>Handled</c>, prevents the window's own handler from ever advancing focus normally)
+    /// ahead of two further, perfectly ordinary focusable controls, and asserts the walk fails
+    /// loudly naming exactly the controls the trap prevented it from ever reaching.
     /// </summary>
     [AvaloniaFact]
     public void AssertTabWalkStaysVisible_StableEarlyTrap_WithExpectedStops_FailsNamingUnvisitedEntries()
@@ -81,21 +81,21 @@ public class CompactViewRigTests
     }
 
     /// <summary>
-    /// Round-4 retro-review finding #1: the previous covering test's trap hijacks BOTH directions
-    /// (its handler never checks <see cref="KeyEventArgs.KeyModifiers"/>), so it cannot prove a
-    /// trap that affects ONLY Shift+Tab is actually caught — the forward pass would already have
-    /// failed first, masking whether the reverse-specific logic ever even ran. This test's trap
-    /// checks <c>KeyModifiers == KeyModifiers.Shift</c> explicitly, hijacking only the LAST TWO
-    /// elements (c/d) under Shift+Tab and leaving plain Tab completely untouched.
+    /// The previous covering test's trap hijacks BOTH directions (its handler never checks
+    /// <see cref="KeyEventArgs.KeyModifiers"/>), so it cannot prove a trap that affects ONLY
+    /// Shift+Tab is actually caught — the forward pass would already have failed first, masking
+    /// whether the reverse-specific logic ever even ran. This test's trap checks
+    /// <c>KeyModifiers == KeyModifiers.Shift</c> explicitly, hijacking only the LAST TWO elements
+    /// (c/d) under Shift+Tab and leaving plain Tab completely untouched.
     /// <para>
-    /// Round-4 finding #2 (the ordering concern): calls the forward and reverse passes
-    /// INDEPENDENTLY via the now-<c>internal</c> <see cref="CompactViewRig.RunTabPass"/> — first
-    /// asserting the FORWARD pass completes with no exception at all (proving the trap really is
-    /// reverse-only, not a blanket hijack), THEN separately asserting the REVERSE pass (started
-    /// from d, the far end — mirroring how a real "walk from last" reverse check would anchor
-    /// itself) throws, naming exactly the two stops (a, b) the c/d hijack never let it reach. This
-    /// removes any ambiguity a single combined <see cref="CompactViewRig.AssertTabWalkStaysVisible"/>
-    /// call would have left about whether forward ever actually succeeded before reverse failed.
+    /// The ordering concern: calls the forward and reverse passes INDEPENDENTLY via the
+    /// now-<c>internal</c> <see cref="CompactViewRig.RunTabPass"/> — first asserting the FORWARD
+    /// pass completes with no exception at all (proving the trap really is reverse-only, not a
+    /// blanket hijack), THEN separately asserting the REVERSE pass (started from d, the far end —
+    /// mirroring how a real "walk from last" reverse check would anchor itself) throws, naming
+    /// exactly the two stops (a, b) the c/d hijack never let it reach. This removes any ambiguity
+    /// a single combined <see cref="CompactViewRig.AssertTabWalkStaysVisible"/> call would have
+    /// left about whether forward ever actually succeeded before reverse failed.
     /// </para>
     /// </summary>
     [AvaloniaFact]
@@ -156,17 +156,16 @@ public class CompactViewRigTests
     }
 
     /// <summary>
-    /// Round-5 retro-review: direct proof that the public <c>reverseSentinel</c> parameter (added
-    /// round 4) is genuinely forwarded to the reverse pass rather than silently ignored. "a" is
-    /// built as a scope boundary — Shift+Tab from it stays put — mirroring the REAL, verified
-    /// Reconstructor finding (a TabControl's own content-scope first element has nowhere to go
-    /// backward; see <c>ReconstructorCompactTests</c>' round 3/4/5 notes). Without an explicit
-    /// <c>reverseSentinel</c>, reverse reuses the forward sentinel and hits the boundary
-    /// immediately (only "a" is ever visited) — asserted here as the pre-round-4 baseline. WITH an
-    /// explicit <c>reverseSentinel</c> of "c", reverse must start there instead, genuinely walking
-    /// c → b → a before hitting the same boundary. If <c>reverseSentinel</c> were silently
-    /// ignored, this second call would fail identically to the baseline (only "a" visited) rather
-    /// than reaching b and c first.
+    /// Direct proof that the public <c>reverseSentinel</c> parameter is genuinely forwarded to
+    /// the reverse pass rather than silently ignored. "a" is built as a scope boundary —
+    /// Shift+Tab from it stays put — mirroring a real, verified Reconstructor scenario (a
+    /// TabControl's own content-scope first element has nowhere to go backward; see
+    /// <c>ReconstructorCompactTests</c>). Without an explicit <c>reverseSentinel</c>, reverse
+    /// reuses the forward sentinel and hits the boundary immediately (only "a" is ever visited) —
+    /// asserted here as the baseline. WITH an explicit <c>reverseSentinel</c> of "c", reverse must
+    /// start there instead, genuinely walking c → b → a before hitting the same boundary. If
+    /// <c>reverseSentinel</c> were silently ignored, this second call would fail identically to
+    /// the baseline (only "a" visited) rather than reaching b and c first.
     /// </summary>
     [AvaloniaFact]
     public void AssertTabWalkStaysVisible_ReverseSentinel_GenuinelyAnchorsTheReversePass()
@@ -210,11 +209,11 @@ public class CompactViewRigTests
     }
 
     /// <summary>
-    /// Round-5 retro-review: direct proof that <see cref="CompactViewRig.RunTabPass"/>'s
-    /// <c>forward</c> parameter genuinely controls which key modifier gets sent — a forward pass
-    /// sends only plain Tab (never Shift+Tab) and a reverse pass sends only Shift+Tab (never plain
-    /// Tab), rather than, say, both passes accidentally sending the same key. Two independent
-    /// counters, incremented by a non-hijacking KeyDown handler that only inspects
+    /// Direct proof that <see cref="CompactViewRig.RunTabPass"/>'s <c>forward</c> parameter
+    /// genuinely controls which key modifier gets sent — a forward pass sends only plain Tab
+    /// (never Shift+Tab) and a reverse pass sends only Shift+Tab (never plain Tab), rather than,
+    /// say, both passes accidentally sending the same key. Two independent counters, incremented
+    /// by a non-hijacking KeyDown handler that only inspects
     /// <see cref="KeyEventArgs.KeyModifiers"/>, confirm this directly.
     /// </summary>
     [AvaloniaFact]

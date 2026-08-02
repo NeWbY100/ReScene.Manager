@@ -8,7 +8,7 @@ namespace ReScene.Manager.Behaviors;
 /// <summary>
 /// Attached behavior that adds Home/End key handling to a <see cref="ScrollViewer"/>. Closes a
 /// real platform gap discovered while implementing the small-window layout degradation's compact
-/// Help body (spec rev 12 §2): Avalonia 11's stock <c>ScrollViewer.OnKeyDown</c> only wires
+/// Help body: Avalonia 11's stock <c>ScrollViewer.OnKeyDown</c> only wires
 /// <c>Key.PageUp</c>/<c>Key.PageDown</c> to its own <c>PageUp()</c>/<c>PageDown()</c> — it does
 /// NOT wire <c>Key.Home</c>/<c>Key.End</c> to its own (public) <c>ScrollToHome()</c>/
 /// <c>ScrollToEnd()</c>, despite the design doc's assumption that "Avalonia's ScrollViewer

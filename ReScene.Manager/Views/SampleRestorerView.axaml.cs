@@ -25,7 +25,7 @@ public partial class SampleRestorerView : UserControl
     // just as correct as reading it back through an extra indirection.
     private const double LogRowMinHeight = 80;
 
-    // MEASURED slack (fix round 1): CompactInvariantRig.MeasureFloor's own bare
+    // MEASURED slack: CompactInvariantRig.MeasureFloor's own bare
     // Measure(InnerWidth, Infinity) call reports each Auto row's UNCONSTRAINED desired height,
     // while a REAL Grid arrange pass (this behavior's own actual target) additionally shrinks
     // Auto rows below that when the total genuinely exceeds available space — e.g. measured
@@ -46,7 +46,7 @@ public partial class SampleRestorerView : UserControl
     {
         AvaloniaXamlLoader.Load(this);
 
-        // Small-window layout degradation (spec rev 12 §1/§2): compact below 535 inner DIPs — the
+        // Small-window layout degradation: compact below 535 inner DIPs — the
         // headline defect view (action row + log measured 0px at 700×450 BASE state under the
         // pre-conversion DockPanel). x:CompileBindings="False" means x:Name elements are NOT
         // wired to auto-generated fields here (same as every other ported view in this project) —
@@ -62,7 +62,7 @@ public partial class SampleRestorerView : UserControl
         Behaviors.CompactHeightBehavior.SetHelpBodyMaxHeight(root, 40);
         Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(root, srrFileTextBox);
 
-        // EXPANDED-mode safety cap (codex round-1 finding: a maxed, 12-row-populated
+        // EXPANDED-mode safety cap: a maxed, 12-row-populated
         // SRSEntriesGrid pushes row 1's own Auto-sized natural height to ~488 DIPs; MEASURED
         // directly that at inner heights from Threshold+1 (536) up to ~640, the trailing rows
         // (the pinned action band AND the entire log — not merely "some clipping") land
@@ -74,7 +74,7 @@ public partial class SampleRestorerView : UserControl
         // is NOT implemented as a change to the shared CompactHeightBehavior (which all four of
         // them also use) — it is scoped to this view alone, kept as plain code-behind rather than
         // a new promoted-too-early Behaviors/ abstraction (this codebase's own established rule:
-        // promotion is a decision for when a SECOND consumer appears — Task 6's CreatorView,
+        // promotion is a decision for when a SECOND consumer appears — CreatorView,
         // whose own StoredFilesGrid could face the identical problem, is the most likely one).
         //
         // Mechanism: on every layout pass, cap the config ScrollViewer's OWN MaxHeight to

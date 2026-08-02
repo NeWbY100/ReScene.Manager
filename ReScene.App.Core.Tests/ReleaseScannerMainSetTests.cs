@@ -5,10 +5,10 @@ using ReScene.RAR;
 namespace ReScene.App.Core.Tests;
 
 /// <summary>
-/// Task 5's test matrix (design plan 2026-07-19-multiset-srr-creation.md L879-901): the §2a
-/// main-set decision tree (pyrescene-rules-excerpt.txt, <c>remove_unwanted_sfvs</c>), one Fact per
-/// row. Proof-related rows drive the injectable <c>proofRarReader</c> seam with fact literals
-/// only — <see cref="RarProofInspectorTests"/> (ReScene.Tests) proves the production
+/// Test matrix for the main-set decision tree (pyrescene-rules-excerpt.txt,
+/// <c>remove_unwanted_sfvs</c>; see docs/superpowers/plans/2026-07-19-multiset-srr-creation.md),
+/// one Fact per row. Proof-related rows drive the injectable <c>proofRarReader</c> seam with fact
+/// literals only — <see cref="RarProofInspectorTests"/> (ReScene.Tests) proves the production
 /// <see cref="RarProofInspector"/> against real fixture bytes.
 /// </summary>
 public class ReleaseScannerMainSetTests : TempDirTestBase
@@ -47,16 +47,15 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
         Assert.Equal("CD1/a.sfv", result.MainSets[0].RelativeName);
         Assert.Equal("CD2/b.sfv", result.MainSets[1].RelativeName);
         Assert.Empty(result.SubtitleSfvs);
-        // Task 7 (§2d pass-10 skeleton): every input SFV is unconditionally appended to
-        // StoredFiles (excerpt: generate_srr L1190-1192, `for sfv in sfvs`) — StoredFiles was only
-        // empty here because Task 5 hadn't implemented §2d yet.
+        // Every input SFV is unconditionally appended to StoredFiles (generate_srr,
+        // `for sfv in sfvs`).
         Assert.Equal([aSfv, bSfv], result.StoredFiles);
     }
 
     [Fact]
     public void VobsubName_ReleaseLacksCarveOut_Excluded()
     {
-        // excerpt: remove_unwanted_sfvs L312-317 (rule 1)
+        // remove_unwanted_sfvs rule 1
         string root = CreateRoot("Some.Movie-GRP");
         string sfv = WriteSfv(Path.Combine(root, "x.vobsubs.sfv"), "x.rar");
 
@@ -84,7 +83,7 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void SubsName_NoCarveOut_Excluded()
     {
-        // excerpt: remove_unwanted_sfvs L319-340 (rule 2, no fall-through condition applies)
+        // remove_unwanted_sfvs rule 2, no fall-through condition applies
         string root = CreateRoot("Some.Release-GRP");
         string sfv = WriteSfv(Path.Combine(root, "grp-subs.sfv"), "grp.rar");
 
@@ -97,7 +96,7 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void SubsName_MatchesFalsePositiveRegex_FallsThroughToMain()
     {
-        // excerpt: remove_unwanted_sfvs L329-338 — `^000?-` alternative of the false-positive regex
+        // remove_unwanted_sfvs rule 2's `^000?-` alternative of the false-positive regex
         string root = CreateRoot("Some.Release-GRP");
         string sfv = WriteSfv(Path.Combine(root, "00-grp-subs.sfv"), "grp.rar");
 
@@ -124,7 +123,7 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void ExactSubsDir_Excluded()
     {
-        // excerpt: remove_unwanted_sfvs L342-355 (rule 3)
+        // remove_unwanted_sfvs rule 3
         string root = CreateRoot("Some.Release-GRP");
         string sfv = WriteSfv(Path.Combine(root, "Subs", "x.sfv"), "x.rar");
 
@@ -137,7 +136,7 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void Proof_SingleRarEntry_LastPackedIsImage_StoresSfvAndRar_NotMainSet()
     {
-        // excerpt: remove_unwanted_sfvs L357-379 (rule 4, image match)
+        // remove_unwanted_sfvs rule 4, image match
         string root = CreateRoot("Some.Release-GRP");
         string sfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
         string rar = Touch(Path.Combine(root, "Proof", "p.rar"));
@@ -148,9 +147,8 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
         ReleaseScanResult result = scanner.Scan(root);
 
         Assert.Empty(result.MainSets);
-        // FINAL order (Task 9 pass-10 reorder, excerpt tail L1240-1251): the proof `.rar` moves to
-        // sit immediately BEFORE its matching `.sfv` (see ReleaseScannerStoredTests's equivalent
-        // test for the full rationale).
+        // Final order: generate_srr moves the proof `.rar` to sit immediately BEFORE its matching
+        // `.sfv` (see ReleaseScannerStoredTests's equivalent test for the full rationale).
         Assert.Equal([rar, sfv], result.StoredFiles);
         Assert.Empty(result.SubtitleSfvs);
     }
@@ -158,8 +156,8 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void Proof_LastPackedNotImage_EarlierWasImage_LastBlockWins_NotProof_ContinuesToLaterRules()
     {
-        // excerpt: remove_unwanted_sfvs L365-373 — skip is reassigned on every block; the LAST
-        // packed block decides, not the first.
+        // remove_unwanted_sfvs: skip is reassigned on every block; the LAST packed block decides,
+        // not the first.
         string root = CreateRoot("Some.Release-GRP");
         string sfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
         string rar = Touch(Path.Combine(root, "Proof", "p.rar"));
@@ -171,17 +169,18 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
 
         Assert.Single(result.MainSets);
         Assert.Equal(sfv, result.MainSets[0].SfvOrRarPath);
-        // Task 7: rule 4 didn't treat p.rar as proof (last block isn't an image), but the
-        // INDEPENDENT filter_proof_rar_files pass is unrelated to rule 4's classification — it
-        // only checks "proof" in the path and ANY packed block being an image (AnyImage: true
-        // here), so it stores p.rar on its own; pass-10 then appends the (unrelated) main sfv.
+        // Rule 4 didn't treat p.rar as proof (last block isn't an image), but the INDEPENDENT
+        // filter_proof_rar_files pass is unrelated to rule 4's classification — it only checks
+        // "proof" in the path and ANY packed block being an image (AnyImage: true here), so it
+        // stores p.rar on its own; generate_srr's SFV-append step then appends the (unrelated)
+        // main sfv.
         Assert.Equal([rar, sfv], result.StoredFiles);
     }
 
     [Fact]
     public void Proof_Unreadable_WarnsAndExcludes_TreatedAsProof()
     {
-        // excerpt: remove_unwanted_sfvs L374-377 ("No RAR5 support yet" / caught ValueError)
+        // remove_unwanted_sfvs: "No RAR5 support yet" / caught ValueError
         string root = CreateRoot("Some.Release-GRP");
         string sfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
         string rar = Touch(Path.Combine(root, "Proof", "p.rar"));
@@ -199,8 +198,8 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void Proof_SingletonEntryNotLowercaseRarExtension_ExcludedAsProof_RarNeverChecked()
     {
-        // excerpt: remove_unwanted_sfvs L362-363 — the naming check runs BEFORE any file-existence
-        // or content check, so neither the filesystem nor the injected reader is ever touched.
+        // remove_unwanted_sfvs: the naming check runs BEFORE any file-existence or content check,
+        // so neither the filesystem nor the injected reader is ever touched.
         string root = CreateRoot("Some.Release-GRP");
         string sfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.RAR");
 
@@ -217,7 +216,7 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void Proof_RarMissingOnDisk_WarnsAndExcludes()
     {
-        // excerpt: remove_unwanted_sfvs L380-385
+        // remove_unwanted_sfvs rule 4: proof RAR missing on disk
         string root = CreateRoot("Some.Release-GRP");
         string sfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
         // p.rar deliberately never created.
@@ -243,14 +242,14 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
 
         Assert.Single(result.MainSets);
         Assert.Equal(sfv, result.MainSets[0].SfvOrRarPath);
-        // Task 7 pass-10: sfv is a main SFV, so it's appended to StoredFiles.
+        // sfv is a main SFV, so it's appended to StoredFiles.
         Assert.Equal([sfv], result.StoredFiles);
     }
 
     [Fact]
     public void Proof_TwoEntries_RequiresSingleton_FallsThroughToLaterRules()
     {
-        // excerpt: remove_unwanted_sfvs L360 — the `len(sfvfiles) == 1` gate.
+        // remove_unwanted_sfvs rule 4's `len(sfvfiles) == 1` gate.
         string root = CreateRoot("Some.Release-GRP");
         string sfv = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar", "p.r00");
 
@@ -262,14 +261,14 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
 
         Assert.Single(result.MainSets);
         Assert.Equal(sfv, result.MainSets[0].SfvOrRarPath);
-        // Task 7 pass-10: sfv is a main SFV, so it's appended to StoredFiles.
+        // sfv is a main SFV, so it's appended to StoredFiles.
         Assert.Equal([sfv], result.StoredFiles);
     }
 
     [Fact]
     public void SubsCdDirectory_Excluded()
     {
-        // excerpt: remove_unwanted_sfvs L387-394 (rule 5)
+        // remove_unwanted_sfvs rule 5
         string root = CreateRoot("Some.Release-GRP");
         string sfv = WriteSfv(Path.Combine(root, "Subs", "CD1", "s.sfv"), "s.rar");
 
@@ -282,7 +281,7 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void SubpackSubstringDir_ReleaseLacksSubpack_Excluded()
     {
-        // excerpt: remove_unwanted_sfvs L396-398 (rule 6a)
+        // remove_unwanted_sfvs rule 6a
         string root = CreateRoot("Movie-GRP");
         string sfv = WriteSfv(Path.Combine(root, "SubpackStuff", "x.sfv"), "x.rar");
 
@@ -295,7 +294,7 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void FixSubstringDir_ReleaseHasFix_MainSet()
     {
-        // excerpt: remove_unwanted_sfvs L402-405 (rule 6c exception: release name also has "fix")
+        // remove_unwanted_sfvs rule 6c exception: release name also has "fix"
         string root = CreateRoot("Movie.FIX-GRP");
         string sfv = WriteSfv(Path.Combine(root, "MyFix", "x.sfv"), "x.rar");
 
@@ -308,9 +307,9 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void Rescue_AllSubsNamed_TwoEntrySfvReadmittedAsMain_OtherStaysExcluded()
     {
-        // excerpt: remove_unwanted_sfvs L425-429 — rescue re-examines every SFV found, not just
-        // the ones the first pass excluded; the destination split (design spec §2a) recomputes
-        // SubtitleSfvs against the FINAL (post-rescue) main set.
+        // remove_unwanted_sfvs: the rescue fallback re-examines every SFV found, not just the ones
+        // the first pass excluded; the destination split recomputes SubtitleSfvs against the FINAL
+        // (post-rescue) main set.
         string root = CreateRoot("Some.Release-GRP");
         string single = WriteSfv(Path.Combine(root, "a-subs.sfv"), "a.rar");
         string multi = WriteSfv(Path.Combine(root, "b-subs.sfv"), "b.rar", "b.r00");
@@ -334,9 +333,8 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
 
         Assert.Empty(result.MainSets);
         Assert.Empty(result.SubtitleSfvs);
-        // Task 7 pass-10: the dirfix skip only affects SubtitleSfvs/nested-SRR routing — the
-        // excerpt's unconditional "for sfv in sfvs" embed-raw-bytes step (L1190-1192) still stores
-        // this sfv regardless.
+        // The dirfix skip only affects SubtitleSfvs/nested-SRR routing — generate_srr's
+        // unconditional "for sfv in sfvs" embed-raw-bytes step still stores this sfv regardless.
         Assert.Equal([sfv], result.StoredFiles);
         Assert.Contains(result.Warnings, w => w.Contains(sfv, StringComparison.Ordinal));
     }
@@ -377,15 +375,15 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
         Assert.Throws<OperationCanceledException>(() => new ReleaseScanner().Scan(root, cts.Token));
     }
 
-    // --- Task 5 consolidated fix round -------------------------------------------------------
+    // --- Edge cases: unreadable SFVs, cancellation, and rescue ordering -----------------------
 
     [Fact]
     public void C1_RescuedMusicSfv_NotAlsoListedAsSubtitleSfv()
     {
-        // C1 (Critical): a rescue-promoted MUSIC sfv must not double-list in both MusicSfvs and
-        // SubtitleSfvs. Repro from the finding: single SFV in Subs/, one music entry -> rule-3
-        // excludes it -> zero main -> rescue admits it to MusicSfvs. Before the fix, the
-        // post-rescue exclusion filter checked only `main`, so it also leaked into SubtitleSfvs.
+        // A rescue-promoted MUSIC sfv must not double-list in both MusicSfvs and SubtitleSfvs.
+        // Repro: single SFV in Subs/, one music entry -> rule 3 excludes it -> zero main -> rescue
+        // admits it to MusicSfvs. Before the fix, the post-rescue exclusion filter checked only
+        // `main`, so it also leaked into SubtitleSfvs.
         string root = CreateRoot("Some.Release-GRP");
         string sfv = WriteSfv(Path.Combine(root, "Subs", "track.sfv"), "track.mp3");
 
@@ -399,9 +397,9 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void I3_UnreadableSfv_InProofDir_WarnsAndSkips_OtherSfvsClassifyNormally()
     {
-        // I3 (Important): an SFV whose entries can't be read must not abort the whole scan. This
-        // covers the ClassifyProof call site — a proof-dir SFV that throws must not be admitted
-        // as a main set (or crash Scan); the other SFV must still classify normally.
+        // An SFV whose entries can't be read must not abort the whole scan. This covers the
+        // ClassifyProof call site — a proof-dir SFV that throws must not be admitted as a main set
+        // (or crash Scan); the other SFV must still classify normally.
         string root = CreateRoot("Some.Release-GRP");
         string good = WriteSfv(Path.Combine(root, "CD1", "a.sfv"), "a.rar");
         string bad = WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
@@ -415,12 +413,11 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
         Assert.Single(result.MainSets);
         Assert.Equal(good, result.MainSets[0].SfvOrRarPath);
         Assert.Empty(result.SubtitleSfvs);
-        // Task 7/9 pass-10 (E1(a) fix, second round): both sfvs are appended regardless of
-        // classification — pass 10 never re-reads an sfv's entries, it just embeds the file itself
-        // — but NON-MAIN sfvs come first and MAIN sfvs are DEFERRED to the bottom (excerpt
-        // L1195-1204's "add RAR sfv files at the bottom"), not plain traversal order. "bad" (Proof/
-        // p.sfv, Skipped — not main) precedes "good" (CD1/a.sfv, the one main set) even though "CD1"
-        // sorts before "Proof" ordinally.
+        // Both sfvs are appended regardless of classification — generate_srr's final SFV-append
+        // step never re-reads an sfv's entries, it just embeds the file itself — but NON-MAIN sfvs
+        // come first and MAIN sfvs are DEFERRED to the bottom (generate_srr's "add RAR sfv files at
+        // the bottom"), not plain traversal order. "bad" (Proof/p.sfv, Skipped — not main) precedes
+        // "good" (CD1/a.sfv, the one main set) even though "CD1" sorts before "Proof" ordinally.
         Assert.Equal([bad, good], result.StoredFiles);
         Assert.Contains(result.Warnings, w => w.Contains(bad, StringComparison.Ordinal));
     }
@@ -428,8 +425,8 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void I3_UnreadableSfv_DuringRescue_WarnsAndSkips_OtherSfvsStillRescued()
     {
-        // I3 (Important): the rescue pass's own _sfvEntryReader call site must be guarded too —
-        // one throwing SFV must not abort rescue for the rest.
+        // The rescue pass's own _sfvEntryReader call site must be guarded too — one throwing SFV
+        // must not abort rescue for the rest.
         string root = CreateRoot("Some.Release-GRP");
         string good = WriteSfv(Path.Combine(root, "a-subs.sfv"), "a.rar", "a.r00"); // 2 entries -> rescuable
         string bad = WriteSfv(Path.Combine(root, "b-subs.sfv"), "b.rar");
@@ -450,9 +447,9 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void I4_CancelledDuringFinalProofRead_ThrowsBeforeReturningResult()
     {
-        // I4 (Important): cancellation observed mid-call (inside the injected proofRarReader) must
-        // still surface as OperationCanceledException, not a successful result — the per-iteration
-        // checks alone miss cancellation that happens during the LAST piece of work before return.
+        // Cancellation observed mid-call (inside the injected proofRarReader) must still surface as
+        // OperationCanceledException, not a successful result — the per-iteration checks alone miss
+        // cancellation that happens during the LAST piece of work before return.
         string root = CreateRoot("Some.Release-GRP");
         WriteSfv(Path.Combine(root, "Proof", "p.sfv"), "p.rar");
         Touch(Path.Combine(root, "Proof", "p.rar"));
@@ -472,10 +469,9 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void I5_SubpackRelease_SubtitleSfvs_PreservesTraversalOrder_NotExcludedThenMain()
     {
-        // I5 (Important): for a subpack/subfix release, SubtitleSfvs must stay in canonical
-        // traversal order across the merged excluded+main-queued set, not [excluded...][main...].
-        // A root-level (traversal-early) main sfv must precede a subdirectory (traversal-later)
-        // excluded sfv.
+        // For a subpack/subfix release, SubtitleSfvs must stay in canonical traversal order across
+        // the merged excluded+main-queued set, not [excluded...][main...]. A root-level
+        // (traversal-early) main sfv must precede a subdirectory (traversal-later) excluded sfv.
         string root = CreateRoot("Some.SUBPACK-GRP");
         string main = WriteSfv(Path.Combine(root, "main.sfv"), "main.rar");
         string excluded = WriteSfv(Path.Combine(root, "Subs", "excluded.sfv"), "excluded.rar");
@@ -504,7 +500,8 @@ public class ReleaseScannerMainSetTests : TempDirTestBase
     [Fact]
     public void AllSfvsExcludedAndUnrescuable_WarnsMightBeMissingSfvFile()
     {
-        // Minor test gap: the "zero after rescue" warning (excerpt L432-434) had no dedicated test.
+        // Minor test gap: the "zero after rescue" warning (remove_unwanted_sfvs) had no dedicated
+        // test.
         string root = CreateRoot("Some.Release-GRP");
         WriteSfv(Path.Combine(root, "a-subs.sfv"), "a.rar"); // 1 entry, no music -> not rescuable
 

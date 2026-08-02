@@ -25,8 +25,7 @@ namespace ReScene.Manager.Controls;
 /// Nothing is reimplemented beyond the control type, because nothing else was being added by the
 /// expander peer: name, children, parent, bounds, enablement, offscreen state, focusability and the
 /// content/control-element flags all resolve identically from <see cref="ControlAutomationPeer"/> —
-/// verified by capturing every one of them before and after this rebase (see the task report's
-/// inventory), not assumed.
+/// verified by capturing every one of them before and after this rebase, not assumed.
 /// </para>
 /// </summary>
 public class HelpDisclosureAutomationPeer : ControlAutomationPeer

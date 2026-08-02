@@ -29,9 +29,9 @@ namespace ReScene.Manager.Tests;
 /// on the newly-current row via the public <c>CurrentCellChanged</c> event.
 /// </para>
 /// <para>
-/// NO WHEEL TESTS (removed, fix round 2): an earlier version of this file also covered a wheel
-/// mechanism this behavior once implemented (4 dedicated tests plus a disclosure test). Codex's
-/// final ruling on the fix-round-1 disclosure was to remove that mechanism outright — see
+/// NO WHEEL TESTS (removed): an earlier version of this file also covered a wheel
+/// mechanism this behavior once implemented (4 dedicated tests plus a disclosure test). That
+/// mechanism was removed outright — see
 /// <see cref="ScrollHandoffBehavior"/>'s own remarks for why it was not just redundant with
 /// Avalonia's native <c>IsScrollChainingEnabled</c> default but could never have provided the
 /// "future insurance" it was kept for either. The platform-level regression guard for wheel
@@ -128,10 +128,10 @@ public class ScrollHandoffBehaviorTests
     // ── KEYBOARD / FOCUS ─────────────────────────────────────────
 
     /// <summary>
-    /// The brief's own scenario: focus the first row's checkbox, then press real Down-arrow keys
+    /// Focus the first row's checkbox, then press real Down-arrow keys
     /// until the CURRENT row is one that is already realized within the grid's own 250-DIP
-    /// viewport (no internal grid scroll needed for it — "inner arrow-key navigation stays inside
-    /// the grid" per the brief) but whose absolute position is below the OUTER's own 150-DIP
+    /// viewport (no internal grid scroll needed for it — inner arrow-key navigation stays inside
+    /// the grid) but whose absolute position is below the OUTER's own 150-DIP
     /// viewport. The current row's bounds — not <c>FocusManager.GetFocusedElement()</c> — are the
     /// meaningful target: DataGrid's own arrow-key handling ends by re-focusing the DataGrid
     /// ITSELF (see this file's own remarks and ScrollHandoffBehavior's), never a specific

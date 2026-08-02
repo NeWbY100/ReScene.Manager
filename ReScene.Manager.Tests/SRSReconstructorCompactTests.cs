@@ -22,17 +22,16 @@ using ReScene.SRS;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Small-window layout degradation tests for <see cref="SRSReconstructorView"/> (task-4 brief:
-/// threshold 450, config row AutoToStar 110 compact / 80 help-open, log 80, Help body MaxHeight
-/// 40, compact CI bound <see cref="CompactInvariantRig.CiBound"/> == 307, pinned band ceiling
-/// 75). Adapts <c>SRSCreatorCompactTests</c>' five-part shape (Task 3's template) to this view's
-/// even simpler structure: no ISO file-selection row (the Reconstructor auto-detects the
-/// matching VOB set — no manual picker), and NO progress controls at all (no Cancel button, no
-/// ProgressBar — "This view has NO progress controls" per the brief). Adds two view-specific
-/// sections: #5 pinned band (the actual defect this task fixes — Rebuild Sample and the result
-/// banner while band 1 is scrolled to both extremes) and #6 the result-cap/re-arm BINDING
-/// (the VM half of the re-arm contract is unit-tested in SRSReconstructorViewModelTests; this
-/// file only asserts the view-level binding survives the visibility race — codex round-4).
+/// Small-window layout degradation tests for <see cref="SRSReconstructorView"/> (threshold 450,
+/// config row AutoToStar 110 compact / 80 help-open, log 80, Help body MaxHeight 40, compact CI
+/// bound <see cref="CompactInvariantRig.CiBound"/> == 307, pinned band ceiling 75). Adapts
+/// <c>SRSCreatorCompactTests</c>' five-part shape to this view's even simpler structure: no ISO
+/// file-selection row (the Reconstructor auto-detects the matching VOB set — no manual picker),
+/// and NO progress controls at all (no Cancel button, no ProgressBar). Adds two view-specific
+/// sections: #5 pinned band (the actual defect this change fixes — Rebuild Sample and the result
+/// banner while band 1 is scrolled to both extremes) and #6 the result-cap/re-arm BINDING (the
+/// VM half of the re-arm contract is unit-tested in SRSReconstructorViewModelTests; this file
+/// only asserts the view-level binding survives the visibility race).
 /// </summary>
 public class SRSReconstructorCompactTests
 {
@@ -73,12 +72,12 @@ public class SRSReconstructorCompactTests
     private const double ExpandedInner = 451;  // comfortably above Threshold
 
     /// <summary>
-    /// The brief's "corrected feedback inventory" worst case, forced together: all three
-    /// FieldStatusLines non-None (with realistic, wrapping-length messages — FieldStatusLine's
-    /// message TextBlock wraps, so a short message would understate the floor), and ShowResult
-    /// with a genuinely two-line ResultSummary (long enough to wrap at the 676-DIP inner width —
-    /// exercises the MaxLines=2 cap rather than a one-line best case). Used by every
-    /// invariant/no-clip check so "worst case" means the same thing everywhere it is asserted.
+    /// The worst-case layout, forced together: all three FieldStatusLines non-None (with
+    /// realistic, wrapping-length messages — FieldStatusLine's message TextBlock wraps, so a
+    /// short message would understate the floor), and ShowResult with a genuinely two-line
+    /// ResultSummary (long enough to wrap at the 676-DIP inner width — exercises the MaxLines=2
+    /// cap rather than a one-line best case). Used by every invariant/no-clip check so "worst
+    /// case" means the same thing everywhere it is asserted.
     /// </summary>
     private static void ForceWorstCase(SRSReconstructorViewModel vm)
     {
@@ -90,7 +89,7 @@ public class SRSReconstructorCompactTests
         vm.ResultSummary = "CRC32 match: 0ABCDEF1 (123,456,789 bytes) — reconstructed successfully from the matching VOB title set found on the ISO image.";
     }
 
-    // ── 1. Invariant (spec §1's four checks; CompactInvariantRig) ────
+    // ── 1. Invariant (the four one-sum checks; CompactInvariantRig) ────
 
     [AvaloniaFact]
     public void Invariant_ExpandedModeFloor_UnderThreshold()
@@ -197,7 +196,7 @@ public class SRSReconstructorCompactTests
     }
 
     /// <summary>
-    /// Criterion A for the last config control named by the brief (Output's own Browse button)
+    /// Criterion A for the last config control (Output's own Browse button)
     /// and the primary action (Rebuild Sample). Both routed through the config band's own
     /// ScrollViewer, identified by Grid.Row (the Help body is ALSO a bare, non-templated
     /// ScrollViewer, so Grid.Row is the only unambiguous handle).
@@ -521,10 +520,10 @@ public class SRSReconstructorCompactTests
             Assert.True(srsFileTextBox.IsFocused,
                 "restoring from a focused compact body must relocate focus to the wired RestoreFocusTarget (SRSFileTextBox), not strand it");
 
-            // A11y gate NEW-1: the resize-driven focus-recovery target must have an accessible
-            // name (WCAG 4.1.2) — same resolution technique as SampleRestorer's SRRFileTextBox
-            // and Creator's OutputTextBox (the real AutomationPeer, not the raw attached
-            // property), so this proves what a screen reader actually announces on landing here.
+            // The resize-driven focus-recovery target must have an accessible name (WCAG 4.1.2)
+            // — same resolution technique as SampleRestorer's SRRFileTextBox and Creator's
+            // OutputTextBox (the real AutomationPeer, not the raw attached property), so this
+            // proves what a screen reader actually announces on landing here.
             Assert.Equal("SRS file path", ControlAutomationPeer.CreatePeerForElement(srsFileTextBox).GetName());
 
             window.Height -= 250;
@@ -594,7 +593,7 @@ public class SRSReconstructorCompactTests
 
     /// <summary>
     /// All four built-ins exercised with genuine key input against a REAL, attached
-    /// ScrollViewer — never a synthetic Offset-setter poke (codex round-6). This view's own
+    /// ScrollViewer — never a synthetic Offset-setter poke. This view's own
     /// intro prose is short enough that it never genuinely overflows the 40-DIP donation cap at
     /// the app's own enforced minimum width, so — mirroring SRSCreatorCompactTests' own,
     /// identical finding — the body's Text is temporarily lengthened (synthetic content, this
@@ -654,14 +653,14 @@ public class SRSReconstructorCompactTests
     // ── 5. Pinned band (the defect this task exists to fix) ───────────
 
     /// <summary>
-    /// Directly asserts the defect the whole task exists to fix: with band 1 (config)
+    /// Directly asserts the defect this change exists to fix: with band 1 (config)
     /// independently scrolled to its top AND its bottom extreme, BOTH the pinned Rebuild
     /// Sample button's bounds AND the result banner's bounds — translated into window
     /// coordinates — stay fully inside the window the entire time, with the result banner
     /// forced visible (the worst case for the pinned band's own height). Pre-change (today's
     /// DockPanel), the equivalent result Border collapsed to a zero-height sliver at the very
-    /// bottom edge under these exact conditions (measured red-phase evidence — see task report:
-    /// <c>resultBanner.Bounds=0, 293, 676, 0</c> at 700×319).
+    /// bottom edge under these exact conditions — this test is verified to fail against that
+    /// pre-change layout (measured: <c>resultBanner.Bounds=0, 293, 676, 0</c> at 700×319).
     /// </summary>
     [AvaloniaFact]
     public void PinnedActionBand_RebuildSampleAndResultBannerStayWithinWindow_BandOneScrolledToTopAndBottom()
@@ -700,11 +699,11 @@ public class SRSReconstructorCompactTests
     /// <summary>
     /// A degenerate (zero-width or zero-height) control translates to a single point, which
     /// trivially satisfies any containment check — exactly the pre-change defect (the result
-    /// Border collapsing to <c>Height=0</c>, see the task report's red evidence) would have
-    /// slipped past a containment-only check. Effective visibility and a positive size are
-    /// asserted FIRST, unconditionally, so a collapsed/invisible control fails outright instead
-    /// of being reported as "contained". Local copy (not promoted into the shared rig) mirrors
-    /// SRSCreatorCompactTests' own helper of the same shape.
+    /// Border collapsing to <c>Height=0</c>) would have slipped past a containment-only check.
+    /// Effective visibility and a positive size are asserted FIRST, unconditionally, so a
+    /// collapsed/invisible control fails outright instead of being reported as "contained".
+    /// Local copy (not promoted into the shared rig) mirrors SRSCreatorCompactTests' own helper
+    /// of the same shape.
     /// </summary>
     private static void AssertFullyWithinWindow(Control control, Window window)
     {
@@ -725,7 +724,7 @@ public class SRSReconstructorCompactTests
             $"{control.GetType().Name} bounds ({topLeft.Value}..{bottomRight.Value}) exceed window bounds {windowBounds}");
     }
 
-    // ── 6. Result cap + re-arm BINDING (a11y rev-3 NEW-4) ──────────────
+    // ── 6. Result cap + re-arm BINDING ──────────────────────────────────
 
     /// <summary>
     /// The VM half of the re-arm contract (clear-at-start, identical-repeat, cancel) is
@@ -744,7 +743,7 @@ public class SRSReconstructorCompactTests
     ///   <item>the BINDING: with the VM's ResultSummary genuinely transitioning empty->text,
     ///     the realized, ALWAYS-IN-TREE ResultStatus TextBlock (log header, LiveSetting=
     ///     Polite) follows — the announcement path that survives the visual banner's own
-    ///     IsVisible race (codex round-4). The visual banner itself carries NO LiveSetting.</item>
+    ///     IsVisible race. The visual banner itself carries NO LiveSetting.</item>
     /// </list>
     /// </summary>
     [AvaloniaFact]
@@ -812,10 +811,10 @@ public class SRSReconstructorCompactTests
     }
 
     /// <summary>
-    /// Fix round 1 (codex, Important): ResultStatus and SaveLogStatus share the SAME log-header
-    /// row via a Grid with FIXED-PROPORTION Star columns (1*,2*) rather than each being its own
-    /// DockPanel.Dock="Right" item, and rather than an Auto+MaxWidth column (fix round 1's first
-    /// attempt). Both presenters must render non-zero width, with the CHOSEN allocation
+    /// ResultStatus and SaveLogStatus share the SAME log-header row via a Grid with
+    /// FIXED-PROPORTION Star columns (1*,2*) rather than each being its own
+    /// DockPanel.Dock="Right" item, and rather than an Auto+MaxWidth column (an earlier attempt
+    /// at this same fix). Both presenters must render non-zero width, with the CHOSEN allocation
     /// mechanism (the fixed 1:2 ratio) and each one's own trim behavior asserted directly, not
     /// implied — visual-only, since each keeps its FULL text as its accessible name regardless
     /// of rendered width (screen readers read the automation peer's Name from the underlying
@@ -827,20 +826,19 @@ public class SRSReconstructorCompactTests
     /// <c>ResultSuccess</c>, THEN <c>ResultSummary</c>, THEN <c>ShowResult</c>, with
     /// <c>SaveLogAnnouncement</c> set and settled EARLIER (a stale value from an earlier "Save
     /// log..." click — nothing in <c>RebuildAsync</c> clears it, so this is a genuinely reachable
-    /// real sequence, not a contrived one). Fix round 2 (codex): an earlier version of this test
-    /// used <c>ResultSuccess -> ShowResult -> ResultSummary</c>, which does not match production;
+    /// real sequence, not a contrived one). An earlier version of this test used
+    /// <c>ResultSuccess -> ShowResult -> ResultSummary</c>, which does not match production;
     /// corrected here.
     /// </para>
     /// <para>
-    /// IMPORTANT, disclosed rather than papered over (fix round 2): this exact, real production
-    /// order does NOT reproduce fix round 1's original Auto+MaxWidth defect — confirmed by
-    /// re-testing three separate realistic reconstructions against a restored copy of the
-    /// Auto+MaxWidth layout (single synchronous tick with today's real order; the same tick
-    /// split into two, rebuild-then-separately-save-log; and this method's own
-    /// stale-save-log-then-rebuild order) — all three rendered BOTH presenters correctly even on
-    /// the OLD layout. The original defect is real and reproducible (see fix round 1's own RED
-    /// evidence) but requires <c>ResultSummary</c> changing strictly AFTER <c>ShowResult</c> in
-    /// the same tick — an ordering that does not correspond to any code path in this codebase
+    /// IMPORTANT: this exact, real production order does NOT reproduce the original
+    /// Auto+MaxWidth defect — confirmed by re-testing three separate realistic reconstructions
+    /// against a restored copy of the Auto+MaxWidth layout (single synchronous tick with today's
+    /// real order; the same tick split into two, rebuild-then-separately-save-log; and this
+    /// method's own stale-save-log-then-rebuild order) — all three rendered BOTH presenters
+    /// correctly even on the OLD layout. The original defect is real and reproducible but
+    /// requires <c>ResultSummary</c> changing strictly AFTER <c>ShowResult</c> in the same tick —
+    /// an ordering that does not correspond to any code path in this codebase
     /// today. This test therefore does NOT discriminate the old layout from the new one; it is a
     /// correctness/regression check against the CURRENT, real production sequence.
     /// <see cref="LogHeaderStatusLines_ResultSummaryAfterShowResult_OrderSensitiveAutoColumnFragility_StarColumnsAreImmune"/>
@@ -913,23 +911,22 @@ public class SRSReconstructorCompactTests
     }
 
     /// <summary>
-    /// Fix round 2 (codex): the genuinely DISCRIMINATING covering test — reproduces fix round
-    /// 1's original Auto+MaxWidth defect exactly (RED against a restored copy of that layout,
-    /// GREEN against the current Star-Star columns), using the SPECIFIC order that triggers it:
-    /// <c>ResultSummary</c> changing strictly AFTER <c>ShowResult</c> in the same synchronous
-    /// tick. Fix round 3 (codex): narrowed to the claim this test actually needs — this exact
-    /// order is not a real <c>RebuildAsync</c> COMPLETION/SHOWING transition. Verified by grep
+    /// The genuinely DISCRIMINATING covering test — reproduces the original Auto+MaxWidth defect
+    /// exactly (RED against a restored copy of that layout, GREEN against the current Star-Star
+    /// columns), using the SPECIFIC order that triggers it: <c>ResultSummary</c> changing
+    /// strictly AFTER <c>ShowResult</c> in the same synchronous tick. Narrowed to the claim this
+    /// test actually needs — this exact order is not a real <c>RebuildAsync</c>
+    /// COMPLETION/SHOWING transition. Verified by grep
     /// against every assignment site in <c>SRSReconstructorViewModel.cs</c>: all three completion
     /// branches (success, failure, exception — the paths that grow ResultStatus's content while
     /// making the banner VISIBLE) always set <c>ResultSummary</c> before <c>ShowResult</c>. The
     /// constructor's and <c>RebuildAsync</c>'s own run-start RESET paths do set
     /// <c>ShowResult = false</c> before clearing <c>ResultSummary</c> — the opposite order — but
     /// that is a HIDING transition (collapsing row 2, not growing it), not the showing/growing
-    /// scenario this fragility and this test concern themselves with (see the report's
-    /// fix-round-2 section for the full verification and the three realistic orderings that did
-    /// NOT reproduce it). This test exists as deliberate hardening: it proves the Star-Star
-    /// mechanism is immune to a real, reproducible Avalonia Grid Auto-column order-sensitivity
-    /// regardless of property-set order, guarding against a plausible FUTURE refactor of
+    /// scenario this fragility and this test concern themselves with. This test exists as
+    /// deliberate hardening: it proves the Star-Star mechanism is immune to a real, reproducible
+    /// Avalonia Grid Auto-column order-sensitivity regardless of property-set order, guarding
+    /// against a plausible FUTURE refactor of
     /// <c>RebuildAsync</c> (or a similar view) reintroducing it.
     /// </summary>
     [AvaloniaFact]
@@ -1096,7 +1093,7 @@ public class SRSReconstructorCompactTests
     /// Renders both controls to a <see cref="RenderTargetBitmap"/> at their OWN true geometry
     /// and requires true byte-for-byte identity of the ENTIRE buffer on BOTH sides — no mask,
     /// no crop, no intersection, no offset. Local copy of SRSCreatorCompactTests' own hardened
-    /// helper (round-4 finding: raster agreement is asserted EXACTLY in integer pixels, in
+    /// helper (raster agreement is asserted EXACTLY in integer pixels, in
     /// BOTH dimensions, BEFORE a single byte is read — a mismatch names both sizes, never a
     /// clamp — because <c>RenderTargetBitmap.Render</c> lays the visual out TO the bitmap's
     /// size, so a raster-size disagreement means two DIFFERENT layouts, not the same picture
@@ -1164,8 +1161,8 @@ public class SRSReconstructorCompactTests
     }
 
     // ── Fixtures (captured from real, green CompactViewRig.CaptureTabOrderControls runs
-    // against this task's finished implementation, WITH Rebuild Sample enabled — see task
-    // report for the capture method). Each entry is CompactViewRig.Describe's own format (real
+    // against the finished view, WITH Rebuild Sample enabled). Each entry is
+    // CompactViewRig.Describe's own format (real
     // automation peer name plus x:Name, reported separately) — a human-readable regression net
     // (catches renames, additions, removals), NOT the discriminating check itself. Same-typed
     // siblings that describe identically (this view's three "Browse" buttons) are disambiguated
@@ -1195,7 +1192,7 @@ public class SRSReconstructorCompactTests
     ];
 
     /// <summary>
-    /// Compact order (spec §2): disclosure header toggle → (body skipped: Help starts collapsed
+    /// Compact order: disclosure header toggle → (body skipped: Help starts collapsed
     /// per condition 5, so the plain-prose body is IsVisible=false and correctly excluded from
     /// Tab order) → identical tail to normal mode (this walk starts one stop earlier, at the
     /// header toggle, rather than at SRS File's Browse button — likewise PROVEN first here by

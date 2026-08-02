@@ -18,14 +18,14 @@
       <RowDefinition Height="*" MinHeight="80" />     <!-- 3: log band -->
     </Grid.RowDefinitions>
 
-    <!-- ── Help disclosure (small-window degradation, spec §2) ── Single instance, always in
+    <!-- ── Help disclosure (small-window degradation) ── Single instance, always in
          the tree: normal mode renders FLAT (header hidden, body force-expanded by
          CompactHeightBehavior) so the page is pixel-identical to the pre-disclosure layout;
          compact mode shows the header and starts collapsed. This view has no links (like
          SRSCreator, unlike Reconstructor) — the intro TextBlock is the whole body. Margin is
          NOT a local value here (house rule: local values beat unconditional styles, so a local
          "0,0,0,6" would defeat the compact-mode margin-tightening override) — the base value
-         lives in the helpDisclosure style instead (task-3 finding). HorizontalAlignment/
+         lives in the helpDisclosure style instead. HorizontalAlignment/
          HorizontalContentAlignment ARE local values (the hug-bug fix): Fluent's Expander
          defaults to Left, so without this it hugs its own content's width instead of filling
          the Grid column. -->
@@ -35,7 +35,7 @@
       <Expander.Header>
         <TextBlock Text="Help" FontSize="{DynamicResource FontSizeCaption}" />
       </Expander.Header>
-      <!-- Body scroller: keyboard route for the text-only body (spec §2 rev 10) —
+      <!-- Body scroller: keyboard route for the text-only body —
            Classes="helpBody" is focusable IN COMPACT ONLY via the class-scoped style. Hosts
            the former tab-description TextBlock verbatim, minus its old DockPanel.Dock/margin
            (margin moved to the Expander). Inset on the content panel per house rule. -->
@@ -112,8 +112,8 @@
       </StackPanel>
     </ScrollViewer>
 
-    <!-- ── Pinned action band — ALWAYS visible (the a11y survey's core defect: this row
-         clipped off-screen mid-run). Overlay/adorner implementations forbidden. The two
+    <!-- ── Pinned action band — ALWAYS visible (this row
+         previously clipped off-screen mid-run). Overlay/adorner implementations forbidden. The two
          separators bracketing it are the SAME two pre-existing Border elements from today's
          markup (relocated together, not duplicated); Margin is NOT a local value on either —
          Classes="pinnedSeparator" supplies today's verbatim 0,4 at normal size with a
@@ -126,7 +126,7 @@
            tightening style, Grid.compactHeight DockPanel.actionBar, needs to be able to win —
            closes the measured 2-DIP compact+HelpOpen overage). Classes="actionBar" supplies
            the SAME 0,0,0,4 base margin at normal size (pixel-identical), zeroed only in
-           compact (task-2 precedent: ReconstructorView's own action DockPanel). -->
+           compact (same pattern as ReconstructorView's own action DockPanel). -->
       <DockPanel Classes="actionBar">
         <Button DockPanel.Dock="Right"
                 Content="Rebuild Sample"
@@ -136,7 +136,7 @@
       </DockPanel>
 
       <!-- ── Result banner ─────────────────────────────────────── Visual-only surface,
-           capped at 2 lines (a11y rev-3 NEW-4) so a very long ResultSummary (e.g. an
+           capped at 2 lines so a very long ResultSummary (e.g. an
            exception message) can never grow the pinned band past its own budget.
            TextWrapping="Wrap" is what makes MaxLines meaningful (otherwise a single-line,
            NoWrap block never reaches a second line to cap). ToolTip.Tip +
@@ -144,7 +144,7 @@
            visual-only-trim rule as the compact tip (ReconstructorView's own
            TextBlock.tipLine). This element carries NO LiveSetting; the announcement itself
            rides the always-in-tree ResultStatus TextBlock in the log header below
-           (visibility-toggling here would race/lose the announcement — codex round-4).
+           (visibility-toggling here would race/lose the announcement).
            Padding/Margin are NOT local values (house rule: the Border.resultBanner style
            supplies today's verbatim 8,6 / 0,0,0,4 at normal size, with a measured
            compact-only tightening — see Styles.axaml). -->
@@ -169,17 +169,17 @@
                 Classes="ghost"
                 Padding="8,2" />
         <TextBlock x:Name="LogHeader" DockPanel.Dock="Left" Text="Log" FontWeight="SemiBold" VerticalAlignment="Center" />
-        <!-- Fix round 1 (codex, Important): the two status presenters share ONE Grid (the
+        <!-- The two status presenters share ONE Grid (the
              DockPanel's sole remaining/fill child) instead of each being its own
              DockPanel.Dock="Right" item — two same-direction docked TextBlocks left DockPanel's
              own arrange bookkeeping unpredictable under long text in both (observed: the FIRST
              one measured its own full unclipped width, starving the panel's remaining-rect
              tracking so the SECOND rendered at literal zero width).
-             FIXED-PROPORTION STAR COLUMNS, not Auto+MaxWidth (fix round 1's first attempt):
-             measured (see task-4 fix-round-1/2/3 report sections) that an Auto column's width
+             FIXED-PROPORTION STAR COLUMNS, not Auto+MaxWidth (an earlier attempt):
+             measured that an Auto column's width
              can silently stop tracking its child's DesiredSize when ResultSummary/ShowResult
              change in the SAME tick that also resizes row 2 (the pinned band, a sibling of this
-             row-3 Star row) — reproduced down to a minimal case. Fix round 2/3 correction: this
+             row-3 Star row) — reproduced down to a minimal case. Correction: this
              requires ResultSummary changing strictly AFTER ShowResult in the same tick, an order
              verified (by grep) to NOT be production's real completion sequence — every
              RebuildAsync completion branch sets ResultSummary before ShowResult — so this is NOT
@@ -189,17 +189,17 @@
              to the Grid's own, correctly-updating, total width), so the mechanism is immune to
              this order-sensitivity regardless of whether today's code happens to avoid triggering
              it — a future reordering of RebuildAsync's three lines (or a similar view) cannot
-             reintroduce the original starvation finding. Trade-off, accepted: SaveLogStatus's
+             reintroduce the original starvation bug. Trade-off, accepted: SaveLogStatus's
              share is now a fixed 2/3 of the row (was ~100% when ResultStatus was empty) rather
              than adapting to content; a guaranteed non-zero floor for BOTH, immune to property-
              set order, beats an adaptive split that can silently render one of them invisible. -->
         <Grid ColumnDefinitions="1*,2*">
-          <!-- Result announcement (a11y rev-3 NEW-4): always in the tree, mirrors
+          <!-- Result announcement: always in the tree, mirrors
                SaveLogStatus's own established pattern exactly — empty text renders nothing, no
                AutomationProperties.Name (the announced name IS the text), LiveSetting=Polite so
                a screen reader is notified the instant ResultSummary transitions from empty to
                text WHILE this element was already realized (the visual banner above toggles
-               IsVisible and would race/lose the announcement instead — codex round-4). -->
+               IsVisible and would race/lose the announcement instead). -->
           <TextBlock Grid.Column="0" x:Name="ResultStatus" Text="{Binding ResultSummary}"
                      AutomationProperties.LiveSetting="Polite"
                      Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"

@@ -8,7 +8,7 @@ using ReScene.SRS;
 namespace ReScene.App.Core.Tests;
 
 /// <summary>
-/// Task 10's VM additions (mandated by the §4a accessibility review): the
+/// Accessibility-driven VM additions: the
 /// <see cref="CreatorViewModel.HasDetectedSets"/> bool the folder-mode list/collapse binds to (a
 /// real int→bool binding fix — Avalonia has no implicit <c>Count</c>→<c>bool</c> conversion), the
 /// grammatically-correct <see cref="CreatorViewModel.DetectedSetsSummary"/> exposed as the

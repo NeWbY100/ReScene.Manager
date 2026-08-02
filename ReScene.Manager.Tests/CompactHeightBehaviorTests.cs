@@ -10,7 +10,7 @@ using ReScene.Manager.Behaviors;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Contract tests for <see cref="CompactHeightBehavior"/> (spec §1): threshold semantics
+/// Contract tests for <see cref="CompactHeightBehavior"/>: threshold semantics
 /// with restore-only hysteresis, ignored zero bounds, RowSizes application with
 /// splitter-capture, help-open donation, class preservation, and staged focus.
 /// </summary>
@@ -188,15 +188,15 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Task 2 brief, Step 1: the HelpExpander per-mode/donation contract, exercised as its own
+    /// The HelpExpander per-mode/donation contract, exercised as its own
     /// round-trip (compact entry resets to collapsed, user-opened HelpOpen tracks it, restore
     /// re-flattens and turns donation off, re-entering compact resets again — durability is
-    /// compact-session scoped, not permanent). RED-FIRST as given: this test attaches the
+    /// compact-session scoped, not permanent). This test attaches the
     /// expander AFTER the control has already been through its first Evaluate() (Host() shows
-    /// the window before SetHelpExpander runs) — a real gap Task 1's own tests never exercised,
-    /// since all of them attach the expander BEFORE first attachment. Fixed by
+    /// the window before SetHelpExpander runs) — a gap the existing coverage never exercised,
+    /// since all of it attaches the expander BEFORE first attachment. Fixed by
     /// OnHelpExpanderChanged additionally synchronizing a just-attached expander to the CURRENT
-    /// mode (see CompactHeightBehavior.cs and the task report for the full analysis) — a narrow,
+    /// mode (see CompactHeightBehavior.cs) — a narrow,
     /// additive fix; no existing test's behavior changed.
     /// </summary>
     [AvaloniaFact]
@@ -235,7 +235,7 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Retro-review finding #1: the given Step-1 test above only exercises a late attach in
+    /// The test above only exercises a late attach in
     /// NORMAL mode with nothing focused. A late attach while the control is ALREADY compact and
     /// established forces the just-attached expander's body collapsed (condition 5) exactly as a
     /// real compact-entry transition would — and if something inside that about-to-collapse body
@@ -284,7 +284,7 @@ public class CompactHeightBehaviorTests
         (Window w, Grid root) = Host(Threshold + 50);
         try
         {
-            // Direction-specific targets (spec rev 7): compact target = the expander's
+            // Direction-specific targets: compact target = the expander's
             // realized header toggle; restore target = a named normal-mode control.
             var expander = new Expander { [Grid.RowProperty] = 2 };
             var collapsing = new Button { Content = "link", [Grid.RowProperty] = 0 };
@@ -297,7 +297,7 @@ public class CompactHeightBehaviorTests
             Dispatcher.UIThread.RunJobs();
             // The app-level styles hide row-0 content in compact AND the expander header
             // at normal (flat mode); the unit test simulates BOTH with the class
-            // (codex round-3: without the header simulation the restore leg never
+            // (without the header simulation the restore leg never
             // strands focus and the assertion is vacuous):
             var toggle = expander.GetVisualDescendants().OfType<ToggleButton>().First();
             root.Classes.CollectionChanged += (_, _) =>
@@ -328,10 +328,10 @@ public class CompactHeightBehaviorTests
     [AvaloniaFact]
     public void FocusOutsideTheView_IsNeverStolen_ByTransitions()
     {
-        // Spec rev 8 precondition: a transition while focus sits OUTSIDE the behavior's
+        // A transition while focus sits OUTSIDE the behavior's
         // root must not move it. The shell is a DockPanel with the root as FILL so the
         // root's height stays window-driven and the transitions genuinely fire
-        // (codex round-3: a StackPanel rehost left the root content-sized and the test
+        // (a StackPanel rehost left the root content-sized and the test
         // could pass without any mode change ever happening).
         (Window w, Grid root) = Host(Threshold + 50);
         try
@@ -364,7 +364,7 @@ public class CompactHeightBehaviorTests
     [AvaloniaFact]
     public void ChainTerminal_RootGetsTransientFocusability()
     {
-        // Spec rev 11: a view with NO focusable descendants forces the chain to its
+        // A view with NO focusable descendants forces the chain to its
         // terminal — the root itself, made focusable only for the hand-off.
         (Window w, Grid root) = Host(Threshold + 50);
         try
@@ -395,7 +395,7 @@ public class CompactHeightBehaviorTests
     [AvaloniaFact]
     public void UnfocusableAfterRestore_Relocates_EvenThoughVisible()
     {
-        // Spec rev 11 trigger: restore leaves a compact-only-focusable element visible
+        // Restore leaves a compact-only-focusable element visible
         // but unfocusable — focus must move to the RestoreFocusTarget.
         (Window w, Grid root) = Host(Threshold - 1);
         try
@@ -424,7 +424,7 @@ public class CompactHeightBehaviorTests
     [AvaloniaFact]
     public void ClippedButRecoverable_Focus_IsBroughtIntoView_NotRelocated()
     {
-        // Spec rev 7 step (5): an element merely scrolled out of a viewport is recovered
+        // An element merely scrolled out of a viewport is recovered
         // via BringIntoView, never relocated.
         (Window w, Grid root) = Host(Threshold + 50);
         try
@@ -466,10 +466,10 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
-    // ── Fix round 1 (code review): covering tests for the four blocking findings ─────
+    // ── Focus-recovery regression coverage ────────────────────────────────
 
     /// <summary>
-    /// Finding #1: a fresh instance that starts (and stays) at normal height must still
+    /// A fresh instance that starts (and stays) at normal height must still
     /// synchronize its Help expander to the "flat mode, force-expanded" state on its very
     /// first evaluation — even though that evaluation crosses no threshold (state.IsCompact's
     /// false default already matches the computed mode, so nothing "transitions"). Before the
@@ -502,7 +502,7 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Finding #2: the deferred (Loaded-priority) recovery job must reject itself once its
+    /// The deferred (Loaded-priority) recovery job must reject itself once its
     /// premise is stale. This exercises the current-focus guard the most naturally
     /// constructible way: a "user" focus move happens SYNCHRONOUSLY within the very same
     /// transition that captured focus (via the compactHeight class-changed side effect, before
@@ -551,7 +551,7 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Fix round 2, item #1 (regression in the above fix): the current-focus guard must yield
+    /// A regression in the guard above: the current-focus guard must yield
     /// ONLY to a USABLE different focus. Here, focus moves from A to B synchronously within
     /// the same transition that captured A — but B is (already) permanently clipped by a plain
     /// ClipToBounds Border, not a ScrollViewer, so nothing ever answers BringIntoView and B stays
@@ -604,11 +604,11 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Fix round 3, item #1 (regression in round 2's ResolveRecoveryTarget refactor): the
-    /// ENTRY-time current-focus check (before BringIntoView) was restored correctly in round 2,
+    /// A regression in the ResolveRecoveryTarget refactor above: the
+    /// ENTRY-time current-focus check (before BringIntoView) was restored correctly there,
     /// but the POST-BringIntoView recheck regressed to generation/mode only, dropping the
-    /// "did focus move to something else valid in the meantime" half of the fix-round-1
-    /// guarantee. Here, captured is permanently clipped (nothing answers BringIntoView), so the
+    /// "did focus move to something else valid in the meantime" half of the guarantee
+    /// established earlier. Here, captured is permanently clipped (nothing answers BringIntoView), so the
     /// obscured branch runs; a handler on captured's OWN RequestBringIntoViewEvent — which
     /// fires synchronously, DURING the BringIntoView() call itself — moves focus to a valid,
     /// unrelated element, simulating a user action racing the recovery attempt. The fallback
@@ -655,7 +655,7 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Finding #3 (fix round 2 refinement — the original version of this test was not
+    /// An earlier version of this test was not
     /// discriminating: target sat wholly outside the outer viewport, which even the OLD,
     /// per-clipper-independent check already caught via its "vs outer" test alone, since that
     /// uses the fully-composed transform). THIS geometry is genuinely discriminating: target
@@ -674,7 +674,7 @@ public class CompactHeightBehaviorTests
     /// together imply X∩(A∩B)≠∅), so inner — always the first ancestor in the bubble path — is
     /// the one that adjusts, and having adjusted it sets e.Handled and the outer never sees
     /// request 1.
-    /// FIX-ROUND-5 CORRECTION: rounds 3 and 4 stopped there and concluded relocation was the
+    /// An earlier version of this test concluded relocation was the
     /// only available end-state. That was an artifact of the implementation's one-attempt-per-
     /// target rule, not of Avalonia. A SECOND request finds inner already satisfied (it returns
     /// false, leaving e.Handled false) and therefore reaches the outer, which completes the
@@ -682,11 +682,11 @@ public class CompactHeightBehaviorTests
     /// rule is covered directly by
     /// <see cref="PartialInnerProgress_SecondRequestReachesOuter_TargetRecovered"/>; what THIS
     /// test still owns, and asserts below, is the DETECTION half.
-    /// RED/GREEN proof (re-verified for this exact test): with IsObscured temporarily reverted
-    /// to the pre-fix, per-clipper-independent implementation, this test FAILS (both
+    /// This test is verified to fail if IsObscured is reverted
+    /// to the pre-fix, per-clipper-independent implementation (both
     /// independent checks pass, so IsObscured never even calls BringIntoView and neither offset
-    /// nor focus ever changes) — RED. With the cumulative-intersection implementation restored,
-    /// this test PASSES — GREEN.
+    /// nor focus ever changes); it passes with the cumulative-intersection implementation
+    /// restored.
     /// </summary>
     [AvaloniaFact]
     public void NestedClippers_DisjointIndependentOverlaps_AreObscuredOnlyByTheCombinedCheck()
@@ -738,7 +738,7 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Finding #4a (entering direction): fallback candidates must be validated, not merely
+    /// Fallback candidates (entering direction) must be validated, not merely
     /// assumed usable. A Focusable=false descendant, an IsVisible=false descendant, and the
     /// captured element itself (clipped but otherwise Focusable/Enabled, so ONLY the explicit
     /// exclusion keeps it out) are all in the tree; none may be selected, and the chain must
@@ -781,7 +781,7 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Finding #4b (restore direction): the resolved direction target itself can be unusable —
+    /// The resolved direction target itself can be unusable (restore direction) —
     /// here, a RestoreFocusTarget that is referenced but was never attached to any tree at all.
     /// The chain must skip it (not silently end there) and still reach the root terminal, since
     /// every other real candidate is also unusable.
@@ -819,7 +819,7 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Fix round 3, item #3: <c>Generation++</c>'s placement (before the captured-null return)
+    /// <c>Generation++</c>'s placement (before the captured-null return)
     /// is correct, but the deferred job's lambda originally read <c>state.Generation</c> LIVE
     /// at run time instead of a value captured at post time — always comparing the live field
     /// to itself, never detecting staleness. Fixed by freezing it into a local before posting.
@@ -834,7 +834,7 @@ public class CompactHeightBehaviorTests
     /// Evaluate) runs at — so within one dispatcher drain, transition A's OWN recovery job is
     /// always serviced before a newly-queued transition B's Evaluate could run.
     /// (3) <c>Dispatcher.RunJobs(priority)</c> is an INCLUSIVE (>=) threshold over discrete,
-    /// adjacent priority values (confirmed empirically in fix round 2: Default=0, Loaded=1,
+    /// adjacent priority values (confirmed empirically: Default=0, Loaded=1,
     /// nothing between them), so there is no partial-drain call that lets Default-priority
     /// work run while withholding Loaded-priority work newly posted as a result of it.
     /// This test instead verifies the guarantee the fix actually provides, directly: the
@@ -871,7 +871,7 @@ public class CompactHeightBehaviorTests
             object state = GetPrivateState(root);
             int liveGeneration = GetGeneration(state);
             // enteringCompact must MATCH state.IsCompact (the root was hosted below the
-            // threshold, so it is compact): fix round 4 found this argument was `false` here,
+            // threshold, so it is compact): an earlier version of this test had this argument `false` here,
             // which tripped IsSuperseded's MODE check first and made the generation argument
             // irrelevant — the test no-opped for the wrong reason. Matching the mode leaves the
             // deliberately-mismatched generation as the only thing that can reject the callback.
@@ -886,10 +886,10 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Fix round 4, item #1: after the BringIntoView attempt, the recovery must re-run the
+    /// After the BringIntoView attempt, the recovery must re-run the
     /// FULL resolution — re-resolve what is focused NOW (yielding to a newer VALID focus,
     /// RETARGETING a newer in-scope-but-unusable one) and only THEN evaluate settledness.
-    /// Round 3 checked settledness FIRST, so the one case where BringIntoView actually
+    /// An earlier version checked settledness FIRST, so the one case where BringIntoView actually
     /// succeeds — the captured element ends up perfectly visible — returned before any
     /// re-resolution, stranding a control that the very same recovery attempt had just
     /// left focused and unusable. Here <c>captured</c> sits in a real ScrollViewer (so
@@ -952,8 +952,8 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Fix round 4, item #2: the OUTER-scroller recovery guarantee. Rounds 1-3 kept
-    /// dropping it, the last round claiming it was impossible for nested clippers; it is
+    /// The OUTER-scroller recovery guarantee. Earlier versions kept
+    /// dropping it, the last one claiming it was impossible for nested clippers; it is
     /// not. The geometry that makes it real is an OVERSIZED inner viewport: the inner
     /// scroller already shows the target in full, so it cannot improve anything —
     /// <c>ScrollContentPresenter.BringIntoViewRequested</c> sets
@@ -1011,9 +1011,9 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Fix round 4, item #3: <see cref="StaleGeneration_DirectlyInjected_CausesTheDeferredJobToNoOp"/>
+    /// <see cref="StaleGeneration_DirectlyInjected_CausesTheDeferredJobToNoOp"/>
     /// only exercises the mismatch guard itself — it passes just as well against the live-capture
-    /// form that round 3 replaced, so it never discriminated frozen from live lambda capture.
+    /// form the fix replaced, so it never discriminated frozen from live lambda capture.
     /// This one does. It reaches the private callback FACTORY (which freezes state.Generation
     /// into a local at creation time), builds a callback, THEN bumps state.Generation behind its
     /// back — the "later transitions landed between post time and run time" window the freeze
@@ -1074,10 +1074,10 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Fix round 5, item #1: one BringIntoView request per target is not enough. A scroller
+    /// One BringIntoView request per target is not enough. A scroller
     /// that PARTIALLY satisfies a request still consumes it — <c>ScrollContentPresenter</c>
     /// sets <c>e.Handled = BringDescendantIntoView(...)</c>, true whenever it moved — so the
-    /// next scroller outward never sees request 1. Round 4's one-attempt-per-target rule
+    /// next scroller outward never sees request 1. An earlier one-attempt-per-target rule
     /// therefore relocated focus that a second request would have recovered.
     /// Geometry (the disjoint-overlap shape, whose target straddles the two clippers' gap):
     /// target at inner-content [95,115], inner viewport 100 at offset 0, outer viewport 100 at
@@ -1136,7 +1136,7 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Fix round 5, item #2: the boundary of <c>MaxBringIntoViewAttempts</c>. With retry gated
+    /// The boundary of <c>MaxBringIntoViewAttempts</c>. With retry gated
     /// on progress, a well-behaved tree terminates on its own — every request either moves a
     /// scroller (and the next one starts from a strictly better position) or moves nothing and
     /// exhausts that target. The cap exists only for the pathological case this rig builds: a
@@ -1195,7 +1195,7 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Fix round 5, item #3: a synchronous BringIntoView handler can CLEAR focus outright.
+    /// A synchronous BringIntoView handler can CLEAR focus outright.
     /// The captured element is then recovered and looks perfectly settled — attached, visible,
     /// focusable — while NOTHING at all is focused, and the recovery would return leaving the
     /// window with empty focus (keyboard and screen-reader users stranded with no focus ring
@@ -1241,11 +1241,11 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
-    // ── Shared-behavior fix (task 6, fix round 4): CONTINUED, NON-TRANSITIONAL resize ─────
+    // ── Shared behavior: CONTINUED, NON-TRANSITIONAL resize ────────────────
 
     /// <summary>
     /// The staged-focus contract must hold under CONTINUED resize, not only at the instant of a
-    /// mode transition. Task 6's own view-level investigation reproduced the gap in production
+    /// mode transition. A view-level investigation reproduced the gap in production
     /// (CreatorView): crossing the threshold IS a transition, so the staged recovery correctly
     /// fired ONCE and scrolled the focused splitter back into its band's viewport — but every
     /// SUBSEQUENT shrink step (not a transition, so <see cref="Evaluate"/>'s
@@ -1374,7 +1374,7 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// The no-focus-theft precondition (spec rev 8) applies to the resize recheck exactly as it
+    /// The no-focus-theft precondition applies to the resize recheck exactly as it
     /// does to transitions: with focus OUTSIDE this root, a resize must cost nothing and can never
     /// pull focus in. Made discriminating by giving the outside element a genuinely broken state —
     /// permanently clipped by a plain ClipToBounds Border, so nothing answers BringIntoView — that
@@ -1471,10 +1471,10 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
-    // ── Final review: the phantom root Tab stop, both remaining orderings ────────────────
+    // ── The phantom root Tab stop, both remaining orderings ─────────────────────
 
     /// <summary>
-    /// Final review, MAJOR: a DEFERRED staged recovery that runs after its root has already left
+    /// A DEFERRED staged recovery that runs after its root has already left
     /// the tree. <see cref="RootTransientFocusability_IsRevertedOnDetach"/> covers grant-THEN-detach
     /// (the reset fires because the root genuinely loses focus). This is the complementary
     /// ordering — detach-THEN-run — and the reset cannot save it: the pass walks a dead tree, finds
@@ -1523,7 +1523,7 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Final review, MAJOR, the third ordering: the root is torn down DURING the pass, so the
+    /// The third ordering: the root is torn down DURING the pass, so the
     /// entry check cannot help — it was attached when the pass began. A handler on the captured
     /// element's own bring-into-view request detaches the view mid-recovery (synchronously, as such
     /// handlers run); the pass then continues down the fallback chain to the terminal, whose
@@ -1568,10 +1568,10 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
-    // ── Shared-behavior fix round 7: the budget, and the resolver's softer bar ───────────
+    // ── Shared behavior: the budget, and the resolver's softer bar ─────────────────
 
     /// <summary>
-    /// Fix round 7, sliver #1: the shared-budget POLICY was implemented only as far as the
+    /// The shared-budget POLICY was implemented only as far as the
     /// wrapper's own leg. A pass that reached the obscured leg called
     /// <see cref="RelocateFocusIfNeeded"/>, which starts its own counter at zero — so a pass could
     /// spend wrapper budget PLUS a whole fresh allowance, more than the 8 requests the policy
@@ -1584,7 +1584,8 @@ public class CompactHeightBehaviorTests
     /// Constructed to cross both legs in ONE pass: the first holder is permanently partially
     /// clipped and fakes progress, so the wrapper's own leg spends a request; its handler then
     /// moves focus to a permanently OBSCURED element that also fakes progress, so the hand-over
-    /// lands in the obscured leg. Round 6 spent 1 + a fresh 8 = 9; the budget now covers the whole
+    /// lands in the obscured leg. Before this fix, the wrapper's own request plus a fresh
+    /// 8-request allowance for the obscured leg totaled 9; the shared budget now covers the whole
     /// pass, so the total is exactly 8 however it is split between the legs.
     /// </para>
     /// </summary>
@@ -1663,7 +1664,7 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Fix round 7, sliver #2 — and a correction to round 6's own stated reasoning. Round 6
+    /// A correction to the reasoning above: an earlier version
     /// returned straight out of the obscured leg, arguing that
     /// <see cref="RelocateFocusIfNeeded"/> already hands over internally and a second loop would
     /// only duplicate it. That was wrong, and this is the case that proves it: the two hand over
@@ -1671,7 +1672,7 @@ public class CompactHeightBehaviorTests
     /// usable is the AA line — focusable, enabled, not ENTIRELY hidden — which a merely PARTIALLY
     /// clipped element satisfies. This pass's bar is full visibility. So the recovery can finish,
     /// perfectly correctly by its own contract, having left the live focus-holder half off-screen,
-    /// displaced by its own in-flight request; and round 6 then declared the pass complete.
+    /// displaced by its own in-flight request; and the earlier version declared the pass complete.
     /// <para>
     /// Geometry, in the scroller's content space (viewport 205 when the pass runs): spacer to 20,
     /// neighbour [20,50], spacer to 215, target [215,245], trailing scroll room. At offset 0 the
@@ -1738,21 +1739,21 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
-    // ── Shared-behavior fix round 6: the stale in-flight request ─────────────────────────
+    // ── Shared behavior: the stale in-flight request ────────────────────────────
 
     /// <summary>
-    /// Fix round 6: stopping attempts 2–8 was never the whole duty. When a handler moves focus
+    /// Stopping attempts 2–8 was never the whole duty. When a handler moves focus
     /// during request 1, that request is ALREADY IN FLIGHT — it keeps bubbling past the handler to
     /// the <c>ScrollContentPresenter</c>, which then scrolls on behalf of the OLD target. If the
     /// element that just took focus lives in that same scroller, the behavior's own request is what
-    /// pushes it out of view — and round 5's unconditional abandonment then walked away from a
+    /// pushes it out of view — and unconditional abandonment then walked away from a
     /// stranding it had itself created. Rescheduling on the next bounds change is no answer: a drag
     /// has a LAST step, and after it there is no next bounds change.
     /// <para>
     /// The pass must instead HAND OVER: once the stale request has settled, run the same
     /// visibility recheck for whoever actually holds focus now. The no-theft precondition still
     /// binds — the new holder must genuinely hold focus and be in-root — and empty focus still
-    /// means full abandon (round 5's rule, unchanged).
+    /// means full abandon (unchanged from before).
     /// </para>
     /// <para>
     /// Geometry, all in the scroller's own content space (viewport 210 at the hosted size, 205
@@ -1761,8 +1762,8 @@ public class CompactHeightBehaviorTests
     /// hangs 25 DIPs past the viewport — PARTIALLY clipped (asserted through the behavior's own
     /// verdict, not assumed), so the partial leg is what runs. Request 1's handler moves focus to
     /// the neighbour and lets the request bubble on; the presenter scrolls to offset 25 to reveal
-    /// the target in full, which puts the neighbour [0,15] ENTIRELY outside the viewport. Round 5
-    /// abandons there, leaving the focused neighbour invisible; the handover recovers it.
+    /// the target in full, which puts the neighbour [0,15] ENTIRELY outside the viewport. The
+    /// earlier version abandons there, leaving the focused neighbour invisible; the handover recovers it.
     /// </para>
     /// </summary>
     [AvaloniaFact]
@@ -1828,10 +1829,10 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
-    // ── Shared-behavior fix round 5: races inside the new path ───────────────────────────
+    // ── Shared behavior: races inside the new path ──────────────────────────────
 
     /// <summary>
-    /// Fix round 5, MAJOR #1 (WCAG 2.4.7/2.4.11): the partial-clip leg took an ACTION —
+    /// WCAG 2.4.7/2.4.11: the partial-clip leg took an ACTION —
     /// <c>BringIntoView</c>, which runs handlers SYNCHRONOUSLY and can re-enter layout and focus —
     /// and then re-checked only GEOMETRY before acting again. The staged transaction's discipline
     /// (revalidate after every action, not just before the first) applies to any action this
@@ -1851,8 +1852,8 @@ public class CompactHeightBehaviorTests
     /// Discriminating by CONSTRUCTION, not timing: the target is permanently clipped by a plain
     /// <c>ClipToBounds</c> Border (nothing can ever recover it) while the handler FAKES progress by
     /// nudging the enclosing scroller 1 DIP per request — the same rig
-    /// <see cref="FakedProgressForever_StopsAtTheCap_AndRelocates"/> uses. Round 4's leg therefore
-    /// spun to the full <c>MaxBringIntoViewAttempts</c> cap (8 requests) after focus had already
+    /// <see cref="FakedProgressForever_StopsAtTheCap_AndRelocates"/> uses. An earlier version of
+    /// this leg therefore spun to the full <c>MaxBringIntoViewAttempts</c> cap (8 requests) after focus had already
     /// moved; the fixed leg issues exactly ONE.
     /// </para>
     /// </summary>
@@ -1892,10 +1893,10 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Fix round 5, MAJOR #1, the generation half: a real transition landing during the leg's own
+    /// The generation half of the fix above: a real transition landing during the leg's own
     /// synchronous <c>BringIntoView</c> must abandon it, exactly as <see cref="IsSuperseded"/>
-    /// rejects a stale deferred job. Same faked-progress rig as above, so round 4's leg spun to the
-    /// cap while superseded and the fixed one issues exactly ONE request.
+    /// rejects a stale deferred job. Same faked-progress rig as above, so an earlier version of
+    /// this leg spun to the cap while superseded and the fixed one issues exactly ONE request.
     /// <para>
     /// The bump is injected directly (the established technique in this file — see
     /// <see cref="FrozenGeneration_CallbackBuiltBeforeLaterTransitions_NoOps"/>'s own three-way
@@ -1936,11 +1937,11 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Fix round 5, MAJOR #2 (WCAG 2.4.3): when the posted pass runs and the FocusManager reports
+    /// WCAG 2.4.3: when the posted pass runs and the FocusManager reports
     /// NOTHING focused, that is not the pass's business. Empty focus means the user (or a close, or
     /// a detach) cleared it; reviving the element that happened to be focused when the pass was
     /// SCHEDULED is focus theft, and the fallback chain's root terminal can leave a phantom Tab
-    /// stop behind. Round 4 inherited <see cref="ResolveRecoveryTarget"/>'s "nothing focused means
+    /// stop behind. An earlier version inherited <see cref="ResolveRecoveryTarget"/>'s "nothing focused means
     /// recover the capture" rule — correct for a TRANSITION, which cleared focus itself by hiding
     /// the element, and wrong for a resize, which did no such thing.
     /// <para>
@@ -1993,14 +1994,14 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Fix round 5, coverage gap: the no-theft precondition end-to-end, not merely at scheduling.
+    /// The no-theft precondition end-to-end, not merely at scheduling.
     /// <see cref="NonTransitionalResize_FocusOutsideTheRoot_IsNeverPulledIn"/> covers focus that was
     /// ALREADY outside when the pass was scheduled (so nothing is ever posted); this covers focus
     /// that was legitimately IN-ROOT at scheduling and left before the pass ran. A guard rather
-    /// than a gap test — round 4 already declined this case, via a different route
+    /// than a gap test — an earlier version already declined this case, via a different route
     /// (<see cref="ResolveRecoveryTarget"/>'s own out-of-scope null) than the live-holder rule that
-    /// replaced it — so it is here to keep BOTH routes honest, and it is reported as passing
-    /// before and after rather than dressed up as a fix.
+    /// replaced it — so it is here to keep BOTH routes honest, and it passes both before and
+    /// after this change rather than pinning a specific fix.
     /// </summary>
     [AvaloniaFact]
     public void ResizeRecheck_FocusMovedOutsideBeforeThePassRuns_NeverRecovers()
@@ -2048,7 +2049,7 @@ public class CompactHeightBehaviorTests
     }
 
     /// <summary>
-    /// Fix round 5, MAJOR #2's second half: the root's TRANSIENT focusability — granted only for
+    /// The root's TRANSIENT focusability — granted only for
     /// the fallback chain's hand-off — must not survive the root leaving the tree, or the view
     /// carries a phantom Tab stop into its next attachment.
     /// <see cref="ChainTerminal_RootGetsTransientFocusability"/> proves the LostFocus reset covers

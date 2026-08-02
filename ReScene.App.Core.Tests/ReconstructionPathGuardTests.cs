@@ -19,8 +19,8 @@ public class ReconstructionPathGuardTests : TempDirTestBase
         string resolved = ReconstructionPathGuard.ResolveReal(Path.Combine(junction, "leaf"));
 
         // The expectation must be canonicalized too: on macOS the raw temp spelling (/var/...)
-        // only matched while the adopted target ALSO kept it — once adoption re-walks the target
-        // (the round-3 fix), the actual side resolves to /private/var and a raw expectation
+        // only matched while the adopted target ALSO kept it — once adoption re-walks the target,
+        // the actual side resolves to /private/var and a raw expectation
         // diverges. Same treatment as the sibling expectations above.
         Assert.Equal(Path.Combine(ReconstructionPathGuard.ResolveReal(realTarget), "leaf"), resolved);
     }

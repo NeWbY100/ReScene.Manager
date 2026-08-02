@@ -5,8 +5,8 @@ using ReScene.App.Core.Services;
 namespace ReScene.App.Core.Tests;
 
 /// <summary>
-/// Tests that SampleRestorerViewModel loads embedded SRS entries off the UI thread (finding #8:
-/// UI-thread async blocking) while still populating the bound collection correctly.
+/// Tests that SampleRestorerViewModel loads embedded SRS entries off the UI thread while still
+/// populating the bound collection correctly.
 /// </summary>
 public class SampleRestorerViewModelTests
 {

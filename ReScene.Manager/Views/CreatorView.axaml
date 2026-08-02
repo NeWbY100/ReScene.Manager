@@ -13,7 +13,7 @@
       <RowDefinition Height="*" MinHeight="80" />     <!-- 3: log band -->
     </Grid.RowDefinitions>
 
-    <!-- ── Help disclosure (small-window degradation, spec §2) ── Single instance, always in
+    <!-- ── Help disclosure (small-window degradation) ── Single instance, always in
          the tree: normal mode renders FLAT (header hidden, body force-expanded by
          CompactHeightBehavior) so the page is pixel-identical to the pre-disclosure layout;
          compact mode shows the header and starts collapsed. This view has no links (like
@@ -30,7 +30,7 @@
       <Expander.Header>
         <TextBlock Text="Help" FontSize="{DynamicResource FontSizeCaption}" />
       </Expander.Header>
-      <!-- Body scroller: keyboard route for the text-only body (spec §2 rev 10) —
+      <!-- Body scroller: keyboard route for the text-only body —
            Classes="helpBody" is focusable IN COMPACT ONLY via the class-scoped style. -->
       <ScrollViewer Classes="helpBody" VerticalScrollBarVisibility="Auto"
                     ScrollViewer.AllowAutoHide="False">
@@ -77,7 +77,7 @@
           </TextBlock>
           <!-- Docked right in declaration order (rightmost first): folder Browse sits to the right of the
                file Browse. Explicit TabIndex keeps keyboard order = visual order = TextBox → Browse file
-               → Browse folder (§4a accessibility review P3#8). -->
+               → Browse folder. -->
           <DockPanel Margin="0,0,0,2">
             <Button DockPanel.Dock="Right" Content="Browse folder…"
                     Command="{Binding BrowseInputFolderCommand}"
@@ -144,8 +144,7 @@
              compact via the descendant PixelRestore entry) can clip the grid's own rows —
              keyboard navigation past the grid's own realized rows hands off to the OUTER (this
              ScrollViewer, band 1) rather than dead-ending at the grid's own edge.
-             AutomationProperties.LabeledBy pairs the grid to its own header TextBlock above (the
-             spec's LabeledBy audit). -->
+             AutomationProperties.LabeledBy pairs the grid to its own header TextBlock above. -->
         <DataGrid x:Name="StoredFilesGrid"
                   Grid.Row="3"
                   ItemsSource="{Binding StoredFiles}"
@@ -168,7 +167,7 @@
         </DataGrid>
 
         <!-- GridSplitter between Stored Files and Output. NO local Background (fix: a local value
-             here would SHADOW the GridSplitter:focus style override — moved to the Task 2 shared
+             here would SHADOW the GridSplitter:focus style override — moved to the shared
              style, which supplies both the rest-state Transparent and the :focus accent). -->
         <GridSplitter Grid.Row="4" Height="5" HorizontalAlignment="Stretch"
                       VerticalAlignment="Center"
@@ -188,7 +187,7 @@
                     Command="{Binding BrowseOutputCommand}"
                     Classes="ghost"
                     Margin="4,0,0,0" MinWidth="75" />
-            <!-- AutomationProperties.Name (fix round 1, codex finding 1): OutputTextBox became the
+            <!-- AutomationProperties.Name: OutputTextBox became the
                  RestoreFocusTarget below (moved off InputTextBox — see the ctor's own remarks on
                  why) — an unnamed edit control landing focus-recovery here would have swapped one
                  a11y gap for another. "Output path" mirrors InputTextBox's own naming convention. -->
@@ -211,7 +210,7 @@
                     IsChecked="{Binding AutoCreateSRS}" Margin="0,1" />
           <CheckBox Content="Vobsub SRR — Create nested SRR files for subtitle archives found in Subs/ directories."
                     IsChecked="{Binding CreateVobsubSRR}" Margin="0,1" />
-          <!-- B3 (pyrescene parity): folder mode always stores a fix release's RAR automatically (the
+          <!-- pyrescene parity: folder mode always stores a fix release's RAR automatically (the
                release scan provides it), so this toggle is inert there — disable it and tell a screen
                reader WHY via HelpText (Avalonia announces the disabled state itself via UIA). -->
           <CheckBox Content="Store fix RAR — For fix/patch releases, store the main RAR file as proof."
@@ -238,8 +237,8 @@
       </Grid>
     </ScrollViewer>
 
-    <!-- ── Pinned action band — ALWAYS visible (the a11y survey's headline defect: this row and
-         the log measured off-window at 700×450 BASE state under today's plain Grid). Overlay/
+    <!-- ── Pinned action band — ALWAYS visible (this row and
+         the log previously measured off-window at 700×450 under the old plain Grid). Overlay/
          adorner implementations forbidden. The two separators bracketing it are the SAME two
          pre-existing Border elements from today's markup (relocated together, not duplicated),
          now Classes="pinnedSeparator" (today's own verbatim Margin="0,4" matches that class's own
@@ -247,8 +246,8 @@
          change). The action DockPanel and ProgressBar below keep their margins as LOCAL, verbatim
          values (0,0,0,2 / 0,0,0,4, unchanged from today) rather than the shared actionBar class —
          that class's own base margin (0,0,0,4) does not match this view's own pre-existing
-         action-row margin (0,0,0,2), the same mismatch Task 4/5 both hit and resolved the same
-         way. -->
+         action-row margin (0,0,0,2) — the same mismatch resolved the same way elsewhere in
+         this app. -->
     <StackPanel Grid.Row="2">
       <Border Classes="pinnedSeparator" Height="1" Background="{DynamicResource BorderSeparator}" />
 

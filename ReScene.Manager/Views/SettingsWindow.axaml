@@ -158,7 +158,7 @@
               <TextBox Text="{Binding ReconstructOutputPath}" />
             </DockPanel>
 
-            <!-- Header + self-labeled CheckBox + indented caption — the window's Mode-row anatomy (§4a).
+            <!-- Header + self-labeled CheckBox + indented caption — the window's Mode-row anatomy.
                  The HelpText carries the kept-for-diagnostics and disk-space context to a Tab-focused
                  screen reader user, since the caption TextBlocks are only visually associated. -->
             <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">

@@ -4,22 +4,21 @@ using Avalonia.Controls;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Shared floor-measurement for the per-view threshold-invariant tests (spec §1's four
-/// one-sum checks). Measures in inner-content DIPs at width 676 (the 700×450 inner width).
+/// Shared floor-measurement for the per-view threshold-invariant tests (four one-sum
+/// checks). Measures in inner-content DIPs at width 676 (the 700×450 inner width).
 /// </summary>
 internal static class CompactInvariantRig
 {
     public const double InnerBudget = 319;   // measured: 450 − 26 − 58 − 23 − 24
-    public const double CiBound = 307;       // InnerBudget − 12 jitter slack (spec §1)
+    public const double CiBound = 307;       // InnerBudget − 12 jitter slack
     public const double InnerWidth = 676;
 
     /// <summary>
-    /// The ROW-AWARE floor of an inner Grid (codex round-1 #5: a naive
-    /// Measure(∞) reports CONTENT height for star and scrolling rows, not their
-    /// minimums): Σ per RowDefinition — star rows contribute MinHeight; pixel rows their
-    /// Height; Auto rows the max desired height of their children measured at
-    /// InnerWidth×∞ — plus inter-row margins. Callers force conditional rows visible and
-    /// set the mode class BEFORE calling.
+    /// The ROW-AWARE floor of an inner Grid (a naive Measure(∞) reports CONTENT height for
+    /// star and scrolling rows, not their minimums): Σ per RowDefinition — star rows
+    /// contribute MinHeight; pixel rows their Height; Auto rows the max desired height of
+    /// their children measured at InnerWidth×∞ — plus inter-row margins. Callers force
+    /// conditional rows visible and set the mode class BEFORE calling.
     /// </summary>
     public static double MeasureFloor(Grid innerRoot)
     {

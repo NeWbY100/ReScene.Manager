@@ -7,9 +7,9 @@ using ReScene.SRS;
 namespace ReScene.App.Core.Tests;
 
 /// <summary>
-/// Task 8's test matrix (design plan 2026-07-19-multiset-srr-creation.md L1122-1138): folder-mode
-/// input handling on <see cref="CreatorViewModel"/> — the generation-guarded background release
-/// scan (spec §3, mirroring <c>InspectorViewModel</c>'s <c>_loadGeneration</c> house pattern), the
+/// Test matrix for folder-mode input handling on <see cref="CreatorViewModel"/> (see
+/// docs/superpowers/plans/2026-07-19-multiset-srr-creation.md) — the generation-guarded background
+/// release scan (mirroring <c>InspectorViewModel</c>'s <c>_loadGeneration</c> house pattern), the
 /// collections/status it populates, the OutputPath auto-vs-user tracking, music-only gating, and
 /// the folder <c>Create</c> branch that calls <see cref="ISRRCreationService.CreateFromInputsAsync"/>.
 /// File-mode behavior is covered by <see cref="CreatorViewModelTests"/>; this file only regression-
@@ -134,7 +134,7 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
 
     /// <summary>Throws an UNEXPECTED (non-OCE) exception from <c>Scan</c> — the very fault
     /// <c>RarProofInspector.Inspect</c>'s narrow IOException/UnauthorizedAccessException catch (or a
-    /// RAR-parser fault) would let escape, to prove C2's catch-all doesn't strand the busy state.</summary>
+    /// RAR-parser fault) would let escape, to prove the catch-all doesn't strand the busy state.</summary>
     private sealed class ThrowingReleaseScanner(Exception toThrow) : IReleaseScanner
     {
         public ReleaseScanResult Scan(string releaseRoot, CancellationToken ct = default) => throw toThrow;
@@ -210,8 +210,8 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
         Assert.Equal([subSfv], vm.ExtraSubtitleSfvFiles);
 
         Assert.Equal(FieldState.Ok, vm.InputStatus.State);
-        // C3: the set-count segment now reuses DetectedSetsSummary's grammar ("2 RAR sets"),
-        // consistent with the detected-sets list's automation Name — no "(s)" pluralization noise.
+        // The set-count segment reuses DetectedSetsSummary's grammar ("2 RAR sets"), consistent
+        // with the detected-sets list's automation Name — no "(s)" pluralization noise.
         Assert.Contains("2 RAR sets", vm.InputStatus.Message, StringComparison.Ordinal);
         Assert.Contains("1 sample(s)", vm.InputStatus.Message, StringComparison.Ordinal);
         Assert.Contains("1 stored file(s)", vm.InputStatus.Message, StringComparison.Ordinal);
@@ -450,8 +450,8 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
         Assert.Equal(0, srr.InputsCalls);
     }
 
-    // ── 9b. IsFolderMode (follow-up B3): reflects the folder/file state with change notification,
-    //        so the view can disable the "Store fix RAR" checkbox in folder mode. ──
+    // ── 9b. IsFolderMode reflects the folder/file state with change notification, so the view can
+    //        disable the "Store fix RAR" checkbox in folder mode. ──
 
     [Fact]
     public async Task IsFolderMode_TracksFolderVsFileInput_WithChangeNotification()
@@ -638,22 +638,21 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
         Assert.Equal(previousOutput, vm.OutputPath); // never overwritten with an auto name
         Assert.Equal(0, scanner.Calls); // never actually scans a filesystem root
         Assert.False(vm.IsScanning);
-        Assert.False(vm.CreateSRRCommand.CanExecute(null)); // F3a: no empty creation from a rejected input
+        Assert.False(vm.CreateSRRCommand.CanExecute(null)); // no empty creation from a rejected input
     }
 
-    // ── F1 fix round: _scanCts lifecycle race ──────────────────
+    // ── _scanCts lifecycle race ──────────────────────────────
 
     [Fact]
     public async Task RapidInputSwitching_WithoutAwaiting_NeverThrows()
     {
-        // Regression for F1: RunFolderScanAsync's cleanup used to run on a background thread
-        // (ConfigureAwait(false) + a bare `finally` that disposed/null'd _scanCts directly), racing
-        // OnInputPathChanged's cancellation of the SAME field on the UI thread.
-        // CancellationTokenSource forbids concurrent Cancel()/Dispose() on one instance
-        // (ObjectDisposedException — a crash), and a background finally could null out a newer
-        // scan's live CTS (TOCTOU). A fast (non-gated) scanner plus many unawaited switches
-        // maximizes the odds of overlapping a background completion with the next switch's
-        // synchronous cancel — the exact window the bug needed.
+        // RunFolderScanAsync's cleanup used to run on a background thread (ConfigureAwait(false) +
+        // a bare `finally` that disposed/null'd _scanCts directly), racing OnInputPathChanged's
+        // cancellation of the SAME field on the UI thread. CancellationTokenSource forbids
+        // concurrent Cancel()/Dispose() on one instance (ObjectDisposedException — a crash), and a
+        // background finally could null out a newer scan's live CTS (TOCTOU). A fast (non-gated)
+        // scanner plus many unawaited switches maximizes the odds of overlapping a background
+        // completion with the next switch's synchronous cancel — the exact window the bug needed.
         var scanner = new StubReleaseScanner(EmptyResult);
         CreatorViewModel vm = CreateVm(scanner, out _);
 
@@ -673,7 +672,7 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
         await Task.WhenAll(pending);
     }
 
-    // ── F2 fix round: cross-mode OutputPath auto-vs-user provenance ──
+    // ── Cross-mode OutputPath auto-vs-user provenance ──
 
     [Fact]
     public async Task FileAutoFill_SwitchToFolder_OutputPathReplacedWithFolderAutoValue()
@@ -682,7 +681,7 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
         string file = Touch(Path.Combine(TempDir, "movie.sfv"));
         CreatorViewModel vm = CreateVm(new StubReleaseScanner(EmptyResult), out _);
 
-        vm.InputPath = file; // file-mode auto-fill now records provenance too (F2)
+        vm.InputPath = file; // file-mode auto-fill now records provenance too
         string fileAutoValue = vm.OutputPath;
         Assert.Equal(Path.Combine(TempDir, "movie.srr"), fileAutoValue);
 
@@ -722,7 +721,7 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
         string folderAutoValue = vm.OutputPath;
         Assert.Equal(Path.Combine(TempDir, "Release.Folder-GRP.srr"), folderAutoValue);
 
-        vm.InputPath = file; // typed directly (not via BrowseInputCommand) — still re-derives (F2)
+        vm.InputPath = file; // typed directly (not via BrowseInputCommand) — still re-derives
 
         Assert.Equal(Path.Combine(TempDir, "movie.srr"), vm.OutputPath);
         Assert.NotEqual(folderAutoValue, vm.OutputPath);
@@ -746,7 +745,7 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
         Assert.Equal(userChosen, vm.OutputPath);
     }
 
-    // ── F3 fix round: folder error paths must gate Create, not fail open ──
+    // ── Folder error paths must gate Create, not fail open ──
 
     [Fact]
     public async Task PriorSuccessfulScan_ThenFilesystemRoot_InputStatusNotStale_CanCreateFalse_CollectionsEmpty()
@@ -767,8 +766,8 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
         string driveRoot = Path.GetPathRoot(TempDir)!;
         vm.InputPath = driveRoot;
 
-        // Peer Finding 2: InputStatus must not keep showing the prior scan's success summary once
-        // the collections behind it have been wiped.
+        // InputStatus must not keep showing the prior scan's success summary once the collections
+        // behind it have been wiped.
         Assert.Equal(FieldState.Error, vm.InputStatus.State);
         Assert.False(vm.CreateSRRCommand.CanExecute(null));
         Assert.Empty(vm.DetectedSets);
@@ -819,13 +818,14 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
     [Fact]
     public async Task ScannerThrowsUnexpectedException_NotStrandedScanning_ErrorStatus_CanCreateFalse()
     {
-        // C2 (M1 hardening): RunFolderScanAsync used to catch ONLY OperationCanceledException, and
+        // RunFolderScanAsync used to catch ONLY OperationCanceledException, and
         // RarProofInspector.Inspect catches only IOException/UnauthorizedAccessException — so an
         // unexpected throw (ArgumentException/NotSupportedException/SecurityException from a
         // FileStream, or a RAR-parser fault) would fault the background Task, the UI completion Post
         // would never run, and IsScanning + InputStatus would stay stranded on "Scanning…" (Create
-        // disabled, a11y live region stuck) until the user re-inputs. The catch-all must fail closed:
-        // clear IsScanning and gate Create with an Error status, like the root-enumeration error (F3).
+        // disabled, a11y live region stuck) until the user re-inputs. The catch-all must fail
+        // closed: clear IsScanning and gate Create with an Error status, like the root-enumeration
+        // error.
         string root = CreateFolder();
         CreatorViewModel vm = CreateVm(new ThrowingReleaseScanner(new InvalidOperationException("kaboom")), out FakeSRRCreationService srr);
         vm.OutputPath = Path.Combine(TempDir, "out.srr");

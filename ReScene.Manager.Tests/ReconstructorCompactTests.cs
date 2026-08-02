@@ -22,9 +22,9 @@ using ReScene.Manager.Views;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Small-window layout degradation tests for <see cref="ReconstructorView"/> (spec rev 12; task
-/// brief numbers: threshold 421, TabControl minimums 130/96/60, log 80, Help body MaxHeight 38,
-/// compact CI bound <see cref="CompactInvariantRig.CiBound"/> == 307). This is the TEMPLATE per-view
+/// Small-window layout degradation tests for <see cref="ReconstructorView"/> (threshold 421,
+/// TabControl minimums 130/96/60, log 80, Help body MaxHeight 38, compact CI bound
+/// <see cref="CompactInvariantRig.CiBound"/> == 307). This is the TEMPLATE per-view
 /// shape every later view task (SRSCreator, SRSReconstructor, SampleRestorer, Creator) copies —
 /// <see cref="CompactViewRig"/> members plus VM property setters only, no other undefined helpers.
 /// </summary>
@@ -79,7 +79,7 @@ public class ReconstructorCompactTests
         "Tip: click “Import from SRR” to auto-configure versions, compression, " +
         "dictionary, timestamps and Host OS from the release's SRR.";
 
-    // ── 1. Invariant (spec §1's four checks; CompactInvariantRig) ────
+    // ── 1. Invariant (the four floor-height/budget checks; CompactInvariantRig) ────
 
     [AvaloniaFact]
     public void Invariant_ExpandedModeFloor_UnderThreshold()
@@ -213,7 +213,7 @@ public class ReconstructorCompactTests
     }
 
     /// <summary>
-    /// Round-3 retro-review finding #1: completeness was opt-in but never actually wired into
+    /// Completeness was opt-in but never actually wired into
     /// this, the REAL Reconstructor walk — so a genuine, present-day regression in either
     /// direction would have gone uncaught by the walk's own stability check alone. Wires
     /// direction-specific expected-stop sets, resolved from committed, description-based fixtures
@@ -237,14 +237,13 @@ public class ReconstructorCompactTests
     /// leaking into the tab strip or shell chrome mid-navigation), and both sentinels happen to be
     /// the first focusable element within that scope. The reverse fixtures below are therefore
     /// deliberately single-entry (the sentinel itself) — an honest reflection of this VERIFIED
-    /// reality, not an oversight — see the retro-fix report for the full finding and why this
-    /// weakens (without invalidating) the reverse completeness check specifically for these two
-    /// entry points.
+    /// reality, not an oversight. This weakens (without invalidating) the reverse completeness
+    /// check specifically for these two entry points.
     /// </para>
     /// </summary>
     /// <summary>
-    /// Round-5 retro-review (the per-scope redesign the round-4 blocker was ruled into): replaces
-    /// round 3/4's single combined <see cref="CompactViewRig.AssertTabWalkStaysVisible"/> call
+    /// Replaces the previous single combined
+    /// <see cref="CompactViewRig.AssertTabWalkStaysVisible"/> call
     /// with the FORWARD walk plus TWO independent, per-scope REVERSE walks — one per
     /// keyboard-navigation scope this view actually has (see
     /// <see cref="NormalScopeAReverseTabOrderFixture"/>'s own doc comment for why there are two,
@@ -284,8 +283,8 @@ public class ReconstructorCompactTests
             // surrounding shell chrome — MenuItem/status-bar controls — until it returns to the
             // sentinel or repeats, which it eventually does, but only after visiting controls
             // outside this view entirely). The per-scope REVERSE walks below still use RunTabPass
-            // directly: reverse never needs to leave root's scope to begin with (round 3/4 already
-            // established that both this view's navigation scopes are entirely WITHIN root), so
+            // directly: reverse never needs to leave root's scope to begin with (both this
+            // view's navigation scopes are entirely WITHIN root), so
             // RunTabPass's own "stable loop" boundary is the right one there.
             sentinel.Focus();
             Dispatcher.UIThread.RunJobs();
@@ -293,7 +292,7 @@ public class ReconstructorCompactTests
             IReadOnlyList<Control> forwardOrder = forwardCapture.Order;
             Assert.Equal(forwardFixture, forwardOrder.Select(CompactViewRig.Describe));
 
-            // Round-6 retro-review: the terminal EXTERNAL target (the first control outside root
+            // The terminal EXTERNAL target (the first control outside root
             // the forward walk lands on) must be the SPECIFIC, expected shell-chrome boundary, not
             // accepted blind — an unvalidated blind exit could mask a topology change that makes
             // the walk leave root somewhere unintended (e.g. mid-view, rather than genuinely
@@ -302,8 +301,8 @@ public class ReconstructorCompactTests
             // MenuItem right after the TabControl in Z-order, so that is the first control the
             // walk reaches once it exhausts this view's own root.
             //
-            // Round-7 retro-review: OBJECT-IDENTITY, not description — consistent with round 6's
-            // reference-exact ordering standard. The expected boundary is captured directly from
+            // OBJECT-IDENTITY, not description — consistent with the reference-exact ordering
+            // standard already established. The expected boundary is captured directly from
             // the shell (window.GetVisualDescendants(), independent of the walk itself, matched
             // on the "_File" MenuItem's own Header) and compared via ReferenceEquals; the
             // description is used only in the failure message.
@@ -333,7 +332,7 @@ public class ReconstructorCompactTests
             CompactViewRig.TabWalkResult scopeAReverse = CompactViewRig.RunTabPass(window, scopeAAnchor, forward: false, expectedScopeAReverseStops);
             CompactViewRig.TabWalkResult scopeBReverse = CompactViewRig.RunTabPass(window, scopeBAnchor, forward: false, expectedScopeBReverseStops);
 
-            // ORDER, explicit and OBJECT-REFERENCE-exact — round-6 retro-review: comparing
+            // ORDER, explicit and OBJECT-REFERENCE-exact: comparing
             // DESCRIPTIONS (as this used to) cannot catch a permutation of the four identically
             // described "Browse" instances — the same four strings in the same positions pass
             // regardless of which SPECIFIC Browse control actually sat at each position. The
@@ -370,7 +369,7 @@ public class ReconstructorCompactTests
     }
 
     /// <summary>
-    /// Round-6 retro-review: OBJECT-REFERENCE-exact sequence comparison — asserts
+    /// OBJECT-REFERENCE-exact sequence comparison — asserts
     /// <paramref name="actual"/> is, position for position, the SAME control REFERENCES as
     /// <paramref name="expected"/>, not merely the same DESCRIPTIONS. A description-based
     /// <c>Assert.Equal</c> cannot distinguish a permutation of controls that all describe
@@ -401,7 +400,7 @@ public class ReconstructorCompactTests
     }
 
     /// <summary>
-    /// Round-6 retro-review: proves <see cref="AssertSameControlSequence"/> — and therefore
+    /// Proves <see cref="AssertSameControlSequence"/> — and therefore
     /// <see cref="AssertTabWalk"/>'s own per-scope reverse order checks, which rely on it — is
     /// genuinely sensitive to a PERMUTATION of identically-described controls, not just to
     /// controls going missing. Captures the REAL forward walk, builds scope B's real, correctly
@@ -452,7 +451,7 @@ public class ReconstructorCompactTests
     }
 
     /// <summary>
-    /// Round-5 retro-review: permanentizes round 4's TEMPORARY sanity check (a fake 5th "Browse"
+    /// Permanentizes an earlier TEMPORARY sanity check (a fake 5th "Browse"
     /// entry, manually inserted then removed) as a REAL, committed test. This view has exactly 4
     /// real "Browse" buttons; a fixture claiming a 5th must fail loudly, naming the exact
     /// shortfall, rather than silently resolving to whatever 4 happen to exist.
@@ -480,7 +479,7 @@ public class ReconstructorCompactTests
     /// completeness-checking is reference-based, and a fixture committed to source can only ever
     /// be strings across separate test runs.
     /// <para>
-    /// Round-4 retro-review (disclosed-not-blocking, fixed anyway): matching is a COUNTED
+    /// Matching is a COUNTED
     /// MULTISET, not a set — the fixture's own count of each distinct description (the four
     /// "Browse" buttons all describe identically, so that description's count is 4) is the
     /// number of REAL, DISTINCT controls required for it, not merely "at least one". A plain
@@ -640,8 +639,8 @@ public class ReconstructorCompactTests
             Assert.Contains("compactHeight", root.Classes);
             TextBlock tip = window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Classes.Contains("tipLine"));
 
-            // Condition 1: trimming is VISUAL-ONLY over the full bound text. Retro-review finding
-            // #3: asserting tip.Text alone (or that the ATTACHED AutomationProperties.Name is
+            // Condition 1: trimming is VISUAL-ONLY over the full bound text. Asserting
+            // tip.Text alone (or that the ATTACHED AutomationProperties.Name is
             // null) is not the same claim as "AT announces the full text" — go through the REAL
             // automation peer, the same thing a screen reader actually calls.
             // TextBlockAutomationPeer.GetNameCore() returns Owner.Inlines?.Text ?? Owner.Text, so
@@ -705,8 +704,8 @@ public class ReconstructorCompactTests
             Assert.True(windowsLink.IsEffectivelyEnabled);
             CompactViewRig.AssertReachableByKeyboard(window, windowsLink);
 
-            // The staged-focus guard's actual point (retro-review finding #6, mirroring Task 3's
-            // identical fix): focus the header TOGGLE — visible and focusable ONLY in compact
+            // The staged-focus guard's actual point (mirroring the identical fix in SRSCreator's
+            // help disclosure): focus the header TOGGLE — visible and focusable ONLY in compact
             // mode (Styles.axaml's Grid.compactHeight ... /template/ ToggleButton IsVisible=True
             // override; flat/normal mode hides it) — then restore. The toggle going
             // IsVisible=false in flat mode must relocate focus to the wired RestoreFocusTarget
@@ -743,9 +742,9 @@ public class ReconstructorCompactTests
     }
 
     /// <summary>
-    /// Retro-review finding #4: reachability/focusability alone proves a link CAN be reached, not
+    /// Reachability/focusability alone proves a link CAN be reached, not
     /// that activating it actually does anything. <see cref="ResourceLink.Launcher"/> is a test
-    /// seam (added for this finding) precisely so a genuine invocation can be exercised safely —
+    /// seam (added specifically so a genuine invocation can be exercised safely) —
     /// swapped for a <see cref="RecordingLauncherService"/> fake, restored in a finally block
     /// (it is a static, process-wide seam). Invoked via the REAL automation peer's
     /// <see cref="IInvokeProvider"/> (the same path a screen reader's "activate" gesture uses,
@@ -875,20 +874,20 @@ public class ReconstructorCompactTests
 
     /// <summary>
     /// Compares the flat-mode header region (row 0) against a standalone reconstruction of the
-    /// PRE-TASK markup (verbatim intro TextBlock + WrapPanel of 3 links, the row-0 shape before
-    /// this task wrapped it in the helpDisclosure Expander), both forced through a real render
-    /// tick before measuring. DOCUMENTED FALLBACK INVOKED (see task report): Fluent's stock
+    /// PRE-CHANGE markup (verbatim intro TextBlock + WrapPanel of 3 links, the row-0 shape before
+    /// this change wrapped it in the helpDisclosure Expander), both forced through a real render
+    /// tick before measuring. Fluent's stock
     /// Expander carries hardcoded floors (control MinHeight 48, chevron cell 32) that made
     /// pixel-identical flat-mode chrome unreachable through style overrides, so Styles.axaml
     /// re-templates Expander.helpDisclosure entirely (mirroring the existing
     /// Expander.versionGroup re-template).
     /// <para>
-    /// Retro-review finding #5, round 2: geometry (height/width) alone cannot catch a shifted
+    /// Geometry (height/width) alone cannot catch a shifted
     /// glyph, a recolored brush, or a reflowed line inside the surviving region — only a REAL
     /// pixel comparison can (<see cref="AssertPixelIdenticalOutsideHeaderMask"/>,
-    /// RenderTargetBitmap + CopyPixels, same technique as HexViewControlTests). Round 1's fix
-    /// resized OLD's window to NEW's measured width before comparing — round 2 correctly rejected
-    /// this: resizing HIDES the real, sanctioned width delta from the test entirely rather than
+    /// RenderTargetBitmap + CopyPixels, same technique as HexViewControlTests). An earlier
+    /// version of this check resized OLD's window to NEW's measured width before comparing;
+    /// that was rejected: resizing HIDES the real, sanctioned width delta from the test entirely rather than
     /// masking it as a bounded, understood, excluded region. This version compares at TRUE
     /// ORIGINAL geometries instead: old at its own natural, unconstrained width
     /// (<see cref="CompactInvariantRig.InnerWidth"/>, confirmed equal to <c>newRoot.Bounds.Width</c>
@@ -902,15 +901,14 @@ public class ReconstructorCompactTests
     /// Chasing why this STILL wasn't clean found a real, previously mis-diagnosed production bug:
     /// <c>Expander.helpDisclosure</c> had no explicit <c>HorizontalAlignment</c>, so it inherited
     /// Fluent's own Expander default (Left) and hugged its own content's width instead of filling
-    /// its Grid column — measured at 676→653, wrongly attributed in the original report entirely
+    /// its Grid column — measured at 676→653, initially misattributed entirely
     /// to "the ScrollViewer's reserved scrollbar track." Fixed as a LOCAL value on Reconstructor's
     /// own Expander element (not the shared style — a shared-style change would also alter
-    /// SRSCreator/Task 3's Expander and invalidate ITS OWN already-approved frame-rig numbers).
+    /// SRSCreator's Expander and invalidate ITS OWN already-approved frame-rig numbers).
     /// With that fixed, the true, fully-explained width delta is just 4 DIPs — the content
     /// StackPanel's own documented, intentional inset (Margin="0,0,4,0", "per house rule") — not
-    /// 23 (round 1's figure) and not 27 (round 2's requested correction, based on the same
-    /// unexamined bug). This supersedes the review's literal "correct to 27" instruction; flagged
-    /// prominently in the retro-fix report for confirmation.
+    /// 23 and not 27 (both earlier estimates based on the same
+    /// unexamined bug).
     /// </para>
     /// <para>
     /// Even at a corrected, minimal 4-DIP delta, one narrow residual remained: word-wrap is a
@@ -939,7 +937,7 @@ public class ReconstructorCompactTests
 
             // NEW's true comparison partner: the innermost content StackPanel, found by walking
             // up from the caption TextBlock (its direct parent, per the XAML) — NOT newRow0 (the
-            // outer Expander) itself. See the round-2 note above for why.
+            // outer Expander) itself. See the note above for why.
             TextBlock newCaption = newRow0.GetVisualDescendants().OfType<TextBlock>().First();
             var newContentPanel = (Control)newCaption.Parent!;
             Size newSize = newContentPanel.Bounds.Size;
@@ -959,9 +957,8 @@ public class ReconstructorCompactTests
                 // extra line.
                 Assert.Equal(oldSize.Height, newSize.Height, precision: 0);
 
-                // Round-2 retro-review correction, TWICE OVER: round 2 asked to correct this
-                // figure from round 1's 23 to the true content-to-content delta of 27 (676→649).
-                // Investigating why the delta was as large as 23/27 in the first place found the
+                // TWICE-CORRECTED figure: earlier passes put this delta first at 23, then at 27
+                // (676→649). Investigating why the delta was as large as 23/27 in the first place found the
                 // REAL root cause: Expander.helpDisclosure had no explicit HorizontalAlignment, so
                 // it inherited the Fluent theme Expander's OWN default (Left) instead of filling
                 // its Grid column — 676→653 of that gap was this unrelated, unintended bug, not
@@ -971,31 +968,28 @@ public class ReconstructorCompactTests
                 // (HorizontalAlignment/HorizontalContentAlignment="Stretch") directly on
                 // Reconstructor's own <Expander x:Name="HelpDisclosure"> element in
                 // ReconstructorView.axaml — NOT the shared Expander.helpDisclosure STYLE: a first
-                // attempt there was caught, by a full-suite run, breaking SRSCreator's (Task 3's)
+                // attempt there was caught, by a full-suite run, breaking SRSCreator's
                 // own already-approved frame-rig test the instant its Expander ALSO started
-                // stretching, so it was reverted (Styles.axaml carries no diff from round 1) and
+                // stretching, so it was reverted (Styles.axaml carries no diff from the original) and
                 // re-applied scoped to only this view. Confirmed by measurement: newRow0 (the
                 // Expander) now matches newRoot's full 676 exactly; only the inner content
-                // StackPanel's own 4-DIP margin remains. So the number both this assert AND the
-                // report must carry is 4, not 27 — flagged prominently for the team lead, since
-                // this both deviates from and supersedes the literal "27" instruction with a
-                // corrected, smaller, more fully-explained one, discovered only by chasing why the
+                // StackPanel's own 4-DIP margin remains. So the correct figure is 4, not 27 — a
+                // corrected, smaller, more fully-explained delta, discovered only by chasing why the
                 // mask-based comparison below wasn't actually clean.
                 double widthNarrowing = oldSize.Width - newSize.Width;
                 Assert.Equal(4.0, widthNarrowing, precision: 0);
 
                 // Compare at TRUE ORIGINAL geometries (old at its own natural width; new at its
                 // own real width) and mask the trailing rectangle the narrowing above just
-                // measured and bounded (present only in old's wider render) PLUS — round-2
-                // finding, discovered only once the width delta above was corrected to its true,
+                // measured and bounded (present only in old's wider render) PLUS — discovered
+                // only once the width delta above was corrected to its true,
                 // minimal 4 DIPs and the mismatch narrowed but did not disappear — the caption
                 // TextBlock's own band. Word-wrap is a discrete, boundary-sensitive layout: EVEN a
                 // 4-DIP narrower measure can (and empirically here, does) push one word across a
                 // line break, for this specific text, at this specific width. Confirmed this is
                 // NOT a wider problem: the WrapPanel/links row below the caption (which places
                 // whole Button/TextBlock items rather than wrapping characters) matches
-                // byte-for-byte with NO exception once given the same width — see the RED/GREEN
-                // evidence in the report. So exactly one additional, named, content-justified
+                // byte-for-byte with NO exception once given the same width. So exactly one additional, named, content-justified
                 // band is excluded (the caption's own height) — not a vague broadening of the mask.
                 AssertPixelIdenticalOutsideHeaderMask(oldRow0, oldSize, newContentPanel, newSize, newCaption.Bounds.Height);
             }
@@ -1004,7 +998,7 @@ public class ReconstructorCompactTests
         finally { newWindow.Close(); }
     }
 
-    /// <summary>Reconstruction of ReconstructorView.axaml's row-0 StackPanel before this task (git history), verbatim.</summary>
+    /// <summary>Reconstruction of ReconstructorView.axaml's row-0 StackPanel before this change (git history), verbatim.</summary>
     private static Window BuildPreDisclosureRow0Window()
     {
         var stack = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
@@ -1040,7 +1034,7 @@ public class ReconstructorCompactTests
     /// rectangle that exists only in <paramref name="oldControl"/>'s wider render (x from
     /// <paramref name="newSize"/>'s width to <paramref name="oldSize"/>'s width, full height —
     /// present only in old, no counterpart in new at all), and (2) <paramref name="wordWrapExcludedHeight"/>
-    /// rows from the top (the caption TextBlock's own band — see the caller's round-2 note on why
+    /// rows from the top (the caption TextBlock's own band — see the caller's note on why
     /// word-wrap makes even the fully-explained, minimal width delta unavoidably reflow-sensitive
     /// there specifically, and why nowhere else needs the same exclusion).
     /// </summary>
@@ -1148,19 +1142,17 @@ public class ReconstructorCompactTests
         c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
 
     // ── Fixtures (captured from real, green CompactViewRig.SnapshotTabOrder runs against
-    // this task's finished implementation — see task report's retro-fix section for the capture
-    // method). Retro-review finding #2: Describe() reads the control's REAL automation peer
+    // this view's finished implementation). Describe() reads the control's REAL automation peer
     // name, so same-type controls with distinct content are no longer collapsed to
     // indistinguishable "Button:" entries — an early trap, a same-type reorder, or a swapped stop
     // is now caught by content, not just by count.
-    // Round-2 retro-review (NEW finding): peer name (accessible-name channel) and x:Name
+    // Peer name (accessible-name channel) and x:Name
     // (test-id channel) are reported SEPARATELY, never one masking the other — see Describe()'s
     // own doc comment. This is why four TextBox entries below show name="" — that is NOT a
     // formatting quirk, it is the honest, unmasked accessible-name record: these four path-picker
     // TextBoxes carry an x:Name (for this rig's own fixture matching) but NO
     // AutomationProperties.Name/LabeledBy, so a screen reader announces nothing for them. REAL,
-    // UNFIXED a11y debt — flagged prominently in the retro-fix report for the a11y final gate,
-    // deliberately NOT papered over with a name in this pass. ──
+    // UNFIXED a11y debt, deliberately NOT papered over with a name in this pass. ──
 
     /// <summary>
     /// Normal mode: identical shape to today's — the disclosure's body is force-expanded with
@@ -1199,7 +1191,7 @@ public class ReconstructorCompactTests
     ];
 
     /// <summary>
-    /// Compact order (spec §2): disclosure header → (body skipped: Help starts collapsed per
+    /// Compact order: disclosure header → (body skipped: Help starts collapsed per
     /// condition 5, so the 3 link buttons are IsVisible=false and correctly excluded from Tab
     /// order) → toolbar (3 enabled buttons — Start is absent, same reason as normal mode) →
     /// work area (Paths sub-tab) → splitter → log. Identical tail to normal mode; only the head
@@ -1227,8 +1219,8 @@ public class ReconstructorCompactTests
     ];
 
     /// <summary>
-    /// Round-5 retro-review: PER-SCOPE reverse walks, superseding round 3/4's single-entry
-    /// fixtures. Round 4 found Reconstructor hosts a SECOND, nested <c>TabControl</c>
+    /// PER-SCOPE reverse walks, superseding earlier single-entry
+    /// fixtures. Reconstructor hosts a SECOND, nested <c>TabControl</c>
     /// (<c>settingsTabs</c>, the Paths/Options sub-tab container) inside the outer shell's own
     /// TabControl, and each independently scopes keyboard navigation to its own selected
     /// content — so a single, view-wide reverse walk can never cross the inner boundary. Scope A
@@ -1237,7 +1229,7 @@ public class ReconstructorCompactTests
     /// in both modes since compact mode only affects row 0) is the Paths sub-tab's own content —
     /// everything after. Captured from a real Shift+Tab key-press simulation anchored at scope A's
     /// own LAST forward stop (the TabItem header) — confirmed to land back on WindowsPackLink
-    /// (scope A's own first-in-scope element, matching round 3's finding) via object-identity hash,
+    /// (scope A's own first-in-scope element) via object-identity hash,
     /// not just description. Scope A ∪ scope B, as a set of object references, equals the FULL
     /// forward inventory exactly (7 + 11 = 18 here; 5 + 11 = 16 in compact mode) — asserted by
     /// <see cref="AssertTabWalk"/>.

@@ -26,7 +26,7 @@ using ReScene.SRS;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Small-window layout degradation tests for <see cref="CreatorView"/> (task-6 brief: threshold
+/// Small-window layout degradation tests for <see cref="CreatorView"/> (threshold
 /// 720, config row AutoToStar 110 compact / 80 help-open, log 80, Help body MaxHeight 40, compact
 /// CI bound <see cref="CompactInvariantRig.CiBound"/> == 307, pinned band ceiling 75, compact
 /// worst floor &lt;= 307). The largest converted view: band 1's config ScrollViewer hosts a GRID
@@ -112,7 +112,7 @@ public class CreatorCompactTests
     private const double ExpandedInner = 721;  // Threshold+1, comfortably expanded
 
     /// <summary>
-    /// The brief's own worst case (case 1), forced together: IsScanning true, HasDetectedSets with
+    /// The worst case, forced together: IsScanning true, HasDetectedSets with
     /// 12 sets (capped at 96 DIPs by the pre-existing ScrollViewer), both FieldStatusLines
     /// non-None with realistic wrapping-length messages, IsCreating + ShowProgress (Cancel +
     /// ProgressMessage + ProgressBar all visible), and StoredFiles populated with 8 rows.
@@ -137,7 +137,7 @@ public class CreatorCompactTests
         }
     }
 
-    // ── 1. Invariant (spec §1's four checks; CompactInvariantRig) — RED-FIRST against today's Grid ──
+    // ── 1. Invariant (CompactInvariantRig's four checks) — verified to fail against the pre-fix plain Grid layout ──
 
     [AvaloniaFact]
     public void Invariant_ExpandedModeFloor_UnderThreshold()
@@ -166,7 +166,7 @@ public class CreatorCompactTests
     /// expands at (Threshold+1). Without <see cref="CreatorView"/>'s own dynamic config-ScrollViewer
     /// MaxHeight cap (ctor remarks), the pinned action band and the entire log would translate
     /// fully below the window's own bottom edge across this whole range — exactly the same
-    /// categorical defect Task 5 found and fixed the same way for SampleRestorerView. This test
+    /// categorical defect already found and fixed the same way for SampleRestorerView. This test
     /// uses REAL arranged rendering (<see cref="CompactViewRig.HostAt"/>) and the clip-aware
     /// <see cref="AssertFullyWithinWindow"/> across the measured-unsafe range (721 through
     /// comfortably past the ~883-DIP floor), plus a height far beyond it, to prove the actual
@@ -276,7 +276,7 @@ public class CreatorCompactTests
     private static void AssertNoClip(double innerHeight, bool expectCompact)
     {
         CreatorViewModel vm = CreateVm();
-        ForceWorstCase(vm); // criterion B worst case: every conditional forced, grid populated
+        ForceWorstCase(vm); // worst case: every conditional forced, grid populated
         var view = new CreatorView { DataContext = vm };
 
         (Window window, Grid root) = CompactViewRig.HostAt(view, innerHeight);
@@ -289,7 +289,7 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// Criterion A for the LAST option control (App name TextBox — no x:Name of its own, so
+    /// Reachability coverage for the LAST option control (App name TextBox — no x:Name of its own, so
     /// distinguished by its Width="400", the only TextBox in the view with that width, mirroring
     /// SRSCreator/SampleRestorer's identical pattern) and the primary action (Create SRR button).
     /// Both routed through the config band's own ScrollViewer, identified by Grid.Row rather than
@@ -341,11 +341,11 @@ public class CreatorCompactTests
     /// and immediately presses Tab, without ever touching the mouse, gets trapped and can never
     /// reach Stored Files, Output, Options, Create SRR, or the Log. Focusing a known-good anchor
     /// first (here, "Add...", the form's own true first stop per <c>AssertTabWalk</c>) proves the
-    /// narrower, still-true claim this task's own acceptance criteria are actually about — "once
-    /// inside the form, is everything reachable" — without silently pretending the wider, false
-    /// claim ("reachable from a cold window") also holds. See the task report's own top-billed
-    /// concern for the full disclosure and why this is NOT fixed here (criterion F requires normal
-    /// tab order unchanged; the defect is orthogonal to and predates this task's own restructuring).
+    /// narrower, still-true claim that matters here — "once inside the form, is everything
+    /// reachable" — without silently pretending the wider, false claim ("reachable from a cold
+    /// window") also holds. This is deliberately NOT fixed here (normal tab order must stay
+    /// unchanged at normal size; the defect is orthogonal to and predates this task's own
+    /// restructuring).
     /// </para>
     /// </summary>
     private static void AssertReachableByAllThreeRoutes(Window window, ScrollViewer scroller, Control target, Control keyboardAnchor)
@@ -371,12 +371,11 @@ public class CreatorCompactTests
     /// TextBoxes/the DataGrid, the sole GridSplitter instance), never derived from a walk's own
     /// observed output.
     /// <para>
-    /// GENUINE FINDING (verified against Avalonia's own source — KeyboardNavigationHandler /
+    /// Verified against Avalonia's own source — KeyboardNavigationHandler /
     /// Navigation/TabNavigation.cs, decompiled/read at 11.3.18, byte-identical to this project's
-    /// pinned 11.3.13 DataGrid sub-package for the relevant files): the Input row's THREE controls
+    /// pinned 11.3.13 DataGrid sub-package for the relevant files: the Input row's THREE controls
     /// carry explicit, pre-existing <c>TabIndex="0"/"1"/"2"</c> values (verbatim from today's
-    /// shipped markup, unrelated to this task — see the view's own XAML comment, "§4a
-    /// accessibility review P3#8"). <c>KeyboardNavigation.TabIndexProperty</c> defaults to
+    /// shipped markup, unrelated to this task). <c>KeyboardNavigation.TabIndexProperty</c> defaults to
     /// EVERY OTHER control in this view/window to a value that, empirically and consistently
     /// across every walk exercised below, sorts AFTER the explicit 0/1/2 run rather than before
     /// it — the practical, confirmed effect (proven by real headless Tab/Shift+Tab input, not
@@ -393,9 +392,9 @@ public class CreatorCompactTests
     /// property (default <c>Continue</c>), and neither the pre-task nor this task's markup sets it
     /// anywhere, so the whole window remains ONE flat navigation group in both versions — a
     /// DFS-order-preserving wrap (adding pass-through containers without reordering children)
-    /// cannot change which tuple sorts where. Per criterion F ("tab order... unchanged" at normal
-    /// size), this is intentionally NOT fixed here — only accurately snapshotted, exactly like
-    /// every other pre-existing a11y-debt item this feature's prior tasks have disclosed rather
+    /// cannot change which tuple sorts where. Per the normal-size requirement that tab order stay
+    /// unchanged, this is intentionally NOT fixed here — only accurately snapshotted, exactly like
+    /// every other pre-existing a11y-debt item earlier work on this feature has disclosed rather
     /// than silently repaired.
     /// </para>
     /// </summary>
@@ -582,7 +581,7 @@ public class CreatorCompactTests
     // ── 3. Tab-order snapshots ────────────────────────────────────────
     //
     // Both entry points below simply invoke the SAME hardened AssertTabWalk (section 2's own
-    // criterion-C helper, now ALSO the exact-order/completeness/reverse-boundary authority) at the
+    // tab-walk helper, now ALSO the exact-order/completeness/reverse-boundary authority) at the
     // exact heights RenderedMatrix_CompactAt700x450_... and
     // RenderedMatrix_FreshAtThresholdPlusOne_... already exercise.
 
@@ -658,9 +657,9 @@ public class CreatorCompactTests
             // The staged-focus guard's actual point: restoring from a focus captured on the body
             // (which just went non-focusable — flat mode's base style, not the compact-only
             // override) must relocate focus, not strand it. RestoreFocusTarget was wired to
-            // OutputTextBox in the view's ctor (NOT InputTextBox — fix round 1, codex finding 1:
-            // InputTextBox is one of the three Input-row TabIndex-trapped controls; see the ctor's
-            // own remarks), so that is where it must land.
+            // OutputTextBox in the view's ctor (NOT InputTextBox — InputTextBox is one of the
+            // three Input-row TabIndex-trapped controls; see the ctor's own remarks), so that is
+            // where it must land.
             TextBox outputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "OutputTextBox");
             Assert.True(outputTextBox.IsFocused,
                 "restoring from a focused compact body must relocate focus to the wired RestoreFocusTarget (OutputTextBox), not strand it");
@@ -675,16 +674,15 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// Fix round 1 (codex finding 1, MAJOR): permanent regression guard for the exact defect the
-    /// finding named — a resize-triggered focus recovery must never deposit a keyboard user onto
-    /// one of the Input row's three TabIndex-trapped controls (InputTextBox, the file Browse
-    /// button, or the folder Browse button — see the task report's "headline finding" for the full
-    /// decompiled-source + empirical proof of the trap those three form with shell chrome).
+    /// Permanent regression guard for the exact defect described above — a resize-triggered focus
+    /// recovery must never deposit a keyboard user onto one of the Input row's three
+    /// TabIndex-trapped controls (InputTextBox, the file Browse button, or the folder Browse
+    /// button — see <c>AssertTabWalk</c>'s own doc for the full decompiled-source + empirical proof
+    /// of the trap those three form with shell chrome).
     /// Resolves the ACTUAL wired target via <see cref="CompactHeightBehavior.GetRestoreFocusTarget"/>
     /// (not a hardcoded assumption of what it "should" be) and asserts it is REFERENCE-DISTINCT
     /// from all three — so a future retarget back into the trap fails here immediately, loudly,
-    /// naming the collision, rather than silently reintroducing the exact harmful path this round
-    /// fixed.
+    /// naming the collision, rather than silently reintroducing this harmful path.
     /// </summary>
     [AvaloniaFact]
     public void RestoreFocusTarget_IsNotOneOfTheThreeTrappedControls()
@@ -709,8 +707,7 @@ public class CreatorCompactTests
                 $"RestoreFocusTarget must not be the input Browse-folder button — it is one of the three TabIndex-trapped controls (TabIndex=\"2\"), and forward-Tab from it settles into the stable shell-chrome loop.");
 
             // Positive assertion, not just three negatives: the actual wired target is OutputTextBox,
-            // carrying its own explicit, computed accessible name (fix round 1, codex finding 1's
-            // own naming requirement).
+            // carrying its own explicit, computed accessible name.
             TextBox outputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "OutputTextBox");
             Assert.True(ReferenceEquals(actualTarget, outputTextBox));
             Assert.Equal("Output path", ControlAutomationPeer.CreatePeerForElement(outputTextBox).GetName());
@@ -766,7 +763,7 @@ public class CreatorCompactTests
         try
         {
             // Flat mode force-expands the body (so this scroller IS realized/attached even though
-            // the header stays hidden) — criterion F requires it NOT be a new Tab stop.
+            // the header stays hidden) — it must NOT become a new Tab stop.
             ScrollViewer body = normalRoot.GetVisualDescendants().OfType<Expander>().Single(e => e.Name == "HelpDisclosure")
                 .GetVisualDescendants().OfType<ScrollViewer>().Single();
             Assert.False(body.Focusable);
@@ -784,7 +781,7 @@ public class CreatorCompactTests
 
             ScrollViewer body = helpDisclosure.GetVisualDescendants().OfType<ScrollViewer>().Single();
             Assert.True(body.Focusable);
-            // Fix round 1 (codex finding 5): the COMPUTED peer name, not merely the raw attached
+            // The COMPUTED peer name, not merely the raw attached
             // property — what a screen reader actually announces (mirrors the same
             // ControlAutomationPeer.CreatePeerForElement(...).GetName() pattern used throughout
             // this file for every other focus-recovery/labeled target).
@@ -995,9 +992,9 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// Fix round 1 (codex finding 4): real arrow-key/current-row visibility coverage for
-    /// StoredFilesGrid's own <c>ScrollHandoffBehavior.Handoff="True"</c> wiring — disclosed as a
-    /// gap in the original task report (concern 4) because, UNLIKE SampleRestorer's SRSEntriesGrid,
+    /// Real arrow-key/current-row visibility coverage for
+    /// StoredFilesGrid's own <c>ScrollHandoffBehavior.Handoff="True"</c> wiring — this needs its
+    /// own coverage because, UNLIKE SampleRestorer's SRSEntriesGrid,
     /// this grid has no per-row focusable control (a plain two-column text grid, no checkbox
     /// column) to individually target. Mirrors SampleRestorer's own
     /// <c>Handoff_KeyboardNavigation_ChainsBringIntoViewToOuterViewer_BottomRowEndsFullyVisible</c>
@@ -1053,8 +1050,8 @@ public class CreatorCompactTests
     /// Wheel at the grid's own extent moves the config band's OWN (band 1) scroller — the platform
     /// default (<c>ScrollViewer.IsScrollChainingEnabled</c>, never overridden in this app), NOT a
     /// custom mechanism: <see cref="ScrollHandoffBehavior"/>'s own wheel path was removed entirely
-    /// (Task 5's final ruling — see its own remarks) after being proven redundant with the platform
-    /// default. Mirrors <c>SampleRestorerCompactTests.WheelHandoffAtGridExtent_...</c>'s identical
+    /// after being proven redundant with the platform default. Mirrors
+    /// <c>SampleRestorerCompactTests.WheelHandoffAtGridExtent_...</c>'s identical
     /// regression guard, adapted: this grid sits at a fixed ConfigGrid ROW (not inside a StackPanel
     /// section), and the grid needs no separate "reveal" stage the way SampleRestorer's did — the
     /// Stored Files row is close enough to compact band 1's own top that a couple of ticks already
@@ -1189,7 +1186,7 @@ public class CreatorCompactTests
         finally { window.Close(); }
     }
 
-    // ── LabeledBy audit: computed UIA names resolve to their own header (fix round 1, codex finding 5) ──
+    // ── LabeledBy audit: computed UIA names resolve to their own header ──
 
     /// <summary>
     /// Both grids/lists in this view use <c>AutomationProperties.LabeledBy</c> to pair themselves
@@ -1215,7 +1212,7 @@ public class CreatorCompactTests
         finally { window.Close(); }
     }
 
-    // ── 8. Frame-rig parity (criterion F: normal-mode pixels unchanged) + splitter (criterion E) ──
+    // ── 8. Frame-rig parity (normal-mode pixels unchanged) + splitter (tab-reachable, resizable, focus-visible) ──
 
     /// <summary>
     /// Same technique as every other converted view's own hardened version (RenderTargetBitmap +
@@ -1322,7 +1319,7 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// Fix round 1 (codex finding 2, MAJOR): the two band-scoped tests above prove SPECIFIC
+    /// The two band-scoped tests above prove SPECIFIC
     /// regions; this proves EVERY conversion-touched band at once, at REST, by comparing the
     /// ENTIRE root — the strongest, most direct answer to "every conversion-touched band must be
     /// inside compared pixels." <see cref="OldFullMarkup"/> is the pre-task
@@ -1370,8 +1367,8 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// Fix round 2 (codex finding 1, path (a) — a genuine cross-version dragged-state parity DOES
-    /// exist, narrower than a full-root comparison but real). The region "everything from the top
+    /// A genuine cross-version dragged-state parity DOES
+    /// exist, narrower than a full-root comparison but real. The region "everything from the top
     /// of the page down through and including the splitter itself" has an identity that did NOT
     /// change between OLD and NEW: same content, same StoredFilesGrid row, same Pixel-height
     /// resize mechanism for the splitter's "Previous" pane (only the "Next" pane's identity
@@ -1386,7 +1383,7 @@ public class CreatorCompactTests
     /// The comparable window is genuinely NARROW — MEASURED directly: even a MODEST two-press
     /// (20-DIP) drag on this plain, unpopulated VM already pushes ConfigGrid's own total natural
     /// height just past the config ScrollViewer's dynamic MaxHeight cap (the same mechanism
-    /// documented in the view's own ctor remarks, sized for the brief's 883-DIP WORST case, which
+    /// documented in the view's own ctor remarks, sized for the 883-DIP worst case, which
     /// leaves this plain-VM REST state only ~10-15 DIPs of headroom before it engages) — at that
     /// point NEW shows a real, load-bearing vertical scrollbar with no OLD equivalent (OLD has no
     /// scrolling architecture at all), narrowing NEW's own content by the scrollbar's track width
@@ -1499,17 +1496,16 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// Fix round 1 (codex finding 2's own "splitter rest/drag states" clause), refined by round 2:
-    /// a genuine, narrow cross-version comparable region DOES exist for a small drag (the test
+    /// A genuine, narrow cross-version comparable region DOES exist for a small drag (the test
     /// above) — but it structurally cannot extend to a LARGER drag, because once the config band's
     /// own scrollbar engages (see the test above's own MEASURED boundary), a real, load-bearing
     /// NEW-only element (the scrollbar track/thumb) appears with no OLD equivalent (OLD has no
     /// scrolling architecture at all — it is a flat, unwrapped Grid). Dragging the OLD splitter's
     /// "Next" pane (outer row 6, a Star-sized row containing the ENTIRE Output+Options+Action+Log
     /// composite) is ALSO not the same operation as dragging the NEW splitter's "Next" pane
-    /// (ConfigGrid row 5, the Output section alone, Auto-sized) — this task's own restructuring
-    /// genuinely changes what the splitter's "Next" pane IS, per the brief's own explicit row
-    /// layout, compounding why no LARGER-drag cross-version comparison is meaningful.
+    /// (ConfigGrid row 5, the Output section alone, Auto-sized) — this restructuring
+    /// genuinely changes what the splitter's "Next" pane IS, compounding why no LARGER-drag
+    /// cross-version comparison is meaningful.
     /// <para>
     /// The meaningful, ACHIEVABLE equivalent for this regime instead: capture the NEW view's own
     /// full-root raster at REST, engage a real, input-driven LARGER drag (ArrowDown — genuine
@@ -1991,11 +1987,11 @@ public class CreatorCompactTests
         return buffer;
     }
 
-    // ── Splitter (criterion E: tab-reachable, Up/Down-resizable, bounded by pane minimums, ──
+    // ── Splitter (tab-reachable, Up/Down-resizable, bounded by pane minimums, ──
     // ── visible >=3:1 focus indication) ─────────────────────────────────────────────────────
 
     /// <summary>
-    /// Criterion E scoped to NORMAL size for this IN-SCROLLER splitter (task brief): unlike
+    /// Scoped to NORMAL size for this IN-SCROLLER splitter: unlike
     /// Reconstructor's top-level splitter (bounded by two compact-shrinkable panes), this
     /// splitter's own "previous" pane (ConfigGrid row 3) has a HARD compact floor of 80 delivered
     /// by the descendant PixelRestore entry, not by dragging — the splitter's pane-minimum bound is
@@ -2060,9 +2056,9 @@ public class CreatorCompactTests
         AssertSplitterFocusContrastAgainstBothPanes(ExpandedInner);
 
     /// <summary>
-    /// Fix round 2 (codex finding 3, NEW MAJOR): the default-theme contrast test above only ever
-    /// exercised EXPANDED size — compact-mode focus visibility/contrast was untested despite Step
-    /// 4 being mode-independent, and the splitter's own criterion-E reachability (proven by the
+    /// The default-theme contrast test above only ever
+    /// exercised EXPANDED size — compact-mode focus visibility/contrast was untested despite that
+    /// requirement being mode-independent, and the splitter's own reachability (proven by the
     /// tab-walk) says nothing about whether its focus indication is actually VISIBLE once reached
     /// at compact size. Same assertions, at <see cref="CompactInner"/>.
     /// </summary>
@@ -2101,9 +2097,9 @@ public class CreatorCompactTests
     /// compact variants of each) share the exact same sampling/math, never duplicated by hand.
     /// </summary>
     /// <summary>
-    /// Fix round 3 (codex finding 1): previously read <c>splitter.Background</c>'s own LOGICAL
-    /// brush color directly — the exact same defect class as round 2's "Transparent.Color is
-    /// meaningless" bug, just reachable a different way: MEASURED (a throwaway diagnostic) that
+    /// Previously read <c>splitter.Background</c>'s own LOGICAL
+    /// brush color directly — the exact same defect class as the "Transparent.Color is
+    /// meaningless" bug documented below, just reachable a different way: MEASURED (a throwaway diagnostic) that
     /// setting <c>splitter.Opacity = 0</c> leaves BOTH <c>IsEffectivelyVisible</c> AND
     /// <c>splitter.Background</c>'s own logical color COMPLETELY UNCHANGED (still reporting the
     /// accent color), while the ACTUAL RENDERED PIXEL at that location silently reverts to
@@ -2136,7 +2132,7 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// Fix round 1 (codex finding 3, spec Step 4): the high-contrast smoke the default-theme
+    /// The high-contrast smoke the default-theme
     /// contrast test above does not cover. This app has no actual shipped high-contrast SKIN —
     /// grepped the whole Resources tree and found no "HighContrast" resource dictionary, no
     /// <c>ThemeVariant</c> switching anywhere beyond the single hardcoded
@@ -2206,7 +2202,7 @@ public class CreatorCompactTests
                 Assert.Equal(highContrastColor, overriddenBrush.Color); // WIRING claim: the property resolved correctly
                 Assert.NotEqual(beforeColor, overriddenBrush.Color);
 
-                // Fix round 3 (codex finding 1): the CONTRAST claim must come from the ACTUAL
+                // The CONTRAST claim must come from the ACTUAL
                 // RENDERED PIXEL (mirrors MeasureSplitterFocusContrast's own identical fix), not
                 // from the known override VALUE — a logically-correct-but-unpainted/clipped focus
                 // indicator would otherwise pass this exact assertion undetected.
@@ -2237,9 +2233,9 @@ public class CreatorCompactTests
         finally { window.Close(); }
     }
 
-    // ── Fix round 2 (codex finding 2): a COMPLETE, scoped high-contrast theme fixture ──
+    // ── A COMPLETE, scoped high-contrast theme fixture ──
     //
-    // The round-1 single-key AccentPrimary override above proves resource LIVENESS only — it
+    // The single-key AccentPrimary override above proves resource LIVENESS only — it
     // never touches the rest of the app's own palette, so it cannot prove the splitter's focus
     // indication survives a genuine WHOLE-THEME swap the way a real Windows high-contrast
     // activation would produce (the two neighboring panes' own colors, whatever resources feed
@@ -2351,7 +2347,7 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// Fix round 2 (codex finding 2). The complete-theme equivalent of
+    /// The complete-theme equivalent of
     /// <see cref="Splitter_FocusVisual_HighContrastSmoke_FollowsLiveResourceOverride"/> — every
     /// resource the splitter's own template AND its two neighboring panes could plausibly consume
     /// is overridden at once (see <see cref="CompleteHighContrastFixtureColors"/>'s own remarks),
@@ -2366,7 +2362,7 @@ public class CreatorCompactTests
     public void Splitter_FocusVisual_CompleteHighContrastFixture_RemainsDistinctFromPanesAndUnfocusedState() =>
         AssertSplitterFocusContrastUnderCompleteHighContrastFixture(ExpandedInner);
 
-    /// <summary>Fix round 2 (codex finding 3): the compact-size variant of the complete-fixture test above.</summary>
+    /// <summary>The compact-size variant of the complete-fixture test above.</summary>
     [AvaloniaFact]
     public void Splitter_FocusVisual_CompleteHighContrastFixture_RemainsDistinctFromPanesAndUnfocusedState_Compact() =>
         AssertSplitterFocusContrastUnderCompleteHighContrastFixture(CompactInner);
@@ -2432,7 +2428,7 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// Fix round 2's own discriminating-evidence requirement: "show it fails if the focus
+    /// The discriminating-evidence case: "show it fails if the focus
     /// indication is removed/hardcoded: temporarily break, observe, revert." Under the complete HC
     /// fixture (both panes now black), a LOCAL (non-<c>DynamicResource</c>-following) Background
     /// value that happens to equal the fixture's own black — simulating exactly the real-world
@@ -2495,7 +2491,7 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// Fix round 3 (codex finding 1)'s own required discriminating-evidence case: proves
+    /// The required discriminating-evidence case: proves
     /// <see cref="MeasureSplitterFocusContrast"/>'s rendered-pixel fix genuinely catches an
     /// "unpainted/clipped" focus indicator that BOTH a naive property-read AND a plain
     /// <c>IsEffectivelyVisible</c> check would miss. <c>Opacity = 0</c> is the sharpest available
@@ -2536,7 +2532,7 @@ public class CreatorCompactTests
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
             Dispatcher.UIThread.RunJobs();
 
-            // The exact reason a property-read (round 0/1/2's own original shape) or a plain
+            // The exact reason a property-read (the original, pre-fix shape of this check) or a plain
             // visibility flag would have MISSED this: none of them changed. This is WHY the
             // in-bounds check (AssertFullyWithinWindow, itself unable to see this case) is not
             // sufficient alone — MeasureSplitterFocusContrast passes straight through it and only
@@ -2563,8 +2559,8 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// Fix round 3, ACT-NOW item: "focused-splitter visibility after continued resizing" was
-    /// untested — the staged focus-recovery contract (<c>CompactHeightBehavior</c>'s own
+    /// "Focused-splitter visibility after continued resizing" needed its own coverage — the staged
+    /// focus-recovery contract (<c>CompactHeightBehavior</c>'s own
     /// capture/relocate machinery) is proven for OBSCURED-CAPTURED elements elsewhere in this
     /// suite, but never specifically for the splitter AS the focus-holder across a genuinely
     /// continuous shrink, including crossing the compact threshold and continuing to shrink
@@ -2572,23 +2568,22 @@ public class CreatorCompactTests
     /// early-return means does NOT re-run the staged capture/recovery sequence at all — so if
     /// anything were going to strand the splitter, it would be here).
     /// <para>
-    /// FIX ROUND 4 (shared behavior): this test found a REAL, REPRODUCIBLE PRODUCTION GAP in the
+    /// This test found a REAL, REPRODUCIBLE PRODUCTION GAP in the
     /// SHARED <c>CompactHeightBehavior</c> (used by all five converted views), not in this view's
-    /// own wiring — round 3 reported it BLOCKED and kept the test SKIPPED as the evidence trail.
-    /// The shared fix has since landed (<c>CompactHeightBehavior</c> now re-checks a still-focused,
-    /// in-scope element's clip-aware visibility on ANY bounds change, not only at transitions), so
-    /// the test is UN-SKIPPED here and HARDENED per codex's round-3 finding on it: the original
+    /// own wiring, and was originally kept SKIPPED — with this comment as the evidence trail —
+    /// until the shared fix landed (<c>CompactHeightBehavior</c> now re-checks a still-focused,
+    /// in-scope element's clip-aware visibility on ANY bounds change, not only at transitions). The
+    /// test is UN-SKIPPED here and HARDENED: the original
     /// form permitted focus theft — it only measured contrast <c>if</c> focus happened to still be
     /// on the splitter, so a run that MOVED focus away scored as a pass. Every assertion below is
     /// now UNCONDITIONAL: at each step the splitter must STILL be the focus-holder (focus moving is
     /// a theft failure, reported as such), must be clip-aware fully visible, and its focus
     /// indication must clear 3:1 against the RENDERED PIXELS the helper actually samples — its own
     /// centre versus the points 3 DIPs above and below it, which is a claim about the surfaces
-    /// immediately adjacent along that centre line, not a survey of either pane as a whole
-    /// (wording tightened per codex, fix round 5).
+    /// immediately adjacent along that centre line, not a survey of either pane as a whole.
     /// </para>
     /// <para>
-    /// MEASURED (reproduced three times, isolating the exact trigger): the brief's OWN worst case
+    /// MEASURED (reproduced three times, isolating the exact trigger): the worst case
     /// (<see cref="ForceWorstCase"/> — 12 detected sets, both statuses, scanning, 8 stored files,
     /// creating+progress) is what exposes it; two narrower diagnostics (worst-case content minus
     /// the 8 stored files; then a direct 900→319 jump instead of a gradual sequence) each found NO
@@ -2609,8 +2604,8 @@ public class CreatorCompactTests
     /// treating "obscurement recheck" as transition-triggered only; a general fix would need it to
     /// also recheck the currently-focused element's visibility on ANY bounds change once compact
     /// (not just on entry), which touches the shared mechanism all six views depend on — outside
-    /// this task's own scope to change unilaterally — which is exactly what fix round 4 then did,
-    /// in the shared behavior, with its own contract tests
+    /// this task's own scope to change unilaterally. The shared behavior was updated accordingly,
+    /// with its own contract tests
     /// (<c>CompactHeightBehaviorTests.ContinuedShrinkPastTransition_*</c> /
     /// <c>ContinuedShrink_PartialClipOnly_*</c>).
     /// </para>
@@ -2647,7 +2642,7 @@ public class CreatorCompactTests
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                 Dispatcher.UIThread.RunJobs();
 
-                // UNCONDITIONAL (codex, fix round 3 finding on this test): the earlier form guarded
+                // UNCONDITIONAL: the earlier form guarded
                 // the contrast measurement behind "if focus is still on the splitter", which let a
                 // run that MOVED focus away score as a pass — permitting exactly the focus theft
                 // the shared behavior is required never to commit. Every state in this sequence is
@@ -2659,7 +2654,7 @@ public class CreatorCompactTests
                     $"{(focused is null ? "NOTHING" : focused.GetType().Name)})");
                 AssertFullyWithinWindow(splitter, window);
 
-                // Scope of this claim, stated exactly (codex, fix round 5): the helper samples THREE
+                // Scope of this claim, stated exactly: the helper samples THREE
                 // rendered pixels — the splitter's own centre, and the points 3 DIPs directly above
                 // and below it. It therefore proves the focus indication is distinguishable from the
                 // surfaces immediately adjacent to it along that centre line; it does not survey
@@ -2777,7 +2772,7 @@ public class CreatorCompactTests
     }
 
     // ── Fixtures (captured from real, green CompactViewRig.CaptureTabOrderControls runs against
-    // this task's finished implementation — see task report for the capture method). Each entry is
+    // this task's finished implementation). Each entry is
     // CompactViewRig.Describe's own format (real automation peer name plus x:Name, reported
     // separately), a human-readable regression net, NOT the discriminating check itself (that is
     // AssertTabWalk's own reference-based ResolveIndependentExpectedOrder + AssertSameControlSequence,

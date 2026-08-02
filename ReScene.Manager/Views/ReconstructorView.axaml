@@ -17,20 +17,20 @@
       <RowDefinition Height="1*" MinHeight="80" />
     </Grid.RowDefinitions>
 
-    <!-- ── Help disclosure (small-window degradation, spec §2) ──
+    <!-- ── Help disclosure (small-window degradation) ──
          Single instance, always in the tree: normal mode renders FLAT (header hidden, body
          force-expanded by CompactHeightBehavior) so the page is pixel-identical to the
          pre-disclosure layout; compact mode shows the header and starts collapsed. -->
     <!-- Margin is NOT a local value here (house rule: local values beat unconditional styles,
          so a local "0,0,0,6" would defeat the compact-mode margin-tightening override) — the
          base value lives in the helpDisclosure style instead. HorizontalAlignment/
-         HorizontalContentAlignment ARE local values (retro-review finding #5, round 2): Fluent's
+         HorizontalContentAlignment ARE local values (the hug-bug fix): Fluent's
          Expander defaults to Left, so without this it hugs its own content's width instead of
          filling the Grid column — the root cause of an ~19-DIP gap this task's own frame-rig
          pixel comparison exposed, previously mis-attributed entirely to "scrollbar track
-         reservation" (see the test's own round-2 note). Deliberately scoped to Reconstructor's
+         reservation" (see the test's own note). Deliberately scoped to Reconstructor's
          OWN Expander instance rather than the shared helpDisclosure style, since a shared-style
-         change would also alter SRSCreator's (Task 3's) Expander and its own already-approved
+         change would also alter SRSCreator's Expander and its own already-approved
          frame-rig numbers — no compact-mode override ever touches these two properties, so a
          local value here carries no house-rule risk. -->
     <controls:HelpDisclosure Grid.Row="0" x:Name="HelpDisclosure" Classes="helpDisclosure"
@@ -40,7 +40,7 @@
         <TextBlock Text="Help &amp; links" FontSize="{DynamicResource FontSizeCaption}" />
       </Expander.Header>
       <!-- The BODY ScrollViewer is the HelpBodyMaxHeight target. NO helpBody class and never
-           focusable — the Reconstructor's links are the keyboard route (spec §2 rev 11: the
+           focusable — the Reconstructor's links are the keyboard route (the
            class-pair would make it compact-focusable). Inset on the content panel per house rule. -->
       <ScrollViewer VerticalScrollBarVisibility="Auto"
                     ScrollViewer.AllowAutoHide="False">
@@ -52,7 +52,7 @@
                caption plus link-class Buttons that open through the SystemLauncherService (see code-behind).
                Every link carries its platform qualifier — the FTP-originals archive contains only the
                Windows binaries. The comma TextBlock carries the gap so it renders flush against the first
-               link (§4a nit). -->
+               link. -->
           <WrapPanel Margin="0,2,0,0">
             <TextBlock Text="WinRAR versions needed for reconstruction can be downloaded from:"
                        Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
@@ -110,9 +110,9 @@
     </DockPanel>
 
     <!-- ── Import-from-SRR tip ─────────────────────────────── -->
-    <!-- Always-visible, compact-trimmed under the five a11y conditions (spec §2): trimming is
-         VISUAL-ONLY over the full bound text (condition 1); ToolTip + HelpText both carry the
-         full text (condition 2); the tip is never the budget donor (condition 4). -->
+    <!-- Always-visible, compact-trimmed to preserve accessibility: trimming is
+         VISUAL-ONLY over the full bound text; ToolTip + HelpText both carry the
+         full text; the tip is never the budget donor. -->
     <!-- TextWrapping is NOT a local value here (house rule: local values beat unconditional
          styles, so a local Wrap would defeat the compact-mode NoWrap override below) — the
          base Wrap value lives in the tipLine style instead, so the compact-scoped descendant

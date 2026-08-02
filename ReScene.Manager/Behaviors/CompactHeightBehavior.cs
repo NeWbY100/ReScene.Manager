@@ -11,11 +11,11 @@ namespace ReScene.Manager.Behaviors;
 
 /// <summary>
 /// Toggles the <c>compactHeight</c> style class on a view's inner layout root from its own
-/// bounds height (spec §1): compact when height &lt; Threshold, restore at ≥ Threshold+12
+/// bounds height: compact when height &lt; Threshold, restore at ≥ Threshold+12
 /// (restore-only hysteresis — a fresh instance at Threshold+1 starts expanded). Applies
 /// per-view <see cref="CompactRowSize"/> values on the root AND on descendant grids
 /// carrying their own RowSizes attachment (collected at each apply), applies help-open
-/// donation, manages the Help expander's per-mode state, runs the spec rev-7 staged
+/// donation, manages the Help expander's per-mode state, runs the staged
 /// focus algorithm across transitions, and keeps a still-focused element visible across
 /// CONTINUED resizing between transitions (see <see cref="RecheckFocusAfterResize"/>).
 /// </summary>
@@ -298,7 +298,7 @@ internal static class CompactHeightBehavior
     /// Schedules one <see cref="RecheckFocusAfterResize"/> pass for a bounds change that is NOT a
     /// mode transition, or returns having done nothing at all.
     /// <para>
-    /// TWO gates keep this off the hot path of a live resize-drag. The FIRST is here: the rev-8
+    /// TWO gates keep this off the hot path of a live resize-drag. The FIRST is here: the
     /// no-focus-theft precondition, evaluated BEFORE anything is scheduled — with focus in the
     /// shell, the tab strip, another view, another window, or nowhere, this costs one
     /// FocusManager query and nothing is posted, so a resize can never pull focus into this view.
@@ -704,8 +704,8 @@ internal static class CompactHeightBehavior
                 // visual design says cannot exist: Help hidden with no affordance, in ANY modality,
                 // to bring it back short of resizing the window. Nothing in the UI offers that
                 // collapse — but the Expander's stock peer still carries the ExpandCollapse pattern,
-                // and an assistive technology can invoke Collapse() on it directly (final review:
-                // non-focusable is not non-actionable). Suppressing the pattern itself would take a
+                // and an assistive technology can invoke Collapse() on it directly — non-focusable
+                // is not non-actionable. Suppressing the pattern itself would take a
                 // custom peer, which Expander only permits through a subclass — so the invariant is
                 // held where it is actually owned instead, which makes that call a no-op.
                 // Re-entrant exactly once: the assignment re-enters with IsExpanded already true.
@@ -788,14 +788,14 @@ internal static class CompactHeightBehavior
         body.MaxHeight = donating ? GetHelpBodyMaxHeight(control) : double.PositiveInfinity;
     }
 
-    // ── Staged focus (spec rev 7/8/11) ───────────────────────────────
+    // ── Staged focus ──────────────────────────────────────────────────
 
     private static Control? CurrentFocusedElement(Control root) =>
         TopLevel.GetTopLevel(root)?.FocusManager?.GetFocusedElement() as Control;
 
     /// <summary>
     /// The currently-focused element, but ONLY if it is focused AND a descendant of
-    /// <paramref name="root"/> (spec rev 8 precondition) — otherwise null, so a resize while
+    /// <paramref name="root"/> — otherwise null, so a resize while
     /// focus sits in the shell menu, the tab strip, another window, or nowhere can never
     /// pull focus into this view.
     /// </summary>
@@ -932,8 +932,8 @@ internal static class CompactHeightBehavior
     /// unfocusable (precisely what this job exists to recover from, not evidence that some
     /// unrelated action has taken over), so that case, and the "still the same element" case,
     /// both mean: recover <paramref name="captured"/>. Focus that moved to something OUTSIDE
-    /// this root entirely is never this job's business (the rev-8 precondition, re-checked
-    /// here since scope can change between capture and this job running) — return null. Focus
+    /// this root entirely is never this job's business (re-checked here since scope can change
+    /// between capture and this job running) — return null. Focus
     /// that moved to a DIFFERENT, USABLE element still inside this root means somebody else
     /// already decided where focus belongs — respect it, return null. Focus that moved to a
     /// DIFFERENT element inside this root that is ITSELF unusable means the same transition (or
@@ -1057,8 +1057,8 @@ internal static class CompactHeightBehavior
     /// attempted; a candidate whose own <c>Focus()</c> call returns false (it became unusable
     /// in the instant between validation and the call, or the framework refused it for some
     /// other reason) is skipped rather than silently ending the chain there. The terminal step
-    /// is never gated behind the same usability check — it is the guaranteed last resort,
-    /// spec rev 8's requirement that a silent no-op is forbidden at every step.
+    /// is never gated behind the same usability check — it is the guaranteed last resort, and
+    /// a silent no-op is forbidden at every step.
     /// </summary>
     private static void FocusFallbackChain(Control root, Control captured, bool enteringCompact)
     {

@@ -12,7 +12,7 @@ namespace ReScene.Manager.Views;
 internal static class ResourceLink
 {
     /// <summary>
-    /// Test seam (retro-review finding #4): swap for a fake <see cref="ILauncherService"/> so a
+    /// Test seam: swap for a fake <see cref="ILauncherService"/> so a
     /// test can raise a REAL Click/UIA Invoke on a link button and assert the invocation actually
     /// fired, without a real OS browser launch as a side effect. Defaults to the real,
     /// production launcher; every one of this class's 3 callers is unaffected in production,

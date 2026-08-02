@@ -6,7 +6,7 @@ namespace ReScene.Manager.Tests;
 
 /// <summary>
 /// Tests for <see cref="AvaloniaUiTimer"/> / <see cref="AvaloniaUiTimerFactory"/>. Ticking is
-/// wall-clock and UI-loop driven, so — per the brief — these assert construction and Start/Stop
+/// wall-clock and UI-loop driven, so these assert construction and Start/Stop
 /// safety rather than an actual timer fire, to stay robust.
 /// </summary>
 public class AvaloniaUiTimerTests

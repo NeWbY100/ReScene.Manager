@@ -124,8 +124,8 @@ public class StylesTests
     }
 
     /// <summary>
-    /// Final review round 2, MAJOR: the re-templated <c>Expander.helpDisclosure</c> shows its header
-    /// ToggleButton only in compact mode. Round 1 walked the peer tree and confirmed the toggle's
+    /// The re-templated <c>Expander.helpDisclosure</c> shows its header
+    /// ToggleButton only in compact mode. An earlier pass walked the peer tree and confirmed the toggle's
     /// peer is pruned at normal — but judged the arrangement coherent on the strength of the
     /// Expander peer being non-focusable. That was the wrong test: NON-FOCUSABLE IS NOT
     /// NON-ACTIONABLE. <c>IExpandCollapseProvider</c> is an action, and an AT can invoke
@@ -142,7 +142,7 @@ public class StylesTests
     /// <see cref="CompactHeightBehavior"/> already DECLARES — "flat mode always renders the body
     /// expanded" — is now enforced continuously instead of only on transitions, so a Collapse at
     /// normal is a genuine no-op: the state does not change and the body stays visible, which is
-    /// the user-facing guarantee the finding asked for.
+    /// the user-facing guarantee this behavior must provide.
     /// </para>
     /// <para>
     /// COMPACT keeps ExpandCollapse on the container deliberately, and it is NOT a second
@@ -150,8 +150,8 @@ public class StylesTests
     /// below — invoking the container's Collapse moves the toggle's own IsChecked with it, and the
     /// behavior's HelpOpen tracks both), and only the toggle is keyboard focusable, so only the
     /// toggle is ever announced as actionable on focus. One state, one authoritative route to
-    /// change it, two coherent views of it — which is what spec §1's "complementary, not
-    /// duplicated" claim requires, now proven rather than asserted.
+    /// change it, two coherent views of it — complementary, not
+    /// duplicated, now proven rather than asserted.
     /// </para>
     /// <para>
     /// Modes are driven through the real behavior (Threshold + window height), not by poking the
@@ -209,7 +209,7 @@ public class StylesTests
             var normalEvents = new List<object?>();
             expanderPeer.PropertyChanged += (_, e) => normalEvents.Add(e.NewValue);
 
-            // The round-2 invariant guard stays as the PROGRAMMATIC defense (nothing in the UI or
+            // The invariant guard stays as the PROGRAMMATIC defense (nothing in the UI or
             // the UIA tree can now reach it, but code still can): a collapse at normal size never
             // costs the user their Help.
             expander.IsExpanded = false;

@@ -9,8 +9,8 @@ namespace ReScene.Manager.Behaviors;
 /// <summary>
 /// Chains keyboard/focus navigation in an inner <see cref="DataGrid"/> — whose own scrolling is
 /// entirely self-contained virtualization, oblivious to any ancestor — out to the nearest ANCESTOR
-/// <see cref="ScrollViewer"/> once the current row moves outside the outer's own viewport (spec's
-/// codex round-1 #8: a small-window config band scrolls its DataGrid host, so a user gesture that
+/// <see cref="ScrollViewer"/> once the current row moves outside the outer's own viewport (a
+/// small-window config band scrolls its DataGrid host, so a user gesture that
 /// would otherwise dead-end at the grid's own edge must continue past it). Confirmed by decompiling
 /// every <c>Focus()</c> call site in <c>Avalonia.Controls.DataGrid</c> 11.3.13's own package:
 /// ordinary (non-edit) arrow-key browsing NEVER focuses a specific cell or row —
@@ -30,8 +30,8 @@ namespace ReScene.Manager.Behaviors;
 /// satisfy "the current cell ends fully visible" without depending on <see cref="DataGridCell"/>
 /// internals that are not part of the public API.
 /// <para>
-/// NO WHEEL MECHANISM (removed, fix round 2 — codex's final ruling on the fix-round-1 disclosure):
-/// an earlier version of this behavior also chained <c>PointerWheelChanged</c> at the grid's own
+/// NO WHEEL MECHANISM (removed): an earlier version of this behavior also chained
+/// <c>PointerWheelChanged</c> at the grid's own
 /// scroll extent. It was removed, not merely left undocumented, for two independent reasons.
 /// First, redundancy: <see cref="DataGrid"/>'s own <c>OnPointerWheelChanged</c> class handler
 /// already leaves the event unhandled whenever it cannot consume the gesture internally (it
@@ -141,7 +141,7 @@ internal static class ScrollHandoffBehavior
 
         // Posted at Loaded priority (mirrors CompactHeightBehavior's own identical deferral
         // rationale for post-transition focus recovery) rather than called synchronously here:
-        // MEASURED (fix round 1) that DataGrid's own internal virtualization scroll
+        // MEASURED that DataGrid's own internal virtualization scroll
         // (ScrollSlotIntoView, run as part of the SAME currency-update call chain that raises
         // CurrentCellChanged) has not always finished repositioning the new current row's OWN
         // DataGridRow by the time this event fires — calling BringIntoView() synchronously here

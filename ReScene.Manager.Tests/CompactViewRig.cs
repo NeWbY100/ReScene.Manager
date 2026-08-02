@@ -12,8 +12,8 @@ using Avalonia.VisualTree;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Shared per-view test rig for the small-window layout degradation feature (produced by Task 2,
-/// consumed unchanged by Tasks 3-6). Hosts a view inside a REAL shell (chrome that genuinely
+/// Shared per-view test rig for the small-window layout degradation feature, used unchanged
+/// across every per-view test class. Hosts a view inside a REAL shell (chrome that genuinely
 /// consumes the budget the design's numbers are calibrated against — see
 /// <see cref="CompactInvariantRig"/>'s 319-DIP figure) and exercises the three physical input
 /// routes (wheel, keyboard, scrollbar-thumb drag) plus a real Tab-walk, all via genuine headless
@@ -25,7 +25,7 @@ internal static class CompactViewRig
     /// <summary>
     /// The canonical small-window shell width (spec's own worked example — 700w is what makes the
     /// 8-tab shell strip wrap to two rows, which is exactly the "wrapped shell strip 58" term in
-    /// the design's 319-inner-DIP arithmetic). Fixed here so every view task hosts at the same
+    /// the design's 319-inner-DIP arithmetic). Fixed here so every view is hosted at the same
     /// width the design's numbers were computed against; only the height varies per call.
     /// </summary>
     private const double ShellWidth = 700;
@@ -181,31 +181,28 @@ internal static class CompactViewRig
     /// <param name="window">The hosting window.</param>
     /// <param name="sentinel">The control to start (and hope to return) the walk at.</param>
     /// <param name="expectedForwardStops">
-    /// Optional, round-2 retro-review completeness check: the full, exhaustive set of controls
-    /// the FORWARD (Tab) pass is expected to reach. When supplied, a stable terminal loop (or a
-    /// true return to the sentinel) is no longer accepted unconditionally — every control in this
-    /// set must have actually been visited first, or the walk fails loudly naming exactly which
-    /// ones were not. Without it (the default), completeness is unchecked, matching every
-    /// pre-round-2 caller's behavior exactly (source- and behavior-compatible with Task 3's
-    /// existing calls). See <see cref="AssertCompleteness"/>.
+    /// Optional completeness check: the full, exhaustive set of controls the FORWARD (Tab) pass
+    /// is expected to reach. When supplied, a stable terminal loop (or a true return to the
+    /// sentinel) is no longer accepted unconditionally — every control in this set must have
+    /// actually been visited first, or the walk fails loudly naming exactly which ones were not.
+    /// Without it (the default), completeness is unchecked, preserving existing callers'
+    /// behavior. See <see cref="AssertCompleteness"/>.
     /// </param>
     /// <param name="expectedReverseStops">
-    /// Round-3 retro-review: the SAME completeness check, but for the REVERSE (Shift+Tab) pass,
-    /// checked independently against its own set rather than reusing
-    /// <paramref name="expectedForwardStops"/> — Shift+Tab order is not guaranteed to be the exact
-    /// mirror of Tab order (a trap could plausibly affect only one direction), so a genuine
-    /// per-direction regression needs a per-direction expectation to be caught.
+    /// The SAME completeness check, but for the REVERSE (Shift+Tab) pass, checked independently
+    /// against its own set rather than reusing <paramref name="expectedForwardStops"/> —
+    /// Shift+Tab order is not guaranteed to be the exact mirror of Tab order (a trap could
+    /// plausibly affect only one direction), so a genuine per-direction regression needs a
+    /// per-direction expectation to be caught.
     /// </param>
     /// <param name="reverseSentinel">
-    /// Round-4 retro-review: the REVERSE pass's own starting point, independent of
-    /// <paramref name="sentinel"/>. Defaults to null, meaning "reuse <paramref name="sentinel"/>"
-    /// — identical to every pre-round-4 caller's behavior (source- and behavior-compatible with
-    /// Task 3's existing calls). A caller with a topology where the forward sentinel is ALSO the
+    /// The REVERSE pass's own starting point, independent of <paramref name="sentinel"/>.
+    /// Defaults to null, meaning "reuse <paramref name="sentinel"/>" — preserving existing
+    /// callers' behavior. A caller with a topology where the forward sentinel is ALSO the
     /// first focusable element of its own keyboard-navigation scope (so Shift+Tab from it cannot
-    /// move at all — see <see cref="ReconstructorCompactTests"/>'s own round-3/4 findings) can
-    /// supply a genuinely different anchor here — e.g. the last control the forward pass reaches
-    /// — so the reverse pass explores a real walk instead of a trivial, always-true single-step
-    /// one.
+    /// move at all — see <see cref="ReconstructorCompactTests"/>) can supply a genuinely
+    /// different anchor here — e.g. the last control the forward pass reaches — so the reverse
+    /// pass explores a real walk instead of a trivial, always-true single-step one.
     /// </param>
     /// <remarks>
     /// Avalonia's default top-level <c>KeyboardNavigation.TabNavigation</c> ("Continue") does
@@ -217,20 +214,19 @@ internal static class CompactViewRig
     /// further or genuinely wrapping back to the very first control. The walk therefore ends
     /// successfully either on genuinely returning to the sentinel (a true cycle exists — no
     /// further proof needed) OR on revisiting an already-seen control — but a BARE repeat is not
-    /// enough evidence on its own: retro-review finding #2 is that an early, erratic trap (a real
-    /// bug that happens to bounce back to something already seen after only 2-3 steps) would
-    /// look identical to a genuine, stable terminal loop under a "first repeat wins" rule. So a
-    /// repeat that ISN'T the sentinel is CONFIRMED, not trusted blindly: one more full lap of the
-    /// apparent cycle length must reproduce the IDENTICAL sequence (see
-    /// <see cref="ConfirmStableLoop"/>) before the walk is accepted as done. A genuine steady
-    /// state reproduces trivially; an early trap diverges and fails loudly instead of silently
-    /// passing.
+    /// enough evidence on its own: an early, erratic trap (a real bug that happens to bounce back
+    /// to something already seen after only 2-3 steps) would look identical to a genuine, stable
+    /// terminal loop under a "first repeat wins" rule. So a repeat that ISN'T the sentinel is
+    /// CONFIRMED, not trusted blindly: one more full lap of the apparent cycle length must
+    /// reproduce the IDENTICAL sequence (see <see cref="ConfirmStableLoop"/>) before the walk is
+    /// accepted as done. A genuine steady state reproduces trivially; an early trap diverges and
+    /// fails loudly instead of silently passing.
     /// <para>
-    /// Round-2 retro-review: lap-reproduction alone proves a loop is STABLE, not that it is
-    /// COMPLETE — a genuinely stable early A→B→A trap (e.g. something hijacking Tab between two
-    /// controls) reproduces perfectly and would otherwise pass even though later, real
-    /// focusables were never reached. <paramref name="expectedForwardStops"/>/
-    /// <paramref name="expectedReverseStops"/> close that gap.
+    /// Lap-reproduction alone proves a loop is STABLE, not that it is COMPLETE — a genuinely
+    /// stable early A→B→A trap (e.g. something hijacking Tab between two controls) reproduces
+    /// perfectly and would otherwise pass even though later, real focusables were never reached.
+    /// <paramref name="expectedForwardStops"/>/<paramref name="expectedReverseStops"/> close that
+    /// gap.
     /// </para>
     /// </remarks>
     public static void AssertTabWalkStaysVisible(
@@ -244,18 +240,18 @@ internal static class CompactViewRig
     }
 
     /// <summary>
-    /// Round-5 retro-review: the distinct controls a <see cref="RunTabPass"/> call actually
-    /// visited, in visitation order, plus WHERE it ultimately landed when the walk concluded — the
-    /// control it either genuinely returned to (the starting sentinel) or the ALREADY-visited
-    /// control the confirmed-stable terminal loop closes on (which, for a walk that starts at one
-    /// end of a keyboard-navigation scope and runs off the OTHER end, is that scope's own
-    /// first-in-scope element — see <see cref="ReconstructorCompactTests"/>'s round-5 per-scope
-    /// walks for why callers need to assert this explicitly, not just infer it).
+    /// The distinct controls a <see cref="RunTabPass"/> call actually visited, in visitation
+    /// order, plus WHERE it ultimately landed when the walk concluded — the control it either
+    /// genuinely returned to (the starting sentinel) or the ALREADY-visited control the
+    /// confirmed-stable terminal loop closes on (which, for a walk that starts at one end of a
+    /// keyboard-navigation scope and runs off the OTHER end, is that scope's own first-in-scope
+    /// element — see <see cref="ReconstructorCompactTests"/>'s per-scope walks for why callers
+    /// need to assert this explicitly, not just infer it).
     /// </summary>
     internal readonly record struct TabWalkResult(IReadOnlyList<Control> Order, Control LoopedBackTo);
 
     /// <summary>
-    /// Round-4 retro-review: widened from <c>private</c> to <c>internal</c> so a covering test
+    /// Widened from <c>private</c> to <c>internal</c> so a covering test
     /// (<c>CompactViewRigTests</c>) can exercise the forward and reverse passes INDEPENDENTLY —
     /// proving a reverse-only trap genuinely lets the forward pass succeed before the reverse
     /// pass fails, rather than relying on <see cref="AssertTabWalkStaysVisible"/>'s combined,
@@ -263,13 +259,12 @@ internal static class CompactViewRig
     /// all, and conversely a passing combined call can't by itself prove forward succeeded
     /// FIRST rather than not being reached).
     /// <para>
-    /// Round-5 retro-review: returns a <see cref="TabWalkResult"/> (the visited order plus the
-    /// boundary it landed on) instead of <c>void</c>, so a caller doing a per-scope reverse walk
-    /// can assert the exact ORDER against a committed fixture and assert the boundary LANDING
-    /// explicitly (so a topology change that merges or splits scopes differently fails loudly
-    /// instead of being silently absorbed). <see cref="AssertTabWalkStaysVisible"/> itself still
-    /// discards the result — its own contract only ever needed the visibility/completeness side
-    /// effects.
+    /// Returns a <see cref="TabWalkResult"/> (the visited order plus the boundary it landed on)
+    /// instead of <c>void</c>, so a caller doing a per-scope reverse walk can assert the exact
+    /// ORDER against a committed fixture and assert the boundary LANDING explicitly (so a
+    /// topology change that merges or splits scopes differently fails loudly instead of being
+    /// silently absorbed). <see cref="AssertTabWalkStaysVisible"/> itself still discards the
+    /// result — its own contract only ever needed the visibility/completeness side effects.
     /// </para>
     /// </summary>
     internal static TabWalkResult RunTabPass(Window window, Control sentinel, bool forward, IReadOnlyCollection<Control>? expectedStops = null)
@@ -313,7 +308,7 @@ internal static class CompactViewRig
     }
 
     /// <summary>
-    /// Round-2 retro-review: the completeness half a stability check alone cannot provide. When
+    /// The completeness half a stability check alone cannot provide. When
     /// <paramref name="expectedStops"/> is supplied, every one of its controls must be present
     /// (by reference) in <paramref name="visited"/> — the distinct controls actually seen before
     /// the walk concluded (this already includes every member of a confirmed stable loop, since
@@ -373,10 +368,9 @@ internal static class CompactViewRig
     /// <param name="window">The hosting window.</param>
     /// <param name="root">The scope to record steps within.</param>
     /// <param name="expectedStops">
-    /// Optional, round-2 retro-review completeness check — see
-    /// <see cref="AssertTabWalkStaysVisible"/>'s parameter of the same name and
-    /// <see cref="AssertCompleteness"/>. Defaults to null (unchecked), matching every
-    /// pre-round-2 caller's behavior exactly.
+    /// Optional completeness check — see <see cref="AssertTabWalkStaysVisible"/>'s parameter of
+    /// the same name and <see cref="AssertCompleteness"/>. Defaults to null (unchecked),
+    /// preserving existing callers' behavior.
     /// </param>
     /// <remarks>
     /// Requires focus to already sit inside <paramref name="root"/> (focus its intended starting
@@ -393,32 +387,31 @@ internal static class CompactViewRig
         [.. CaptureTabOrderControls(window, root, expectedStops).Order.Select(Describe)];
 
     /// <summary>
-    /// Round-5 retro-review: the distinct, in-root controls a <see cref="CaptureTabOrderControls"/>
-    /// call actually visited, in visitation order, plus — round 6 retro-review — the control it
-    /// landed on if it terminated by LEAVING root's scope (<c>null</c> if it instead terminated by
-    /// a confirmed stable loop within root; there is no "external target" in that case). A caller
-    /// needs this to validate the walk didn't merely leave root at all, but left it at the
-    /// SPECIFIC, expected boundary — an unvalidated blind exit could mask a topology change that
-    /// makes the walk leave root somewhere unintended.
+    /// The distinct, in-root controls a <see cref="CaptureTabOrderControls"/> call actually
+    /// visited, in visitation order, plus the control it landed on if it terminated by LEAVING
+    /// root's scope (<c>null</c> if it instead terminated by a confirmed stable loop within root;
+    /// there is no "external target" in that case). A caller needs this to validate the walk
+    /// didn't merely leave root at all, but left it at the SPECIFIC, expected boundary — an
+    /// unvalidated blind exit could mask a topology change that makes the walk leave root
+    /// somewhere unintended.
     /// </summary>
     internal readonly record struct TabOrderCapture(IReadOnlyList<Control> Order, Control? FirstExternalTarget);
 
     /// <summary>
-    /// Round-5 retro-review: <see cref="SnapshotTabOrder"/>'s own core walk, extracted so a
-    /// caller needing the REAL, root-scoped, ordered <see cref="Control"/> references (not just
-    /// their descriptions) can get them directly — completeness/order checks against a committed
-    /// fixture are reference-based, and <see cref="ReconstructorCompactTests"/>'s round-5
-    /// per-scope reverse walks need to index into the forward walk's own disambiguated result by
-    /// POSITION (the four "Browse" buttons describe identically, so only the walk's own ordered
-    /// result can name a specific one unambiguously). <see cref="SnapshotTabOrder"/> itself is
-    /// unchanged — a thin wrapper over this — so every pre-round-5 caller (Task 3's included)
-    /// keeps its exact prior behavior.
+    /// <see cref="SnapshotTabOrder"/>'s own core walk, extracted so a caller needing the REAL,
+    /// root-scoped, ordered <see cref="Control"/> references (not just their descriptions) can
+    /// get them directly — completeness/order checks against a committed fixture are
+    /// reference-based, and <see cref="ReconstructorCompactTests"/>'s per-scope reverse walks
+    /// need to index into the forward walk's own disambiguated result by POSITION (the four
+    /// "Browse" buttons describe identically, so only the walk's own ordered result can name a
+    /// specific one unambiguously). <see cref="SnapshotTabOrder"/> itself is unchanged — a thin
+    /// wrapper over this — so every existing caller keeps its exact prior behavior.
     /// <para>
-    /// Round-6 retro-review: the extraction had DROPPED per-step visibility assertions
-    /// (<see cref="SnapshotTabOrder"/>'s own pre-round-5 body never called
+    /// An earlier version of this extraction had dropped per-step visibility assertions
+    /// (<see cref="SnapshotTabOrder"/>'s own earlier body never called
     /// <see cref="AssertFullyVisible"/> either — this was always a latent gap in
     /// <c>SnapshotTabOrder</c> itself, but it only became a real Criterion C regression once
-    /// round 5 started using this extraction for <c>ReconstructorCompactTests</c>' own FORWARD
+    /// this extraction started being used for <c>ReconstructorCompactTests</c>' own FORWARD
     /// walk, a role <see cref="RunTabPass"/> — which DOES assert visibility at every step — used
     /// to fill). Restored: every control visited WITHIN root (including the starting one) is now
     /// asserted fully visible, exactly matching <see cref="RunTabPass"/>'s own guarantee. The
@@ -473,12 +466,12 @@ internal static class CompactViewRig
 
     /// <summary>
     /// See <see cref="ConfirmStableLoop"/> — the same confirmation, scoped to "still inside root"
-    /// as an ADDITIONAL boundary check alongside visibility, not instead of it. Round-7
-    /// retro-review: this confirmation lap previously never asserted visibility at all (unlike
-    /// <see cref="ConfirmStableLoop"/>'s own confirmation lap, which always has) — a control that
-    /// goes invisible BETWEEN the main lap (round 6 restored its own per-step visibility check)
-    /// and this confirmation lap would have been silently absorbed as "the loop reproduced
-    /// stably," when it is actually a real defect. Fixed to match.
+    /// as an ADDITIONAL boundary check alongside visibility, not instead of it. This confirmation
+    /// lap previously never asserted visibility at all (unlike <see cref="ConfirmStableLoop"/>'s
+    /// own confirmation lap, which always has) — a control that goes invisible BETWEEN the main
+    /// lap (which itself restored its own per-step visibility check) and this confirmation lap
+    /// would have been silently absorbed as "the loop reproduced stably," when it is actually a
+    /// real defect. Fixed to match.
     /// </summary>
     private static void ConfirmStableLoopWithinRoot(Window window, Control root, List<Control> order, int cycleStart, int cycleLength)
     {
@@ -505,12 +498,11 @@ internal static class CompactViewRig
     }
 
     /// <summary>
-    /// Criterion A, INPUT-DRIVEN (codex round-2 #9 — programmatic BringIntoView is not a user
-    /// path): three routes, each asserted per target — (a) WHEEL: genuine wheel input over the
-    /// scroll region until the target is fully inside the window; (b) KEYBOARD: real Tab/arrow
-    /// input until the target is focused and fully visible; (c) THUMB: pointer
-    /// press-drag-release on the vertical scrollbar thumb (headless MouseDown/MouseMove/MouseUp
-    /// on the thumb's bounds) until visible.
+    /// Criterion A, INPUT-DRIVEN (programmatic BringIntoView is not a user path): three routes,
+    /// each asserted per target — (a) WHEEL: genuine wheel input over the scroll region until the
+    /// target is fully inside the window; (b) KEYBOARD: real Tab/arrow input until the target is
+    /// focused and fully visible; (c) THUMB: pointer press-drag-release on the vertical scrollbar
+    /// thumb (headless MouseDown/MouseMove/MouseUp on the thumb's bounds) until visible.
     /// </summary>
     public static void AssertReachableByWheel(Window window, Control target)
     {
@@ -670,12 +662,12 @@ internal static class CompactViewRig
     /// (progressively transform every ClipToBounds ancestor's bounds into window space and
     /// intersect) since independent per-clipper checks are provably not equivalent — see
     /// CompactHeightBehavior.GetClipVisibility's own XML doc for the counter-example (the shared
-    /// geometry walk that IsObscured now answers from; fix round 4 moved the explanation there
-    /// when the same walk gained the finer partially-clipped verdict this helper's own bar needs).
-    /// Widened from <c>private</c> to <c>internal</c> (whole-branch review, MAJOR): a board-level
-    /// test needs this exact per-element clip-aware check to walk an entire subtree recursively
-    /// (nested bands, not just a root's direct children) rather than forking a parallel variant of
-    /// the same geometry walk.
+    /// geometry walk that IsObscured now answers from, once it gained the finer
+    /// partially-clipped verdict this helper's own bar needs).
+    /// Widened from <c>private</c> to <c>internal</c>: a board-level test needs this exact
+    /// per-element clip-aware check to walk an entire subtree recursively (nested bands, not
+    /// just a root's direct children) rather than forking a parallel variant of the same
+    /// geometry walk.
     /// </summary>
     internal static bool IsFullyVisibleWithinWindow(Control element, Window window)
     {
@@ -720,36 +712,35 @@ internal static class CompactViewRig
     }
 
     /// <summary>
-    /// Retro-review finding #2: reading ONLY the attached <c>AutomationProperties.Name</c>
-    /// (as before) is empty for most Buttons in this app (none of the link/toolbar buttons carry
-    /// an explicit one), so every such stop collapsed to the same bare "Button:" identity — a
-    /// fixture built from that cannot tell "Export Config" apart from "Import from SRR", so a
-    /// same-type reorder is invisible to it. The REAL automation peer's <c>GetName()</c> is what
-    /// AT actually announces: for a ContentControl (Button/ToggleButton/CheckBox/...) with no
-    /// explicit Name, <c>ContentControlAutomationPeer.GetNameCore()</c> falls through to the
-    /// realized content's own text — see the peer's own decompiled source, confirmed empirically
-    /// below.
+    /// Reading ONLY the attached <c>AutomationProperties.Name</c> (as before) is empty for most
+    /// Buttons in this app (none of the link/toolbar buttons carry an explicit one), so every
+    /// such stop collapsed to the same bare "Button:" identity — a fixture built from that cannot
+    /// tell "Export Config" apart from "Import from SRR", so a same-type reorder is invisible to
+    /// it. The REAL automation peer's <c>GetName()</c> is what AT actually announces: for a
+    /// ContentControl (Button/ToggleButton/CheckBox/...) with no explicit Name,
+    /// <c>ContentControlAutomationPeer.GetNameCore()</c> falls through to the realized content's
+    /// own text — see the peer's own decompiled source, confirmed empirically below.
     /// <para>
-    /// Round-2 retro-review (NEW finding): the first fix ALSO fell back to <c>control.Name</c>
-    /// (x:Name) whenever the peer name was empty. That conflates two different channels — a
-    /// TEST-ID (this rig's own need for a stable, reorder-detecting fixture key) and an
-    /// ACCESSIBLE NAME (what AT actually announces) — and doing so silently PAPERED OVER a real
-    /// gap: this view's four path-picker TextBoxes (carrying only an x:Name, no
-    /// AutomationProperties.Name/LabeledBy) would render as e.g. "TextBox:WinRARTextBox" as if
-    /// that were a meaningful accessible name, when the TRUE peer name is empty — a screen reader
-    /// announces nothing for them. Fixed by reporting BOTH channels, always, separately: the
-    /// peer's real name verbatim (empty stays empty — the honest accessible-name record) and the
-    /// x:Name as its own labeled field (this rig's stable test-id, never treated as an accessible
-    /// name). The four TextBoxes' empty <c>name=""</c> is deliberately left visible in every
-    /// fixture rather than fixed here — see the retro-fix report's a11y-debt note.
+    /// An earlier version of this also fell back to <c>control.Name</c> (x:Name) whenever the
+    /// peer name was empty. That conflates two different channels — a TEST-ID (this rig's own
+    /// need for a stable, reorder-detecting fixture key) and an ACCESSIBLE NAME (what AT actually
+    /// announces) — and doing so silently PAPERED OVER a real gap: this view's four path-picker
+    /// TextBoxes (carrying only an x:Name, no AutomationProperties.Name/LabeledBy) would render
+    /// as e.g. "TextBox:WinRARTextBox" as if that were a meaningful accessible name, when the
+    /// TRUE peer name is empty — a screen reader announces nothing for them. Fixed by reporting
+    /// BOTH channels, always, separately: the peer's real name verbatim (empty stays empty — the
+    /// honest accessible-name record) and the x:Name as its own labeled field (this rig's stable
+    /// test-id, never treated as an accessible name). The four TextBoxes' empty <c>name=""</c> is
+    /// deliberately left visible in every fixture rather than fixed here — a known accessibility
+    /// gap in the view itself, not a rig defect.
     /// </para>
     /// <para>
-    /// Round-3 retro-review: widened from <c>private</c> to <c>internal</c> so a per-view test
-    /// (Reconstructor's own) can resolve its committed, description-based fixtures back into REAL
-    /// <see cref="Control"/> references for a given live window (matching every control whose
-    /// <see cref="Describe"/> output is one of the fixture's strings) — the completeness
-    /// parameters this file's walk methods take are reference-based, and a hardcoded fixture can
-    /// only ever be strings, never live object references, across separate test runs.
+    /// Widened from <c>private</c> to <c>internal</c> so a per-view test (Reconstructor's own)
+    /// can resolve its committed, description-based fixtures back into REAL <see cref="Control"/>
+    /// references for a given live window (matching every control whose <see cref="Describe"/>
+    /// output is one of the fixture's strings) — the completeness parameters this file's walk
+    /// methods take are reference-based, and a hardcoded fixture can only ever be strings, never
+    /// live object references, across separate test runs.
     /// </para>
     /// </summary>
     internal static string Describe(Control control)

@@ -13,14 +13,14 @@
       <RowDefinition Height="*" MinHeight="80" />     <!-- 3: log band -->
     </Grid.RowDefinitions>
 
-    <!-- ── Help disclosure (small-window degradation, spec §2) ── Single instance, always in
+    <!-- ── Help disclosure (small-window degradation) ── Single instance, always in
          the tree: normal mode renders FLAT (header hidden, body force-expanded by
          CompactHeightBehavior) so the page is pixel-identical to the pre-disclosure layout;
          compact mode shows the header and starts collapsed. This view has no links (like
          SRSCreator/SRSReconstructor, unlike Reconstructor) — the intro TextBlock is the whole
          body. Margin is NOT a local value here (house rule: local values beat unconditional
          styles, so a local "0,0,0,6" would defeat the compact-mode margin-tightening override) —
-         the base value lives in the helpDisclosure style instead (task-3 finding).
+         the base value lives in the helpDisclosure style instead.
          HorizontalAlignment/HorizontalContentAlignment ARE local values (the hug-bug fix):
          Fluent's Expander defaults to Left, so without this it hugs its own content's width
          instead of filling the Grid column. -->
@@ -30,16 +30,16 @@
       <Expander.Header>
         <TextBlock Text="Help" FontSize="{DynamicResource FontSizeCaption}" />
       </Expander.Header>
-      <!-- Body scroller: keyboard route for the text-only body (spec §2 rev 10) —
+      <!-- Body scroller: keyboard route for the text-only body —
            Classes="helpBody" is focusable IN COMPACT ONLY via the class-scoped style. Hosts
            the former tab-description TextBlock verbatim, minus its old DockPanel.Dock/margin
            (margin moved to the Expander). NO right inset here (deviation from the house rule's
-           usual 4px content-panel inset, task-2/3/4's own pattern): MEASURED — this view's own
+           usual 4px content-panel inset): MEASURED — this view's own
            intro sentence is long enough that narrowing its available width by even 4px shifts a
            word-wrap point on the first line, producing a genuine pixel difference from today's
            markup (frame-rig red at (660,10): old byte 0x9A vs new byte 0x00), not just a narrower
-           right margin. Criterion F (normal-mode pixel-parity) is treated as the stricter,
-           blocking requirement; the 4px inset was a scrollbar-clearance nicety for compact mode
+           right margin. Normal-mode pixel-parity is treated as the stricter,
+           must-preserve requirement; the 4px inset was a scrollbar-clearance nicety for compact mode
            only, and this view's compact body has ample width (676 DIPs) to spare regardless. -->
       <ScrollViewer Classes="helpBody" VerticalScrollBarVisibility="Auto"
                     ScrollViewer.AllowAutoHide="False">
@@ -51,7 +51,7 @@
 
     <!-- ── Config band (always-present; squeezes + scrolls in compact via AutoToStar) ──
          Content renders at natural height at normal size (row is Auto), no scrollbar shown.
-         Classes="compactScrollInset" (NOT a local Margin — fix round 1, codex finding 2):
+         Classes="compactScrollInset" (NOT a local Margin):
          base value is zero, matching today's markup exactly (this StackPanel did not exist
          before this task; its content was a plain, unindented DockPanel column) — the 4px
          right-inset for scrollbar clearance applies ONLY in compact mode, via the style's own
@@ -73,7 +73,7 @@
                   Command="{Binding BrowseSRRCommand}"
                   Classes="ghost"
                   Margin="4,0,0,0" MinWidth="75" />
-          <!-- AutomationProperties.Name (fix round 1, codex finding 3): pre-existing a11y debt,
+          <!-- AutomationProperties.Name: pre-existing a11y debt,
                unrelated to this task's own compact-layout work but discovered while wiring this
                control up as CompactHeightBehavior's RestoreFocusTarget — without it, a screen
                reader announced this TextBox with no accessible name at all. "SRR file path"
@@ -132,7 +132,7 @@
              own top/bottom extent, and keyboard navigation past the grid's own realized rows,
              both hand off to the OUTER (this ScrollViewer) rather than dead-ending at the grid's
              own edge. AutomationProperties.LabeledBy pairs the grid to its own header TextBlock
-             above (the spec's LabeledBy audit — mirrors the Log ListBox/LogHeader pairing below). -->
+             above (mirrors the Log ListBox/LogHeader pairing below). -->
         <DataGrid x:Name="SRSEntriesGrid"
                   ItemsSource="{Binding SRSEntries}"
                   IsReadOnly="False"
@@ -150,7 +150,8 @@
           <DataGrid.Columns>
             <!-- Authored (not DataGridCheckBoxColumn) so the cell checkbox can opt OUT of the
                  app-wide 14px glyph via Classes="fullSizeGlyph": this cell is UNLABELED, so the
-                 glyph IS the pointer target — the a11y ruling keeps it at Fluent's 20x20. The
+                 glyph IS the pointer target — it keeps Fluent's default 20x20 size since an
+                 unlabeled control needs a large enough hit target. The
                  automation name substitutes for the missing visual label. -->
             <DataGridTemplateColumn Header="" Width="30">
               <DataGridTemplateColumn.CellTemplate>
@@ -172,18 +173,17 @@
       </StackPanel>
     </ScrollViewer>
 
-    <!-- ── Pinned action band — ALWAYS visible (the a11y survey's headline defect: this row and
-         the log measured 0px at 700×450 BASE state under today's DockPanel). Overlay/adorner
+    <!-- ── Pinned action band — ALWAYS visible (this row and
+         the log previously measured 0px height at 700×450 under the old DockPanel layout). Overlay/adorner
          implementations forbidden. The two separators bracketing it are the SAME two pre-existing
          Border elements from today's markup (relocated together, not duplicated); Margin "0,4" on
          both is TODAY's own verbatim value AND happens to match Classes="pinnedSeparator"'s own
-         base value exactly (Styles.axaml, task-4), so applying it here is a zero-deviation,
+         base value exactly (Styles.axaml), so applying it here is a zero-deviation,
          compact-only tightening with no normal-mode change. The action DockPanel and ProgressBar
          below keep their margins as LOCAL, verbatim values (0,0,0,2 / 0,0,0,4, unchanged from
          today) rather than the shared actionBar class — that class's own base margin (0,0,0,4)
-         does not match this view's own pre-existing action-row margin (0,0,0,2), and task-4's
-         identical mismatch needed an explicit review adjudication to accept; compact-mode
-         tightening here is deferred until MEASURED to be needed (see task-5 report). ── -->
+         does not match this view's own pre-existing action-row margin (0,0,0,2); compact-mode
+         tightening here is deferred until MEASURED to be needed. ── -->
     <StackPanel Grid.Row="2">
       <Border Classes="pinnedSeparator" Height="1" Background="{DynamicResource BorderSeparator}" />
 

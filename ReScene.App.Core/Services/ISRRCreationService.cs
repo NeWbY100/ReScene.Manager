@@ -70,8 +70,8 @@ public interface ISRRCreationService
 
     /// <summary>
     /// Creates an SRR file from an explicit list of RAR-set inputs (SFVs and/or first-volume
-    /// RARs) — the folder-mode counterpart to <see cref="CreateFromRARAsync"/>/<see cref="CreateFromSFVAsync"/>
-    /// (design spec §3), used when a <see cref="ReScene.App.Core.ViewModels.CreatorViewModel"/>
+    /// RARs) — the folder-mode counterpart to <see cref="CreateFromRARAsync"/>/<see cref="CreateFromSFVAsync"/>,
+    /// used when a <see cref="ReScene.App.Core.ViewModels.CreatorViewModel"/>
     /// input resolves to a release folder rather than a single file.
     /// </summary>
     /// <param name="outputPath">

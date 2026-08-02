@@ -2,7 +2,7 @@ namespace ReScene.Manager.Behaviors;
 
 /// <summary>
 /// How <see cref="CompactHeightBehavior"/> treats one RowDefinition across modes
-/// (RowDefinitions are not styleable, so the behavior owns their values — spec §1).
+/// (RowDefinitions are not styleable, so the behavior owns their values).
 /// </summary>
 internal enum CompactRowMode
 {

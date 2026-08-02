@@ -8,32 +8,32 @@ namespace ReScene.App.Core.Services;
 
 /// <summary>
 /// Default <see cref="IReleaseScanner"/> — a line-for-line port of pyrescene's
-/// <c>remove_unwanted_sfvs</c> (pyrescene-rules-excerpt.txt L294-436, design spec §2a) plus the
+/// <c>remove_unwanted_sfvs</c> (see docs/superpowers/specs/pyrescene-rules-excerpt.txt) plus the
 /// rescue fallback and excluded-SFV destination rules that sit alongside it in
 /// <c>generate_srr</c>. Sequential, first-match: each <c>*.sfv</c> under the root is classified by
 /// walking rules 1-7 in order and stopping at the first one that applies.
 /// </summary>
 public sealed partial class ReleaseScanner : IReleaseScanner
 {
-    // excerpt: remove_unwanted_sfvs L344-348 (rule 3 exact parent-directory set)
+    // remove_unwanted_sfvs rule 3: exact parent-directory set
     private static readonly HashSet<string> _exactExcludedDirs = new(StringComparer.OrdinalIgnoreCase)
     {
         "subs", "vobsubs", "vobsub", "subtitles", "sub", "czsubs",
         "subpack", "vobsubs-full", "vobsubs-light", "codec", "codecs", "cover", "covers",
     };
 
-    // excerpt: has_music L419-423 (case-SENSITIVE endswith, preserved verbatim — [DIVERGENCE] noted
-    // on the rescue fallback that consumes it)
+    // has_music: case-SENSITIVE endswith, preserved verbatim — [DIVERGENCE] noted
+    // on the rescue fallback that consumes it
     private static readonly string[] _musicExtensions = [".mp3", ".flac", ".mp2"];
 
-    // excerpt: get_sample_files L42-43 (FileType.VideoExtensions, referenced not itself excerpted
+    // get_sample_files references FileType.VideoExtensions (not itself excerpted
     // verbatim — the list mirrors pyrescene's rescene/utility.py)
     private static readonly string[] _videoExtensions =
     [
         ".mp4", ".m4v", ".avi", ".mkv", ".wmv", ".vob", ".m2ts", ".ts", ".mpeg", ".mpg", ".m2v", ".m2p",
     ];
 
-    // excerpt: PROOF_IMAGE_EXTS L75 — each entry is used as `"*" + ext` (an fnmatch SUFFIX match
+    // PROOF_IMAGE_EXTS: each entry is used as `"*" + ext` (an fnmatch SUFFIX match
     // on the whole lowered filename); since every one of these 5 strings is exactly 4 characters,
     // this collapses to "the file's last 4 characters equal one of these 5 strings" — including
     // the ".jpg"-vs-bare-"jpeg" asymmetry (a name ending in the bare letters "jpeg" with NO
@@ -41,7 +41,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     // image-extension check (ReScene.Lib/ReScene/RAR/RarProofInspector.cs) — kept consistent here.
     private static readonly string[] _proofImageLast4 = [".jpg", "jpeg", ".png", ".bmp", ".gif"];
 
-    // excerpt: generate_srr L629 (log blacklist, case-insensitive exact basename match)
+    // generate_srr's log blacklist: case-insensitive exact basename match
     private static readonly HashSet<string> _logBlacklist = new(StringComparer.OrdinalIgnoreCase)
     {
         "rushchk.log", ".upchk.log", "ufxpcrc.log",
@@ -49,7 +49,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
     private static readonly byte[] _pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
-    // excerpt: rar_file_blacklist L862-892 — release names whose main RAR is never storable (e.g.
+    // rar_file_blacklist: release names whose main RAR is never storable (e.g.
     // it contains cracked .exe content), even when is_storable_fix's gate would otherwise pass.
     // Exact-case membership test, matching Python's `in` on a list of str.
     private static readonly HashSet<string> _fixRarBlacklist = new(StringComparer.Ordinal)
@@ -93,7 +93,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     /// read (default: <see cref="SFVFile.ReadFile"/> against the real file); <paramref name="proofRarReader"/>
     /// overrides how a proof RAR's packed-block facts are read (default:
     /// <see cref="RarProofInspector.Inspect"/> against the real file). Rule 4 consumes
-    /// <see cref="ProofRarFacts.LastPackedIsImage"/>; the independent proof-RAR pass (Task 7)
+    /// <see cref="ProofRarFacts.LastPackedIsImage"/>; the independent proof-RAR pass
     /// consumes <see cref="ProofRarFacts.AnyImage"/> — one seam serves both.
     /// </summary>
     internal ReleaseScanner(
@@ -125,11 +125,11 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         var excludedCandidates = new List<string>();
         var stored = new List<string>();
 
-        // E1(b) fix (codex #1, second round): rule 4 (remove_unwanted_sfvs) ONLY decides whether an
+        // Rule 4 (remove_unwanted_sfvs) ONLY decides whether an
         // SFV counts as a main set — in pyrescene it never itself drives RAR storage or ordering.
         // The proof-linked RAR's actual storage+ordering is entirely owned by GetProofRars below,
         // an independent pass over the RAW RAR-file traversal (mirroring get_proof_files'
-        // filter_proof_rar_files, excerpt L84) — `LastPackedIsImage` (rule 4's own predicate)
+        // filter_proof_rar_files) — `LastPackedIsImage` (rule 4's own predicate)
         // always implies `AnyImage` (GetProofRars' predicate: both are computed from the SAME
         // packed-block list, RarProofInspector.cs), and the RAR's path always contains "proof"
         // (its SFV's own parent dir is "proof"/"proofs"), so GetProofRars ALWAYS independently
@@ -154,38 +154,38 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                     // where its stored-file contribution (if any) actually comes from.
                     //
                     // [DIVERGENCE: scope] A proof-classified SFV is routed OUT of nested-SRR
-                    // (subtitle) processing entirely (design §2a): it is never added to `main` and
-                    // is not a subtitle candidate. pyrescene instead routes it to extra_sfvs and
-                    // relies on D8 to skip nested-SRR creation. But D8 (excerpt L805-811 — "not for
-                    // Proof RARs that are already stored inside the SRR") tests each already-stored
-                    // file against `basename(esfv)[:-3] + "rar"` — the SFV's OWN STEM + ".rar", NOT
-                    // the RAR the SFV lists. So pyrescene skips only when some stored file is named
-                    // `<sfv-stem>.rar`. In the NORMAL case (`Proof/p.sfv` listing `p.rar`, that RAR
-                    // stored by filter_proof_rar_files — excerpt L204-211, only RARs whose resolved
-                    // path contains "proof") D8 looks for `p.rar`, finds it, and skips — both agree
-                    // (no nested SRR). pyrescene WOULD create a nested SRR (rule 4, excerpt L357-385
-                    // → create_srr_for_subs, L819-823), and this port does NOT, whenever no stored
-                    // file matches `<sfv-stem>.rar`, i.e.:
+                    // (subtitle) processing entirely: it is never added to `main` and is not a
+                    // subtitle candidate. pyrescene instead routes it to extra_sfvs and relies on
+                    // generate_srr's own stored-file check to skip nested-SRR creation — but that
+                    // check ("not for Proof RARs that are already stored inside the SRR") tests
+                    // each already-stored file against `basename(esfv)[:-3] + "rar"` — the SFV's
+                    // OWN STEM + ".rar", NOT the RAR the SFV lists. So pyrescene skips only when
+                    // some stored file is named `<sfv-stem>.rar`. In the NORMAL case (`Proof/p.sfv`
+                    // listing `p.rar`, that RAR stored by filter_proof_rar_files, only RARs whose
+                    // resolved path contains "proof") the check looks for `p.rar`, finds it, and
+                    // skips — both agree (no nested SRR). pyrescene WOULD create a nested SRR (rule
+                    // 4 → create_srr_for_subs), and this port does NOT, whenever no stored file
+                    // matches `<sfv-stem>.rar`, i.e.:
                     //   (a) the proof SFV lists a RAR OUTSIDE its own dir (e.g. `..\Extras\p.rar`) —
                     //       that external path has no "proof" segment, so it is never stored; or
                     //   (b) the proof SFV's STEM differs from its listed RAR's basename even in the
                     //       same dir (e.g. `Proof/meta.sfv` listing `proofpack.rar`: proofpack.rar
-                    //       IS stored, but D8 looks for `meta.rar` and misses).
+                    //       IS stored, but the check looks for `meta.rar` and misses).
                     // Both are edge cases — a proof SFV whose stem ≠ its proof RAR's name is not the
                     // scene norm — and are accepted as a documented divergence (behavior unchanged).
                     break;
                 case SfvClass.Skipped:
-                    // I3 hardening: the SFV itself was unreadable — a warning was already added
-                    // inside TryReadSfvEntries; it gets no destination at all (spec §2 error
+                    // The SFV itself was unreadable — a warning was already added
+                    // inside TryReadSfvEntries; it gets no destination at all (the error
                     // contract's "otherwise skipped" branch, distinct from an actively-excluded
                     // SFV, which still reaches SubtitleSfvs).
                     break;
             }
         }
 
-        // excerpt: remove_unwanted_sfvs L425-434 (rescue fallback: re-admit multi-entry or
+        // remove_unwanted_sfvs (rescue fallback): re-admit multi-entry or
         // music-having SFVs when nothing survived rules 1-7 — re-examines every SFV found, not
-        // just the ones rules 1-7 excluded, exactly like pyrescene's `for sfv in sfv_list`)
+        // just the ones rules 1-7 excluded, exactly like pyrescene's `for sfv in sfv_list`
         var musicSfvs = new List<string>();
         if (main.Count == 0)
         {
@@ -195,7 +195,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                 IReadOnlyList<string>? entries = TryReadSfvEntries(sfv, warnings);
                 if (entries is null)
                 {
-                    // I3 hardening: warning already added — don't let one bad SFV crash rescue.
+                    // Warning already added — don't let one bad SFV crash rescue.
                     continue;
                 }
 
@@ -206,7 +206,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                 else if (entries.Any(HasMusicExtension))
                 {
                     // [DIVERGENCE] pyrescene admits rescued music SFVs as ordinary main sets;
-                    // Spec 2 routes them to MusicSfvs instead (design spec §2 L138-141).
+                    // Spec 2 routes them to MusicSfvs instead.
                     musicSfvs.Add(sfv);
                     warnings.Add($"Rescued as a music set (unsupported until Spec 2): {sfv}");
                 }
@@ -214,27 +214,27 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
             if (main.Count == 0 && musicSfvs.Count == 0)
             {
-                // excerpt: remove_unwanted_sfvs L432-434
+                // remove_unwanted_sfvs: message shown when nothing survived rules 1-7 or the rescue fallback.
                 warnings.Add($"{releaseName} might be missing an SFV file.");
             }
         }
 
-        // C1 fix: the FINAL wanted set (post-rescue) is main UNION musicSfvs — pyrescene's rescue
-        // tail appends BOTH kinds into the SAME wanted_sfvs list (excerpt L425-429), so
-        // get_unwanted_sfvs (L438) excludes both from the excluded/extra_sfvs computation.
+        // The FINAL wanted set (post-rescue) is main UNION musicSfvs — pyrescene's rescue
+        // tail appends BOTH kinds into the SAME wanted_sfvs list, so
+        // get_unwanted_sfvs excludes both from the excluded/extra_sfvs computation.
         // Checking only `main` let a rescue-promoted MUSIC sfv double-list in both MusicSfvs and
         // SubtitleSfvs.
         var wanted = new HashSet<string>(main);
         wanted.UnionWith(musicSfvs);
 
-        // I5 fix: build `subs` in a SINGLE traversal-ordered pass over `sfvs` (rather than
+        // Build `subs` in a SINGLE traversal-ordered pass over `sfvs` (rather than
         // concatenating excludedCandidates then main) so a subpack/subfix release's merged
         // excluded + main-queued SubtitleSfvs stays in canonical traversal order instead of two
-        // concatenated runs. design spec §2a "Excluded-SFV destinations": pyrescene computes
-        // `extra_sfvs` against the FINAL (post-rescue) wanted_sfvs set
-        // (`get_unwanted_sfvs(allsfvs, wantedsfvs)`, called after remove_unwanted_sfvs —
-        // including its own rescue tail — has already returned) — an SFV the rescue promoted
-        // into `main`/`musicSfvs` is no longer excluded, even though the first pass flagged it.
+        // concatenated runs. pyrescene computes `extra_sfvs` against the FINAL (post-rescue)
+        // wanted_sfvs set (`get_unwanted_sfvs(allsfvs, wantedsfvs)`, called after
+        // remove_unwanted_sfvs — including its own rescue tail — has already returned) — an SFV
+        // the rescue promoted into `main`/`musicSfvs` is no longer excluded, even though the
+        // first pass flagged it.
         bool subpackOrSubfixRelease = lcRelease.Contains("subpack", StringComparison.Ordinal)
             || lcRelease.Contains("subfix", StringComparison.Ordinal);
         var excludedSet = new HashSet<string>(excludedCandidates);
@@ -256,12 +256,12 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
         List<string> sampleFiles = FindSamples(all, sfvs, warnings, ct);
 
-        // ---- Task 7/9: stored-file chain (design spec §2d, category order nfo -> m3u -> proof
-        // images -> proof RARs -> log -> cue -> pre-existing srs -> fix RAR -> input SFVs). Rule
-        // 4's own proof RAR needs no special handling here at all (E1(b) fix, second round) — it
-        // is always independently rediscovered by GetProofRars below, in traversal order. The
-        // generated-artifact categories (6/9, VM-level) and the full pass-10 reorder are spliced in
-        // by CreatorViewModel over this scanner's own already-ordered output.
+        // ---- Stored-file chain: category order nfo -> m3u -> proof images -> proof RARs -> log ->
+        // cue -> pre-existing srs -> fix RAR -> input SFVs. Rule 4's own proof RAR needs no special
+        // handling here at all — it is always independently rediscovered by GetProofRars below, in
+        // traversal order. The generated-artifact categories (added at the ViewModel level) and the
+        // full pass-10 reorder are spliced in by CreatorViewModel over this scanner's own
+        // already-ordered output.
         ct.ThrowIfCancellationRequested();
         IReadOnlyList<string> nfoFiles = ReleaseTraversal.FilterByExtension(all, ".nfo");
         IReadOnlyList<string> m3uFiles = ReleaseTraversal.FilterByExtension(all, ".m3u");
@@ -274,7 +274,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         stored.AddRange(NfoPass(nfoFiles));
         stored.AddRange(m3uFiles);
         stored.AddRange(GetProofImages(all, releaseName, knownGoodStems, warnings));
-        // excerpt: filter_proof_rar_files (get_proof_files, L84) — the ONLY proof-RAR pass; a
+        // filter_proof_rar_files (get_proof_files) — the ONLY proof-RAR pass; a
         // rule-4-linked proof RAR is always independently rediscovered here (see the remark above).
         stored.AddRange(GetProofRars(rarFiles, stored, warnings, ct));
         stored.AddRange(LogPass(logFiles));
@@ -287,15 +287,15 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             stored.Add(fixRar);
         }
 
-        // pass-10 (excerpt L1190-1206, "copied_sfvs"/"rarsfv"): every SFV is stored, but NOT in
+        // pass-10 ("copied_sfvs"/"rarsfv"): every SFV is stored, but NOT in
         // plain traversal order — non-main (excluded/subtitle/proof/music) SFVs are appended FIRST,
         // in traversal order, and MAIN (rar-set) SFVs are DEFERRED to the bottom, appended last (the
-        // excerpt's own `rarsfv` list: "add RAR sfv files at the bottom"). E1(a) fix (second
-        // round): the previous single pass stored every SFV in plain traversal order with no
-        // main-vs-non-main partition, so a tree with both a main SFV and a non-main one (e.g. a
-        // proof or subtitle SFV) came out with the main SFV in the wrong (traversal, not
-        // deferred-to-bottom) position. Deduped by OS-resolved final path (design spec §1a —
-        // uniform with F4's GetProofRars dedup) against whatever an earlier pass already stored.
+        // excerpt's own `rarsfv` list: "add RAR sfv files at the bottom"). The previous single pass
+        // stored every SFV in plain traversal order with no main-vs-non-main partition, so a tree
+        // with both a main SFV and a non-main one (e.g. a proof or subtitle SFV) came out with the
+        // main SFV in the wrong (traversal, not deferred-to-bottom) position. Deduped by
+        // OS-resolved final path, uniform with GetProofRars' own dedup, against whatever an earlier
+        // pass already stored.
         var alreadyStored = new HashSet<string>(stored.Select(ResolveDedupKey), StringComparer.OrdinalIgnoreCase);
         foreach (string sfv in sfvs)
         {
@@ -313,9 +313,8 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             }
         }
 
-        // pass-10 tail (excerpt tail L1240-1251 — codex r2b f6/Task 7 #5, implemented here in
-        // Task 9): move every nested/proof `.srr`/`.rar` whose stem matches an SFV to immediately
-        // BEFORE that SFV. At this scanner level the only movers that can ever exist are a proof
+        // pass-10 tail: move every nested/proof `.srr`/`.rar` whose stem matches an SFV to
+        // immediately BEFORE that SFV. At this scanner level the only movers that can ever exist are a proof
         // RAR (GetProofRars, above) whose stem matches its linked proof SFV (this scanner never
         // sees generated nested SRRs — those are VM-level artifacts spliced in by
         // CreatorViewModel, which re-applies this same reorder over its larger merged list).
@@ -323,7 +322,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
         var sets = main.Select(sfv => new ReleaseSetInput(sfv, RelativeName(releaseRoot, sfv))).ToList();
 
-        // excerpt: get_start_rar_files L441-455 (design spec §2e). [DIVERGENCE: extension] the
+        // get_start_rar_files: [DIVERGENCE: extension] the
         // excerpt derives main_rars ONLY from selected SFVs' entries and never discovers loose RAR
         // sets on its own — this port adds that discovery, gated to when zero SFVs exist anywhere
         // under the root (an SFV of any kind, even one rules 1-7 exclude, disables it entirely).
@@ -332,7 +331,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             sets.AddRange(DiscoverLooseRarSets(releaseRoot, all, lcRelease, ct));
         }
 
-        // I4 fix: re-check cancellation immediately before returning — a long final SFV/RAR read
+        // Re-check cancellation immediately before returning — a long final SFV/RAR read
         // that got cancelled mid-call must not silently produce a successful result.
         ct.ThrowIfCancellationRequested();
 
@@ -340,11 +339,11 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     }
 
     /// <summary>
-    /// The per-SFV branch of <c>remove_unwanted_sfvs</c> (excerpt L294-407), rules 1-7 in
+    /// The per-SFV branch of <c>remove_unwanted_sfvs</c>, rules 1-7 in
     /// sequential first-match order. Rule 4 (proof) decides classification only — the proof SFV
     /// needs no collection at all (it is simply excluded from <c>main</c>, letting pass-10 store
     /// it at its natural position) and its linked RAR's storage is entirely owned by
-    /// <see cref="GetProofRars"/>'s independent pass (see the E1(b) remark at this method's call
+    /// <see cref="GetProofRars"/>'s independent pass (see the remark at this method's call
     /// site in <see cref="Scan"/>).
     /// </summary>
     private SfvClass ClassifySfv(string sfv, string lcRelease, List<string> warnings, CancellationToken ct)
@@ -354,7 +353,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         string dir = Path.GetDirectoryName(sfv) ?? string.Empty;
         string pardir = Path.GetFileName(dir).ToLowerInvariant();
 
-        // excerpt: remove_unwanted_sfvs L312-317 (rule 1: vobsub/subtitle name, release lacks the carve-out)
+        // remove_unwanted_sfvs rule 1: vobsub/subtitle name, release lacks the carve-out
         if ((lcSfvName.Contains("vobsub", StringComparison.Ordinal) || lcSfvName.Contains("subtitle", StringComparison.Ordinal))
             && !lcRelease.Contains("subpack", StringComparison.Ordinal)
             && !lcRelease.Contains("vobsub", StringComparison.Ordinal)
@@ -364,8 +363,8 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             return SfvClass.Excluded;
         }
 
-        // excerpt: remove_unwanted_sfvs L319-340 (rule 2: "subs" false-positive fall-through — the
-        // `pass` branch does NOT accept the SFV, it only skips ahead to rules 3-7)
+        // remove_unwanted_sfvs rule 2: "subs" false-positive fall-through — the
+        // `pass` branch does NOT accept the SFV, it only skips ahead to rules 3-7
         if (lcSfvName.Contains("subs", StringComparison.Ordinal))
         {
             bool fallsThrough = SubsFalsePositiveRegex().IsMatch(sfvName)
@@ -381,13 +380,13 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             }
         }
 
-        // excerpt: remove_unwanted_sfvs L342-355 (rule 3: exact subtitle/cover/codec parent dir)
+        // remove_unwanted_sfvs rule 3: exact subtitle/cover/codec parent dir
         if (_exactExcludedDirs.Contains(pardir))
         {
             return SfvClass.Excluded;
         }
 
-        // excerpt: remove_unwanted_sfvs L357-385 (rule 4: proof state machine)
+        // remove_unwanted_sfvs rule 4: proof state machine
         if (pardir is "proof" or "proofs")
         {
             SfvClass? proofResult = ClassifyProof(sfv, dir, warnings, ct);
@@ -399,13 +398,13 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             // block isn't an image) — falls through to rules 5-7.
         }
 
-        // excerpt: remove_unwanted_sfvs L387-394 (rule 5: `.*Subs.?CD\d$` directory)
+        // remove_unwanted_sfvs rule 5: `.*Subs.?CD\d$` directory
         if (SubsCdDirRegex().IsMatch(dir))
         {
             return SfvClass.Excluded;
         }
 
-        // excerpt: remove_unwanted_sfvs L396-400 (rule 6a/6b: subpack/subfix substring parent dir)
+        // remove_unwanted_sfvs rule 6a/6b: subpack/subfix substring parent dir
         if (pardir.Contains("subpack", StringComparison.Ordinal) && !lcRelease.Contains("subpack", StringComparison.Ordinal))
         {
             return SfvClass.Excluded;
@@ -416,22 +415,22 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             return SfvClass.Excluded;
         }
 
-        // excerpt: remove_unwanted_sfvs L402-405 (rule 6c: generic "fix" substring parent dir)
+        // remove_unwanted_sfvs rule 6c: generic "fix" substring parent dir
         if (pardir.Contains("fix", StringComparison.Ordinal) && !lcRelease.Contains("fix", StringComparison.Ordinal))
         {
             return SfvClass.Excluded;
         }
 
-        // excerpt: remove_unwanted_sfvs L407 (rule 7: otherwise, main set)
+        // remove_unwanted_sfvs rule 7: otherwise, main set
         return SfvClass.Main;
     }
 
     /// <summary>
-    /// Rule 4's proof state machine (excerpt L357-385). Returns <see cref="SfvClass.Proof"/> when
+    /// Rule 4's proof state machine. Returns <see cref="SfvClass.Proof"/> when
     /// the SFV is excluded as proof material; the proof SFV itself needs no explicit storage here
     /// at all (it lands via pass-10's final-SFV pass, at its correct category position, simply by
     /// never being added to <c>main</c>). Its LINKED RAR's storage is likewise NOT this method's
-    /// concern (E1(b) fix, second round): <see cref="GetProofRars"/>'s independent pass always
+    /// concern: <see cref="GetProofRars"/>'s independent pass always
     /// rediscovers it (same reasoning as the class-level remark at this method's call site), so no
     /// RAR path is collected or returned here — including its "unreadable" warning, which
     /// <see cref="GetProofRars"/> also produces independently; duplicating it here would double it.
@@ -443,14 +442,14 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         IReadOnlyList<string>? entries = TryReadSfvEntries(sfv, warnings);
         if (entries is null)
         {
-            // I3 hardening: an unreadable SFV can't be verified as either the proof singleton or
+            // An unreadable SFV can't be verified as either the proof singleton or
             // anything else — warn (already done inside TryReadSfvEntries) and skip it entirely
-            // (spec §2 error contract's "otherwise skipped" branch) rather than guessing it into
+            // (the error contract's "otherwise skipped" branch) rather than guessing it into
             // MainSets or SubtitleSfvs.
             return SfvClass.Skipped;
         }
 
-        // excerpt: remove_unwanted_sfvs L360 (exactly one entry required)
+        // remove_unwanted_sfvs: exactly one entry required
         if (entries.Count != 1)
         {
             return null;
@@ -458,8 +457,8 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
         string entryName = entries[0];
 
-        // excerpt: remove_unwanted_sfvs L362-363 ("e.g. .sfv for proof file" — the singleton isn't
-        // even RAR-compressed; the RAR path is never checked for existence in this branch). No RAR
+        // remove_unwanted_sfvs: "e.g. .sfv for proof file" — the singleton isn't
+        // even RAR-compressed; the RAR path is never checked for existence in this branch. No RAR
         // to collect; the SFV itself is picked up later by pass-10.
         if (!entryName.EndsWith(".rar", StringComparison.Ordinal))
         {
@@ -468,14 +467,14 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
         string rarPath = Path.Combine(dir, entryName);
 
-        // excerpt: remove_unwanted_sfvs L364-379 (readable RAR: last packed block's image-ness wins)
+        // remove_unwanted_sfvs (readable RAR): last packed block's image-ness wins
         if (File.Exists(rarPath))
         {
             ProofRarFacts facts = _proofRarReader(rarPath, ct);
             if (!facts.Readable)
             {
-                // excerpt: remove_unwanted_sfvs L374-377 ("No RAR5 support yet" / caught
-                // ValueError). No warning here — GetProofRars's own independent pass over this
+                // remove_unwanted_sfvs: "No RAR5 support yet" / caught
+                // ValueError. No warning here — GetProofRars's own independent pass over this
                 // exact RAR (it is on disk and its path contains "proof") produces the "cannot
                 // read" warning; adding a second one here would just duplicate it.
                 return SfvClass.Proof;
@@ -486,18 +485,18 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                 return null;
             }
 
-            // No RAR to collect — GetProofRars independently rediscovers and stores it (E1(b)).
+            // No RAR to collect — GetProofRars independently rediscovers and stores it.
             return SfvClass.Proof;
         }
 
-        // excerpt: remove_unwanted_sfvs L380-385 (proof RAR missing on disk)
+        // remove_unwanted_sfvs: proof RAR missing on disk
         warnings.Add($"Proof RAR cannot be found: {rarPath}");
         return SfvClass.Proof;
     }
 
     /// <summary>
-    /// Routes a rules-1-6-excluded SFV to its destination (design spec §2a "Excluded-SFV
-    /// destinations"): <see cref="ReleaseScanResult.SubtitleSfvs"/>, except an SFV whose immediate
+    /// Routes a rules-1-6-excluded SFV to its destination:
+    /// <see cref="ReleaseScanResult.SubtitleSfvs"/>, except an SFV whose immediate
     /// parent directory name contains "dirfix" is skipped entirely with a warning instead
     /// (pyrescene: <c>generate_srr</c>'s <c>extra_sfvs</c> loop, "not for dirfix releases moved to
     /// the main folder" — <c>"dirfix" in subdir.lower()</c>, a substring check on the immediate
@@ -517,7 +516,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
     /// <summary>
     /// Reads an SFV's entries, converting any I/O or parse failure into a per-item warning instead
-    /// of letting it crash the whole scan (design spec §2 "Error contract": scanner failures
+    /// of letting it crash the whole scan (scanner failures
     /// degrade to warnings, never a hard stop — item classified stored-only when readable metadata
     /// suffices, otherwise skipped). [DIVERGENCE: hardening] pyrescene's <c>parse_sfv_file</c>
     /// would crash or propagate on a malformed/inaccessible SFV.
@@ -539,7 +538,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         Array.Exists(_musicExtensions, ext => fileName.EndsWith(ext, StringComparison.Ordinal));
 
     /// <summary>
-    /// §2c samples (excerpt: <c>get_sample_files</c> L42-68). Phase 1 flags every video-extension
+    /// Samples (<c>get_sample_files</c>). Phase 1 flags every video-extension
     /// file (in traversal order) whose path contains "sample" or whose literal sibling
     /// <c>sample[:-4] + ".sfv"</c> exists; whatever's left falls through to phase 2, which
     /// cross-references every SFV's entries — read once, regardless of each SFV's rules-1-7
@@ -560,7 +559,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
             ct.ThrowIfCancellationRequested();
 
-            // excerpt: get_sample_files L48-52 — "sample" anywhere in the path (case-insensitive)
+            // get_sample_files: "sample" anywhere in the path (case-insensitive)
             // OR a sibling literally named `sample[:-4] + ".sfv"`. The Python slice always drops
             // exactly 4 characters regardless of the real extension's length — for a 3-char ext
             // (".avi") that strips the extension cleanly ("clip.avi" -> "clip.sfv"); for a 4-char
@@ -583,12 +582,12 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             }
         }
 
-        // excerpt: get_sample_files L56-66 (phase 2 — musicvideo/multi-part MKV cross-reference).
+        // get_sample_files, phase 2 — musicvideo/multi-part MKV cross-reference.
         // Entries are read once, only when a candidate remains, matching the excerpt's "this way
         // so we don't always have to read in the SFV files unnecessarily".
         if (notSamples.Count > 0)
         {
-            // excerpt: get_sample_files L59-65 — `sfv_stored_files` holds the RAW entry names (not
+            // get_sample_files: `sfv_stored_files` holds the RAW entry names (not
             // basenames); the membership test then compares the candidate's BASENAME against those
             // raw entries (`os.path.basename(nsample) in sfv_stored_files`). Storing basenames here
             // instead would be MORE permissive than pyrescene (matching subpath-qualified entries
@@ -625,11 +624,11 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         Array.Exists(_videoExtensions, ext => ext.Equals(extension, StringComparison.OrdinalIgnoreCase));
 
     // ============================================================================================
-    // §2d — stored-file chain (Task 7)
+    // Stored-file chain
     // ============================================================================================
 
     /// <summary>
-    /// excerpt: generate_srr L608-617 (nfo filter) — every <c>*.nfo</c> except (case-insensitive
+    /// generate_srr (nfo filter) — every <c>*.nfo</c> except (case-insensitive
     /// basename) <c>imdb.nfo</c>/<c>tvmaze.nfo</c>, and except a "no.nfo"-substring basename that
     /// is EXACTLY 8 bytes (the excerpt's own comment: "contains the text 'no.nfo'") or that can't
     /// be sized at all — both silently skipped, matching pyrescene's own silent
@@ -647,7 +646,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                 continue;
             }
 
-            // excerpt L611 — `os.path.basename(nfo).lower() in ("no.nfo")`: `("no.nfo")` is a
+            // `os.path.basename(nfo).lower() in ("no.nfo")`: `("no.nfo")` is a
             // parenthesized STRING, not a 1-tuple (no trailing comma) — Python's `in` on a str is
             // SUBSTRING membership, not equality. So basenames ".nfo" and "o.nfo" (both substrings
             // of "no.nfo", not just "no.nfo" itself) also enter the size==8 skip check below.
@@ -674,7 +673,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     }
 
     /// <summary>
-    /// excerpt: generate_srr L626-631 (log filter) — every <c>*.log</c> except the exact
+    /// generate_srr (log filter) — every <c>*.log</c> except the exact
     /// (case-insensitive) blacklist and any name starting with a literal dot.
     /// </summary>
     private static List<string> LogPass(IReadOnlyList<string> logFiles)
@@ -695,7 +694,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     }
 
     /// <summary>
-    /// excerpt: collect_known_good_filenames L198-202 — basenames of every sfv/nfo/m3u/rar found
+    /// collect_known_good_filenames: basenames of every sfv/nfo/m3u/rar found
     /// under the root, each with its LAST FOUR CHARACTERS dropped (a literal slice, not an
     /// extension-aware strip — equivalent for these particular 4-char extensions).
     /// </summary>
@@ -713,7 +712,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     }
 
     /// <summary>
-    /// excerpt: filter_proof_image_files L95-112 (keyword bypass, precedes <see cref="AlwaysSkip"/>)
+    /// filter_proof_image_files (keyword bypass, precedes <see cref="AlwaysSkip"/>)
     /// + <c>store_rls_root</c>'s callers — the full per-image decision chain for every proof-image
     /// candidate found under the root, in traversal order.
     /// </summary>
@@ -729,7 +728,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
             string lower = file.ToLowerInvariant();
 
-            // excerpt L100-106 — keyword-path bypass runs BEFORE always_skip.
+            // Keyword-path bypass runs BEFORE always_skip.
             if (IsKeywordProofPath(lower))
             {
                 result.Add(file);
@@ -750,7 +749,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         return result;
     }
 
-    // excerpt: PROOF_IMAGE_EXTS L75 (see the _proofImageLast4 field remarks for the "*"+ext ==
+    // PROOF_IMAGE_EXTS (see the _proofImageLast4 field remarks for the "*"+ext ==
     // "last 4 characters" equivalence).
     private static bool IsProofImageFile(string fileName)
     {
@@ -763,11 +762,11 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     }
 
     /// <summary>
-    /// excerpt: filter_proof_image_files L100-106 — "proof"/"sample" match ANYWHERE in the lowered
+    /// filter_proof_image_files: "proof"/"sample" match ANYWHERE in the lowered
     /// full path; "cover"/"screenshots"/"compare" require an immediately preceding path separator
-    /// (<c>os.sep + "keyword"</c>), i.e. they must start a path component. Preserved verbatim — the
-    /// design spec's prose shorthand ("keyword substring") elides this distinction, but the
-    /// excerpt's separator anchor is what's normative.
+    /// (<c>os.sep + "keyword"</c>), i.e. they must start a path component. Preserved verbatim — a
+    /// looser paraphrase elsewhere says merely "keyword substring", but this separator anchor is
+    /// what's actually normative.
     /// </summary>
     private static bool IsKeywordProofPath(string lowerFullPath)
     {
@@ -783,7 +782,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     }
 
     /// <summary>
-    /// excerpt: always_skip L114-127 — space in the (original-case) basename, OR the (lowered)
+    /// always_skip: space in the (original-case) basename, OR the (lowered)
     /// path-minus-extension ends in "folder", OR the (lowered) basename contains "albumartsmall",
     /// OR the (lowered) basename starts with "albumart_{".
     /// </summary>
@@ -798,7 +797,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     }
 
     /// <summary>
-    /// excerpt: store_rls_root L128-170. Basename starting with "00"/"01" (subsumes "001") stores
+    /// store_rls_root. Basename starting with "00"/"01" (subsumes "001") stores
     /// unconditionally; otherwise a size strictly greater than 100000 bytes AND a similar known-good
     /// name AND NOT a fixed-resolution cover stores; every other outcome is a skip + warning (both
     /// the size<=100000 and the size-ok-but-rejected branches share the same message format).
@@ -807,7 +806,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     {
         string baseName = Path.GetFileName(proofPath);
 
-        // excerpt L135-136 — startswith(("00","01","001")): "001" is already subsumed by "00".
+        // startswith(("00","01","001")): "001" is already subsumed by "00".
         if (baseName.StartsWith("00", StringComparison.Ordinal) || baseName.StartsWith("01", StringComparison.Ordinal))
         {
             return true;
@@ -825,20 +824,20 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             return false;
         }
 
-        // excerpt L140 — strictly greater than 100000.
+        // Strictly greater than 100000.
         if (size > 100_000 && SimilarToGoodName(proofPath, knownGoodStems) && !FixedResolutionCover(proofPath))
         {
             return true;
         }
 
-        // excerpt L147-152/163-169 — same skip_tpl message for both the size<=100000 branch and
+        // Same skip_tpl message for both the size<=100000 branch and
         // the size-ok-but-rejected branch.
         warnings.Add($"'{baseName}' ({size} B) not added to SRR for release {releaseName}");
         return false;
     }
 
     /// <summary>
-    /// excerpt: similar_to_good_name L172-196 (L918-942 duplicate) + strip_zeros L225-237.
+    /// similar_to_good_name (pyrescene defines it twice, verbatim) + strip_zeros (same).
     /// </summary>
     private static bool SimilarToGoodName(string proofPath, List<string> knownGoodStems)
     {
@@ -857,7 +856,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                 return true;
             }
 
-            // excerpt L184-195 — possible group name before the extension; the image side is
+            // Possible group name before the extension; the image side is
             // split on the FULL input path (not just its basename), matching the excerpt exactly.
             string grprls = LastDashSegment(bn.ToLowerInvariant());
             string grpimg = LastDashSegment(SplitextStem(proofPath));
@@ -890,7 +889,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         return dot > sep + 1 ? path[..dot] : path;
     }
 
-    // excerpt: strip_zeros L225-237 (L971-983 duplicate)
+    // strip_zeros (pyrescene defines this twice, verbatim)
     private static string StripZeros(string fileName)
     {
         if (fileName.StartsWith("00-", StringComparison.Ordinal) || fileName.StartsWith("00_", StringComparison.Ordinal)
@@ -915,7 +914,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     }
 
     /// <summary>
-    /// excerpt: fixed_resolution_cover L238-244 — true only when the image's pixel dimensions are
+    /// fixed_resolution_cover: true only when the image's pixel dimensions are
     /// exactly 630x1200 (a movie-poster cover most likely added by a site script).
     /// </summary>
     private static bool FixedResolutionCover(string imagePath)
@@ -925,7 +924,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     }
 
     /// <summary>
-    /// excerpt: get_image_size L259-292 — sniffs PNG/GIF/JPEG from the first 24 header bytes (by
+    /// get_image_size: sniffs PNG/GIF/JPEG from the first 24 header bytes (by
     /// content, not by file extension, exactly like pyrescene's imghdr). BMP (and anything else)
     /// falls to the excerpt's own `else: return`, so this always returns <see langword="null"/> for
     /// it, matching pyrescene's behavior of never treating a BMP as a fixed-resolution cover.
@@ -941,7 +940,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                 return null;
             }
 
-            // excerpt L266-270 — PNG: 8-byte signature, IHDR width/height at offset 16 (BE uint32).
+            // PNG: 8-byte signature, IHDR width/height at offset 16 (BE uint32).
             if (head[..8].SequenceEqual(_pngSignature))
             {
                 uint check = BinaryPrimitives.ReadUInt32BigEndian(head[4..8]);
@@ -955,7 +954,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
                 return (width, height);
             }
 
-            // excerpt L271-272 — GIF: 6-byte signature, LE uint16 width/height immediately after.
+            // GIF: 6-byte signature, LE uint16 width/height immediately after.
             if (head[..6].SequenceEqual("GIF87a"u8) || head[..6].SequenceEqual("GIF89a"u8))
             {
                 int width = BinaryPrimitives.ReadUInt16LittleEndian(head[6..8]);
@@ -965,7 +964,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
             // [DIVERGENCE: simplified] pyrescene's imghdr only recognizes a JPEG when the header
             // carries JFIF/Exif right after SOI (imghdr's built-in test_jpeg) OR an ICC_PROFILE/
-            // Adobe marker (excerpt L247-257's appended custom test_jpeg; its third fallback
+            // Adobe marker (the excerpt's appended custom test_jpeg; its third fallback
             // branch, `h[0:4] == "\xff\xd8\xff\xdb"`, compares bytes to a Python str literal — dead
             // code under Python 3, never true). This port does not replicate that sniff — instead
             // ANY file starting with the bare SOI marker (FF D8) is probed as a JPEG, regardless of
@@ -991,7 +990,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     }
 
     /// <summary>
-    /// excerpt: get_image_size L273-287 — walks JPEG segments until a SOFn marker (0xC0-0xCF,
+    /// get_image_size: walks JPEG segments until a SOFn marker (0xC0-0xCF,
     /// excluding 0xC4/0xC8/0xCC which share the range but aren't SOF) is found, then reads
     /// height/width immediately after it.
     /// </summary>
@@ -1051,11 +1050,11 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     private static bool IsSofMarker(int ftype) => ftype is >= 0xc0 and <= 0xcf and not (0xc4 or 0xc8 or 0xcc);
 
     /// <summary>
-    /// excerpt: filter_proof_rar_files L204-211 (independent pass — unlike proof images, gated
+    /// filter_proof_rar_files (independent pass — unlike proof images, gated
     /// only by "proof" appearing anywhere in the lowered path, no keyword-vs-always_skip split).
-    /// [Task-5 forward note] rule 4 (above, in <see cref="ClassifyProof"/>) may already have stored
+    /// Rule 4 (above, in <see cref="ClassifyProof"/>) may already have stored
     /// this exact RAR as the success case of a proof-linked singleton SFV — deduped by OS-resolved
-    /// final path (design spec §1a) against <paramref name="stored"/> so it is never added twice,
+    /// final path against <paramref name="stored"/> so it is never added twice,
     /// including when the same physical file is reachable via two different spellings (an ancestor
     /// symlink/junction, an 8.3 short name, etc. — a lexical <see cref="Path.GetFullPath(string)"/>
     /// compare would miss those aliases).
@@ -1102,7 +1101,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     /// <see cref="Path.GetFullPath(string)"/> form rather than throwing and aborting the scan.
     /// <c>internal</c> (not <c>private</c>) so <see cref="ViewModels.CreatorViewModel"/> can reuse
     /// the exact same OS-final-path dedup key when reconciling manually-added artifacts against
-    /// this scanner's already-stored files (E3, Task 9 second fix round) — mirrors
+    /// this scanner's already-stored files — mirrors
     /// <see cref="ApplyProofBeforeSfvReorder{T}"/>'s own cross-class reuse.
     /// </summary>
     internal static string ResolveDedupKey(string path)
@@ -1118,8 +1117,8 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     }
 
     /// <summary>
-    /// excerpt tail L1240-1251 ("put vobsub SRRs and proof RARs above their SFV file in the
-    /// list") — the pass-10 reorder. For every item whose last 4 characters (case-insensitive)
+    /// The pass-10 reorder ("put vobsub SRRs and proof RARs above their SFV file in the
+    /// list"). For every item whose last 4 characters (case-insensitive)
     /// are <c>.srr</c> or <c>.rar</c>, if dropping those 4 characters and appending <c>.sfv</c>
     /// (case-insensitive) matches some OTHER item in the list, that item is moved to sit
     /// immediately before the matching one. Movers are identified against the ORIGINAL list (a
@@ -1129,7 +1128,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     /// sequence without relying on value-equality removal (safe even if two items happen to
     /// project to equal keys). Generic over <paramref name="keySelector"/> so both this scanner
     /// (over raw disk paths) and <see cref="ViewModels.CreatorViewModel"/>'s larger merged list
-    /// (over stored logical names, once generated artifacts are spliced in — Task 9) share one
+    /// (over stored logical names, once generated artifacts are spliced in) share one
     /// implementation. The excerpt's own slicing (<c>cfile[-4:]</c>/<c>cfile[:-4]</c>) assumes
     /// every one of <c>.srr</c>/<c>.rar</c>/<c>.sfv</c> is exactly 4 characters — true for all
     /// three, so a literal 4-character slice reproduces it exactly.
@@ -1199,11 +1198,11 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     }
 
     /// <summary>
-    /// excerpt: generate_srr L784-798 (conditional fix RAR) + is_storable_fix L516-524 — stores the
+    /// generate_srr (conditional fix RAR) + is_storable_fix — stores the
     /// single main RAR only when: the release name matches <see cref="IsStorableFix"/>; there is
     /// exactly one main SFV, listing exactly one entry that is itself a first-volume <c>.rar</c>;
     /// the release isn't in the hardcoded blacklist; and the resolved RAR isn't already queued for
-    /// storage (excerpt: "prevent duplicate file add").
+    /// storage ("prevent duplicate file add").
     /// </summary>
     private string? TryGetFixRar(string releaseName, List<string> mainSfvs, List<string> stored, List<string> warnings)
     {
@@ -1238,8 +1237,8 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             return null;
         }
 
-        // excerpt L793-794 — "prevent duplicate file add". Uniform OS-final-path dedup (design
-        // spec §1a) rather than a lexical Path.GetFullPath compare, matching GetProofRars/the
+        // "Prevent duplicate file add". Uniform OS-final-path dedup rather than a
+        // lexical Path.GetFullPath compare, matching GetProofRars/the
         // pass-10 SFV-append dedup above.
         string resolved = ResolveDedupKey(rarPath);
         bool alreadyStored = stored.Any(s => string.Equals(ResolveDedupKey(s), resolved, StringComparison.OrdinalIgnoreCase));
@@ -1247,7 +1246,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     }
 
     /// <summary>
-    /// excerpt: get_start_rar_files L441-455 (<c>first_rars</c>, referenced but not itself
+    /// get_start_rar_files (<c>first_rars</c>, referenced but not itself
     /// excerpted) — pyrescene identifies "the first volume" from the SFV's LISTED ENTRY NAME
     /// alone (it never scans the disk for sibling volumes here), so this is a pure naming check,
     /// not a disk chain-walk: a plain "X.rar" (no <c>.partNN</c> segment) is always first; an
@@ -1264,7 +1263,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     [GeneratedRegex(@"\.part(\d+)\.rar$", RegexOptions.IgnoreCase)]
     private static partial Regex PartVolumeSuffixRegex();
 
-    // excerpt: is_storable_fix L516-524 (L1060-1071 duplicate) — four alternatives OR'd together;
+    // is_storable_fix (pyrescene defines this twice, verbatim) — four alternatives OR'd together;
     // only the FIRST is case-insensitive (re.IGNORECASE passed in the excerpt); the remaining three
     // are case-sensitive (no flag) — preserved exactly, not unified into one IgnoreCase regex.
     private static bool IsStorableFix(string releaseName) =>
@@ -1272,7 +1271,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
         || FixNameRegex3().IsMatch(releaseName) || FixNameRegex4().IsMatch(releaseName);
 
     /// <summary>
-    /// §2e loose-RAR discovery (excerpt: <c>get_start_rar_files</c> L441-455 derives its RAR sets
+    /// Loose-RAR discovery (<c>get_start_rar_files</c> derives its RAR sets
     /// ONLY from SFV entries and never discovers loose RARs itself).
     /// [DIVERGENCE: extension] the caller invokes this only when zero SFVs exist anywhere under
     /// the root. Every RAR-volume file found is grouped into its archive-set chain (lib
@@ -1341,7 +1340,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
 
     /// <summary>
     /// Directory-only mirror of <see cref="ClassifySfv"/>'s rules 3, 4 (pardir check only), 5, and
-    /// 6 (excerpt L342-355, L357, L387-394, L396-405) for loose-RAR discovery — a bare RAR file has
+    /// 6 for loose-RAR discovery — a bare RAR file has
     /// no SFV name or entries to run rule 4's full proof state machine, rule 1, or rule 2 against,
     /// so only the parent-directory exclusions apply.
     /// </summary>
@@ -1349,27 +1348,27 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     {
         string pardir = Path.GetFileName(dir).ToLowerInvariant();
 
-        // excerpt: remove_unwanted_sfvs L342-355 (rule 3)
+        // remove_unwanted_sfvs rule 3
         if (_exactExcludedDirs.Contains(pardir))
         {
             return true;
         }
 
-        // design spec §2e L186-188 ("rules 3-6" includes rule 4) + excerpt L357 (proof pardir
-        // check). Loose-RAR discovery has no SFV to run rule 4's full state machine against, but
-        // the directory-name exclusion still applies: a proof RAR is never a release set.
+        // "Rules 3-6" here includes rule 4 (the proof pardir check). Loose-RAR discovery has no
+        // SFV to run rule 4's full state machine against, but the directory-name exclusion still
+        // applies: a proof RAR is never a release set.
         if (pardir is "proof" or "proofs")
         {
             return true;
         }
 
-        // excerpt: remove_unwanted_sfvs L387-394 (rule 5)
+        // remove_unwanted_sfvs rule 5
         if (SubsCdDirRegex().IsMatch(dir))
         {
             return true;
         }
 
-        // excerpt: remove_unwanted_sfvs L396-400 (rule 6a/6b)
+        // remove_unwanted_sfvs rule 6a/6b
         if (pardir.Contains("subpack", StringComparison.Ordinal) && !lcRelease.Contains("subpack", StringComparison.Ordinal))
         {
             return true;
@@ -1380,7 +1379,7 @@ public sealed partial class ReleaseScanner : IReleaseScanner
             return true;
         }
 
-        // excerpt: remove_unwanted_sfvs L402-405 (rule 6c)
+        // remove_unwanted_sfvs rule 6c
         if (pardir.Contains("fix", StringComparison.Ordinal) && !lcRelease.Contains("fix", StringComparison.Ordinal))
         {
             return true;
@@ -1395,34 +1394,34 @@ public sealed partial class ReleaseScanner : IReleaseScanner
     private static IReadOnlyList<string> DefaultReadSfvEntries(string sfvPath) =>
         [.. SFVFile.ReadFile(sfvPath).Entries.Select(e => e.FileName)];
 
-    // excerpt: remove_unwanted_sfvs L331 — `^000?-|.*(cd\d|flac).*` (IGNORECASE). .NET's `^` (no
+    // remove_unwanted_sfvs: `^000?-|.*(cd\d|flac).*` (IGNORECASE). .NET's `^` (no
     // Multiline option) anchors to the absolute string start exactly like Python's re.match, so
     // this translates directly: the first alternative only matches at position 0, the second is
     // already unanchored via its own `.*` wrapping.
     [GeneratedRegex(@"^000?-|.*(cd\d|flac).*", RegexOptions.IgnoreCase)]
     private static partial Regex SubsFalsePositiveRegex();
 
-    // excerpt: remove_unwanted_sfvs L387
+    // remove_unwanted_sfvs's rule 5 pattern
     [GeneratedRegex(@".*Subs.?CD\d$", RegexOptions.IgnoreCase)]
     private static partial Regex SubsCdDirRegex();
 
-    // excerpt: is_storable_fix L521-523 — the only case-insensitive alternative. "proof?" makes
+    // is_storable_fix: the only case-insensitive alternative. "proof?" makes
     // the trailing 'f' optional (matches "pro" or "proof"); `.?` allows 0 or 1 arbitrary character
     // between the keyword and "Fix"/"Patch". .NET's `^` (no Multiline option) mirrors re.match's
     // start anchor, same rationale as SubsFalsePositiveRegex above.
     [GeneratedRegex(@"^.*(SFV|PPF|sync|proof?|dir|nfo|Interleaving|Trackorder).?(Fix|Patch).*", RegexOptions.IgnoreCase)]
     private static partial Regex FixNameRegex1();
 
-    // excerpt: is_storable_fix L1068 — case-sensitive (no re.IGNORECASE in the excerpt).
+    // is_storable_fix: case-sensitive (no re.IGNORECASE in the excerpt).
     [GeneratedRegex(@"^.*\.(FiX|FIX)(\.|-).*")]
     private static partial Regex FixNameRegex2();
 
-    // excerpt: is_storable_fix L1069 — case-sensitive; the `.` between "DVDR" and "Fix-" is an
+    // is_storable_fix: case-sensitive; the `.` between "DVDR" and "Fix-" is an
     // UNESCAPED regex metacharacter (any single character), not a literal dot, preserved verbatim.
     [GeneratedRegex(@"^.*\.DVDR.Fix-.*")]
     private static partial Regex FixNameRegex3();
 
-    // excerpt: is_storable_fix L1070 — same unescaped-dot quirk, twice.
+    // is_storable_fix: same unescaped-dot quirk, twice.
     [GeneratedRegex(@"^.*\.DVDR.REPACK.Fix-.*")]
     private static partial Regex FixNameRegex4();
 
