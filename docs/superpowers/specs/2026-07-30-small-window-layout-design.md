@@ -1,8 +1,10 @@
 # Small-Window Layout Degradation — Design
 
-Status: rev 14 — per-view threshold constants replaced by derived switch heights
-(2026-08-02); see [Amendment 2026-08-02](#amendment-2026-08-02--derived-thresholds). Everything
-below that the amendment does not supersede stands as rev 13 left it.
+Status: rev 15 — per-view threshold constants replaced by derived switch heights, and the
+pinned-band bound restated after app-wide content text moved to 13px (both 2026-08-02); see
+[Amendment 2026-08-02](#amendment-2026-08-02--derived-thresholds) and
+[Amendment 2026-08-02b](#amendment-2026-08-02b--pinned-band-bound-restated-after-the-13px-content-text-change).
+Everything below that the amendments do not supersede stands as rev 13 left it.
 
 Status: rev 13 — implemented d045ea6. Task 7 (Settings audit + whole-board close) verified
 the feature end-to-end: SettingsWindow's own 560×360 minimum audited (criterion C Tab-walk
@@ -475,6 +477,52 @@ assigning NaN raises no change. No shipped view sets a minimum.
 `CompactHeightBehavior.GetEffectiveThreshold` exposes the switch height read-only, so tests derive
 their heights from it instead of restating a number that can drift from the one the behavior uses.
 No per-view switch height is written down anywhere in the test suite.
+
+## Amendment 2026-08-02b — pinned-band bound restated after the 13px content-text change
+
+App-wide content text moved 12 → 13px (user decision, "Commit 13px", after a 12/13/14 side-by-side).
+This section records the one bound that had to move with it, and the measurements that say nothing
+else did.
+
+**The tests were tighter than this document.** They asserted the pinned action band at ≤ 75, taken
+from the per-view compact-floor TARGETS in §1's table ("action ≤ 75") — figures for the floor SUM,
+not bounds on the band. §4's own assertion is against the band's HEADROOM: `319 − 24 header −
+120 config − 80 log − margins ≈ 84`. The bound is now that 84, shared as
+`CompactInvariantRig.PinnedBandCeiling`, and the four three-band views assert against it.
+
+Measured, worst case, inner width 676 at the 700×450 minimum (12px → 13px):
+
+| View | Compact floor, Help closed | Help open | Pinned band | Derived switch point |
+|---|---|---|---|---|
+| Reconstructor | 293 → **295** | 295 → **297** | 22 → **22** | 439 → **441** |
+| SRSCreator | 276 → **278** | 281 → **283** | 68 → **70** | 511 → **523** |
+| SRSReconstructor | 280 → **285** | 285 → **290** | 72 → **77** | 456 → **467** |
+| SampleRestorer | 268 → **270** | 273 → **275** | 60 → **62** | 535 → **537** |
+| Creator | 268 → **270** | 273 → **275** | 60 → **62** | 715 → **717** |
+
+The one-sum compact invariant is unaffected: the worst floor is 297 against the 307 CI bound, with
+10 DIPs of headroom, Help open or closed, on every view. Only SRSReconstructor's band crosses the
+old 75, and at 77 it is well inside the 84 the design actually allows. Reclaiming two DIPs from that
+one view's padding was considered and rejected: it would shave a real visual design to satisfy a
+number the document never asserted, in one view out of five, while the budget it exists to protect
+measurably holds.
+
+Derived thresholds absorbed the change with no code edit, which is what they are for — switch points
+moved +2 to +12 DIPs, and the sweep invariants are stated in terms of each view's own switch point
+so none of them needed touching.
+
+Two other recalibrations, both from measured 13px geometry rather than widened tolerances:
+
+- The dense versions list now realizes its rows at 18 rather than 16 (the text sizes the row; the
+  scoped `MinHeight` 16 no longer binds), so its pitch is 20 rather than v1.9's 18. That moves the
+  row AWAY from the 2.5.8 target-size deviation §3 granted this list, not deeper into it, and the
+  style's stated invariants (header toggle `MinHeight` ≥ 24, every leaf keyboard-reachable) are
+  untouched. The guard against a Fluent bump restoring the 20px primitive floor still
+  discriminates: 20 > 18.
+- The 14px check glyph still centres exactly — at 13px the row is 18 and the glyph sits 2.00 from
+  the top, where the same rule gave 1.00 against a 16px row at 12px. The test now derives the
+  expected offset from the measured slack, so it asserts CENTRING rather than a particular font
+  size, and asserts the slack is large enough for centred and top-aligned to be distinguishable.
 
 ## Out of scope
 

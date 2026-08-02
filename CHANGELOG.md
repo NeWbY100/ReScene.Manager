@@ -4,6 +4,11 @@ All notable changes to ReScene Manager (formerly ReScene.NET) are documented her
 
 ## [Unreleased]
 
+### Changed
+
+- Content text is now 13px, up from the 12px inherited from the WPF app — more readable without
+  costing the vertical room 14px would in small windows. Tab-strip headers keep their 12px.
+
 ### Added
 
 - Task pages now adapt to small windows: panes shrink and scroll instead of clipping, header
