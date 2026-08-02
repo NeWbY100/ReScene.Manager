@@ -1,9 +1,15 @@
 # Small-Window Layout Degradation — Design
 
-Status: rev 12 — codex round-5 folded: announcement re-arm (ResultSummary clears at run
-start so identical consecutive outcomes still announce); body keyboard route uses
-PageUp/PageDown/Home/End (Avalonia's ScrollViewer handles Page keys, not arrows).
-Pending codex round 6.
+Status: rev 13 — implemented d045ea6. Task 7 (Settings audit + whole-board close) verified
+the feature end-to-end: SettingsWindow's own 560×360 minimum audited (criterion C Tab-walk
+passes with no compact machinery needed), a cross-view board (font-source enlargement,
+RenderScaling 1.25/1.5x, five-view invariant-coverage guard) added, full suite green
+(Manager 427/427, App.Core 712/712, 0W/0E), and an ava-desktop runtime pass confirmed
+compact chrome, Help open/close, and continued-resize focus stability (the item flagged
+OWED after Task 6 fix-7) on the real app at 700×450 and at native size. Note: this repo's
+own task briefs anticipated "rev 10"/"rev 11" for this status line, written before rounds
+6-12 of review landed; rev 13 is the correct next number given the rev 12 this document
+actually reached.
 
 ## Coordinate space (normative for every figure in this document)
 

@@ -124,6 +124,35 @@ public class ScrollReachabilityTests
             Assert.Contains("RAR Reconstruction", scrollable);
 
             Assert.True(unreachable.Count == 0, string.Join("; ", unreachable));
+
+            // Small-window-layout Task 7 audit: SettingsWindow owns its own MinWidth 560 /
+            // MinHeight 360 and its pages already scroll (the fact above proves the LAST control
+            // is reachable by scroll). Criterion C, applied to Settings, is the remaining half of
+            // the audit — a genuine keyboard Tab walk from each page's first control must never
+            // leave the window at that same minimum. No compact machinery (CompactHeightBehavior)
+            // is added here — this proves none is needed; a failure here means the audit's
+            // premise is wrong and the spec needs a change, not a silent workaround.
+            for (int i = 0; i < tabs.ItemCount; i++)
+            {
+                tabs.SelectedIndex = i;
+                Dispatcher.UIThread.RunJobs();
+                string header = (tabs.Items[i] as TabItem)?.Header as string ?? $"#{i}";
+
+                // Same "the unnamed, currently-visible ScrollViewer is this page's own" technique
+                // ProbePages uses above — only the SELECTED TabItem's content is realized, so this
+                // naturally scopes the search to the active page rather than a stale prior one.
+                ScrollViewer? sv = tabs.GetVisualDescendants().OfType<ScrollViewer>()
+                    .FirstOrDefault(s => s.Name is null && s.IsEffectivelyVisible);
+                Assert.NotNull(sv);
+
+                Control sentinel = sv!.GetVisualDescendants().OfType<Control>()
+                    .First(c => c.Focusable && c.IsEffectivelyVisible);
+
+                // Forward (Tab) then reverse (Shift+Tab) from the page's own first control;
+                // throws naming the offending control if any focused stop's bounds spill outside
+                // the intersection of every clipping ancestor's viewport and the window.
+                CompactViewRig.AssertTabWalkStaysVisible(window, sentinel);
+            }
         }
         finally
         {

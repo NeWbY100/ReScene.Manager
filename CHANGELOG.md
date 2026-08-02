@@ -4,6 +4,12 @@ All notable changes to ReScene Manager (formerly ReScene.NET) are documented her
 
 ## [Unreleased]
 
+### Added
+
+- Task pages now adapt to small windows: panes shrink and scroll instead of clipping, header
+  help collapses behind a disclosure, and every control stays reachable by keyboard at the
+  minimum window size (700×450).
+
 ### Fixed
 
 - RAR reconstruction now assembles output volumes from the SRR's original headers, fixing
