@@ -1471,6 +1471,103 @@ public class CompactHeightBehaviorTests
         finally { w.Close(); }
     }
 
+    // ── Final review: the phantom root Tab stop, both remaining orderings ────────────────
+
+    /// <summary>
+    /// Final review, MAJOR: a DEFERRED staged recovery that runs after its root has already left
+    /// the tree. <see cref="RootTransientFocusability_IsRevertedOnDetach"/> covers grant-THEN-detach
+    /// (the reset fires because the root genuinely loses focus). This is the complementary
+    /// ordering — detach-THEN-run — and the reset cannot save it: the pass walks a dead tree, finds
+    /// every candidate unusable (detached reads as obscured), reaches the guaranteed terminal, and
+    /// grants <c>Focusable</c> to a root that CANNOT take focus. <c>Focus()</c> returns false,
+    /// nothing is ever focused, so no LostFocus ever arrives to undo the grant — and the next time
+    /// the view is attached it carries a Tab stop it never authored.
+    /// <para>
+    /// Constructed end-to-end, not through reflection: <c>SetHelpExpander</c> on an established,
+    /// already-compact root posts a staged recovery SYNCHRONOUSLY, which is the one production path
+    /// that lets a detach land between the post and the run. (Through <c>Evaluate</c> it is not
+    /// constructible at all — that posts at Loaded from Default, and Loaded drains first.)
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void DeferredRecovery_RootDetachedBeforeThePassRuns_LeavesNoPhantomRootTabStop()
+    {
+        (Window w, Grid root) = Host(Threshold - 1);   // compact AND established
+        try
+        {
+            var expander = new Expander { IsExpanded = true, [Grid.RowProperty] = 0 };
+            var bodyButton = new Button { Content = "body" };
+            expander.Content = bodyButton;
+            root.Children.Add(expander);
+            Dispatcher.UIThread.RunJobs();
+
+            bodyButton.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(bodyButton.IsFocused);
+            Assert.False(root.Focusable, "setup precondition: the root starts with no Tab stop of its own");
+
+            // Posts the staged recovery synchronously...
+            CompactHeightBehavior.SetHelpExpander(root, expander);
+
+            // ...and the view goes away before the dispatcher ever gets to it (tab switch, close).
+            w.Content = null;
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(root.Focusable,
+                "a pass whose root has already left the tree must do nothing at all — granting the " +
+                "terminal's transient focusability to a root that cannot take focus leaves a Tab " +
+                "stop with nothing to undo it");
+            Assert.False(root.IsFocused);
+        }
+        finally { w.Close(); }
+    }
+
+    /// <summary>
+    /// Final review, MAJOR, the third ordering: the root is torn down DURING the pass, so the
+    /// entry check cannot help — it was attached when the pass began. A handler on the captured
+    /// element's own bring-into-view request detaches the view mid-recovery (synchronously, as such
+    /// handlers run); the pass then continues down the fallback chain to the terminal, whose
+    /// <c>Focus()</c> now cannot succeed. The grant exists only for a hand-off, so a hand-off that
+    /// did not happen must not leave it behind.
+    /// <para>
+    /// Note the ordering makes the detach-time reset irrelevant here even if one existed: the
+    /// detach happens BEFORE the grant, so only the terminal itself can undo it.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void DeferredRecovery_RootTornDownDuringThePass_LeavesNoPhantomRootTabStop()
+    {
+        (Window w, Grid root) = Host(Threshold + 50);
+        try
+        {
+            var clipper = new Border { [Grid.RowProperty] = 2, Height = 20, ClipToBounds = true };
+            var clippedHost = new StackPanel();
+            var captured = new Button { Content = "captured", Height = 30, Margin = new Thickness(0, 50, 0, 0) };
+            clippedHost.Children.Add(captured);
+            clipper.Child = clippedHost;
+            root.Children.Add(clipper);
+            Dispatcher.UIThread.RunJobs();
+
+            captured.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(captured.IsFocused);
+            Assert.False(root.Focusable);
+
+            // Attached after the setup Focus(), which raises a request of its own. Fires
+            // synchronously inside the recovery's own BringIntoView.
+            captured.AddHandler(Control.RequestBringIntoViewEvent, (_, _) => w.Content = null);
+
+            w.Height = Threshold - 1;   // transition → staged recovery → teardown mid-pass
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(root.Focusable,
+                "the terminal grants focusability ONLY for a hand-off; when the hand-off cannot " +
+                "happen the grant must be undone rather than left as a permanent Tab stop");
+            Assert.False(root.IsFocused);
+        }
+        finally { w.Close(); }
+    }
+
     // ── Shared-behavior fix round 7: the budget, and the resolver's softer bar ───────────
 
     /// <summary>

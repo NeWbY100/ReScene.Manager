@@ -121,6 +121,14 @@ internal static class CompactHeightBehavior
         HookBounds(control, GetOrCreateState(control));
     }
 
+    // Deliberately does NOT reset the root's transient Focusable, because every ordering that could
+    // strand it is already closed at its own source, and a reset here would be unreachable code
+    // pretending to be a safety net: granted-then-detached is undone by OnControlLostFocus (the
+    // root genuinely loses focus on the way out — pinned by
+    // RootTransientFocusability_IsRevertedOnDetach); detached-then-recovered never grants at all
+    // (RunStagedRecovery's attachment check); and torn-down-mid-pass grants, fails to hand off, and
+    // undoes itself (FocusFallbackChain's terminal). A reset here could not catch that last one
+    // anyway — the detach precedes the grant.
     private static void OnControlDetachedFromVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
     {
         var control = (Control)sender!;
@@ -810,6 +818,17 @@ internal static class CompactHeightBehavior
     /// <inheritdoc cref="RelocateFocusIfNeeded"/>
     private static void RunStagedRecovery(Control root, Control captured, bool enteringCompact, int generation, State state, ref int attempts)
     {
+        // A job posted while the view was live can run after it has left the tree — a tab switch or
+        // a window close between the post and the dispatcher servicing it. There is nothing to
+        // recover in a detached tree (no focus to hold, nothing visible to scroll into view) and,
+        // worse, walking it reaches the chain's guaranteed terminal, which would grant the root
+        // focusability it can no longer hand off — see FocusFallbackChain's own note. Neither the
+        // generation nor the mode need have changed, so IsSuperseded cannot see this.
+        if (!root.IsAttachedToVisualTree())
+        {
+            return;
+        }
+
         Control candidate = captured;
         HashSet<Control> exhausted = [];
 
@@ -1044,7 +1063,15 @@ internal static class CompactHeightBehavior
         // for the hand-off; OnControlLostFocus resets it the moment focus moves on, so no
         // permanent Tab stop is added. Unconditional — never gated behind IsUsable.
         root.Focusable = true;
-        root.Focus();
+        if (!root.Focus())
+        {
+            // The hand-off did not happen. A root that is detached, or whose window is being torn
+            // down, cannot take focus — Focus() reports false and nothing is focused, so the
+            // LostFocus reset this grant relies on will NEVER arrive to undo it. Left set, it is a
+            // permanent Tab stop the view never authored, revealed the next time the view attaches.
+            // The grant lasts exactly as long as the attempt it was made for.
+            root.Focusable = false;
+        }
     }
 
     private static bool TryFocus(Control? candidate, Control captured) =>
