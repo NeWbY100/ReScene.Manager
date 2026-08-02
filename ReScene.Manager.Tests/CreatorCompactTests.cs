@@ -447,31 +447,19 @@ public class CreatorCompactTests
     /// TextBoxes/the DataGrid, the sole GridSplitter instance), never derived from a walk's own
     /// observed output.
     /// <para>
-    /// Verified against Avalonia's own source — KeyboardNavigationHandler /
-    /// Navigation/TabNavigation.cs, decompiled/read at 11.3.18, byte-identical to this project's
-    /// pinned 11.3.13 DataGrid sub-package for the relevant files: the Input row's THREE controls
-    /// carry explicit, pre-existing <c>TabIndex="0"/"1"/"2"</c> values (verbatim from today's
-    /// shipped markup, unrelated to this task). <c>KeyboardNavigation.TabIndexProperty</c> defaults to
-    /// EVERY OTHER control in this view/window to a value that, empirically and consistently
-    /// across every walk exercised below, sorts AFTER the explicit 0/1/2 run rather than before
-    /// it — the practical, confirmed effect (proven by real headless Tab/Shift+Tab input, not
-    /// modeled) is that the Input row's three controls (TextBox → Browse file → Browse folder) sit
-    /// LAST in the whole view's tab sequence, not first, despite being the visually first row: a
-    /// forward walk starting at "Add..." (the true first stop — proven by the reverse walk
-    /// below landing back on it) traverses EVERY OTHER control in the view first, only reaching
-    /// InputTextBox/Browse-file/Browse-folder at the very end before exiting to the shell chrome.
-    /// This is a PRE-EXISTING condition: it depends only on (a) the three explicit TabIndex values,
-    /// unchanged by this task, and (b) each control's relative DOCUMENT position, which this task's
-    /// restructuring does not alter (sections were wrapped in new parent Grids/ScrollViewers, never
-    /// reordered relative to one another) — confirmed further by Avalonia's own scoping rule: tab
-    /// navigation groups are bounded by an ancestor's <c>KeyboardNavigation.TabNavigation</c>
-    /// property (default <c>Continue</c>), and neither the pre-task nor this task's markup sets it
-    /// anywhere, so the whole window remains ONE flat navigation group in both versions — a
-    /// DFS-order-preserving wrap (adding pass-through containers without reordering children)
-    /// cannot change which tuple sorts where. Per the normal-size requirement that tab order stay
-    /// unchanged, this is intentionally NOT fixed here — only accurately snapshotted, exactly like
-    /// every other pre-existing a11y-debt item earlier work on this feature has disclosed rather
-    /// than silently repaired.
+    /// Both path rows (Input and Output) are <c>DockPanel</c>s whose Browse buttons are docked
+    /// Right and therefore declared FIRST, so their markup order is the reverse of what the user
+    /// sees. Each carries explicit <c>TabIndex</c> values to put keyboard order back into visual
+    /// order, and — the part that matters for THIS walk —
+    /// <c>KeyboardNavigation.TabNavigation="Local"</c> to keep those values scoped to their own
+    /// row. Without the scoping the pins were compared against the whole window, whose every other
+    /// control carries the default <c>int.MaxValue</c>; the pinned controls therefore sorted apart
+    /// from the rest of the form, and a walk entering the form elsewhere only reached them by
+    /// running off the end. The order recorded here is the scoped one: each row sits where it
+    /// renders. <c>ColdStartTabWalk_EscapesTheInputRow_AndReachesThePrimaryAction</c> covers the
+    /// entry point this walk cannot (nothing focused at all), and
+    /// <c>PathRows_TabOrderFollowsVisualOrder_DespiteReversedTreeOrder</c> pins the inversion the
+    /// pins exist to correct.
     /// </para>
     /// </summary>
     private static void AssertTabWalk(double innerHeight)
@@ -722,10 +710,10 @@ public class CreatorCompactTests
             Assert.True(body.Focusable);
             Assert.True(body.IsEffectivelyEnabled);
 
-            // Anchor the walk at the Help toggle itself (the form's own genuine first stop in
-            // compact mode — see AssertReachableByAllThreeRoutes' own doc on why this view needs an
-            // explicit anchor, unlike every other converted view: a blind Tab press from a truly
-            // unfocused window lands on InputTextBox instead and never reaches back here).
+            // Anchor the walk at the Help toggle — compact mode's own first stop. Anchoring
+            // explicitly keeps this assertion about the body scroller's reachability rather than
+            // about wherever a blind first Tab happens to land; the cold-start entry point has its
+            // own test.
             ToggleButton helpToggle = helpDisclosure.GetVisualDescendants().OfType<ToggleButton>().Single();
             helpToggle.Focus();
             Dispatcher.UIThread.RunJobs();
@@ -762,10 +750,11 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// The keyboard trap itself, from the entry point a keyboard-only user actually meets: the
-    /// window opens with nothing focused and they press Tab. Every other tab-order test in this
-    /// file starts from a focused sentinel INSIDE the form, which enters the order somewhere the
-    /// trap does not hold and is why it survived them.
+    /// Regression guard for the keyboard trap this view USED to have, exercised from the entry
+    /// point a keyboard-only user actually meets: the window opens with nothing focused and they
+    /// press Tab. Every other tab-order test in this file starts from a focused sentinel INSIDE the
+    /// form, which entered the order somewhere the trap did not hold — which is why it survived
+    /// them all.
     /// <para>
     /// Before the fix, this walk never left the Input row: TabIndex 0/1/2 on those three controls
     /// were compared against the whole window's navigation scope, where every other control carries
@@ -911,6 +900,21 @@ public class CreatorCompactTests
                 "inverts, the TabIndex pins on this row have nothing left to correct and should go.");
         }
 
+        // The same reversal is what an ASSISTIVE TECHNOLOGY sees. A UIA tree-walker reads the
+        // automation peer tree, which follows the children order above, NOT the TabIndex order —
+        // so a screen-reader user navigating this row structurally (rather than by Tab) meets
+        // Browse before the path box. Recorded as the known consequence of docking right-first:
+        // the pins fix keyboard order and cannot fix tree order, and the row's controls each carry
+        // their own AutomationProperties.Name so the reading is unambiguous either way.
+        IReadOnlyList<AutomationPeer> peerChildren =
+            ControlAutomationPeer.CreatePeerForElement(dockPanel).GetChildren() ?? [];
+        List<string> peerOrder = [.. peerChildren.Select(p => p.GetName() ?? string.Empty)];
+        List<string> expectedPeerOrder =
+            [.. expectedTreeOrder.Select(c => ControlAutomationPeer.CreatePeerForElement(c).GetName() ?? string.Empty)];
+        Assert.True(peerOrder.SequenceEqual(expectedPeerOrder),
+            $"{rowName} row: the UIA child order should mirror the markup order (reverse of visual) — " +
+            $"got [{string.Join(", ", peerOrder)}], expected [{string.Join(", ", expectedPeerOrder)}]");
+
         for (int i = 1; i < visualOrder.Count; i++)
         {
             Assert.True(visualOrder[i - 1].Bounds.X < visualOrder[i].Bounds.X,
@@ -937,9 +941,11 @@ public class CreatorCompactTests
     /// This guard was originally about that trap: landing recovery on one of the Input row's three
     /// pinned controls would have deposited a keyboard user inside it. Scoping the pins
     /// (KeyboardNavigation.TabNavigation="Local") removed the hazard, so the three negative
-    /// assertions below no longer defend against harm — they defend a deliberate choice. A resize
-    /// should return focus near the work the user was doing, not to the very top of the form, and
-    /// OutputTextBox is the last field before the primary action.
+    /// assertions below no longer defend against harm — they defend a retained choice: recovery
+    /// lands on a named, always-present field partway down the form rather than resetting the user
+    /// to the very first row. That is the whole claim. The Options checkboxes and the App-name
+    /// field sit between OutputTextBox and the primary action, so it is NOT "the last field before
+    /// Create SRR", and no stronger claim than "not the top" is being made for it.
     /// </para>
     /// <para>
     /// Resolves the ACTUAL wired target via <see cref="CompactHeightBehavior.GetRestoreFocusTarget"/>
@@ -997,9 +1003,9 @@ public class CreatorCompactTests
             ScrollViewer body = helpDisclosure.GetVisualDescendants().OfType<ScrollViewer>().Single();
             Assert.Equal(40, body.MaxHeight);
 
-            // Anchor at "Add..." (this view's own genuine first-reaching-everything-else stop —
-            // see AssertReachableByAllThreeRoutes' own doc for why this view needs an explicit
-            // anchor, unlike every other converted view).
+            // Anchor at "Add..." so this assertion is about the target's reachability from inside
+            // the form rather than about wherever a blind first Tab lands; the cold-start entry
+            // point has its own test.
             Button keyboardAnchor = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.AddStoredFileCommand));
             keyboardAnchor.Focus();
             Dispatcher.UIThread.RunJobs();

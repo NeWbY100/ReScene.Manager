@@ -90,9 +90,11 @@ public partial class CreatorView : UserControl
         // RestoreFocusTarget is OutputTextBox, NOT InputTextBox. It was originally chosen to keep
         // resize-triggered focus recovery out of the Input row's keyboard trap; that trap is now
         // fixed (KeyboardNavigation.TabNavigation="Local" scopes both path rows' TabIndex pins), so
-        // the reason is no longer safety. It stays because it is the better landing on its own
-        // merits: a resize should return focus near the work the user was doing rather than to the
-        // very top of the form, and OutputTextBox is the last field before the primary action.
+        // safety no longer forces the choice. It is RETAINED rather than re-derived: OutputTextBox
+        // is a named, always-present field partway down the form, so recovery lands there instead
+        // of resetting the user to the very first row. Note the Options checkboxes and the App-name
+        // field sit between it and the Create SRR button — it is not the last field before the
+        // action, and nothing here claims a landing better than "not the top".
         // CreatorCompactTests.RestoreFocusTarget_PrefersTheOutputFieldOverTheTopOfTheForm pins the
         // choice so a future retarget is a decision rather than a drift.
         Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(root, outputTextBox);

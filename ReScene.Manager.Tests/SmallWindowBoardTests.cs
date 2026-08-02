@@ -111,14 +111,14 @@ public class SmallWindowBoardTests
         BeginnerShellViewModel shell = BeginnerShellTestFactory.Create();
         using var fontResources = new FontResourceOverrideScope();
 
-        AssertViewSurvivesFontGrowth(new ReconstructorView { DataContext = shell.Reconstructor }, isReconstructor: true, hasKnownColdStartTrap: false);
-        AssertViewSurvivesFontGrowth(new SRSCreatorView { DataContext = shell.SRSCreator }, isReconstructor: false, hasKnownColdStartTrap: false);
-        AssertViewSurvivesFontGrowth(new SRSReconstructorView { DataContext = shell.Restore.SingleRebuilder }, isReconstructor: false, hasKnownColdStartTrap: false);
-        AssertViewSurvivesFontGrowth(new SampleRestorerView { DataContext = shell.Restore.BulkRestorer }, isReconstructor: false, hasKnownColdStartTrap: false);
-        AssertViewSurvivesFontGrowth(new CreatorView { DataContext = shell.CreateSRRWizard }, isReconstructor: false, hasKnownColdStartTrap: true);
+        AssertViewSurvivesFontGrowth(new ReconstructorView { DataContext = shell.Reconstructor }, isReconstructor: true);
+        AssertViewSurvivesFontGrowth(new SRSCreatorView { DataContext = shell.SRSCreator }, isReconstructor: false);
+        AssertViewSurvivesFontGrowth(new SRSReconstructorView { DataContext = shell.Restore.SingleRebuilder }, isReconstructor: false);
+        AssertViewSurvivesFontGrowth(new SampleRestorerView { DataContext = shell.Restore.BulkRestorer }, isReconstructor: false);
+        AssertViewSurvivesFontGrowth(new CreatorView { DataContext = shell.CreateSRRWizard }, isReconstructor: false);
     }
 
-    private static void AssertViewSurvivesFontGrowth(UserControl view, bool isReconstructor, bool hasKnownColdStartTrap)
+    private static void AssertViewSurvivesFontGrowth(UserControl view, bool isReconstructor)
     {
         (Window window, Grid root) = CompactViewRig.HostAt(view, CompactInvariantRig.InnerBudget);
         try
@@ -158,22 +158,13 @@ public class SmallWindowBoardTests
             Control restoreTarget = CompactHeightBehavior.GetRestoreFocusTarget(root)
                 ?? throw new InvalidOperationException($"{view.GetType().Name} has no RestoreFocusTarget wired.");
 
-            if (hasKnownColdStartTrap)
-            {
-                // Creator's SECOND, separately-documented exception: MEASURED here (cold-start Tab
-                // from nothing focused lands in the pre-existing Input-row TabIndex 0/1/2 loop with
-                // shell chrome, never reaching OutputTextBox — a known, pre-existing accessibility
-                // defect, unrelated to font size and present at 1.0x too) — re-failing on it in
-                // THIS cross-cutting test would be noise, not a new finding, and would mask whatever
-                // font growth itself does to this view. Proven instead via direct Focus(): if the
-                // trap is ever fixed, AssertReachableByKeyboard's own pre-check (already-focused AND
-                // fully visible) still requires the SAME "not clipped by the enlarged font" bar this
-                // test exists to enforce, so this branch does not silently stop checking anything.
-                restoreTarget.Focus();
-                Dispatcher.UIThread.RunJobs();
-                Assert.True(restoreTarget.IsFocused, $"{view.GetType().Name}'s RestoreFocusTarget could not even be given focus directly.");
-            }
-
+            // Every view is walked from a genuine COLD START — nothing focused, so
+            // AssertReachableByKeyboard establishes its own starting point with a blind Tab and
+            // walks from there. The Creator used to be exempted here, its target focused directly
+            // instead, because its Input row's unscoped TabIndex pins trapped a cold-start walk
+            // before it could reach anything. That trap is fixed (the path rows are scoped — see
+            // CreatorView.axaml), so the exemption is gone and this case now exercises the same
+            // route as the other four.
             CompactViewRig.AssertReachableByKeyboard(window, restoreTarget);
 
             // "the per-view tip... assertions still hold": only the Reconstructor has a "Tip:" line;
