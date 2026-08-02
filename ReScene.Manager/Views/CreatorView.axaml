@@ -197,10 +197,14 @@
                against the whole window — see the Input row's own note for what that costs when it is
                left off. -->
           <DockPanel KeyboardNavigation.TabNavigation="Local">
+            <!-- Contextual name: four buttons in this view read "Browse", so the bare content is
+                 not a usable label out of context. Follows the "Browse for <target>" phrasing the
+                 Reconstruct wizard's four already use. -->
             <Button DockPanel.Dock="Right" Content="Browse"
                     Command="{Binding BrowseOutputCommand}"
                     Classes="ghost"
                     TabIndex="1"
+                    AutomationProperties.Name="Browse for output path"
                     Margin="4,0,0,0" MinWidth="75" />
             <!-- AutomationProperties.Name: OutputTextBox became the
                  RestoreFocusTarget below (moved off InputTextBox — see the ctor's own remarks on

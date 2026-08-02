@@ -733,9 +733,10 @@ public class CreatorCompactTests
             // The staged-focus guard's actual point: restoring from a focus captured on the body
             // (which just went non-focusable — flat mode's base style, not the compact-only
             // override) must relocate focus, not strand it. RestoreFocusTarget was wired to
-            // OutputTextBox in the view's ctor (NOT InputTextBox — a resize should return focus
-            // near the work, not to the top of the form; see the ctor's own remarks), so that is
-            // where it must land.
+            // OutputTextBox in the view's ctor (NOT InputTextBox — recovery lands on a field
+            // partway down the form rather than resetting the user to the first row; see the
+            // ctor's own remarks for the full rationale and its limits), so that is where it must
+            // land.
             TextBox outputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "OutputTextBox");
             Assert.True(outputTextBox.IsFocused,
                 "restoring from a focused compact body must relocate focus to the wired RestoreFocusTarget (OutputTextBox), not strand it");
@@ -865,14 +866,26 @@ public class CreatorCompactTests
         (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
         try
         {
+            // Expected UIA names are LITERAL here, never read back off the controls: a test that
+            // derives them from the very controls it is checking passes through any rename,
+            // including one that strips a name to the bare "Browse" these buttons all share.
             TextBox inputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "InputTextBox");
             Button inputBrowse = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputCommand));
             Button inputBrowseFolder = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputFolderCommand));
-            AssertRowOrder(window, "Input", [inputTextBox, inputBrowse, inputBrowseFolder]);
+            AssertRowOrder(window, "Input",
+            [
+                (inputTextBox, "Input path"),
+                (inputBrowse, "Browse input file"),
+                (inputBrowseFolder, "Browse folder for release input"),
+            ]);
 
             TextBox outputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "OutputTextBox");
             Button outputBrowse = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseOutputCommand));
-            AssertRowOrder(window, "Output", [outputTextBox, outputBrowse]);
+            AssertRowOrder(window, "Output",
+            [
+                (outputTextBox, "Output path"),
+                (outputBrowse, "Browse for output path"),
+            ]);
         }
         finally { window.Close(); }
     }
@@ -883,9 +896,18 @@ public class CreatorCompactTests
     /// left-to-right order really is <paramref name="visualOrder"/>, and Tab walks it in that same
     /// order.
     /// </summary>
-    private static void AssertRowOrder(Window window, string rowName, IReadOnlyList<Control> visualOrder)
+    private static void AssertRowOrder(
+        Window window, string rowName, IReadOnlyList<(Control Control, string ExpectedName)> visualRow)
     {
+        List<Control> visualOrder = [.. visualRow.Select(entry => entry.Control)];
         var dockPanel = (DockPanel)visualOrder[0].GetVisualParent()!;
+
+        // Every control announces itself, which is what keeps the reversed UIA order below merely
+        // surprising rather than ambiguous — four buttons in this view render the word "Browse".
+        foreach ((Control control, string expectedName) in visualRow)
+        {
+            Assert.Equal(expectedName, ControlAutomationPeer.CreatePeerForElement(control).GetName());
+        }
 
         List<Control> treeOrder = [.. dockPanel.Children.OfType<Control>()];
         List<Control> expectedTreeOrder = [.. Enumerable.Reverse(visualOrder)];
@@ -909,8 +931,7 @@ public class CreatorCompactTests
         IReadOnlyList<AutomationPeer> peerChildren =
             ControlAutomationPeer.CreatePeerForElement(dockPanel).GetChildren() ?? [];
         List<string> peerOrder = [.. peerChildren.Select(p => p.GetName() ?? string.Empty)];
-        List<string> expectedPeerOrder =
-            [.. expectedTreeOrder.Select(c => ControlAutomationPeer.CreatePeerForElement(c).GetName() ?? string.Empty)];
+        List<string> expectedPeerOrder = [.. visualRow.Select(entry => entry.ExpectedName).Reverse()];
         Assert.True(peerOrder.SequenceEqual(expectedPeerOrder),
             $"{rowName} row: the UIA child order should mirror the markup order (reverse of visual) — " +
             $"got [{string.Join(", ", peerOrder)}], expected [{string.Join(", ", expectedPeerOrder)}]");
@@ -3080,7 +3101,7 @@ public class CreatorCompactTests
         "DataGrid name=\"Stored Files\" id=\"StoredFilesGrid\"",
         "GridSplitter name=\"Resize stored files and output\" id=\"\"",
         "TextBox name=\"Output path\" id=\"OutputTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Browse for output path\" id=\"\"",
         "CheckBox name=\"Auto-include files — Scan release directory for .nfo, .sfv, proof images, .m3u, .cue, .log files.\" id=\"\"",
         "CheckBox name=\"Auto-create SRS — Create .srs files for samples found in Sample/ subdirectory.\" id=\"\"",
         "CheckBox name=\"Vobsub SRR — Create nested SRR files for subtitle archives found in Subs/ directories.\" id=\"\"",
@@ -3107,7 +3128,7 @@ public class CreatorCompactTests
         "DataGrid name=\"Stored Files\" id=\"StoredFilesGrid\"",
         "GridSplitter name=\"Resize stored files and output\" id=\"\"",
         "TextBox name=\"Output path\" id=\"OutputTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Browse for output path\" id=\"\"",
         "CheckBox name=\"Auto-include files — Scan release directory for .nfo, .sfv, proof images, .m3u, .cue, .log files.\" id=\"\"",
         "CheckBox name=\"Auto-create SRS — Create .srs files for samples found in Sample/ subdirectory.\" id=\"\"",
         "CheckBox name=\"Vobsub SRR — Create nested SRR files for subtitle archives found in Subs/ directories.\" id=\"\"",
