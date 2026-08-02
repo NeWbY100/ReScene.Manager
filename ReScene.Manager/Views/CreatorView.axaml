@@ -77,8 +77,16 @@
           </TextBlock>
           <!-- Docked right in declaration order (rightmost first): folder Browse sits to the right of the
                file Browse. Explicit TabIndex keeps keyboard order = visual order = TextBox → Browse file
-               → Browse folder. -->
-          <DockPanel Margin="0,0,0,2">
+               → Browse folder — the tree order here is the REVERSE of the visual one, so the pins are
+               correcting a real mismatch and cannot simply be dropped.
+               TabNavigation="Local" scopes those pins to this row. Without it they are compared against
+               the whole window's navigation scope, where every other control carries the default
+               int.MaxValue — so these three sort ahead of the entire form and a keyboard user who
+               starts cold (window open, nothing focused, press Tab) cycles between them and the shell
+               chrome forever, never reaching Stored Files, Output, Options, Create SRR or the log.
+               Local makes the row order among themselves and the row itself take its ordinary place in
+               the outer order. -->
+          <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
             <Button DockPanel.Dock="Right" Content="Browse folder…"
                     Command="{Binding BrowseInputFolderCommand}"
                     Classes="ghost"
