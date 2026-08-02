@@ -692,10 +692,30 @@ internal static class CompactHeightBehavior
         {
             void Handler(object? _, AvaloniaPropertyChangedEventArgs args)
             {
-                if (args.Property == Expander.IsExpandedProperty)
+                if (args.Property != Expander.IsExpandedProperty)
                 {
-                    RecomputeHelpOpen(control, expander, state);
+                    return;
                 }
+
+                // Flat mode's invariant — "leaving compact renders the body expanded", declared by
+                // ApplyHelpExpanderDirection — enforced CONTINUOUSLY, not only at the transition that
+                // establishes it. At normal size the header toggle is hidden by the app styles and
+                // its automation peer is pruned with it, so a collapse there produces a state the
+                // visual design says cannot exist: Help hidden with no affordance, in ANY modality,
+                // to bring it back short of resizing the window. Nothing in the UI offers that
+                // collapse — but the Expander's stock peer still carries the ExpandCollapse pattern,
+                // and an assistive technology can invoke Collapse() on it directly (final review:
+                // non-focusable is not non-actionable). Suppressing the pattern itself would take a
+                // custom peer, which Expander only permits through a subclass — so the invariant is
+                // held where it is actually owned instead, which makes that call a no-op.
+                // Re-entrant exactly once: the assignment re-enters with IsExpanded already true.
+                if (!state.IsCompact && !expander.IsExpanded)
+                {
+                    expander.IsExpanded = true;
+                    return;
+                }
+
+                RecomputeHelpOpen(control, expander, state);
             }
 
             expander.PropertyChanged += Handler;

@@ -9,6 +9,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using ReScene.Manager.Behaviors;
 
 namespace ReScene.Manager.Tests;
 
@@ -122,71 +123,97 @@ public class StylesTests
     }
 
     /// <summary>
-    /// Final review, MAJOR: the re-templated <c>Expander.helpDisclosure</c> shows its header
-    /// ToggleButton only in compact mode (<c>IsVisible=False</c> at normal, re-enabled by the
-    /// <c>Grid.compactHeight</c> selector), and the review asked whether that leaves the UIA tree
-    /// exposing an ACTIONABLE-but-invisible peer at normal size, or splits the Expander's semantics
-    /// incoherently across peers. VERIFIED, not assumed — this walks the real automation tree the
-    /// shared template produces in each mode, rather than trusting that
-    /// <c>IsVisible=False</c> prunes a peer.
+    /// Final review round 2, MAJOR: the re-templated <c>Expander.helpDisclosure</c> shows its header
+    /// ToggleButton only in compact mode. Round 1 walked the peer tree and confirmed the toggle's
+    /// peer is pruned at normal — but judged the arrangement coherent on the strength of the
+    /// Expander peer being non-focusable. That was the wrong test: NON-FOCUSABLE IS NOT
+    /// NON-ACTIONABLE. <c>IExpandCollapseProvider</c> is an action, and an AT can invoke
+    /// <c>Collapse()</c> on it directly. MEASURED against the unfixed code: at NORMAL size that set
+    /// <c>IsExpanded=false</c> and hid the body while the header toggle stayed pruned from both the
+    /// visual and UIA trees — a state the visual design says cannot exist, with no affordance in
+    /// ANY modality to undo it short of resizing the window.
     /// <para>
-    /// What the walk established (MEASURED against this template, both modes):
-    /// at NORMAL the ToggleButton peer is ABSENT from the tree ENTIRELY — not merely reported
-    /// offscreen — while the toggle CONTROL is still present in the visual tree (asserted below, so
-    /// the absence is provably UIA pruning and not the control being missing), and the body's
-    /// content stays reachable; at COMPACT the toggle appears as a keyboard-focusable Button peer
-    /// carrying the Toggle pattern, with its accessible name mirrored from the Expander's own. The
-    /// Expander's stock <c>ExpanderAutomationPeer</c> carries ExpandCollapse in BOTH modes and is
-    /// itself not keyboard focusable — so the two peers are complementary exactly as spec §1
-    /// describes ("the toggle announces its expanded/collapsed state through its own Toggle
-    /// pattern, while the Expander's stock ExpanderAutomationPeer continues to expose
-    /// ExpandCollapse"), never two competing actionable peers for one control.
+    /// FIXED at the level that owns the invariant rather than at the peer. Suppressing the pattern
+    /// itself is not reachable from here: <c>Expander.OnCreateAutomationPeer</c> is
+    /// <c>protected virtual</c>, so a custom peer requires subclassing the control and editing every
+    /// view that hosts one, and <c>AutomationProperties.AccessibilityView=Raw</c> was MEASURED not
+    /// to prune the peer from its parent's children walk at all. What
+    /// <see cref="CompactHeightBehavior"/> already DECLARES — "flat mode always renders the body
+    /// expanded" — is now enforced continuously instead of only on transitions, so a Collapse at
+    /// normal is a genuine no-op: the state does not change and the body stays visible, which is
+    /// the user-facing guarantee the finding asked for.
     /// </para>
     /// <para>
-    /// The name is deliberately NOT the "Help" every other caller uses: mirroring is a
-    /// TemplateBinding, and a distinctive value proves the binding rather than a coincidence with a
-    /// hardcoded string. Tested through the shared style directly rather than through any one view,
-    /// because the template and the compact selector are what the finding is about.
+    /// COMPACT keeps ExpandCollapse on the container deliberately, and it is NOT a second
+    /// independent action: it drives the very same <c>IsExpanded</c> the toggle exposes (asserted
+    /// below — invoking the container's Collapse moves the toggle's own IsChecked with it, and the
+    /// behavior's HelpOpen tracks both), and only the toggle is keyboard focusable, so only the
+    /// toggle is ever announced as actionable on focus. One state, one authoritative route to
+    /// change it, two coherent views of it — which is what spec §1's "complementary, not
+    /// duplicated" claim requires, now proven rather than asserted.
+    /// </para>
+    /// <para>
+    /// Modes are driven through the real behavior (Threshold + window height), not by poking the
+    /// class on, so the wiring under test is the shipped one. The accessible name is deliberately
+    /// NOT the "Help" most callers use: mirroring is a TemplateBinding, and a distinctive value
+    /// proves the binding rather than coinciding with a hardcoded string.
     /// </para>
     /// </summary>
     [AvaloniaFact]
     public void HelpDisclosure_ExposesCoherentAutomationPeers_InBothModes()
     {
         const string HelpName = "Help & links";
+        const double Threshold = 300;
 
-        var expander = new Expander { Classes = { "helpDisclosure" }, IsExpanded = true };
-        expander.Content = new TextBlock { Text = "help body" };
+        var expander = new Expander { Classes = { "helpDisclosure" } };
+        var body = new TextBlock { Text = "help body" };
+        expander.Content = body;
         AutomationProperties.SetName(expander, HelpName);
 
         var host = new Grid();
         host.Children.Add(expander);
-        var window = new Window { Width = 700, Height = 400, Content = host };
+        CompactHeightBehavior.SetThreshold(host, Threshold);
+        CompactHeightBehavior.SetHelpExpander(host, expander);
+
+        var window = new Window { Width = 700, Height = Threshold + 100, Content = host };
         window.Show();
         Dispatcher.UIThread.RunJobs();
         try
         {
-            // ── NORMAL: the header toggle is hidden by the base style ──
+            // ── NORMAL: flat section. Header toggle hidden, body shown. ──
+            Assert.DoesNotContain("compactHeight", host.Classes);
             ToggleButton toggle = expander.GetVisualDescendants().OfType<ToggleButton>().Single();
-            Assert.False(toggle.IsVisible,
-                "precondition: the base style hides the header toggle at normal size");
+            Assert.False(toggle.IsVisible, "precondition: the base style hides the header toggle at normal size");
+            Assert.True(expander.IsExpanded, "precondition: flat mode force-expands the body");
+            Assert.True(body.IsEffectivelyVisible);
 
             AutomationPeer expanderPeer = ControlAutomationPeer.CreatePeerForElement(expander);
             Assert.Equal(HelpName, expanderPeer.GetName());
-            var expandCollapse = Assert.IsAssignableFrom<IExpandCollapseProvider>(expanderPeer);
-            Assert.Equal(ExpandCollapseState.Expanded, expandCollapse.ExpandCollapseState);
-            Assert.False(expanderPeer.IsKeyboardFocusable(),
-                "the Expander itself is not a Tab stop — the toggle is, when it exists");
-
+            Assert.False(expanderPeer.IsKeyboardFocusable(), "the Expander itself is not a Tab stop");
             Assert.DoesNotContain(DescendantPeers(expanderPeer), p => OwnerOf(p) is ToggleButton);
-            Assert.True(toggle.IsVisible == false && expander.GetVisualDescendants().Contains(toggle),
-                "the toggle CONTROL is still in the visual tree, so its peer's absence above is " +
-                "genuine UIA pruning of an invisible control rather than the control not existing");
+            Assert.Contains(expander.GetVisualDescendants(), v => ReferenceEquals(v, toggle));
+            // ^ the toggle CONTROL is still in the visual tree, so its peer's absence is genuine UIA
+            //   pruning of an invisible control rather than the template not creating it at all.
 
-            // ── COMPACT: the compactHeight selector reveals it ──
-            host.Classes.Add("compactHeight");
-            expander.IsExpanded = false;   // what a real compact entry leaves behind (condition 5)
+            // THE LOAD-BEARING SCENARIO: an AT invokes the container's Collapse at normal size.
+            var expandCollapse = Assert.IsAssignableFrom<IExpandCollapseProvider>(expanderPeer);
+            expandCollapse.Collapse();
             Dispatcher.UIThread.RunJobs();
+
+            Assert.True(body.IsEffectivelyVisible,
+                "Collapse() at normal size must be a no-op: the header toggle is pruned from both " +
+                "trees here, so a collapse would hide Help with no affordance in any modality to " +
+                "restore it — a state the visual design says cannot exist");
+            Assert.True(expander.IsExpanded);
+            Assert.Equal(ExpandCollapseState.Expanded, expandCollapse.ExpandCollapseState);
+            Assert.False(toggle.IsVisible, "and it must not have revealed the toggle as a side effect");
+
+            // ── COMPACT: real disclosure. Toggle appears; the behavior resets it collapsed. ──
+            window.Height = Threshold - 1;
+            Dispatcher.UIThread.RunJobs();
+            Assert.Contains("compactHeight", host.Classes);
             Assert.True(toggle.IsVisible);
+            Assert.False(expander.IsExpanded, "compact entry starts collapsed (condition 5)");
 
             AutomationPeer compactExpanderPeer = ControlAutomationPeer.CreatePeerForElement(expander);
             var compactExpandCollapse = Assert.IsAssignableFrom<IExpandCollapseProvider>(compactExpanderPeer);
@@ -196,18 +223,29 @@ public class StylesTests
                 DescendantPeers(compactExpanderPeer), p => OwnerOf(p) is ToggleButton);
             Assert.Equal(HelpName, togglePeer.GetName());
             Assert.Equal(AutomationControlType.Button, togglePeer.GetAutomationControlType());
-            Assert.True(togglePeer.IsKeyboardFocusable());
             Assert.True(togglePeer.IsEnabled());
             Assert.False(togglePeer.IsOffscreen());
             Assert.IsAssignableFrom<IToggleProvider>(togglePeer);
 
-            // ExpandCollapse tracks the real state, so an AT reading the region is never told
-            // something different from what the toggle reports.
-            expander.IsExpanded = true;
+            // ONE authoritative action: the toggle is the only keyboard-focusable peer, so it is the
+            // only one an AT announces as actionable on focus...
+            Assert.True(togglePeer.IsKeyboardFocusable());
+            Assert.False(compactExpanderPeer.IsKeyboardFocusable());
+
+            // ...and the container's pattern is not a SECOND, independent action: it moves the very
+            // same state, which the toggle and the behavior both follow.
+            compactExpandCollapse.Expand();
             Dispatcher.UIThread.RunJobs();
-            Assert.Equal(ExpandCollapseState.Expanded,
-                Assert.IsAssignableFrom<IExpandCollapseProvider>(
-                    ControlAutomationPeer.CreatePeerForElement(expander)).ExpandCollapseState);
+            Assert.True(expander.IsExpanded);
+            Assert.True(toggle.IsChecked, "the toggle reports the same state the container just set");
+            Assert.True(CompactHeightBehavior.GetHelpOpen(host), "and the behavior's donation follows it");
+            Assert.Equal(ExpandCollapseState.Expanded, compactExpandCollapse.ExpandCollapseState);
+
+            compactExpandCollapse.Collapse();
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(expander.IsExpanded, "collapsing IS allowed in compact — the toggle is right there");
+            Assert.False(toggle.IsChecked);
+            Assert.False(CompactHeightBehavior.GetHelpOpen(host));
         }
         finally { window.Close(); }
     }
