@@ -384,6 +384,16 @@ internal static class CompactHeightBehavior
         ApplyRowsEverywhere(control, state);
         ToggleClass(control, wantCompact);
 
+        // (3)-(6) staged: run only after a layout pass reflects the just-applied class/row/
+        // visibility changes (Loaded is lower priority than the layout-driving priorities,
+        // so the dispatcher services any pending layout before this posted job runs).
+        if (captured is not null)
+        {
+            Dispatcher.UIThread.Post(
+                CreateRecoveryCallback(control, captured, wantCompact, state),
+                DispatcherPriority.Loaded);
+        }
+
         // A pass that leaves the view EXPANDED has just changed the very layout its floor is read
         // from — a restore rebuilds the expanded rows, and a first evaluation at normal height
         // forces the Help body open — while the capture at the top of this pass necessarily ran
@@ -391,11 +401,24 @@ internal static class CompactHeightBehavior
         // up: that pass re-captures against the settled expanded tree and drops straight back to
         // compact if expanded genuinely no longer fits.
         //
+        // POSTED LAST, AND THAT ORDER IS LOAD-BEARING — do not move this above the recovery post.
+        // Both jobs sit at the same priority, so they run in the order they were queued, and this
+        // one can re-compact the view. Queued FIRST it would run FIRST, and a re-compaction ahead
+        // of the restore's own recovery is destructive in three compounding ways: it hides the
+        // compact-only controls the restore had just revealed (and vice versa), it bumps the
+        // generation so the restore's queued recovery rejects itself as stale, and its own capture
+        // finds whatever focus the half-finished restore left behind — which, for a restore that
+        // hid the focused compact-only header toggle, is NOTHING. The behavior would then have
+        // cleared focus itself and left it cleared, with the one job that could have repaired it
+        // already invalidated. Queued last, the recovery has run to completion first, so nothing
+        // stale is superseded and this pass captures a settled, genuinely-focused element and
+        // stages its own recovery in the ordinary way.
+        //
         // Posted rather than left to RecaptureFloorAfterLayout, which covers a DIFFERENT case and
-        // cannot cover this one: that handler runs when layout runs, and the changes made just
-        // above do not always invalidate layout at all (a class no style in this view keys on, row
-        // values that resolve to what they already were). Re-validating a restore is not something
-        // to make conditional on the layout system having had an opinion about it. The two are
+        // cannot cover this one: that handler runs when layout runs, and the changes made above do
+        // not always invalidate layout at all (a class no style in this view keys on, row values
+        // that resolve to what they already were). Re-validating a restore is not something to make
+        // conditional on the layout system having had an opinion about it. The two are
         // complementary — this one guarantees a check after every change the BEHAVIOR makes, that
         // one catches the changes it does not make: content arriving, prose rewrapping, a font
         // growing, none of which resize the root and none of which would otherwise be noticed.
@@ -409,18 +432,6 @@ internal static class CompactHeightBehavior
         {
             Dispatcher.UIThread.Post(() => Evaluate(control, state), DispatcherPriority.Loaded);
         }
-
-        if (captured is null)
-        {
-            return;
-        }
-
-        // (3)-(6) staged: run only after a layout pass reflects the just-applied class/row/
-        // visibility changes (Loaded is lower priority than the layout-driving priorities,
-        // so the dispatcher services any pending layout before this posted job runs).
-        Dispatcher.UIThread.Post(
-            CreateRecoveryCallback(control, captured, wantCompact, state),
-            DispatcherPriority.Loaded);
     }
 
     /// <summary>
