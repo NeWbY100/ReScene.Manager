@@ -411,24 +411,17 @@ public class CreatorCompactTests
     /// <para>
     /// <paramref name="keyboardAnchor"/> (required, unlike every other converted view's identical
     /// helper): <see cref="CompactViewRig.AssertReachableByKeyboard"/> only auto-establishes a
-    /// starting point when NOTHING is already focused, via a single blind Tab press. For every
-    /// other converted view that lands somewhere that eventually reaches the target within a
-    /// bounded walk. For THIS view it does not — see <c>AssertTabWalk</c>'s own doc: a single blind
-    /// Tab press from a truly unfocused window lands on <c>InputTextBox</c> (TabIndex="0", the
-    /// smallest EXPLICIT value anywhere, picked first when nothing is "current" to search forward
-    /// from), and continuing forward from there (Browse file → Browse folder → shell) settles into
-    /// a STABLE, PERMANENT 3-element loop with shell chrome (Browse folder ⇄ the "_File" MenuItem ⇄
-    /// the status bar's version button) that never reaches back into the rest of the form — VERIFIED
-    /// directly (a real 30-step walk from a truly unfocused window). This is the pre-existing
-    /// TabIndex defect's actual, severe, user-facing consequence: a keyboard user who opens this tab
-    /// and immediately presses Tab, without ever touching the mouse, gets trapped and can never
-    /// reach Stored Files, Output, Options, Create SRR, or the Log. Focusing a known-good anchor
-    /// first (here, "Add...", the form's own true first stop per <c>AssertTabWalk</c>) proves the
-    /// narrower, still-true claim that matters here — "once inside the form, is everything
-    /// reachable" — without silently pretending the wider, false claim ("reachable from a cold
-    /// window") also holds. This is deliberately NOT fixed here (normal tab order must stay
-    /// unchanged at normal size; the defect is orthogonal to and predates this task's own
-    /// restructuring).
+    /// starting point when NOTHING is already focused, via a single blind Tab press, and this
+    /// helper's own job is the narrower claim "once inside the form, is the target reachable by
+    /// each of the three routes". Anchoring explicitly keeps that claim honest whatever the walk's
+    /// entry point happens to be, and keeps the three routes comparable with each other.
+    /// <para>
+    /// It used to be load-bearing for a worse reason: this view's Input row carried unscoped
+    /// TabIndex pins, so a blind Tab press from an unfocused window landed there and then cycled
+    /// between the row and shell chrome forever, never reaching the rest of the form. That trap is
+    /// fixed (KeyboardNavigation.TabNavigation="Local" on the path rows) and
+    /// <c>ColdStartTabWalk_EscapesTheInputRow_AndReachesThePrimaryAction</c> now covers the
+    /// cold-start path directly, which is where that claim belongs.
     /// </para>
     /// </summary>
     private static void AssertReachableByAllThreeRoutes(Window window, ScrollViewer scroller, Control target, Control keyboardAnchor)
@@ -584,7 +577,7 @@ public class CreatorCompactTests
         List<Control> order =
         [
             inputTextBox, inputBrowse, inputBrowseFolder,
-            add, remove, removeAll, moveUp, moveDown, storedFilesGrid, splitter, outputBrowse, outputTextBox,
+            add, remove, removeAll, moveUp, moveDown, storedFilesGrid, splitter, outputTextBox, outputBrowse,
             autoInclude, autoCreateSrs, vobsubSrr, storeFixRar, allowCompressed, osoHashes, languagesDiz, appName,
             createSrr, saveLog,
         ];
@@ -752,8 +745,8 @@ public class CreatorCompactTests
             // The staged-focus guard's actual point: restoring from a focus captured on the body
             // (which just went non-focusable — flat mode's base style, not the compact-only
             // override) must relocate focus, not strand it. RestoreFocusTarget was wired to
-            // OutputTextBox in the view's ctor (NOT InputTextBox — InputTextBox is one of the
-            // three Input-row TabIndex-trapped controls; see the ctor's own remarks), so that is
+            // OutputTextBox in the view's ctor (NOT InputTextBox — a resize should return focus
+            // near the work, not to the top of the form; see the ctor's own remarks), so that is
             // where it must land.
             TextBox outputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "OutputTextBox");
             Assert.True(outputTextBox.IsFocused,
@@ -858,13 +851,25 @@ public class CreatorCompactTests
         string.Join(" -> ", walk.Select(CompactViewRig.Describe));
 
     /// <summary>
-    /// The Input row's own order, which the TabIndex values exist for and which the trap fix must
-    /// not disturb: visual left-to-right is path box, Browse, Browse folder, but DockPanel docks in
-    /// DECLARATION order (rightmost first), so the tree order is the reverse of the visual one.
-    /// That mismatch is what the pins correct — they are not removable, only scopable.
+    /// Both path rows keep keyboard order equal to VISUAL order, and the reason they need help
+    /// doing so is pinned rather than merely described.
+    /// <para>
+    /// Each row is a <c>DockPanel</c> whose Browse buttons are docked Right and therefore declared
+    /// FIRST — docking consumes edges in declaration order, so the rightmost control has to come
+    /// first in the markup. The tree order is consequently the exact REVERSE of what the user sees,
+    /// and left alone a keyboard user tabs the row backwards. Explicit <c>TabIndex</c> plus
+    /// <c>KeyboardNavigation.TabNavigation="Local"</c> is what corrects it: the pins order the row
+    /// internally, Local keeps them from being compared against the whole window (which is what
+    /// trapped the Input row).
+    /// </para>
+    /// <para>
+    /// The INVERSION itself is asserted, not assumed. If someone ever reorders the markup so tree
+    /// order already matches visual order, the pins become unnecessary and this test says so —
+    /// rather than silently passing and leaving dead scaffolding behind.
+    /// </para>
     /// </summary>
     [AvaloniaFact]
-    public void InputRow_TabOrderFollowsVisualOrder_NotDeclarationOrder()
+    public void PathRows_TabOrderFollowsVisualOrder_DespiteReversedTreeOrder()
     {
         CreatorViewModel vm = CreateVm();
         var view = new CreatorView { DataContext = vm };
@@ -872,37 +877,78 @@ public class CreatorCompactTests
         try
         {
             TextBox inputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "InputTextBox");
-            Button browse = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputCommand));
-            Button browseFolder = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputFolderCommand));
+            Button inputBrowse = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputCommand));
+            Button inputBrowseFolder = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputFolderCommand));
+            AssertRowOrder(window, "Input", [inputTextBox, inputBrowse, inputBrowseFolder]);
 
-            // Premise: visual order really is the reverse of declaration order, or the pins would
-            // have nothing to correct and this test would be asserting an accident.
-            Assert.True(inputTextBox.Bounds.X < browse.Bounds.X && browse.Bounds.X < browseFolder.Bounds.X,
-                "visual order should be path box, Browse, Browse folder");
-
-            inputTextBox.Focus();
-            Dispatcher.UIThread.RunJobs();
-            Assert.True(ReferenceEquals(CompactViewRig.StepFocus(window, forward: true), browse),
-                "Tab from the path box must reach Browse");
-            Assert.True(ReferenceEquals(CompactViewRig.StepFocus(window, forward: true), browseFolder),
-                "Tab from Browse must reach Browse folder");
+            TextBox outputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "OutputTextBox");
+            Button outputBrowse = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseOutputCommand));
+            AssertRowOrder(window, "Output", [outputTextBox, outputBrowse]);
         }
         finally { window.Close(); }
     }
 
     /// <summary>
-    /// Permanent regression guard for the exact defect described above — a resize-triggered focus
-    /// recovery must never deposit a keyboard user onto one of the Input row's three
-    /// TabIndex-trapped controls (InputTextBox, the file Browse button, or the folder Browse
-    /// button — see <c>AssertTabWalk</c>'s own doc for the full decompiled-source + empirical proof
-    /// of the trap those three form with shell chrome).
+    /// Asserts one path row three ways: the markup order is the reverse of
+    /// <paramref name="visualOrder"/> (the premise the pins exist to correct), the rendered
+    /// left-to-right order really is <paramref name="visualOrder"/>, and Tab walks it in that same
+    /// order.
+    /// </summary>
+    private static void AssertRowOrder(Window window, string rowName, IReadOnlyList<Control> visualOrder)
+    {
+        var dockPanel = (DockPanel)visualOrder[0].GetVisualParent()!;
+
+        List<Control> treeOrder = [.. dockPanel.Children.OfType<Control>()];
+        List<Control> expectedTreeOrder = [.. Enumerable.Reverse(visualOrder)];
+        Assert.True(treeOrder.Count == expectedTreeOrder.Count,
+            $"{rowName} row: expected {expectedTreeOrder.Count} children, found {treeOrder.Count}");
+        for (int i = 0; i < treeOrder.Count; i++)
+        {
+            Assert.True(ReferenceEquals(treeOrder[i], expectedTreeOrder[i]),
+                $"{rowName} row: markup order should be the REVERSE of visual order (docking consumes " +
+                $"edges in declaration order) — position {i} holds {CompactViewRig.Describe(treeOrder[i])}, " +
+                $"expected {CompactViewRig.Describe(expectedTreeOrder[i])}. If the markup no longer " +
+                "inverts, the TabIndex pins on this row have nothing left to correct and should go.");
+        }
+
+        for (int i = 1; i < visualOrder.Count; i++)
+        {
+            Assert.True(visualOrder[i - 1].Bounds.X < visualOrder[i].Bounds.X,
+                $"{rowName} row: {CompactViewRig.Describe(visualOrder[i - 1])} should render left of " +
+                $"{CompactViewRig.Describe(visualOrder[i])}");
+        }
+
+        visualOrder[0].Focus();
+        Dispatcher.UIThread.RunJobs();
+        for (int i = 1; i < visualOrder.Count; i++)
+        {
+            Control? next = CompactViewRig.StepFocus(window, forward: true);
+            Assert.True(ReferenceEquals(next, visualOrder[i]),
+                $"{rowName} row: Tab from {CompactViewRig.Describe(visualOrder[i - 1])} should reach " +
+                $"{CompactViewRig.Describe(visualOrder[i])}, not " +
+                $"{(next is null ? "<nothing>" : CompactViewRig.Describe(next))}");
+        }
+    }
+
+    /// <summary>
+    /// Pins WHERE a resize-triggered focus recovery lands, which is a preference rather than a
+    /// safety requirement now that the Input row's keyboard trap is fixed.
+    /// <para>
+    /// This guard was originally about that trap: landing recovery on one of the Input row's three
+    /// pinned controls would have deposited a keyboard user inside it. Scoping the pins
+    /// (KeyboardNavigation.TabNavigation="Local") removed the hazard, so the three negative
+    /// assertions below no longer defend against harm — they defend a deliberate choice. A resize
+    /// should return focus near the work the user was doing, not to the very top of the form, and
+    /// OutputTextBox is the last field before the primary action.
+    /// </para>
+    /// <para>
     /// Resolves the ACTUAL wired target via <see cref="CompactHeightBehavior.GetRestoreFocusTarget"/>
-    /// (not a hardcoded assumption of what it "should" be) and asserts it is REFERENCE-DISTINCT
-    /// from all three — so a future retarget back into the trap fails here immediately, loudly,
-    /// naming the collision, rather than silently reintroducing this harmful path.
+    /// rather than assuming what it "should" be, so a future retarget shows up here as a decision to
+    /// re-make rather than a silent drift.
+    /// </para>
     /// </summary>
     [AvaloniaFact]
-    public void RestoreFocusTarget_IsNotOneOfTheThreeTrappedControls()
+    public void RestoreFocusTarget_PrefersTheOutputFieldOverTheTopOfTheForm()
     {
         CreatorViewModel vm = CreateVm();
         var view = new CreatorView { DataContext = vm };
@@ -917,11 +963,11 @@ public class CreatorCompactTests
             Button inputBrowseFolder = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputFolderCommand));
 
             Assert.False(ReferenceEquals(actualTarget, inputTextBox),
-                $"RestoreFocusTarget must not be InputTextBox — it is one of the three TabIndex-trapped controls (TabIndex=\"0\").");
+                "RestoreFocusTarget should not be InputTextBox — a resize would throw focus back to the top of the form.");
             Assert.False(ReferenceEquals(actualTarget, inputBrowse),
-                $"RestoreFocusTarget must not be the input Browse button — it is one of the three TabIndex-trapped controls (TabIndex=\"1\").");
+                "RestoreFocusTarget should not be the input Browse button — a resize would throw focus back to the top of the form.");
             Assert.False(ReferenceEquals(actualTarget, inputBrowseFolder),
-                $"RestoreFocusTarget must not be the input Browse-folder button — it is one of the three TabIndex-trapped controls (TabIndex=\"2\"), and forward-Tab from it settles into the stable shell-chrome loop.");
+                "RestoreFocusTarget should not be the input Browse-folder button — a resize would throw focus back to the top of the form.");
 
             // Positive assertion, not just three negatives: the actual wired target is OutputTextBox,
             // carrying its own explicit, computed accessible name.
@@ -3027,8 +3073,8 @@ public class CreatorCompactTests
         "Button name=\"Move Down\" id=\"\"",
         "DataGrid name=\"Stored Files\" id=\"StoredFilesGrid\"",
         "GridSplitter name=\"Resize stored files and output\" id=\"\"",
-        "Button name=\"Browse\" id=\"\"",
         "TextBox name=\"Output path\" id=\"OutputTextBox\"",
+        "Button name=\"Browse\" id=\"\"",
         "CheckBox name=\"Auto-include files — Scan release directory for .nfo, .sfv, proof images, .m3u, .cue, .log files.\" id=\"\"",
         "CheckBox name=\"Auto-create SRS — Create .srs files for samples found in Sample/ subdirectory.\" id=\"\"",
         "CheckBox name=\"Vobsub SRR — Create nested SRR files for subtitle archives found in Subs/ directories.\" id=\"\"",
@@ -3054,8 +3100,8 @@ public class CreatorCompactTests
         "Button name=\"Move Down\" id=\"\"",
         "DataGrid name=\"Stored Files\" id=\"StoredFilesGrid\"",
         "GridSplitter name=\"Resize stored files and output\" id=\"\"",
-        "Button name=\"Browse\" id=\"\"",
         "TextBox name=\"Output path\" id=\"OutputTextBox\"",
+        "Button name=\"Browse\" id=\"\"",
         "CheckBox name=\"Auto-include files — Scan release directory for .nfo, .sfv, proof images, .m3u, .cue, .log files.\" id=\"\"",
         "CheckBox name=\"Auto-create SRS — Create .srs files for samples found in Sample/ subdirectory.\" id=\"\"",
         "CheckBox name=\"Vobsub SRR — Create nested SRR files for subtitle archives found in Subs/ directories.\" id=\"\"",

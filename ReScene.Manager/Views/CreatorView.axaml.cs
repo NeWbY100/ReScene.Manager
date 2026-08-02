@@ -87,16 +87,14 @@ public partial class CreatorView : UserControl
         Behaviors.CompactHeightBehavior.SetHelpExpander(root, helpDisclosure);
         Behaviors.CompactHeightBehavior.SetHelpBodyMaxHeight(root, 40);
 
-        // RestoreFocusTarget is OutputTextBox, NOT InputTextBox — that wiring would be genuinely
-        // harmful: InputTextBox is one of the Input row's three TabIndex-trapped controls
-        // (TabIndex="0"; Browse file="1"; Browse folder="2"). Landing a
-        // resize-triggered focus recovery THERE would deposit a keyboard user one single Tab press
-        // from the documented stable trap loop (Browse folder <-> the shell's "_File" menu <-> the
-        // status bar) — a NEW harmful path this behavior's own wiring would have created,
-        // distinct from the pre-existing trap itself (which stays deferred to its own follow-up
-        // per criterion F). OutputTextBox sits safely inside this view's OWN (default-TabIndex)
-        // "safe run" — CreatorCompactTests.RestoreFocusTarget_IsNotOneOfTheThreeTrappedControls
-        // pins this permanently so a future retarget can't silently regress into the trap.
+        // RestoreFocusTarget is OutputTextBox, NOT InputTextBox. It was originally chosen to keep
+        // resize-triggered focus recovery out of the Input row's keyboard trap; that trap is now
+        // fixed (KeyboardNavigation.TabNavigation="Local" scopes both path rows' TabIndex pins), so
+        // the reason is no longer safety. It stays because it is the better landing on its own
+        // merits: a resize should return focus near the work the user was doing rather than to the
+        // very top of the form, and OutputTextBox is the last field before the primary action.
+        // CreatorCompactTests.RestoreFocusTarget_PrefersTheOutputFieldOverTheTopOfTheForm pins the
+        // choice so a future retarget is a decision rather than a drift.
         Behaviors.CompactHeightBehavior.SetRestoreFocusTarget(root, outputTextBox);
 
         // EXPANDED-mode safety cap (the same categorical issue SampleRestorerView's own ctor
