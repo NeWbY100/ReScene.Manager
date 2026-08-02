@@ -492,11 +492,11 @@ public class CreatorCompactTests
         {
             bool compact = root.Classes.Contains("compactHeight");
 
-            // Independent ground truth, resolved BEFORE any walk runs. "Add..." (the Stored Files
-            // section's first button) is the true first stop in BOTH modes — compact merely
-            // PREPENDS the Help toggle ahead of it, per every other converted view's identical
-            // shape; see this method's own doc for why "Add..." (not InputTextBox/Browse-folder,
-            // the visually-first row) is genuinely first.
+            // Independent ground truth, resolved BEFORE any walk runs. The Input path box is the
+            // true first stop in BOTH modes — compact merely PREPENDS the Help toggle ahead of it,
+            // per every other converted view's identical shape. It was "Add..." while the Input
+            // row's unscoped TabIndex pins held it out of the ordinary order; scoping them
+            // (CreatorView.axaml) put the row back where it visually is.
             List<Control> independentOrder = ResolveIndependentExpectedOrder(window, vm, compact);
             Control sentinel = independentOrder[0];
 
@@ -521,11 +521,11 @@ public class CreatorCompactTests
                 $"forward capture's terminal external target should be {CompactViewRig.Describe(expectedExternalBoundary)}, " +
                 $"not {CompactViewRig.Describe(forwardCapture.FirstExternalTarget!)} — same description does not mean same control instance.");
 
-            // REVERSE: anchored at the forward walk's own LAST stop (Browse folder for release
-            // input — the unambiguous boundary, proven by the FORWARD exit above), never a
-            // presumed starting point. Checked against the INDEPENDENT order's own reversal, and
-            // must land back on independentOrder[0] ("Add...") — the actual, empirical proof that
-            // "Add..." is genuinely first, not an assumption riding on the visual layout.
+            // REVERSE: anchored at the forward walk's own LAST stop (the unambiguous boundary,
+            // proven by the FORWARD exit above), never a presumed starting point. Checked against
+            // the INDEPENDENT order's own reversal, and must land back on independentOrder[0] —
+            // the actual, empirical proof of which control is genuinely first, rather than an
+            // assumption riding on the visual layout.
             CompactViewRig.TabWalkResult reverse = CompactViewRig.RunTabPass(window, forwardOrder[^1], forward: false, independentOrder);
 
             List<Control> expectedReverseOrder = [.. Enumerable.Reverse(independentOrder)];
@@ -575,11 +575,18 @@ public class CreatorCompactTests
         Button inputBrowse = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputCommand));
         Button inputBrowseFolder = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputFolderCommand));
 
+        // The Input row leads, which is both where it sits visually and where it sits in the tree.
+        // It used to come LAST, after the log — not a design choice but the keyboard trap showing
+        // through: unscoped TabIndex 0/1/2 sorted those three ahead of the whole window scope, and
+        // a walk entering the form anywhere else only ever reached them by running off the end.
+        // KeyboardNavigation.TabNavigation="Local" on the row (CreatorView.axaml) scopes the pins
+        // to the row, so the row now takes its ordinary place among its siblings.
         List<Control> order =
         [
+            inputTextBox, inputBrowse, inputBrowseFolder,
             add, remove, removeAll, moveUp, moveDown, storedFilesGrid, splitter, outputBrowse, outputTextBox,
             autoInclude, autoCreateSrs, vobsubSrr, storeFixRar, allowCompressed, osoHashes, languagesDiz, appName,
-            createSrr, saveLog, inputTextBox, inputBrowse, inputBrowseFolder,
+            createSrr, saveLog,
         ];
 
         if (compact)
@@ -757,6 +764,128 @@ public class CreatorCompactTests
             Dispatcher.UIThread.RunJobs();
             Assert.Contains("compactHeight", root.Classes);
             Assert.False(helpDisclosure.IsExpanded, "re-entering compact must reset Help to collapsed, not resume the prior session's open state");
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// The keyboard trap itself, from the entry point a keyboard-only user actually meets: the
+    /// window opens with nothing focused and they press Tab. Every other tab-order test in this
+    /// file starts from a focused sentinel INSIDE the form, which enters the order somewhere the
+    /// trap does not hold and is why it survived them.
+    /// <para>
+    /// Before the fix, this walk never left the Input row: TabIndex 0/1/2 on those three controls
+    /// were compared against the whole window's navigation scope, where every other control carries
+    /// the default (int.MaxValue), so the three sorted ahead of the entire form and the walk cycled
+    /// among them and the shell chrome forever. Stored Files, Output, Options, Create SRR and the
+    /// log were unreachable by keyboard from a cold start.
+    /// </para>
+    /// <para>
+    /// Asserted against the far side of the form specifically, not merely "focus moved": the trap
+    /// moved focus perfectly well, round and round. Reaching the primary action is what proves the
+    /// order goes somewhere.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ColdStartTabWalk_EscapesTheInputRow_AndReachesThePrimaryAction()
+    {
+        const int MaxSteps = 40;   // the documented reproduction used ~30; this leaves headroom
+
+        CreatorViewModel vm = CreateVm();
+
+        // The primary action is command-gated on both paths being set, and a DISABLED button is
+        // correctly skipped by Tab — so without this the walk could pass the action band and the
+        // test would be measuring the command's CanExecute rather than the tab order.
+        vm.InputPath = @"C:\release\movie.sfv";
+        vm.OutputPath = @"C:\release\movie.srr";
+
+        var view = new CreatorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        try
+        {
+            Button createButton = window.GetVisualDescendants().OfType<Button>().Single(b => b.Content is "Create SRR");
+            TextBox inputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "InputTextBox");
+            Assert.True(createButton.IsEffectivelyEnabled,
+                "test precondition: the primary action must be enabled, or Tab skipping it would prove nothing");
+
+            // Cold start: no sentinel, nothing focused — the state a freshly-opened window is in.
+            Assert.Null(window.FocusManager?.GetFocusedElement());
+
+            List<Control> forward = [];
+            int reachedAt = -1;
+            for (int step = 0; step < MaxSteps && reachedAt < 0; step++)
+            {
+                if (CompactViewRig.StepFocus(window, forward: true) is not { } focused)
+                {
+                    break;
+                }
+
+                forward.Add(focused);
+                if (ReferenceEquals(focused, createButton))
+                {
+                    reachedAt = step;
+                }
+            }
+
+            Assert.True(reachedAt >= 0,
+                $"cold-start Tab never reached the Create SRR button in {MaxSteps} steps — the walk was: " +
+                Trail(forward));
+
+            // Reverse from the far side must travel back THROUGH the Input row rather than bouncing
+            // in a cycle of its own — the row is reachable from both directions or it is not
+            // reachable.
+            List<Control> reverse = [];
+            bool reachedInput = false;
+            for (int step = 0; step < MaxSteps && !reachedInput; step++)
+            {
+                if (CompactViewRig.StepFocus(window, forward: false) is not { } focused)
+                {
+                    break;
+                }
+
+                reverse.Add(focused);
+                reachedInput = ReferenceEquals(focused, inputTextBox);
+            }
+
+            Assert.True(reachedInput,
+                $"Shift+Tab from the primary action never returned to the Input path box in {MaxSteps} steps — " +
+                "the walk was: " + Trail(reverse));
+        }
+        finally { window.Close(); }
+    }
+
+    private static string Trail(IEnumerable<Control> walk) =>
+        string.Join(" -> ", walk.Select(CompactViewRig.Describe));
+
+    /// <summary>
+    /// The Input row's own order, which the TabIndex values exist for and which the trap fix must
+    /// not disturb: visual left-to-right is path box, Browse, Browse folder, but DockPanel docks in
+    /// DECLARATION order (rightmost first), so the tree order is the reverse of the visual one.
+    /// That mismatch is what the pins correct — they are not removable, only scopable.
+    /// </summary>
+    [AvaloniaFact]
+    public void InputRow_TabOrderFollowsVisualOrder_NotDeclarationOrder()
+    {
+        CreatorViewModel vm = CreateVm();
+        var view = new CreatorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
+        try
+        {
+            TextBox inputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "InputTextBox");
+            Button browse = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputCommand));
+            Button browseFolder = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputFolderCommand));
+
+            // Premise: visual order really is the reverse of declaration order, or the pins would
+            // have nothing to correct and this test would be asserting an accident.
+            Assert.True(inputTextBox.Bounds.X < browse.Bounds.X && browse.Bounds.X < browseFolder.Bounds.X,
+                "visual order should be path box, Browse, Browse folder");
+
+            inputTextBox.Focus();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(ReferenceEquals(CompactViewRig.StepFocus(window, forward: true), browse),
+                "Tab from the path box must reach Browse");
+            Assert.True(ReferenceEquals(CompactViewRig.StepFocus(window, forward: true), browseFolder),
+                "Tab from Browse must reach Browse folder");
         }
         finally { window.Close(); }
     }
@@ -2883,10 +3012,14 @@ public class CreatorCompactTests
     // separately), a human-readable regression net, NOT the discriminating check itself (that is
     // AssertTabWalk's own reference-based ResolveIndependentExpectedOrder + AssertSameControlSequence,
     // proven to genuinely discriminate by AssertSameControlSequence_SwappedPositions_FailsNamingTheMismatch).
-    // "Add..." (not the visually-first Input row) is genuinely first — see AssertTabWalk's own doc. ──
+    // The Input row leads, matching its visual and tree position — see
+    // ResolveIndependentExpectedOrder's own note on why it used to trail the log instead. ──
 
     private static readonly IReadOnlyList<string> NormalModeTabOrderFixture =
     [
+        "TextBox name=\"Input path\" id=\"InputTextBox\"",
+        "Button name=\"Browse input file\" id=\"\"",
+        "Button name=\"Browse folder for release input\" id=\"\"",
         "Button name=\"Add...\" id=\"\"",
         "Button name=\"Remove\" id=\"\"",
         "Button name=\"Remove All\" id=\"\"",
@@ -2906,14 +3039,14 @@ public class CreatorCompactTests
         "TextBox name=\"\" id=\"\"",
         "Button name=\"Create SRR\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
-        "TextBox name=\"Input path\" id=\"InputTextBox\"",
-        "Button name=\"Browse input file\" id=\"\"",
-        "Button name=\"Browse folder for release input\" id=\"\"",
     ];
 
     private static readonly IReadOnlyList<string> CompactModeTabOrderFixture =
     [
         "ToggleButton name=\"Help\" id=\"\"",
+        "TextBox name=\"Input path\" id=\"InputTextBox\"",
+        "Button name=\"Browse input file\" id=\"\"",
+        "Button name=\"Browse folder for release input\" id=\"\"",
         "Button name=\"Add...\" id=\"\"",
         "Button name=\"Remove\" id=\"\"",
         "Button name=\"Remove All\" id=\"\"",
@@ -2933,8 +3066,5 @@ public class CreatorCompactTests
         "TextBox name=\"\" id=\"\"",
         "Button name=\"Create SRR\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
-        "TextBox name=\"Input path\" id=\"InputTextBox\"",
-        "Button name=\"Browse input file\" id=\"\"",
-        "Button name=\"Browse folder for release input\" id=\"\"",
     ];
 }

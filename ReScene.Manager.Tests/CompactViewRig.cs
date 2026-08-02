@@ -619,7 +619,16 @@ internal static class CompactViewRig
 
     // ── Shared helpers ───────────────────────────────────────────────
 
-    private static Control? StepFocus(Window window, bool forward)
+    /// <summary>
+    /// One real Tab (or Shift+Tab) keystroke, returning whatever holds focus afterwards.
+    /// <para>
+    /// Widened from <c>private</c> so a caller can run a walk this rig's own passes cannot: they
+    /// all start from a focused sentinel, whereas a COLD START — window open, nothing focused,
+    /// user presses Tab — is a different entry point into the tab order and the one a keyboard-only
+    /// user actually meets first. See <c>CreatorCompactTests</c>' cold-start walk.
+    /// </para>
+    /// </summary>
+    internal static Control? StepFocus(Window window, bool forward)
     {
         RawInputModifiers modifiers = forward ? RawInputModifiers.None : RawInputModifiers.Shift;
         window.KeyPressQwerty(PhysicalKey.Tab, modifiers);
