@@ -11,5 +11,8 @@ namespace ReScene.Manager.Views;
 /// </summary>
 public partial class HomeView : UserControl
 {
-    public HomeView() => AvaloniaXamlLoader.Load(this);
+    public HomeView()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
 }

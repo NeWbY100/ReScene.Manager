@@ -12,5 +12,8 @@ namespace ReScene.Manager.Views.Wizards;
 /// </summary>
 public partial class CreateSRRWizardBody : UserControl
 {
-    public CreateSRRWizardBody() => AvaloniaXamlLoader.Load(this);
+    public CreateSRRWizardBody()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
 }

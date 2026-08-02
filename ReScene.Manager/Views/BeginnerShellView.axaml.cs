@@ -17,7 +17,10 @@ namespace ReScene.Manager.Views;
 /// </summary>
 public partial class BeginnerShellView : UserControl
 {
-    public BeginnerShellView() => AvaloniaXamlLoader.Load(this);
+    public BeginnerShellView()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
 
     private void OnCardClick(object? sender, RoutedEventArgs e)
     {

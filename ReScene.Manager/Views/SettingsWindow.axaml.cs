@@ -13,7 +13,10 @@ namespace ReScene.Manager.Views;
 public partial class SettingsWindow : Window
 {
     /// <summary>Parameterless constructor for the XAML designer / loader only.</summary>
-    public SettingsWindow() => AvaloniaXamlLoader.Load(this);
+    public SettingsWindow()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
 
     public SettingsWindow(SettingsViewModel viewModel)
         : this()

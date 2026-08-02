@@ -13,5 +13,8 @@ namespace ReScene.Manager.Views.Wizards;
 /// </summary>
 public partial class EditSRRWizardBody : UserControl
 {
-    public EditSRRWizardBody() => AvaloniaXamlLoader.Load(this);
+    public EditSRRWizardBody()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
 }

@@ -24,7 +24,10 @@ public partial class FieldStatusLine : UserControl
     public static readonly StyledProperty<FieldStatus?> StatusProperty =
         AvaloniaProperty.Register<FieldStatusLine, FieldStatus?>(nameof(Status), FieldStatus.None);
 
-    public FieldStatusLine() => AvaloniaXamlLoader.Load(this);
+    public FieldStatusLine()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
 
     /// <summary>The status to display. Defaults to <see cref="FieldStatus.None"/> (hidden).</summary>
     public FieldStatus? Status

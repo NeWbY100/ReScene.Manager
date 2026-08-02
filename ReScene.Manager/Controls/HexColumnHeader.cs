@@ -48,7 +48,10 @@ internal sealed class HexColumnHeader : Control
     internal static readonly StyledProperty<int> BytesPerLineProperty =
         AvaloniaProperty.Register<HexColumnHeader, int>(nameof(BytesPerLine), 16);
 
-    static HexColumnHeader() => AffectsRender<HexColumnHeader>(BytesPerLineProperty);
+    static HexColumnHeader()
+    {
+        AffectsRender<HexColumnHeader>(BytesPerLineProperty);
+    }
 
     /// <summary>The inner drawing surface this header aligns to, assigned by <see cref="HexView"/>.</summary>
     internal HexViewControl? Inner

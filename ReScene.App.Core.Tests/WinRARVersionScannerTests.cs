@@ -8,7 +8,10 @@ public sealed class WinRARVersionScannerTests : IDisposable
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "wrvs-" + Guid.NewGuid().ToString("N"));
 
-    public WinRARVersionScannerTests() => Directory.CreateDirectory(_root);
+    public WinRARVersionScannerTests()
+    {
+        Directory.CreateDirectory(_root);
+    }
 
     public void Dispose()
     {

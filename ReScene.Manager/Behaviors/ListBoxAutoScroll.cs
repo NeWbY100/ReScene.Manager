@@ -31,7 +31,10 @@ public static class ListBoxAutoScroll
     // The weak key means the entry is collected with the control — no leak, no explicit unhook.
     private static readonly ConditionalWeakTable<ItemsControl, NotifyCollectionChangedEventHandler> _handlers = [];
 
-    static ListBoxAutoScroll() => AutoScrollToEndProperty.Changed.AddClassHandler<ItemsControl>(OnAutoScrollToEndChanged);
+    static ListBoxAutoScroll()
+    {
+        AutoScrollToEndProperty.Changed.AddClassHandler<ItemsControl>(OnAutoScrollToEndChanged);
+    }
 
     private static void OnAutoScrollToEndChanged(ItemsControl itemsControl, AvaloniaPropertyChangedEventArgs e)
     {

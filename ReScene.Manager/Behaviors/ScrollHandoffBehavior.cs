@@ -71,7 +71,10 @@ internal static class ScrollHandoffBehavior
     // the caller's part (same rationale as ListBoxAutoScroll's / ScrollViewerHomeEndKeys' own handler tables).
     private static readonly ConditionalWeakTable<DataGrid, State> _states = [];
 
-    static ScrollHandoffBehavior() => HandoffProperty.Changed.AddClassHandler<Control>(OnHandoffChanged);
+    static ScrollHandoffBehavior()
+    {
+        HandoffProperty.Changed.AddClassHandler<Control>(OnHandoffChanged);
+    }
 
     private static void OnHandoffChanged(Control control, AvaloniaPropertyChangedEventArgs e)
     {

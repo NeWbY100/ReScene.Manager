@@ -11,5 +11,8 @@ namespace ReScene.Manager.Views;
 /// </summary>
 public partial class AdvancedShellView : UserControl
 {
-    public AdvancedShellView() => AvaloniaXamlLoader.Load(this);
+    public AdvancedShellView()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
 }

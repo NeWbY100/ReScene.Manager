@@ -257,7 +257,7 @@ internal static class CompactHeightBehavior
         control.PropertyChanged += Handler;
         state.BoundsHandler = Handler;
 
-        EventHandler layoutHandler = (_, _) => RecaptureFloorAfterLayout(control, state);
+        void layoutHandler(object? _1, EventArgs _2) => RecaptureFloorAfterLayout(control, state);
         control.LayoutUpdated += layoutHandler;
         state.LayoutHandler = layoutHandler;
 

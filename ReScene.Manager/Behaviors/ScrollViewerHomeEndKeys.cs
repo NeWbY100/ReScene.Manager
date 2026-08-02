@@ -32,7 +32,10 @@ public static class ScrollViewerHomeEndKeys
     // rationale as ListBoxAutoScroll's own handler table).
     private static readonly ConditionalWeakTable<ScrollViewer, EventHandler<KeyEventArgs>> _handlers = [];
 
-    static ScrollViewerHomeEndKeys() => EnabledProperty.Changed.AddClassHandler<ScrollViewer>(OnEnabledChanged);
+    static ScrollViewerHomeEndKeys()
+    {
+        EnabledProperty.Changed.AddClassHandler<ScrollViewer>(OnEnabledChanged);
+    }
 
     private static void OnEnabledChanged(ScrollViewer scrollViewer, AvaloniaPropertyChangedEventArgs e)
     {

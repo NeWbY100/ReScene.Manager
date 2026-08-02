@@ -37,7 +37,10 @@ public static class TextBoxDropBehavior
 
     public static void SetDropMode(TextBox obj, DropMode value) => obj.SetValue(DropModeProperty, value);
 
-    static TextBoxDropBehavior() => DropModeProperty.Changed.AddClassHandler<TextBox>(OnDropModeChanged);
+    static TextBoxDropBehavior()
+    {
+        DropModeProperty.Changed.AddClassHandler<TextBox>(OnDropModeChanged);
+    }
 
     private static void OnDropModeChanged(TextBox textBox, AvaloniaPropertyChangedEventArgs e)
     {

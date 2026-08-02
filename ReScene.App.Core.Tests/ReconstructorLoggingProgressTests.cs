@@ -438,13 +438,13 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
         vm.SetImportStateForTest(ImportWith(MakeSet("a", "a.rar"), MakeSet("b", "b.rar")));
 
         var messages = new ConcurrentQueue<string>();
-        PropertyChangedEventHandler handler = (_, e) =>
+        void handler(object? _, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(ReconstructorViewModel.ProgressMessage))
             {
                 messages.Enqueue(vm.ProgressMessage);
             }
-        };
+        }
         vm.PropertyChanged += handler;
 
         int call = 0;
@@ -493,13 +493,13 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
         vm.SetImportStateForTest(ImportWith(MakeSet("a", "a.rar")));
 
         var messages = new ConcurrentQueue<string>();
-        PropertyChangedEventHandler handler = (_, e) =>
+        void handler(object? _, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(ReconstructorViewModel.ProgressMessage))
             {
                 messages.Enqueue(vm.ProgressMessage);
             }
-        };
+        }
         vm.PropertyChanged += handler;
 
         brute.OnRun = o =>

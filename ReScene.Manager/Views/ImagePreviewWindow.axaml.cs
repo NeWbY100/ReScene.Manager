@@ -15,7 +15,10 @@ namespace ReScene.Manager.Views;
 public partial class ImagePreviewWindow : Window
 {
     /// <summary>Parameterless constructor for the XAML loader / designer only.</summary>
-    public ImagePreviewWindow() => AvaloniaXamlLoader.Load(this);
+    public ImagePreviewWindow()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
 
     public ImagePreviewWindow(Bitmap image, string fileName, long byteSize)
         : this()

@@ -17,7 +17,10 @@ namespace ReScene.Manager.Views.Wizards;
 public partial class WizardWindow : Window
 {
     /// <summary>Parameterless constructor for the XAML designer / loader only.</summary>
-    public WizardWindow() => AvaloniaXamlLoader.Load(this);
+    public WizardWindow()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
 
     public WizardWindow(WizardViewModel viewModel, Control body)
         : this()
