@@ -52,7 +52,10 @@ public static class LogListCopy
     // also means detaching only ever clears OUR menu, never one some other code put on the list.
     private static readonly ConditionalWeakTable<ListBox, MenuState> _menus = [];
 
-    static LogListCopy() => EnableProperty.Changed.AddClassHandler<ListBox>(OnEnableChanged);
+    static LogListCopy()
+    {
+        EnableProperty.Changed.AddClassHandler<ListBox>(OnEnableChanged);
+    }
 
     private static void OnEnableChanged(ListBox listBox, AvaloniaPropertyChangedEventArgs e)
     {
@@ -135,7 +138,8 @@ public static class LogListCopy
         // Show the chord next to Copy Line. Resolved here rather than at attach time because the
         // list is not in the visual tree yet when the style setter runs, so there is no TopLevel
         // to ask.
-        state.CopyLine.InputGesture ??= CopyGestures(listBox).FirstOrDefault();
+        IReadOnlyList<KeyGesture> gestures = CopyGestures(listBox);
+        state.CopyLine.InputGesture ??= gestures.Count > 0 ? gestures[0] : null;
     }
 
     private static void OnKeyDown(object? sender, KeyEventArgs e)
