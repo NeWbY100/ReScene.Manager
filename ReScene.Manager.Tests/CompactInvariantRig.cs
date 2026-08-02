@@ -23,6 +23,26 @@ internal static class CompactInvariantRig
     public const double InnerWidth = 676;
 
     /// <summary>
+    /// The most the pinned action band may measure in compact mode. The design's own headroom
+    /// arithmetic (§4: <c>319 − 24 header − 120 config − 80 log − margins ≈ 84</c>) — the space
+    /// genuinely left for the band once every other compact band has taken its declared minimum.
+    /// <para>
+    /// Not the tighter 75 these tests used to carry: that figure came from the per-view compact
+    /// FLOOR targets ("action ≤ 75" in the threshold table), which are design targets for the sum,
+    /// while the bound the spec actually asserts against is this headroom. The 13px content text
+    /// took SRSReconstructor's band to 77 — inside the spec's own bound, outside the tighter one —
+    /// and the binding constraint it protects, the one-sum compact floor against
+    /// <see cref="CiBound"/>, has 10 DIPs of headroom at 13px. See the design doc's 2026-08-02
+    /// note.
+    /// </para>
+    /// <para>
+    /// Still a real guard, not a formality: the bands measure 62–77 across the five views, so a
+    /// band that started genuinely crowding the work area would breach it.
+    /// </para>
+    /// </summary>
+    public const double PinnedBandCeiling = 84;
+
+    /// <summary>
     /// How far above its own switch point a view is hosted when a test just wants it
     /// unambiguously EXPANDED. Comfortably clear of the restore hysteresis (12) without being so
     /// tall that a view stops resembling the small windows this feature is about.

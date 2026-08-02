@@ -44,7 +44,7 @@ public class SmallWindowBoardTests
 
         public FontResourceOverrideScope()
         {
-            Override("ControlContentThemeFontSize", 16.0); // 12 -> 16
+            Override("ControlContentThemeFontSize", 16.0); // 13 -> 16
             Override("FontSizeCaption", 17.0);              // 13 -> 17
             Override("MonoFontSize", 18.0);                 // 14 -> +4
             Override("FontSizeBody", 18.0);                 // 14 -> +4
@@ -78,7 +78,7 @@ public class SmallWindowBoardTests
     private const string FontEnlargedWindowClass = "boardFontEnlargedProbe";
 
     /// <summary>
-    /// The <c>:is(Window)</c> style in Styles.axaml pins unstyled content to FontSize=12 as a
+    /// The <c>:is(Window)</c> style in Styles.axaml pins unstyled content to FontSize=13 as a
     /// plain (non-activator) Style setter — that style's own comment records why a LOCAL VALUE
     /// must never be used to override it: a local value out-prioritizes it, which is exactly the
     /// mechanism behind the shipped 14px regression this repo already fixed once (commit

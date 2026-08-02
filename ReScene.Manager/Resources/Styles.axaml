@@ -209,7 +209,7 @@
     <Setter Property="Background" Value="{DynamicResource AccentPrimary}" />
   </Style>
 
-  <!-- 12px content parity (see the ControlContentThemeFontSize note in Density.axaml). Avalonia's
+  <!-- 13px content text (see the ControlContentThemeFontSize note in Density.axaml). Avalonia's
        DEFAULT FontSize is already 12, so this style is enforcement against default/theme drift
        plus the written contract, not the supply. MUST be :is(Window) — a plain "Window" selector
        matches the style KEY, and every app window is a subclass (MainWindow, SettingsWindow, ...),
@@ -220,7 +220,7 @@
        their themed content follows the Density resource instead. WindowFontSizeParityTests
        enforces the whole map. -->
   <Style Selector=":is(Window)">
-    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontSize" Value="13" />
   </Style>
 
   <!-- WPF parity: v1.9 had NO press animation; Fluent scales Button/ToggleButton/RepeatButton
@@ -628,11 +628,11 @@
        (16 + 2 margin = 18px pitch), accepted as a 2.5.8 deviation scoped to THIS dense version list
        only; invariants: header toggle keeps
        MinHeight >= 24, every leaf stays keyboard-reachable. FontSize 12 is enforcement against
-       theme drift (content is 12 app-wide; see ControlContentThemeFontSize). Brushes remain
+       theme drift (content is 13 app-wide; see ControlContentThemeFontSize). Brushes remain
        untouched throughout, so the original contrast analysis carries. -->
   <Style Selector="Expander.versionGroup CheckBox">
     <Setter Property="MinHeight" Value="16" />
-    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontSize" Value="13" />
   </Style>
   <Style Selector="Expander.versionGroup:expanded /template/ Path#ChevronGlyph">
     <Setter Property="RenderTransform">

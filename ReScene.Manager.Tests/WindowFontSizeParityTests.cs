@@ -7,7 +7,7 @@ using ReScene.App.Core.Services;
 namespace ReScene.Manager.Tests;
 
 /// <summary>
-/// Guards the app-wide 12px content-text parity (user decision, v1.9 WPF parity) against the two
+/// Guards the app-wide 13px content text (user decision 2026-08-02, after comparing 12/13/14; originally 12 for v1.9 WPF parity) against the two
 /// mechanisms that silently broke it once: a root-level <c>FontSize</c> pin on a window (a local
 /// value out-prioritizes the app style and re-inflates every inheriting control), and the
 /// Avalonia style-key trap (a plain <c>Window</c> selector matches no subclassed window — the
@@ -16,7 +16,7 @@ namespace ReScene.Manager.Tests;
 /// here and must be registered explicitly rather than escaping coverage.
 /// </summary>
 /// <remarks>
-/// Expected realized sizes: 12 everywhere, except <see cref="Views.PromptDialog"/> whose root pins
+/// Expected realized sizes: 13 everywhere, except <see cref="Views.PromptDialog"/> whose root pins
 /// FontSizeBody (14) — v1.9's PromptWindow.xaml did the same, so the pin is parity, not drift.
 /// The per-control asserts on MainWindow span all three FontSize-acquisition paths: window
 /// inheritance (TextBox/CheckBox/DataGrid — the families that regressed), theme resource
@@ -31,7 +31,7 @@ public class WindowFontSizeParityTests
         [typeof(Views.PromptDialog)] = 14, // v1.9 parity pin (PromptWindow.xaml:9)
     };
 
-    private const double DefaultExpected = 12;
+    private const double DefaultExpected = 13;
 
     [AvaloniaFact]
     public void EveryWindow_RealizesTheParityFontSize()
@@ -90,14 +90,14 @@ public class WindowFontSizeParityTests
             // Window-inheritance path — the families that regressed to 14 when the root pin
             // masked the app style.
             TextBox pathBox = main.GetVisualDescendants().OfType<TextBox>().First();
-            Assert.Equal(12, pathBox.FontSize);
+            Assert.Equal(13, pathBox.FontSize);
             CheckBox checkBox = main.GetVisualDescendants().OfType<CheckBox>().First();
-            Assert.Equal(12, checkBox.FontSize);
+            Assert.Equal(13, checkBox.FontSize);
 
             // Theme-resource path (ControlContentThemeFontSize in Density.axaml).
             Button browse = main.GetVisualDescendants().OfType<Button>()
                 .First(b => Equals(b.Content, "Browse"));
-            Assert.Equal(12, browse.FontSize);
+            Assert.Equal(13, browse.FontSize);
 
             // Explicit-token path: the tab description caption pins FontSizeCaption (13);
             // the :is(Window) style must not clobber it.
@@ -123,7 +123,7 @@ public class WindowFontSizeParityTests
             Dispatcher.UIThread.RunJobs();
             DataGrid? grid = progress.GetVisualDescendants().OfType<DataGrid>().FirstOrDefault();
             if (grid is not null)
-                Assert.Equal(12, grid.FontSize);
+                Assert.Equal(13, grid.FontSize);
             progress.Close();
         }
         finally

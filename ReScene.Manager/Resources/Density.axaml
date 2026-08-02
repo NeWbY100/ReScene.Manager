@@ -20,16 +20,18 @@
        default (ContentControlThemeFontFamily) so popups/tooltips match the windows. -->
   <FontFamily x:Key="ContentControlThemeFontFamily">Segoe UI, fonts:Inter#Inter, $Default</FontFamily>
 
-  <!-- Content text size — WPF parity, USER DECISION 2026-07-26 ("Let's use 12px"): the old app's
-       TabItem FontSize=12 style INHERITED into all tab content, so v1.9 rendered effectively
-       every content surface at 12px; Fluent's default is 14. NOTE the inverted token semantics
-       this restores (also true in v1.9): FontSizeCaption (13) is INTENTIONALLY larger than the
-       inherited content text (12), and FontSizeBody (14) is not the de facto body size — do not
-       "normalize" content text to FontSizeBody, that silently drifts back to 14. Enlargement path
-       is OS display scaling (per-monitor, honored by Avalonia). A Window-level FontSize style in
-       Styles.axaml covers unstyled TextBlocks; this resource covers every Fluent-themed control
-       including popup-hosted ones (theme resources are app-global). -->
-  <x:Double x:Key="ControlContentThemeFontSize">12</x:Double>
+  <!-- Content text size — USER DECISION 2026-08-02 ("Commit 13px") after a side-by-side of
+       12 (v1.9 WPF parity: the old app's TabItem FontSize=12 style inherited into all tab
+       content), 13, and 14 (Fluent's default). 13 is a deliberate middle: more readable than
+       the WPF-parity 12, without 14's loss of vertical room in small windows. NOTE:
+       FontSizeCaption (13) now EQUALS content text — v1.9's inverted hierarchy (captions
+       larger than content) is intentionally flattened by this choice. FontSizeBody (14) is
+       still not the de facto body size — do not "normalize" content text to FontSizeBody.
+       Enlargement path is OS display scaling (per-monitor, honored by Avalonia). A
+       Window-level FontSize style in Styles.axaml covers unstyled TextBlocks; this resource
+       covers every Fluent-themed control including popup-hosted ones (theme resources are
+       app-global). Tab-strip headers keep their own 12 (TabItem style below, v1.9 parity). -->
+  <x:Double x:Key="ControlContentThemeFontSize">13</x:Double>
 
   <!-- TabItem — WPF: FontSize 12, FontWeight Normal, Padding 12,6, MinHeight 0 (App.xaml:359-394).
        Fluent default: 24px SemiLight, MinHeight 48. TabItemHeaderMargin is consumed as the

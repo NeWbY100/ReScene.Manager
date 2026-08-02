@@ -185,11 +185,12 @@ public class SRSCreatorCompactTests
                 $"compact+HelpOpen floor {floor:F1} must be <= {CompactInvariantRig.CiBound}");
 
             // 4. Pinned band (row 2) is never the budget donor — its natural height stays small
-            // and positive regardless of mode, and within the spec's <=75 ceiling even with
+            // and positive regardless of mode, and within CompactInvariantRig.PinnedBandCeiling even with
             // Cancel + ProgressMessage + ProgressBar all forced visible (ForceWorstCase).
             Control pinnedBand = root.Children.OfType<Control>().Single(c => Grid.GetRow(c) == 2);
-            Assert.True(pinnedBand.DesiredSize.Height is > 0 and <= 75,
-                $"pinned band height {pinnedBand.DesiredSize.Height:F1} out of the expected pinned-row range");
+            Assert.True(pinnedBand.DesiredSize.Height > 0 && pinnedBand.DesiredSize.Height <= CompactInvariantRig.PinnedBandCeiling,
+                $"pinned band height {pinnedBand.DesiredSize.Height:F1} out of the expected pinned-row range " +
+                $"(0, {CompactInvariantRig.PinnedBandCeiling}]");
         }
         finally { window.Close(); }
     }
