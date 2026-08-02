@@ -29,7 +29,7 @@ public partial class SRSReconstructorView : UserControl
         // x:CompileBindings="False" means x:Name elements are NOT wired to auto-generated fields
         // here (same as every other ported view in this project — see SRSCreatorView's own
         // note); resolved once via FindControl instead.
-        Grid root = (Grid)Content!;
+        var root = (Grid)Content!;
         Expander helpDisclosure = this.FindControl<Expander>("HelpDisclosure")!;
         TextBox srsFileTextBox = this.FindControl<TextBox>("SRSFileTextBox")!;
         Behaviors.CompactHeightBehavior.SetThreshold(root, 450);
@@ -45,10 +45,7 @@ public partial class SRSReconstructorView : UserControl
     // DependencyPropertyChangedEventArgs), so the previously-subscribed VM is tracked in a field.
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (_subscribedVm is not null)
-        {
-            _subscribedVm.PropertyChanged -= OnVmPropertyChanged;
-        }
+        _subscribedVm?.PropertyChanged -= OnVmPropertyChanged;
 
         _isoController = null;
         _subscribedVm = DataContext as SRSReconstructorViewModel;

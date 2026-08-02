@@ -506,7 +506,7 @@ public class ReconstructorCompactTests
     /// </summary>
     private static List<Control> ResolveExpectedStops(Window window, IReadOnlyCollection<string> fixture)
     {
-        Dictionary<string, int> expectedCounts = fixture
+        var expectedCounts = fixture
             .GroupBy(description => description)
             .ToDictionary(g => g.Key, g => g.Count());
 
@@ -948,7 +948,7 @@ public class ReconstructorCompactTests
                 oldWindow.Show();
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                 Dispatcher.UIThread.RunJobs();
-                Control oldRow0 = (Control)oldWindow.Content!;
+                var oldRow0 = (Control)oldWindow.Content!;
                 Size oldSize = oldRow0.Bounds.Size;
 
                 // Height must match exactly — this is the visually significant dimension (a
@@ -1010,7 +1010,7 @@ public class ReconstructorCompactTests
             TextWrapping = TextWrapping.Wrap,
         });
 
-        IBrush? secondary = (IBrush?)Application.Current!.FindResource("ForegroundSecondary");
+        var secondary = (IBrush?)Application.Current!.FindResource("ForegroundSecondary");
         var wrap = new WrapPanel { Margin = new Thickness(0, 2, 0, 0) };
         wrap.Children.Add(new TextBlock { Text = "WinRAR versions needed for reconstruction can be downloaded from:", Foreground = secondary, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0), FontSize = (double)Application.Current!.FindResource("FontSizeCaption")! });
         wrap.Children.Add(new Button { Classes = { "link" }, Content = "Extracted files for Windows (ready to use)", FontSize = (double)Application.Current!.FindResource("FontSizeCaption")!, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
@@ -1097,7 +1097,7 @@ public class ReconstructorCompactTests
         bitmap.Render(control);
 
         byte[] buffer = new byte[size.Width * size.Height * 4];
-        GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
         try
         {
             bitmap.CopyPixels(new PixelRect(0, 0, size.Width, size.Height), handle.AddrOfPinnedObject(), buffer.Length, size.Width * 4);

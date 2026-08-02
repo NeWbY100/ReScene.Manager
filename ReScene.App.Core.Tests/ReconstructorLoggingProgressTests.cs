@@ -304,7 +304,7 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
         const int count = 2000;
         using var start = new ManualResetEventSlim(false);
 
-        Task adder = Task.Run(() =>
+        var adder = Task.Run(() =>
         {
             start.Wait();
             for (int i = 0; i < count; i++)
@@ -313,7 +313,7 @@ public sealed class ReconstructorLoggingProgressTests : TempDirTestBase
             }
         });
 
-        Task summariser = Task.Run(() =>
+        var summariser = Task.Run(() =>
         {
             start.Wait();
             // Concurrently snapshot-and-render the summary. An unguarded List<T> would throw

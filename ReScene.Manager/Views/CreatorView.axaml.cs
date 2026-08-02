@@ -59,7 +59,7 @@ public partial class CreatorView : UserControl
         // largest converted view. x:CompileBindings="False" means x:Name elements are NOT wired
         // to auto-generated fields (same as every other ported view in this project) — resolved
         // once via FindControl instead.
-        Grid root = (Grid)Content!;
+        var root = (Grid)Content!;
         Grid configGrid = this.FindControl<Grid>("ConfigGrid")!;
         Expander helpDisclosure = this.FindControl<Expander>("HelpDisclosure")!;
         TextBox outputTextBox = this.FindControl<TextBox>("OutputTextBox")!;
@@ -161,7 +161,7 @@ public partial class CreatorView : UserControl
             return;
         }
 
-        List<string> paths = files
+        var paths = files
             .Select(file => file.TryGetLocalPath())
             .Where(path => !string.IsNullOrEmpty(path))
             .Select(path => path!)

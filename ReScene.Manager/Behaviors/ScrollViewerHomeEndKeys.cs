@@ -30,7 +30,7 @@ public static class ScrollViewerHomeEndKeys
     // Holds each control's subscription so it can be removed if the property is toggled off. The
     // weak key means the entry is collected with the control — no leak, no explicit unhook (same
     // rationale as ListBoxAutoScroll's own handler table).
-    private static readonly ConditionalWeakTable<ScrollViewer, EventHandler<KeyEventArgs>> _handlers = new();
+    private static readonly ConditionalWeakTable<ScrollViewer, EventHandler<KeyEventArgs>> _handlers = [];
 
     static ScrollViewerHomeEndKeys() => EnabledProperty.Changed.AddClassHandler<ScrollViewer>(OnEnabledChanged);
 

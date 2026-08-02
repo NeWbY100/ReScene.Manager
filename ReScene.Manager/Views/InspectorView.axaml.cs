@@ -54,17 +54,11 @@ public partial class InspectorView : UserControl
     {
         base.OnDataContextChanged(e);
 
-        if (_viewModel is not null)
-        {
-            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-        }
+        _viewModel?.PropertyChanged -= OnViewModelPropertyChanged;
 
         _viewModel = DataContext as InspectorViewModel;
 
-        if (_viewModel is not null)
-        {
-            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
-        }
+        _viewModel?.PropertyChanged += OnViewModelPropertyChanged;
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

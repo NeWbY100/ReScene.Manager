@@ -818,7 +818,7 @@ public class SRSCreatorCompactTests
                 oldWindow.Show();
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                 Dispatcher.UIThread.RunJobs();
-                Control oldRow0 = (Control)oldWindow.Content!;
+                var oldRow0 = (Control)oldWindow.Content!;
                 Size oldSize = oldRow0.Bounds.Size;
 
                 // Height must match exactly — the visually significant dimension (a
@@ -889,7 +889,7 @@ public class SRSCreatorCompactTests
                 oldWindow.Show();
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                 Dispatcher.UIThread.RunJobs();
-                Control oldRow0 = (Control)oldWindow.Content!;
+                var oldRow0 = (Control)oldWindow.Content!;
                 Size oldSize = oldRow0.Bounds.Size;
 
                 AssertDriftedSizeFails(new Size(DriftAcrossOneRasterLine(newRowSize.Width), newRowSize.Height));
@@ -1037,7 +1037,7 @@ public class SRSCreatorCompactTests
         bitmap.Render(control);
 
         byte[] buffer = new byte[size.Width * size.Height * 4];
-        GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
         try
         {
             bitmap.CopyPixels(new PixelRect(0, 0, size.Width, size.Height), handle.AddrOfPinnedObject(), buffer.Length, size.Width * 4);

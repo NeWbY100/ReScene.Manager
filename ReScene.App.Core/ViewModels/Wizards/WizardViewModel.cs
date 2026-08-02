@@ -41,11 +41,8 @@ public partial class WizardViewModel : ViewModelBase, IDisposable
     /// <summary>Unsubscribes from the content VM so a closed wizard can be garbage-collected.</summary>
     public void Dispose()
     {
-        if (_contentNotifier is not null)
-        {
-            _contentNotifier.PropertyChanged -= OnContentPropertyChanged;
-            _contentNotifier = null;
-        }
+        _contentNotifier?.PropertyChanged -= OnContentPropertyChanged;
+        _contentNotifier = null;
 
         GC.SuppressFinalize(this);
     }

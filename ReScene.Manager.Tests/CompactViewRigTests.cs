@@ -54,7 +54,7 @@ public class CompactViewRigTests
                 return;
             }
 
-            Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+            var focused = window.FocusManager?.GetFocusedElement() as Control;
             if (ReferenceEquals(focused, a))
             {
                 b.Focus();
@@ -123,7 +123,7 @@ public class CompactViewRigTests
                 return;
             }
 
-            Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+            var focused = window.FocusManager?.GetFocusedElement() as Control;
             if (ReferenceEquals(focused, c))
             {
                 d.Focus();

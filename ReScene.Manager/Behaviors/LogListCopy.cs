@@ -50,7 +50,7 @@ public static class LogListCopy
     // Each list's own menu and its open-time state, held weakly so it dies with the ListBox — no
     // leak, no explicit unhook (same rationale as ListBoxAutoScroll's handler table). Tracking it
     // also means detaching only ever clears OUR menu, never one some other code put on the list.
-    private static readonly ConditionalWeakTable<ListBox, MenuState> _menus = new();
+    private static readonly ConditionalWeakTable<ListBox, MenuState> _menus = [];
 
     static LogListCopy() => EnableProperty.Changed.AddClassHandler<ListBox>(OnEnableChanged);
 
@@ -178,7 +178,7 @@ public static class LogListCopy
     /// </summary>
     private static string? FocusedLine(ListBox listBox)
     {
-        TopLevel? topLevel = TopLevel.GetTopLevel(listBox);
+        var topLevel = TopLevel.GetTopLevel(listBox);
         if ((topLevel?.FocusManager?.GetFocusedElement() as Visual)
             .FindAncestorOfType<ListBoxItem>(includeSelf: true) is not { } container)
         {

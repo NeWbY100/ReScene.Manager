@@ -436,7 +436,7 @@ public class CompactHeightBehaviorTests
             root.Children.Add(scroller);
             Dispatcher.UIThread.RunJobs();
 
-            Button last = (Button)stack.Children[^1];
+            var last = (Button)stack.Children[^1];
             last.Focus();
             scroller.Offset = default;             // scroll the focused button out of view
             Dispatcher.UIThread.RunJobs();

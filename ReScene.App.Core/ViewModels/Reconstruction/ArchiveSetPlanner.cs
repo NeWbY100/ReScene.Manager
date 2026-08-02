@@ -74,7 +74,7 @@ internal static class ArchiveSetPlanner
 
         if (embeddedSfvBytes is { Length: > 0 })
         {
-            SFVFile embedded = SFVFile.ParseBytes(embeddedSfvBytes, tolerant: true);
+            var embedded = SFVFile.ParseBytes(embeddedSfvBytes, tolerant: true);
             var embeddedSnapshot = new VerificationSnapshot(HashType.CRC32,
                 [.. embedded.Entries.Select(e => (e.FileName, e.CRC))]);
 

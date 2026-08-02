@@ -81,7 +81,7 @@ internal static class CompactHeightBehavior
     // stored here (keyed by the owning Grid, root OR descendant) rather than on the state's
     // owner, because a descendant grid never gets its own entry — it is only ever reached
     // by walking the root's visual tree at apply time.
-    private static readonly ConditionalWeakTable<Control, State> _states = new();
+    private static readonly ConditionalWeakTable<Control, State> _states = [];
 
     static CompactHeightBehavior()
     {
@@ -661,13 +661,10 @@ internal static class CompactHeightBehavior
     private static void ApplyHelpExpanderDirection(Control control, State state, bool enteringCompact)
     {
         Expander? expander = GetHelpExpander(control);
-        if (expander is not null)
-        {
-            // Entering compact: collapsed by default (condition-5 reset — re-entering a
-            // compact session never resumes a previous session's open Help). Leaving:
-            // flat mode always renders the body expanded.
-            expander.IsExpanded = !enteringCompact;
-        }
+        // Entering compact: collapsed by default (condition-5 reset — re-entering a
+        // compact session never resumes a previous session's open Help). Leaving:
+        // flat mode always renders the body expanded.
+        expander?.IsExpanded = !enteringCompact;
 
         RecomputeHelpOpen(control, expander, state);
 

@@ -35,10 +35,7 @@ public partial class CreateSRSWizardBody : UserControl
     // tracked in a field (mirrors SRSCreatorView).
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (_subscribedVm is not null)
-        {
-            _subscribedVm.PropertyChanged -= OnVmPropertyChanged;
-        }
+        _subscribedVm?.PropertyChanged -= OnVmPropertyChanged;
 
         _isoController = null;
         _subscribedVm = DataContext as SRSCreatorViewModel;

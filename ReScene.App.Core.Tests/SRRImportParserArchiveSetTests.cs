@@ -14,7 +14,7 @@ public class SRRImportParserArchiveSetTests
 
         Assert.True(File.Exists(srrPath), $"Fixture not found: {srrPath}");
 
-        SRRFile srr = SRRFile.Load(srrPath);
+        var srr = SRRFile.Load(srrPath);
         ImportedSRRInfo info = SRRImportParser.Parse(srr, srrPath);
 
         Assert.Equal(2, info.ArchiveSets.Count);

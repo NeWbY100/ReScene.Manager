@@ -35,10 +35,7 @@ public partial class ReconstructWizardBody : UserControl
     // tracked in a field (mirrors ReconstructorView).
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (_subscribedVm is not null)
-        {
-            _subscribedVm.PropertyChanged -= OnVmPropertyChanged;
-        }
+        _subscribedVm?.PropertyChanged -= OnVmPropertyChanged;
 
         _subscribedVm = DataContext as ReconstructorViewModel;
 

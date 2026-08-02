@@ -37,10 +37,7 @@ public partial class RestoreWizardBody : UserControl
     // tracked in a field (mirrors SRSReconstructorView).
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (_subscribedSingle is not null)
-        {
-            _subscribedSingle.PropertyChanged -= OnSinglePropertyChanged;
-        }
+        _subscribedSingle?.PropertyChanged -= OnSinglePropertyChanged;
 
         _isoController = null;
         _subscribedSingle = (DataContext as BeginnerRestoreViewModel)?.SingleRebuilder;

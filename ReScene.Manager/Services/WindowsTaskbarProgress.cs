@@ -53,7 +53,7 @@ internal sealed class WindowsTaskbarProgress
 
         try
         {
-            Type? comType = Type.GetTypeFromCLSID(_taskbarListClsid);
+            var comType = Type.GetTypeFromCLSID(_taskbarListClsid);
             if (comType is null || Activator.CreateInstance(comType) is not ITaskbarList3 taskbar)
             {
                 return null;

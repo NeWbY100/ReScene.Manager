@@ -20,12 +20,9 @@ public partial class BeginnerRestoreViewModel(IFileDialogService fileDialog) : V
         set
         {
             _bulkRestorer = value;
-            if (value is not null)
-            {
-                // Surface sub-VM changes (e.g. MediaDirectoryPath) as our own, so a hosting
-                // wizard — which only observes this facade — re-evaluates its step gating.
-                value.PropertyChanged += (_, _) => OnPropertyChanged(nameof(BulkRestorer));
-            }
+            // Surface sub-VM changes (e.g. MediaDirectoryPath) as our own, so a hosting
+            // wizard — which only observes this facade — re-evaluates its step gating.
+            value?.PropertyChanged += (_, _) => OnPropertyChanged(nameof(BulkRestorer));
         }
     }
 
@@ -36,10 +33,7 @@ public partial class BeginnerRestoreViewModel(IFileDialogService fileDialog) : V
         set
         {
             _singleRebuilder = value;
-            if (value is not null)
-            {
-                value.PropertyChanged += (_, _) => OnPropertyChanged(nameof(SingleRebuilder));
-            }
+            value?.PropertyChanged += (_, _) => OnPropertyChanged(nameof(SingleRebuilder));
         }
     }
 

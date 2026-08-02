@@ -777,7 +777,7 @@ public sealed class CreatorViewModelFolderModeTests : TempDirTestBase
     public async Task ScannerRootError_SetsErrorStatus_CanCreateFalse_NoEmptyCreation()
     {
         string root = CreateFolder();
-        ReleaseScanResult rootError = ReleaseScanResult.RootError(root, "Access to the path is denied.");
+        var rootError = ReleaseScanResult.RootError(root, "Access to the path is denied.");
         CreatorViewModel vm = CreateVm(new StubReleaseScanner(rootError), out FakeSRRCreationService srr);
         vm.OutputPath = Path.Combine(TempDir, "out.srr");
 

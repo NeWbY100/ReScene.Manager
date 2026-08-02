@@ -69,7 +69,7 @@ internal static class ScrollHandoffBehavior
 
     // Weakly keyed so a grid's state dies with the grid — no leak, no explicit unhook required on
     // the caller's part (same rationale as ListBoxAutoScroll's / ScrollViewerHomeEndKeys' own handler tables).
-    private static readonly ConditionalWeakTable<DataGrid, State> _states = new();
+    private static readonly ConditionalWeakTable<DataGrid, State> _states = [];
 
     static ScrollHandoffBehavior() => HandoffProperty.Changed.AddClassHandler<Control>(OnHandoffChanged);
 

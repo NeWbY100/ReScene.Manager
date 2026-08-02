@@ -786,10 +786,7 @@ public partial class FileCompareViewModel(IFileCompareService compareService, IF
             bool isLeftTarget = targetSelectedField == SelectedLeftTreeNode;
 
             // Deselect previous node
-            if (targetSelectedField is not null)
-            {
-                targetSelectedField.IsSelected = false;
-            }
+            targetSelectedField?.IsSelected = false;
 
             // Use field to avoid re-triggering the property changed handler
             targetSelectedField = match;

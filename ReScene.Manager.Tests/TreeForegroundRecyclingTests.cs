@@ -69,7 +69,7 @@ public class TreeForegroundRecyclingTests
         vm.LeftTreeRoots.Add(new TreeNodeViewModel { Text = "A-plain" });
         Dispatcher.UIThread.RunJobs();
 
-        Color accentError = Color.Parse("#FFF44747");
+        var accentError = Color.Parse("#FFF44747");
         Color black = Colors.Black;
         Assert.Equal(accentError, FgOf("A-diff"));
         Color steadyPlain = FgOf("A-plain"); // Fluent inherited default (White-class today)

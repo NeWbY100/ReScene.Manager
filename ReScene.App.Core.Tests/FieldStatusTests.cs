@@ -14,7 +14,7 @@ public class FieldStatusTests
     [Fact]
     public void Ok_SetsStateAndMessage()
     {
-        FieldStatus status = FieldStatus.Ok("Found 3 volumes");
+        var status = FieldStatus.Ok("Found 3 volumes");
         Assert.Equal(FieldState.Ok, status.State);
         Assert.Equal("Found 3 volumes", status.Message);
     }

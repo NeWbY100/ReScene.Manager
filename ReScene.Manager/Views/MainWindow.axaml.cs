@@ -127,11 +127,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_taskbarVm is not null)
-        {
-            _taskbarVm.PropertyChanged -= OnTaskbarPropertyChanged;
-            _taskbarVm = null;
-        }
+        _taskbarVm?.PropertyChanged -= OnTaskbarPropertyChanged;
+        _taskbarVm = null;
 
         _taskbarProgress?.Clear();
         _taskbarProgress = null;

@@ -124,10 +124,7 @@ public partial class ReconstructorViewModel : ViewModelBase
         ApplyPathDefaultsFromSettings();
         RefreshPathStatuses();
 
-        if (_settingsService is not null)
-        {
-            _settingsService.Changed += OnSettingsChanged;
-        }
+        _settingsService?.Changed += OnSettingsChanged;
     }
 
     /// <summary>
@@ -2018,7 +2015,7 @@ public partial class ReconstructorViewModel : ViewModelBase
 
         try
         {
-            SRRFile srr = SRRFile.Load(srrPath);
+            var srr = SRRFile.Load(srrPath);
             return srr.ReadStoredFile(srrPath, name => EmbeddedSfvMatchesSet(name, set));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)

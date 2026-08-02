@@ -37,7 +37,7 @@ public partial class ReconstructorView : UserControl
         // x:CompileBindings="False" means x:Name elements are NOT wired to auto-generated fields
         // here (same as every other ported view in this project — see BruteForceProgressWindow's
         // own note); resolved once via FindControl instead.
-        Grid root = (Grid)Content!;
+        var root = (Grid)Content!;
         Expander helpDisclosure = this.FindControl<Expander>("HelpDisclosure")!;
         Button windowsPackLink = this.FindControl<Button>("WindowsPackLink")!;
         Behaviors.CompactHeightBehavior.SetThreshold(root, 421);
@@ -51,10 +51,7 @@ public partial class ReconstructorView : UserControl
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (_subscribedVm is not null)
-        {
-            _subscribedVm.PropertyChanged -= OnVmPropertyChanged;
-        }
+        _subscribedVm?.PropertyChanged -= OnVmPropertyChanged;
 
         _subscribedVm = DataContext as ReconstructorViewModel;
 

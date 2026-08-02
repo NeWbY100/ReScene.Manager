@@ -23,7 +23,7 @@ public class ArchiveSetEmbeddedSfvTests
     {
         Assert.True(File.Exists(FixturePath), $"Fixture not found: {FixturePath}");
 
-        SRRFile srr = SRRFile.Load(FixturePath);
+        var srr = SRRFile.Load(FixturePath);
         Assert.Equal(2, srr.ArchiveSets.Count);
 
         var crcMaps = new Dictionary<string, Dictionary<string, string>>();

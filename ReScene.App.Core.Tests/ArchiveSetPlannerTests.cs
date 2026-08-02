@@ -567,7 +567,7 @@ public class ArchiveSetPlannerTests
             "007.A.View.To.A.Kill.1985.UE.iNTERNAL.DVDRip.XviD-iNCiTE.fine_2cd.srr");
         Assert.True(File.Exists(srrPath), $"Fixture not found: {srrPath}");
 
-        SRRFile srr = SRRFile.Load(srrPath);
+        var srr = SRRFile.Load(srrPath);
         Assert.Equal(2, srr.ArchiveSets.Count);
 
         SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings();

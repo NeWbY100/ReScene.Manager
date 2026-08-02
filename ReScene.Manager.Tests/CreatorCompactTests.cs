@@ -1245,7 +1245,7 @@ public class CreatorCompactTests
                 oldWindow.Show();
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                 Dispatcher.UIThread.RunJobs();
-                Control oldRow0 = (Control)oldWindow.Content!;
+                var oldRow0 = (Control)oldWindow.Content!;
                 Size oldSize = oldRow0.Bounds.Size;
 
                 Assert.Equal(oldSize.Height, newRowSize.Height, precision: 0);
@@ -1301,7 +1301,7 @@ public class CreatorCompactTests
                 oldWindow.Show();
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                 Dispatcher.UIThread.RunJobs();
-                Control oldCaption = (Control)oldWindow.Content!;
+                var oldCaption = (Control)oldWindow.Content!;
                 Size oldSize = oldCaption.Bounds.Size;
 
                 Assert.Equal(oldSize.Height, newCaptionSize.Height, precision: 0);
@@ -1849,7 +1849,7 @@ public class CreatorCompactTests
     private static Window BuildPreConversionInputCaptionWindow()
     {
         var textBlock = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 2) };
-        IBrush? secondary = (IBrush?)Application.Current!.FindResource("ForegroundSecondary");
+        var secondary = (IBrush?)Application.Current!.FindResource("ForegroundSecondary");
         double captionSize = (double)Application.Current!.FindResource("FontSizeCaption")!;
         textBlock.Inlines!.Add(new Run { Text = "Input ", FontWeight = FontWeight.SemiBold });
         textBlock.Inlines!.Add(new Run { Text = " " });
@@ -1891,7 +1891,7 @@ public class CreatorCompactTests
                 oldWindow.Show();
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                 Dispatcher.UIThread.RunJobs();
-                Control oldRow0 = (Control)oldWindow.Content!;
+                var oldRow0 = (Control)oldWindow.Content!;
                 Size oldSize = oldRow0.Bounds.Size;
 
                 AssertDriftedSizeFails(new Size(DriftAcrossOneRasterLine(newRowSize.Width), newRowSize.Height));
@@ -1974,7 +1974,7 @@ public class CreatorCompactTests
         bitmap.Render(control);
 
         byte[] buffer = new byte[size.Width * size.Height * 4];
-        GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
         try
         {
             bitmap.CopyPixels(new PixelRect(0, 0, size.Width, size.Height), handle.AddrOfPinnedObject(), buffer.Length, size.Width * 4);
@@ -2647,7 +2647,7 @@ public class CreatorCompactTests
                 // run that MOVED focus away score as a pass — permitting exactly the focus theft
                 // the shared behavior is required never to commit. Every state in this sequence is
                 // recoverable by scrolling the config band, so focus moving is a FAILURE.
-                Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+                var focused = window.FocusManager?.GetFocusedElement() as Control;
                 Assert.True(ReferenceEquals(focused, splitter),
                     $"at inner height {targetInner}, the splitter must STILL hold focus — this shrink is " +
                     "recoverable by scrolling, so moving focus away is theft, not a recovery (focus is now " +
@@ -2678,7 +2678,7 @@ public class CreatorCompactTests
         bitmap.Render(window);
 
         byte[] buffer = new byte[size.Width * size.Height * 4];
-        GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
         try
         {
             bitmap.CopyPixels(new PixelRect(0, 0, size.Width, size.Height), handle.AddrOfPinnedObject(), buffer.Length, size.Width * 4);

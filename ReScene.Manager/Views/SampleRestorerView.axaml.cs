@@ -51,7 +51,7 @@ public partial class SampleRestorerView : UserControl
         // pre-conversion DockPanel). x:CompileBindings="False" means x:Name elements are NOT
         // wired to auto-generated fields here (same as every other ported view in this project) —
         // resolved once via FindControl instead.
-        Grid root = (Grid)Content!;
+        var root = (Grid)Content!;
         Expander helpDisclosure = this.FindControl<Expander>("HelpDisclosure")!;
         TextBox srrFileTextBox = this.FindControl<TextBox>("SRRFileTextBox")!;
         Behaviors.CompactHeightBehavior.SetThreshold(root, 535);

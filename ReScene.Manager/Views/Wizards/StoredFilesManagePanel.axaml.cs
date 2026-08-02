@@ -53,7 +53,7 @@ public partial class StoredFilesManagePanel : UserControl
             return;
         }
 
-        Visual? source = e.Source as Visual;
+        var source = e.Source as Visual;
         if (FindAncestor<DataGridRow>(source) is not null
             || FindAncestor<ScrollBar>(source) is not null
             || FindAncestor<DataGridColumnHeader>(source) is not null)

@@ -29,7 +29,7 @@ public static class ListBoxAutoScroll
 
     // Holds each control's subscription so it can be removed if the property is toggled off.
     // The weak key means the entry is collected with the control — no leak, no explicit unhook.
-    private static readonly ConditionalWeakTable<ItemsControl, NotifyCollectionChangedEventHandler> _handlers = new();
+    private static readonly ConditionalWeakTable<ItemsControl, NotifyCollectionChangedEventHandler> _handlers = [];
 
     static ListBoxAutoScroll() => AutoScrollToEndProperty.Changed.AddClassHandler<ItemsControl>(OnAutoScrollToEndChanged);
 

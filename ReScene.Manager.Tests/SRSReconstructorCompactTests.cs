@@ -997,7 +997,7 @@ public class SRSReconstructorCompactTests
                 oldWindow.Show();
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                 Dispatcher.UIThread.RunJobs();
-                Control oldRow0 = (Control)oldWindow.Content!;
+                var oldRow0 = (Control)oldWindow.Content!;
                 Size oldSize = oldRow0.Bounds.Size;
 
                 Assert.Equal(oldSize.Height, newRowSize.Height, precision: 0);
@@ -1043,7 +1043,7 @@ public class SRSReconstructorCompactTests
                 oldWindow.Show();
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                 Dispatcher.UIThread.RunJobs();
-                Control oldRow0 = (Control)oldWindow.Content!;
+                var oldRow0 = (Control)oldWindow.Content!;
                 Size oldSize = oldRow0.Bounds.Size;
 
                 AssertDriftedSizeFails(new Size(DriftAcrossOneRasterLine(newRowSize.Width), newRowSize.Height));
@@ -1147,7 +1147,7 @@ public class SRSReconstructorCompactTests
         bitmap.Render(control);
 
         byte[] buffer = new byte[size.Width * size.Height * 4];
-        GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
         try
         {
             bitmap.CopyPixels(new PixelRect(0, 0, size.Width, size.Height), handle.AddrOfPinnedObject(), buffer.Length, size.Width * 4);

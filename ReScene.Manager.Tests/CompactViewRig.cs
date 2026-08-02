@@ -545,7 +545,7 @@ internal static class CompactViewRig
         const int MaxSteps = 400;
         for (int step = 0; step < MaxSteps; step++)
         {
-            Control? focused = window.FocusManager?.GetFocusedElement() as Control;
+            var focused = window.FocusManager?.GetFocusedElement() as Control;
             if (ReferenceEquals(focused, target))
             {
                 if (!IsFullyVisibleWithinWindow(target, window))

@@ -127,11 +127,11 @@ internal sealed record VerificationSnapshot(HashType HashType, IReadOnlyList<(st
     {
         if (Path.GetExtension(path).Equals(".sha1", StringComparison.OrdinalIgnoreCase))
         {
-            SHA1File sha1 = SHA1File.ReadFile(path);
+            var sha1 = SHA1File.ReadFile(path);
             return new VerificationSnapshot(HashType.SHA1, [.. sha1.Entries.Select(e => (e.FileName, e.SHA1))]);
         }
 
-        SFVFile sfv = SFVFile.ReadFile(path);
+        var sfv = SFVFile.ReadFile(path);
         return new VerificationSnapshot(HashType.CRC32, [.. sfv.Entries.Select(e => (e.FileName, e.CRC))]);
     }
 }

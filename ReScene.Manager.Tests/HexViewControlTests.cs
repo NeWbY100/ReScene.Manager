@@ -37,7 +37,7 @@ public class HexViewControlTests
     private static int CountNonTransparentPixels(RenderTargetBitmap bitmap, int width, int height)
     {
         byte[] buffer = new byte[width * height * 4];
-        GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
         try
         {
             bitmap.CopyPixels(new PixelRect(0, 0, width, height), handle.AddrOfPinnedObject(), buffer.Length, width * 4);
