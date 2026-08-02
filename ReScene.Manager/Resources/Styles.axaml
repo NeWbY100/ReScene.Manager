@@ -622,7 +622,7 @@
       </ControlTemplate>
     </Setter>
   </Style>
-  <!-- v1.9 leaf density (user-measured: old pitch 18px, new 22px). The 14px GLYPH half of this
+  <!-- v1.9 leaf density (user-measured v1.9 pitch 18px; 20px here since the 13px content text sized the rows past MinHeight 16). The 14px GLYPH half of this
        treatment was promoted app-wide 2026-07-29 (global CheckBox template styles above +
        CheckBoxGlyphSize token) — what stays scoped here is the DENSITY half: MinHeight 16 rows
        (16 + 2 margin = 18px pitch), accepted as a 2.5.8 deviation scoped to THIS dense version list

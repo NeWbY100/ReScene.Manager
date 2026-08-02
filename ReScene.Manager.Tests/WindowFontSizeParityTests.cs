@@ -106,7 +106,7 @@ public class WindowFontSizeParityTests
             Assert.Equal(13, caption.FontSize);
 
             // Element-pin path: v1.9 deliberately emphasized primary content at Body (14) over
-            // the 12px chrome — the Inspector tree carries that pin. Guards against a future
+            // the smaller chrome text (now 13) — the Inspector tree carries that pin. Guards against a future
             // "cleanup" of redundant-looking pins silently flattening the v1.9 hierarchy.
             tabs.SelectedIndex = 1; // Inspector
             Dispatcher.UIThread.RunJobs();
