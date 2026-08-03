@@ -60,9 +60,13 @@
                Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
         </TextBlock>
         <DockPanel>
+          <!-- "Browse for <target>", target from this row's own visible caption subject — see
+               SampleRestorerView's first Browse button for the convention and the WCAG 2.5.3
+               reasoning that makes it safe here (Content is the bare word "Browse"). -->
           <Button DockPanel.Dock="Right" Content="Browse"
                   Command="{Binding BrowseInputCommand}"
                   Classes="ghost"
+                  AutomationProperties.Name="Browse for sample file"
                   Margin="4,0,0,0" MinWidth="75" />
           <TextBox x:Name="InputTextBox" Text="{Binding InputPath}"
                    AutomationProperties.Name="Sample file path"
@@ -102,6 +106,7 @@
           <Button DockPanel.Dock="Right" Content="Browse"
                   Command="{Binding BrowseMainFileCommand}"
                   Classes="ghost"
+                  AutomationProperties.Name="Browse for main file"
                   Margin="4,0,0,0" MinWidth="75" />
           <Button DockPanel.Dock="Right" Content="Clear"
                   Command="{Binding ClearMainFileCommand}"
@@ -124,9 +129,15 @@
                Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
         </TextBlock>
         <DockPanel>
+          <!-- "Browse for output path" VERBATIM from CreatorView, the Create-SRR wizard and
+               SRSReconstructorView: four surfaces, one function (choose where the output file is
+               written), so one name (WCAG 3.2.4). The Reconstructor's own output picker reads
+               "Browse for output folder" instead, and that is not an inconsistency — it picks a
+               DIRECTORY, which is a different thing to choose. -->
           <Button DockPanel.Dock="Right" Content="Browse"
                   Command="{Binding BrowseOutputCommand}"
                   Classes="ghost"
+                  AutomationProperties.Name="Browse for output path"
                   Margin="4,0,0,0" MinWidth="75" />
           <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}"
                    AutomationProperties.Name="Output path"

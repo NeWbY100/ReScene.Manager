@@ -524,8 +524,8 @@ public class CreatorCompactTests
     /// Independent ground truth for this view's tab order — each entry resolved by a UNIQUE
     /// identifier (bound <c>RelayCommand</c> reference for Buttons, x:Name or a distinguishing
     /// attribute for TextBoxes/the DataGrid, the sole GridSplitter, distinct Content strings for
-    /// the option CheckBoxes), NEVER by re-deriving from a walk's own observed output. Unlike
-    /// SRSCreator/SampleRestorer, this view's three "Browse"-labelled buttons do NOT collide by
+    /// the option CheckBoxes), NEVER by re-deriving from a walk's own observed output. This view's
+    /// three "Browse"-labelled buttons do NOT collide by
     /// description — all three carry distinct explicit AutomationProperties.Name values
     /// ("Browse for input file", "Browse folder for release input", "Browse for output path"); the
     /// output one gained its name after this comment was first written, when two of the three were

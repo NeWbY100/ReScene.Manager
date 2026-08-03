@@ -413,6 +413,110 @@ public class AccessibleNamingTests
     }
 
     /// <summary>
+    /// The nine Browse buttons that still announced the bare word "Browse" after the first naming
+    /// pass — three each in SampleRestorer, SRSCreator and SRSReconstructor. One literal per
+    /// button, each resolved by its bound command.
+    /// <para>
+    /// The target in each name comes from that row's OWN visible caption subject, which is why
+    /// SampleRestorer says "directory" (its captions read "Media Directory"/"Output Directory")
+    /// where SRSReconstructor says "file" (its caption reads "Media File"). The shared phrasing is
+    /// safe for all nine under WCAG 2.5.3 precisely because each renders the bare word "Browse" —
+    /// asserted below alongside the names, since that is the condition that makes the convention
+    /// applicable rather than a coincidence.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void SiblingViews_BrowseButtons_UseTheSharedConvention()
+    {
+        BeginnerShellViewModel shell = BeginnerShellTestFactory.Create();
+
+        SampleRestorerViewModel restorerVm = shell.Restore.BulkRestorer!;
+        Window restorer = Host(new SampleRestorerView { DataContext = restorerVm });
+        try
+        {
+            AssertBrowseButton(restorer, restorerVm.BrowseSRRCommand, "Browse for SRR file");
+            AssertBrowseButton(restorer, restorerVm.BrowseMediaDirectoryCommand, "Browse for media directory");
+            AssertBrowseButton(restorer, restorerVm.BrowseOutputDirectoryCommand, "Browse for output directory");
+        }
+        finally { restorer.Close(); }
+
+        SRSCreatorViewModel srsCreatorVm = shell.SRSCreator;
+        Window srsCreator = Host(new SRSCreatorView { DataContext = srsCreatorVm });
+        try
+        {
+            AssertBrowseButton(srsCreator, srsCreatorVm.BrowseInputCommand, "Browse for sample file");
+            AssertBrowseButton(srsCreator, srsCreatorVm.BrowseMainFileCommand, "Browse for main file");
+            AssertBrowseButton(srsCreator, srsCreatorVm.BrowseOutputCommand, "Browse for output path");
+        }
+        finally { srsCreator.Close(); }
+
+        SRSReconstructorViewModel rebuilderVm = shell.Restore.SingleRebuilder!;
+        Window rebuilder = Host(new SRSReconstructorView { DataContext = rebuilderVm });
+        try
+        {
+            AssertBrowseButton(rebuilder, rebuilderVm.BrowseSRSCommand, "Browse for SRS file");
+            AssertBrowseButton(rebuilder, rebuilderVm.BrowseMediaCommand, "Browse for media file");
+            AssertBrowseButton(rebuilder, rebuilderVm.BrowseOutputCommand, "Browse for output path");
+        }
+        finally { rebuilder.Close(); }
+    }
+
+    /// <summary>
+    /// Asserts one Browse button's literal name AND the Label-in-Name condition that licenses the
+    /// shared phrasing: its visible Content must be the bare word, and the accessible name must
+    /// contain it (WCAG 2.5.3). If someone ever changes a Content to "Browse folder…" the way
+    /// CreatorView's does, this fails rather than letting the convention quietly break a level-A
+    /// criterion.
+    /// </summary>
+    private static void AssertBrowseButton(Window window, System.Windows.Input.ICommand command, string expectedName)
+    {
+        Button button = ByCommand(window, command);
+        Assert.Equal("Browse", button.Content as string);
+        Assert.Equal(expectedName, PeerName(button));
+        Assert.StartsWith("Browse", PeerName(button), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// WCAG 3.2.4 across the four surfaces that pick an output FILE path: CreatorView, the
+    /// Create-SRR wizard, SRSCreatorView and SRSReconstructorView all say "Browse for output path".
+    /// All four are compared against one literal rather than against each other, so the test cannot
+    /// pass by them drifting together.
+    /// <para>
+    /// The Reconstructor's own output picker deliberately reads "Browse for output folder" and is
+    /// asserted to DIFFER — it chooses a directory, which is a different thing to choose, and
+    /// collapsing the two would be false consistency rather than 3.2.4 compliance.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void OutputPathPickers_ShareOneName_AndTheFolderPickerDeliberatelyDiffers()
+    {
+        const string PathName = "Browse for output path";
+        const string FolderName = "Browse for output folder";
+
+        BeginnerShellViewModel shell = BeginnerShellTestFactory.Create();
+
+        Window creator = Host(new CreatorView { DataContext = shell.CreateSRRWizard });
+        try { Assert.Equal(PathName, PeerName(ByCommand(creator, shell.CreateSRRWizard.BrowseOutputCommand))); }
+        finally { creator.Close(); }
+
+        Window srsCreator = Host(new SRSCreatorView { DataContext = shell.SRSCreator });
+        try { Assert.Equal(PathName, PeerName(ByCommand(srsCreator, shell.SRSCreator.BrowseOutputCommand))); }
+        finally { srsCreator.Close(); }
+
+        Window rebuilder = Host(new SRSReconstructorView { DataContext = shell.Restore.SingleRebuilder });
+        try { Assert.Equal(PathName, PeerName(ByCommand(rebuilder, shell.Restore.SingleRebuilder!.BrowseOutputCommand))); }
+        finally { rebuilder.Close(); }
+
+        Window reconstructor = Host(new ReconstructorView { DataContext = shell.Reconstructor });
+        try
+        {
+            Assert.Equal(FolderName, PeerName(ByCommand(reconstructor, shell.Reconstructor.BrowseOutputCommand)));
+            Assert.NotEqual(PathName, FolderName);
+        }
+        finally { reconstructor.Close(); }
+    }
+
+    /// <summary>
     /// The ISO picker only exists while an ISO is the source, so it is not in any tab-order fixture
     /// and needs its own coverage. LabeledBy its "File inside ISO:" caption, so — like the App-name
     /// boxes — the announced value is the caption verbatim.

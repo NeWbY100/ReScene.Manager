@@ -413,12 +413,12 @@ public class SampleRestorerCompactTests
     /// ORDER-ORACLE standard (project house rule, blocking if violated): the expected stop
     /// sequence is resolved INDEPENDENTLY, up front, by unique identity (bound command for
     /// Buttons, x:Name for TextBoxes, DataContext reference for the grid's own CheckBoxes) —
-    /// never derived from a walk's own observed output. This view has THREE identically-described
-    /// "Browse" buttons (SRR/Media/Output) AND every row's checkbox describes identically too
-    /// (same AutomationProperties.Name, no x:Name) — <see cref="AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch"/>
-    /// proves the discrimination directly against the Browse buttons; the SAME reference-equality
-    /// mechanism (not a separate test) would equally catch a checkbox-position defect, since it
-    /// checks every position, including the grid's own two, not just the three Browse buttons.
+    /// never derived from a walk's own observed output. This view's three "Browse" buttons used to
+    /// describe identically as well, and no longer do — they carry distinct names now. Every row
+    /// checkbox still does (same AutomationProperties.Name, no x:Name), which is what
+    /// <see cref="AssertSameControlSequence_SwappedIdenticallyDescribedRowCheckboxes_FailsNamingTheMismatch"/>
+    /// selects on to prove the discrimination directly. The SAME reference-equality mechanism (not
+    /// a separate test) covers every other position too, since it checks all of them.
     /// <para>
     /// Uses a SMALL, deliberately fully-realized SRSEntries count (2) — see this class's own
     /// remarks on why a virtualization-dependent count would make the grid's own tab-stop
@@ -543,12 +543,25 @@ public class SampleRestorerCompactTests
     /// <summary>
     /// Proves <see cref="AssertSameControlSequence"/> — and therefore <see cref="AssertTabWalk"/>'s
     /// own forward/reverse checks — is genuinely sensitive to a PERMUTATION of identically-
-    /// described controls, not just to controls going missing. Mirrors
-    /// SRSReconstructorCompactTests' own identical covering test against this view's own three
-    /// identically-described "Browse" buttons.
+    /// described controls, not just to controls going missing.
+    /// <para>
+    /// RE-POINTED, not redesigned. This used to swap two of this view's three "Browse" buttons,
+    /// which described identically because none carried a name. Naming all nine bare Browse
+    /// buttons across the three sibling views removed that pair. Unlike the Reconstructor and the
+    /// two SRS views — which were left with no identically-described pair at all, and whose
+    /// equivalents had to be split into a positional test plus a constructed-pair test — THIS view
+    /// still has a real one: the SRS grid's per-row checkboxes all carry the same
+    /// <c>AutomationProperties.Name</c> ("Restore this sample") and no x:Name, so two rows are
+    /// genuinely indistinguishable to the description channel while being different objects.
+    /// </para>
+    /// <para>
+    /// The pair's indistinguishability is ASSERTED here rather than assumed, which is the whole
+    /// point of re-pointing carefully: if the grid ever gained a per-row distinguisher this test
+    /// would be proving nothing, and it says so instead of passing quietly.
+    /// </para>
     /// </summary>
     [AvaloniaFact]
-    public void AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch()
+    public void AssertSameControlSequence_SwappedIdenticallyDescribedRowCheckboxes_FailsNamingTheMismatch()
     {
         SampleRestorerViewModel vm = CreateVm();
         SetPathsForCanRestore(vm);
@@ -572,17 +585,29 @@ public class SampleRestorerCompactTests
 
             IReadOnlyList<Control> forwardOrder = CompactViewRig.CaptureTabOrderControls(window, root, independentOrder).Order;
 
-            List<int> browseIndexes = [.. Enumerable.Range(0, independentOrder.Count)
-                .Where(i => CompactViewRig.Describe(independentOrder[i]) == "Button name=\"Browse\" id=\"\"")];
-            Assert.True(browseIndexes.Count >= 2, "this covering test requires at least 2 identically-described Browse buttons to swap");
+            List<int> rowCheckboxIndexes = [.. Enumerable.Range(0, independentOrder.Count)
+                .Where(i => CompactViewRig.Describe(independentOrder[i]) == "CheckBox name=\"Restore this sample\" id=\"\"")];
+            Assert.True(rowCheckboxIndexes.Count >= 2,
+                "this covering test requires at least 2 identically-described row checkboxes to swap — if the grid gained a " +
+                "per-row distinguisher, this test proves nothing about description-blind comparison and must be redesigned, " +
+                "not silently re-pointed");
+
+            // The premise, asserted: the two really are indistinguishable to the description
+            // channel, and really are different objects. Both halves matter — identical
+            // descriptions make the swap invisible to a string comparison, and distinct references
+            // are what AssertSameControlSequence is supposed to notice.
+            Assert.Equal(
+                CompactViewRig.Describe(independentOrder[rowCheckboxIndexes[0]]),
+                CompactViewRig.Describe(independentOrder[rowCheckboxIndexes[1]]));
+            Assert.False(ReferenceEquals(independentOrder[rowCheckboxIndexes[0]], independentOrder[rowCheckboxIndexes[1]]));
 
             List<Control> tampered = [.. independentOrder];
-            (tampered[browseIndexes[0]], tampered[browseIndexes[1]]) = (tampered[browseIndexes[1]], tampered[browseIndexes[0]]);
+            (tampered[rowCheckboxIndexes[0]], tampered[rowCheckboxIndexes[1]]) = (tampered[rowCheckboxIndexes[1]], tampered[rowCheckboxIndexes[0]]);
 
             Xunit.Sdk.FailException ex = Assert.Throws<Xunit.Sdk.FailException>(
                 () => AssertSameControlSequence(tampered, forwardOrder, "forward"));
 
-            Assert.Contains($"position {browseIndexes[0]}", ex.Message, StringComparison.Ordinal);
+            Assert.Contains($"position {rowCheckboxIndexes[0]}", ex.Message, StringComparison.Ordinal);
             Assert.Contains("same description does not mean same control instance", ex.Message, StringComparison.Ordinal);
 
             // The untampered, genuinely independent expectation still passes against the SAME
@@ -1454,17 +1479,19 @@ public class SampleRestorerCompactTests
     // the finished view). Each entry
     // is CompactViewRig.Describe's own format (real automation peer name plus x:Name, reported
     // separately) — a human-readable regression net, NOT the discriminating check itself.
-    // Same-typed siblings that describe identically (the three "Browse" buttons, both grid row
-    // checkboxes) are disambiguated by AssertTabWalk's OWN independent, reference-based checks.
-    // All three picker TextBoxes now carry an explicit AutomationProperties.Name: SRRFileTextBox
+    // Same-typed siblings that describe identically (both grid row checkboxes) are disambiguated
+    // by AssertTabWalk's OWN independent, reference-based checks.
+    // All three picker TextBoxes carry an explicit AutomationProperties.Name: SRRFileTextBox
     // gained "SRR file path" during the compact-layout work, and MediaDirTextBox/OutputDirTextBox
     // — recorded here at the time as untouched pre-existing a11y debt — gained "Media directory
     // path"/"Output directory path" in the naming pass, following the same "<subject> path"
     // convention with each subject taken from that row's own visible caption.
-    // The three "Browse" buttons are deliberately NOT renamed: unlike the Reconstructor's four,
-    // which the Reconstruct wizard already had names for, these have no cross-surface twin to
-    // stay consistent with, and inventing three new strings is a wider change than this pass
-    // took on. They remain the identically-described siblings the covering test selects on. ──
+    // The three "Browse" buttons WERE deliberately left bare in that pass, and are now named too
+    // ("Browse for SRR file"/"…media directory"/"…output directory"), closing the WCAG 3.2.4
+    // asymmetry that pass left behind — the same function announced "Browse for <target>" in the
+    // Reconstructor and the Creator and a bare "Browse" here. They are therefore no longer the
+    // identically-described siblings the covering test selects on; it now selects on the grid's
+    // per-row checkboxes, which genuinely still describe identically. ──
 
     /// <summary>
     /// Normal mode, starting at SRR File's own Browse button — PROVEN first (not presumed): the
@@ -1473,11 +1500,11 @@ public class SampleRestorerCompactTests
     /// </summary>
     private static readonly IReadOnlyList<string> NormalModeTabOrderFixture =
     [
-        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Browse for SRR file\" id=\"\"",
         "TextBox name=\"SRR file path\" id=\"SRRFileTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Browse for media directory\" id=\"\"",
         "TextBox name=\"Media directory path\" id=\"MediaDirTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Browse for output directory\" id=\"\"",
         "TextBox name=\"Output directory path\" id=\"OutputDirTextBox\"",
         "DataGrid name=\"Embedded SRS Files\" id=\"SRSEntriesGrid\"",
         "CheckBox name=\"Restore this sample\" id=\"\"",
@@ -1494,11 +1521,11 @@ public class SampleRestorerCompactTests
     private static readonly IReadOnlyList<string> CompactModeTabOrderFixture =
     [
         "ToggleButton name=\"Help\" id=\"\"",
-        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Browse for SRR file\" id=\"\"",
         "TextBox name=\"SRR file path\" id=\"SRRFileTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Browse for media directory\" id=\"\"",
         "TextBox name=\"Media directory path\" id=\"MediaDirTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Browse for output directory\" id=\"\"",
         "TextBox name=\"Output directory path\" id=\"OutputDirTextBox\"",
         "DataGrid name=\"Embedded SRS Files\" id=\"SRSEntriesGrid\"",
         "CheckBox name=\"Restore this sample\" id=\"\"",

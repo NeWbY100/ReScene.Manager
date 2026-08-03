@@ -1175,3 +1175,167 @@ confirms.
    SampleRestorer) and two delegating to the rig (SRSCreator, SRSReconstructor). That is more
    consistent than before in behaviour and less consistent in shape. Converging the other two is a
    small, safe follow-up that was out of this package's scope.
+
+---
+
+# Package B — the nine bare-"Browse" buttons
+
+Date: 2026-08-03. Base `main` @2800f23. One commit. Nothing pushed.
+
+Closes §C11.2 / §C12.5 — the debt item 2 created by fixing four Browse buttons and leaving nine.
+
+## E1. The census, re-verified on this tree first
+
+Nine, three per view, every one with visible `Content="Browse"` and no
+`AutomationProperties.Name`:
+
+| View | Commands |
+|---|---|
+| `SampleRestorerView` | `BrowseSRRCommand`, `BrowseMediaDirectoryCommand`, `BrowseOutputDirectoryCommand` |
+| `SRSCreatorView` | `BrowseInputCommand`, `BrowseMainFileCommand`, `BrowseOutputCommand` |
+| `SRSReconstructorView` | `BrowseSRSCommand`, `BrowseMediaCommand`, `BrowseOutputCommand` |
+
+The bare `Content` is what makes the shared phrasing SAFE here: WCAG 2.5.3 requires the accessible
+name to contain the visible label, and every "Browse for &lt;target&gt;" contains "Browse". That is
+the exact condition CreatorView's folder picker fails — its Content reads "Browse folder…" — which
+is why it keeps its own name and always will. `AssertBrowseButton` asserts the Content alongside the
+name, so if one of these nine ever gains a longer label the convention breaks loudly instead of
+quietly violating a level-A criterion.
+
+## E2. The names
+
+Each target is phrased from that row's OWN visible caption subject, which is why SampleRestorer says
+"directory" and SRSReconstructor says "file" for what is otherwise the same shape of control:
+
+| Command | Name | Caption subject |
+|---|---|---|
+| `BrowseSRRCommand` | "Browse for SRR file" | "SRR File" |
+| `BrowseMediaDirectoryCommand` | "Browse for media directory" | "Media Directory" |
+| `BrowseOutputDirectoryCommand` | "Browse for output directory" | "Output Directory" |
+| `BrowseInputCommand` (SRSCreator) | "Browse for sample file" | "Sample File" |
+| `BrowseMainFileCommand` | "Browse for main file" | "Main file" |
+| `BrowseOutputCommand` (SRSCreator) | "Browse for output path" | "Output" |
+| `BrowseSRSCommand` | "Browse for SRS file" | "SRS File" |
+| `BrowseMediaCommand` | "Browse for media file" | "Media File" |
+| `BrowseOutputCommand` (SRSReconstructor) | "Browse for output path" | "Output" |
+
+**Four surfaces now share "Browse for output path"** — CreatorView, the Create-SRR wizard,
+SRSCreatorView and SRSReconstructorView — because all four pick where an output FILE is written.
+`OutputPathPickers_ShareOneName_AndTheFolderPickerDeliberatelyDiffers` pins that against one literal
+(never against each other, which would pass if they drifted together) AND asserts the Reconstructor's
+own picker still reads "Browse for output folder". That difference is deliberate: it chooses a
+DIRECTORY, and collapsing the two would be false consistency rather than 3.2.4 compliance.
+
+## E3. Fallout, measured — and one thing the brief did not expect
+
+**18 failures across 3 suites**, six per suite: five fixture-dependent plus the covering test.
+
+The brief anticipated SampleRestorer's covering test losing its premise. **All three did** —
+`SRSCreatorCompactTests` and `SRSReconstructorCompactTests` carry the same
+`AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_…` test, each selecting on
+`Button name="Browse" id=""` in its own view, and each dropped to zero matches.
+
+All fixtures regenerated from measured walks (temporary dump per suite using that suite's own setup
+and its own independent oracle, captured, removed) — never edited entry by entry.
+
+## E4. The covering tests: two different answers, on purpose
+
+The brief asked whether any identically-described pair remained per suite. Measured from the
+regenerated walks, and the answer differs by view:
+
+- **SampleRestorer STILL has one**: the SRS grid's per-row checkboxes both describe as
+  `CheckBox name="Restore this sample" id=""` — same name from the shared cell template, no x:Name,
+  different objects. So its test is **re-pointed, not redesigned**, to
+  `AssertSameControlSequence_SwappedIdenticallyDescribedRowCheckboxes_FailsNamingTheMismatch`. The
+  pair's indistinguishability is now ASSERTED in the test (equal `Describe`, non-equal reference)
+  rather than assumed — the brief's explicit warning, and the thing that stops it hollowing out if
+  the grid ever gains a per-row distinguisher.
+- **SRSCreator and SRSReconstructor have none left.** Every stop in their measured walks now carries
+  a distinct name or x:Name. So each follows the §C5 precedent: the positional half stays as
+  `AssertSameControlSequence_SwappedPositions_FailsNamingTheMismatch` against the real walk, and the
+  reference-versus-description half moves to a new
+  `AssertSameControlSequence_IdenticallyDescribedControls_AreDistinguishedByReference` against a
+  constructed pair.
+
+A real pair is better evidence when one exists; a constructed one is honest when it does not.
+
+**Per-suite, not shared — asked and answered.** `AssertSameControlSequence` is a PRIVATE helper
+duplicated in each suite, so "this suite's ordering check compares by reference" is a per-suite claim
+about a per-suite method. One shared test would prove it for whichever copy it happened to call and
+leave the others free to drift to a description comparison undetected. Promoting the helper into the
+rig would make one test correct and is a five-suite refactor belonging in its own change — recorded
+as a follow-up rather than smuggled in here.
+
+## E5. Evidence
+
+`-t:Rebuild` on all four projects, each **0 Warning(s), 0 Error(s)**, then `dotnet test --no-build`:
+
+```
+Manager   Passed!  - Failed: 0, Passed: 478, Skipped: 0, Total: 478
+App.Core  Passed!  - Failed: 0, Passed: 722, Skipped: 0, Total: 722
+```
+
+Baselines Manager 474 / App.Core 722. Delta **+4 Manager**: two in `AccessibleNamingTests`
+(`SiblingViews_BrowseButtons_UseTheSharedConvention`,
+`OutputPathPickers_ShareOneName_AndTheFolderPickerDeliberatelyDiffers`) and two constructed-pair
+tests (SRSCreator, SRSReconstructor). The three covering tests were RENAMED, not added.
+
+## E6. The sweep, run LAST
+
+Run after the final edit. **The first draft of this section carried two counts written before the
+grep was run, and one of them I then talked myself into "explaining" with arithmetic that did not
+work. Both are replaced below by the run.** That is the third recurrence of the same defect in this
+chain and it is recorded rather than quietly fixed.
+
+**Named Browse buttons in shipped views — 23, per file:**
+
+```
+$ grep -rn 'AutomationProperties.Name="Browse' ReScene.Manager/Views/
+CreatorView.axaml            3
+SampleRestorerView.axaml     3
+ReconstructorView.axaml      4
+CreateSRRWizardBody.axaml    3
+SRSReconstructorView.axaml   3
+SRSCreatorView.axaml         3
+ReconstructWizardBody.axaml  4
+                            --
+                            23
+```
+
+23 DECLARATIONS across 7 files, not 23 distinct buttons a user can meet: the Create-SRR wizard
+re-declares the Creator's input pair and its output picker, and the Reconstruct wizard re-declares
+the Reconstructor's four, so the same function is authored twice on two surfaces by design (WCAG
+3.2.4 — and asserted, on both surfaces, against one literal). Every one of the 23 is now named;
+before item 2 the count was 4.
+
+**Stale-rationale sweep.** Nine hits for "three 'Browse' buttons" / "deliberately left alone"
+language across the three suites. Eight are past-tense records of what those buttons USED to be,
+which is what a future reader needs to understand why the covering tests have the shapes they do.
+One was a live claim — `SRSCreatorCompactTests`' covering-test doc still said it swaps "two of the
+three identically-described Browse positions" when it no longer does — and is rewritten. The ninth
+hit is in `CompactHeightBehaviorTests` about `e.Handled` and is unrelated.
+
+**Visible labels, unchanged:** `grep -c 'Content="Browse"'` over the views is unchanged by this
+package. No visible label moved — only accessible names were added, which is what keeps WCAG 2.5.3
+satisfied for all nine.
+
+## E7. Concerns
+
+1. **Nine new strings were invented**, where item 2's four were adopted verbatim from an existing
+   surface. Each is derived from a visible caption rather than chosen freely, and each is pinned by
+   a literal assertion, but there is no second surface to cross-check them against the way the
+   Reconstructor's four had the wizard. If any reads badly to a real screen-reader user, only a real
+   session will find it — gate item (e), still skipped.
+2. **"Browse for main file" is the weakest of the nine.** Its row's caption is "Main file (optional
+   — populates MatchOffset, matches pyrescene's -c flag)", so the subject is clear but the field's
+   PURPOSE is not conveyed by the name alone. The row's caption remains adjacent text, which is
+   where a screen reader reads it, but this one leans on that more than the others do.
+3. **SampleRestorer's covering test now depends on the grid's cell template staying
+   undifferentiated.** That is a genuine coupling — a future per-row accessible name (say
+   "Restore sampleA.srs", which would be an accessibility IMPROVEMENT) would break it. The test
+   fails loudly with an explanation rather than passing vacuously, which is the best available
+   outcome, but whoever makes that improvement will have to redesign this test at the same time.
+4. **The app is now consistent about Browse buttons for the first time**, which removes §C12.5's
+   concern rather than mitigating it: thirteen buttons, one convention, one documented exception.
+   The exception (CreatorView's folder picker) is the only place a speech-input user meets different
+   words for a similar action, and it is different because the visible label is different.

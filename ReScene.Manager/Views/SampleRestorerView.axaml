@@ -69,9 +69,18 @@
                Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
         </TextBlock>
         <DockPanel>
+          <!-- Naming convention for all three Browse buttons on this view, stated once here:
+               "Browse for <target>", with the target phrased from that row's OWN visible caption
+               subject, matching the Reconstructor's four and the Creator's. The bare Content
+               "Browse" is not a usable label out of context — three buttons in this view alone
+               render it — and because it IS the bare word, the shared phrasing is safe under WCAG
+               2.5.3 (the accessible name contains the visible label). The one Browse button in the
+               app that cannot take this phrasing is CreatorView's folder picker, whose Content
+               reads "Browse folder…"; its own site records why. -->
           <Button DockPanel.Dock="Right" Content="Browse"
                   Command="{Binding BrowseSRRCommand}"
                   Classes="ghost"
+                  AutomationProperties.Name="Browse for SRR file"
                   Margin="4,0,0,0" MinWidth="75" />
           <!-- AutomationProperties.Name: pre-existing a11y debt,
                unrelated to this task's own compact-layout work but discovered while wiring this
@@ -98,6 +107,7 @@
           <Button DockPanel.Dock="Right" Content="Browse"
                   Command="{Binding BrowseMediaDirectoryCommand}"
                   Classes="ghost"
+                  AutomationProperties.Name="Browse for media directory"
                   Margin="4,0,0,0" MinWidth="75" />
           <!-- Same convention and the same reasoning as SRRFileTextBox above: a short
                "<subject> path" phrase whose subject is this row's OWN visible caption ("Media
@@ -122,6 +132,7 @@
           <Button DockPanel.Dock="Right" Content="Browse"
                   Command="{Binding BrowseOutputDirectoryCommand}"
                   Classes="ghost"
+                  AutomationProperties.Name="Browse for output directory"
                   Margin="4,0,0,0" MinWidth="75" />
           <TextBox x:Name="OutputDirTextBox" Text="{Binding OutputDirectoryPath}"
                    AutomationProperties.Name="Output directory path"

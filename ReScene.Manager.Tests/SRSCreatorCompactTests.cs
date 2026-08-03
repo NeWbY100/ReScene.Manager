@@ -390,10 +390,13 @@ public class SRSCreatorCompactTests
     /// identifier (bound <c>RelayCommand</c> reference for Buttons, x:Name or a distinguishing
     /// attribute for TextBoxes), NEVER by re-deriving from a walk's own observed output. This is
     /// what makes <see cref="AssertTabWalk"/>'s forward/reverse checks genuinely discriminating
-    /// against a same-described-sibling swap (three "Browse" buttons and two unnamed TextBoxes
-    /// in this view all describe identically via <see cref="CompactViewRig.Describe"/>) — proven
-    /// directly by
-    /// <see cref="AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch"/>.
+    /// against a same-described-sibling swap — proven directly by
+    /// <see cref="AssertSameControlSequence_SwappedPositions_FailsNamingTheMismatch"/> and
+    /// <see cref="AssertSameControlSequence_IdenticallyDescribedControls_AreDistinguishedByReference"/>.
+    /// (This view once supplied the motivating collision itself — three bare "Browse" buttons and
+    /// two unnamed TextBoxes — and no longer does: every one of them is named. Resolving by
+    /// identity here is the house rule applied uniformly, not a workaround for a collision that
+    /// still exists.)
     /// </summary>
     private static List<Control> ResolveIndependentExpectedOrder(Window window, SRSCreatorViewModel vm, bool compact)
     {
@@ -422,19 +425,35 @@ public class SRSCreatorCompactTests
 
     /// <summary>
     /// Proves <see cref="AssertSameControlSequence"/> — and therefore <see cref="AssertTabWalk"/>'s
-    /// own forward/reverse checks, which rely on it — is genuinely sensitive to a PERMUTATION of
-    /// identically-described controls, not just to controls going missing. Captures the REAL
-    /// forward walk against the real, independent expected order, then deliberately swaps two of
-    /// the three identically-described "Browse" positions WITHIN THAT INDEPENDENT EXPECTATION
-    /// (never within the observed walk) — simulating a hypothetical regression that reordered
-    /// them in the tree while every description stayed the same, which a description-based
-    /// comparison (or a forward-derived reverse oracle) could never catch. Asserts
+    /// own forward/reverse checks, which rely on it — is genuinely sensitive to a PERMUTATION, not
+    /// just to controls going missing. Captures the REAL forward walk against the real, independent
+    /// expected order, then deliberately swaps two adjacent positions WITHIN THAT INDEPENDENT
+    /// EXPECTATION (never within the observed walk) — simulating a regression that reordered them
+    /// in the tree, which a forward-derived reverse oracle could never catch. Asserts
     /// the mismatch fails, naming the specific position, then confirms the UNTAMPERED
     /// expectation still passes against the same real walk (the failure above was caused by the
     /// tampering, not a real defect).
+    /// <para>
+    /// REDESIGNED — same split, and the same reasoning, as
+    /// <c>ReconstructorCompactTests</c>' §C5 precedent. This used to swap two of the three
+    /// identically-described "Browse" buttons, which is what made it a proof about REFERENCE
+    /// versus DESCRIPTION comparison rather than merely about ordering. Naming those three removed
+    /// the last identically-described pair from this view — checked, not assumed: every stop in the
+    /// measured walk now carries a distinct accessible name or x:Name. Rather than re-point the
+    /// swap at a pair that is not genuinely indistinguishable (which would hollow the test out
+    /// while it kept passing), the two claims are split: this test keeps the real-walk grounding
+    /// and asserts positional sensitivity, and
+    /// <see cref="AssertSameControlSequence_IdenticallyDescribedControls_AreDistinguishedByReference"/>
+    /// carries the reference-versus-description claim against a constructed pair.
+    /// </para>
+    /// <para>
+    /// SampleRestorer went the other way and kept a real pair, because it still has one (its grid's
+    /// per-row checkboxes). The difference is deliberate: a real pair is better evidence when one
+    /// exists, and a constructed one is honest when it does not.
+    /// </para>
     /// </summary>
     [AvaloniaFact]
-    public void AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch()
+    public void AssertSameControlSequence_SwappedPositions_FailsNamingTheMismatch()
     {
         SRSCreatorViewModel vm = CreateVm();
         vm.InputPath = @"C:\release\sample.mkv";
@@ -450,17 +469,14 @@ public class SRSCreatorCompactTests
 
             IReadOnlyList<Control> forwardOrder = CompactViewRig.CaptureTabOrderControls(window, root, independentOrder).Order;
 
-            List<int> browseIndexes = [.. Enumerable.Range(0, independentOrder.Count)
-                .Where(i => CompactViewRig.Describe(independentOrder[i]) == "Button name=\"Browse\" id=\"\"")];
-            Assert.True(browseIndexes.Count >= 2, "this covering test requires at least 2 identically-described Browse buttons to swap");
-
+            Assert.True(independentOrder.Count >= 2, "this covering test needs at least 2 stops to swap");
             List<Control> tampered = [.. independentOrder];
-            (tampered[browseIndexes[0]], tampered[browseIndexes[1]]) = (tampered[browseIndexes[1]], tampered[browseIndexes[0]]);
+            (tampered[0], tampered[1]) = (tampered[1], tampered[0]);
 
             Xunit.Sdk.FailException ex = Assert.Throws<Xunit.Sdk.FailException>(
                 () => AssertSameControlSequence(tampered, forwardOrder, "forward"));
 
-            Assert.Contains($"position {browseIndexes[0]}", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("position 0", ex.Message, StringComparison.Ordinal);
             Assert.Contains("same description does not mean same control instance", ex.Message, StringComparison.Ordinal);
 
             // The untampered, genuinely independent expectation still passes against the SAME
@@ -471,14 +487,59 @@ public class SRSCreatorCompactTests
     }
 
     /// <summary>
+    /// The half of the old covering test the naming pass would otherwise have silently dropped:
+    /// that <see cref="AssertSameControlSequence"/> catches a permutation a DESCRIPTION-based
+    /// comparison cannot see at all. Asserted against a constructed pair, because this view no
+    /// longer contains one.
+    /// <para>
+    /// Kept PER-SUITE rather than shared with the Reconstructor's identical test, and the reason is
+    /// not symmetry: <see cref="AssertSameControlSequence"/> is a private helper duplicated in each
+    /// suite, so the claim "this suite's ordering check compares by reference" is a per-suite claim
+    /// about a per-suite method. One shared test would prove it for whichever copy it happened to
+    /// call, leaving the others free to drift to a description comparison undetected. Promoting the
+    /// helper into the shared rig would make one test correct, and is a five-suite refactor that
+    /// belongs in its own change.
+    /// </para>
+    /// <para>
+    /// Both halves are stated rather than assumed: first that a description comparison genuinely
+    /// PASSES on the swapped sequence, then that the reference comparison FAILS on the same swap.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void AssertSameControlSequence_IdenticallyDescribedControls_AreDistinguishedByReference()
+    {
+        var first = new Button { Content = "Browse" };
+        var second = new Button { Content = "Browse" };
+        var neighbour = new TextBox { Name = "Anchor" };
+
+        Assert.Equal(CompactViewRig.Describe(first), CompactViewRig.Describe(second));
+        Assert.False(ReferenceEquals(first, second));
+
+        List<Control> actual = [first, neighbour, second];
+        List<Control> swapped = [second, neighbour, first];
+
+        // A description-based oracle is blind to the swap — the specific gap this helper closes.
+        Assert.Equal(actual.Select(CompactViewRig.Describe), swapped.Select(CompactViewRig.Describe));
+
+        Xunit.Sdk.FailException ex = Assert.Throws<Xunit.Sdk.FailException>(
+            () => AssertSameControlSequence(swapped, actual, "constructed identical-description pair"));
+
+        Assert.Contains("position 0", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("same description does not mean same control instance", ex.Message, StringComparison.Ordinal);
+
+        AssertSameControlSequence(actual, actual, "constructed pair (untampered, sanity check)");
+    }
+
+    /// <summary>
     /// OBJECT-REFERENCE-exact sequence comparison — asserts <paramref name="actual"/> is,
     /// position for position, the SAME control REFERENCES as <paramref name="expected"/>, not
     /// merely the same DESCRIPTIONS. A description-based <c>Assert.Equal</c> cannot distinguish
-    /// a permutation of controls that all describe identically (this view's three "Browse"
-    /// buttons, none of which carry a distinguishing x:Name or accessible name); this can, since
-    /// it never converts either side to a string until it already knows a mismatch exists and
-    /// needs to report it. Mirrors <c>ReconstructorCompactTests</c>' own helper of the same
-    /// shape.
+    /// a permutation of controls that all describe identically; this can, since it never converts
+    /// either side to a string until it already knows a mismatch exists and needs to report it.
+    /// This view's three "Browse" buttons were the motivating example until they were named;
+    /// the property is now proven against a constructed pair by
+    /// <see cref="AssertSameControlSequence_IdenticallyDescribedControls_AreDistinguishedByReference"/>.
+    /// Mirrors <c>ReconstructorCompactTests</c>' own helper of the same shape.
     /// </summary>
     private static void AssertSameControlSequence(IReadOnlyList<Control> expected, IReadOnlyList<Control> actual, string context)
     {
@@ -1172,13 +1233,15 @@ public class SRSCreatorCompactTests
     // the finished view, WITH Create SRS enabled). Each entry is CompactViewRig.Describe's own
     // format (real automation peer name plus x:Name, reported separately — see its own doc) — a
     // human-readable regression net
-    // (catches renames, additions, removals), NOT the discriminating check itself. Same-typed
-    // siblings that describe identically (this view's three "Browse" buttons) are disambiguated by
-    // AssertTabWalk's OWN independent, reference-based checks
+    // (catches renames, additions, removals), NOT the discriminating check itself. The ordering
+    // check itself is AssertTabWalk's OWN independent, reference-based one
     // (ResolveIndependentExpectedOrder + AssertSameControlSequence, both forward and reverse —
     // see AssertTabWalk's own doc for why the fixture strings alone cannot do this), proven to
-    // genuinely discriminate by
-    // AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch.
+    // discriminate by AssertSameControlSequence_SwappedPositions_FailsNamingTheMismatch and
+    // AssertSameControlSequence_IdenticallyDescribedControls_AreDistinguishedByReference.
+    // This view's three "Browse" buttons used to describe identically; naming them
+    // ("Browse for sample file"/"…main file"/"…output path") means NO entry in these fixtures
+    // describes identically to another any more.
     // The two entries that used to read name="" — the Main-file picker and the App-name box —
     // were a SECOND identically-described pair, and real a11y debt behind it. Both are named now:
     // "Main file path" follows the "<subject> path" convention, and the App-name box is LabeledBy
@@ -1197,12 +1260,12 @@ public class SRSCreatorCompactTests
     /// </summary>
     private static readonly IReadOnlyList<string> NormalModeTabOrderFixture =
     [
-        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Browse for sample file\" id=\"\"",
         "TextBox name=\"Sample file path\" id=\"InputTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Browse for main file\" id=\"\"",
         "Button name=\"Clear\" id=\"\"",
         "TextBox name=\"Main file path\" id=\"\"",
-        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Browse for output path\" id=\"\"",
         "TextBox name=\"Output path\" id=\"OutputTextBox\"",
         "TextBox name=\"App name:\" id=\"\"",
         "Button name=\"Create SRS\" id=\"\"",
@@ -1219,12 +1282,12 @@ public class SRSCreatorCompactTests
     private static readonly IReadOnlyList<string> CompactModeTabOrderFixture =
     [
         "ToggleButton name=\"Help\" id=\"\"",
-        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Browse for sample file\" id=\"\"",
         "TextBox name=\"Sample file path\" id=\"InputTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Browse for main file\" id=\"\"",
         "Button name=\"Clear\" id=\"\"",
         "TextBox name=\"Main file path\" id=\"\"",
-        "Button name=\"Browse\" id=\"\"",
+        "Button name=\"Browse for output path\" id=\"\"",
         "TextBox name=\"Output path\" id=\"OutputTextBox\"",
         "TextBox name=\"App name:\" id=\"\"",
         "Button name=\"Create SRS\" id=\"\"",

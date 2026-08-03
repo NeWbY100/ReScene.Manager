@@ -61,9 +61,13 @@
                Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
         </TextBlock>
         <DockPanel>
+          <!-- "Browse for <target>", target from this row's own visible caption subject — see
+               SampleRestorerView's first Browse button for the convention and the WCAG 2.5.3
+               reasoning that makes it safe here (Content is the bare word "Browse"). -->
           <Button DockPanel.Dock="Right" Content="Browse"
                   Command="{Binding BrowseSRSCommand}"
                   Classes="ghost"
+                  AutomationProperties.Name="Browse for SRS file"
                   Margin="4,0,0,0" MinWidth="75" />
           <TextBox x:Name="SRSFileTextBox" Text="{Binding SRSFilePath}"
                    AutomationProperties.Name="SRS file path"
@@ -84,6 +88,7 @@
           <Button DockPanel.Dock="Right" Content="Browse"
                   Command="{Binding BrowseMediaCommand}"
                   Classes="ghost"
+                  AutomationProperties.Name="Browse for media file"
                   Margin="4,0,0,0" MinWidth="75" />
           <!-- Same convention and reasoning as SRSFileTextBox above: a short "<subject> path"
                phrase whose subject is this row's OWN visible caption ("Media File"), so the
@@ -104,9 +109,12 @@
                Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
         </TextBlock>
         <DockPanel>
+          <!-- "Browse for output path" VERBATIM from CreatorView, SRSCreatorView and the
+               Create-SRR wizard — one function, one name (WCAG 3.2.4). -->
           <Button DockPanel.Dock="Right" Content="Browse"
                   Command="{Binding BrowseOutputCommand}"
                   Classes="ghost"
+                  AutomationProperties.Name="Browse for output path"
                   Margin="4,0,0,0" MinWidth="75" />
           <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}"
                    AutomationProperties.Name="Output path"
