@@ -472,8 +472,18 @@ public partial class SRREditorViewModel(ISRREditingService srrEditing, IFileDial
     /// Copies the working copy to <see cref="OutputPath"/> (overwriting), recording the result.
     /// Called when leaving the save step.
     /// </summary>
+    /// <remarks>
+    /// <see cref="ResultMessage"/> is cleared FIRST, before any branch can set it and before the try
+    /// block, because it drives a live region: an equal value raises no change notification, so a
+    /// second save with the same outcome would announce nothing. That repeat is reachable — step 3
+    /// offers Back, and Back then Next re-runs this against the same path. <c>Reset()</c> does not
+    /// cover it; that runs when the wizard opens, not between two saves. Do not fold this into the
+    /// branches: the failure path needs it too. Pinned by
+    /// <c>SRREditorViewModelTests.RepeatSaveOfTheSameOutcome_ReAnnouncesViaClearThenSetTransition</c>.
+    /// </remarks>
     public void Save()
     {
+        ResultMessage = string.Empty;
         ShowResult = true;
 
         if (_workingCopyPath is null)

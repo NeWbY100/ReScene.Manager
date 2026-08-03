@@ -2237,3 +2237,108 @@ Break-verification, each mechanism sabotaged separately, observed, and reverted 
 - **The high-contrast theme initiative** (gate item c).
 - **A real screen-reader session.** Every claim in this wave is from headless Avalonia walks and
   rendered-pixel sampling. No NVDA or Narrator has spoken any of these names aloud.
+
+## M1. The Edit-SRR wizard's step 3 now speaks
+
+The step whose entire purpose is to report the outcome announced nothing. Two halves, both required,
+each break-verified separately.
+
+**Markup.** The result block toggled `IsVisible`, so it was not realized when its text arrived and an
+AT had no transition to notice. It is now always in the tree with `LiveSetting="Polite"`.
+
+**ViewModel.** `Save()` assigned `ResultMessage` in all four branches without clearing it first. Two
+saves with the same outcome assign an equal value, which raises no change notification. Measured on
+the unfixed VM, and it is worse than "announces late" — the recorded transitions were `[]`, i.e. the
+second save raised **nothing at all**. `ResultMessage = string.Empty` now sits at the top of `Save()`,
+before every branch and before the try, mirroring `ImportSRRAsync` (§C6).
+
+The repeat is reachable, which is what makes it a defect rather than a hypothetical: step 3 declares
+no `CanGoBack`, so Back is offered there, and Back then Next re-runs `OnLeave = vm.Save` against the
+same output path and produces a byte-identical message.
+
+## M2. The ordering fact the spec did not have
+
+§I3 assumed this would need the same separate-live-line placement as its two precedents. Measuring
+first changed the answer twice.
+
+**Is the live line even realized when the text lands?** `Save()`'s own summary says "called when
+leaving the save step", which reads as though the result arrives while step 3 is still hidden — in
+which case no placement inside step 3 could work. `WizardViewModel.Next()` increments
+`CurrentStepIndex` BEFORE invoking `OnLeave`, so step 3 is already visible. That is asserted, not
+assumed: swapping those two lines makes
+`AdvancingOffTheSaveStep_DeliversTheResultToARealizedLiveRegion` fail with the reason.
+
+**Where should the line go?** The two precedents (`SRSReconstructorView.ResultStatus`,
+`ReconstructWizardBody.CustomPackerStatus`) put a SEPARATE live line beside an `IsVisible`-toggled
+banner. Both banners are styled `Border`s — background, corner radius — which would show as an empty
+coloured box if left in the tree. **This one is a bare `TextBlock`, invisible when empty**, so
+promoting the existing element was available, and it is the better shape: a separate line would put
+the same result text in the tree twice and a screen-reader user would meet it twice.
+
+Measured cost of the deviation, at four states: with a result present the header is **67 DIPs either
+way**, so the visible rendering is unchanged. An EMPTY result would reserve **26 DIPs** (an 18-DIP
+line box plus its 8-DIP margin) where the old binding collapsed it — a cost this step cannot pay,
+because `Save()` sets `ShowResult` and one of four messages on every path and step 3 is reachable only
+by running `Save()`. `ShowResult` is therefore always true here, which is what made the old binding
+dead weight rather than protection.
+
+No focusable control was added — a `TextBlock` is not focusable — so no tab-order fixture moved.
+Measured rather than asserted: zero fixture files appear in this commit's diff, and both suites pass
+unchanged apart from the new tests.
+
+## M3. This was NOT the last silent-outcome sibling — §I3's sweep was population-limited
+
+§I3 swept for the defect class with a grep over **three literal property names**
+(`HasCustomPackerWarning|ShowResult|HasImportedSRR`) and concluded EditSRR was the only survivor.
+That population was too narrow, in the same way and for the same reason as the counting failures this
+workstream keeps recording: it enumerated what was already known rather than what the app contains.
+
+Re-swept from the general population — all **83** `IsVisible="{Binding …}"` elements under
+`ReScene.Manager/Views/`, narrowed to **6** whose bound property names an outcome — then checked each
+against the live-line population (17 `LiveSetting` occurrences across 8 files):
+
+| Element | Live counterpart |
+|---|---|
+| `ReconstructorView:129` HasCustomPackerWarning | `CustomPackerStatus` — OK |
+| `SRSReconstructorView:165` ShowResult | `ResultStatus` — OK |
+| `ReconstructWizardBody:87` HasCustomPackerWarning | fixed in §I — OK |
+| `EditSRRWizardBody` ShowResult | fixed by this commit — OK |
+| **`RestoreWizardBody:134`** SingleRebuilder.ShowResult | **NONE — file has zero live lines** |
+| **`InspectorView:71`** HasWarning → `WarningMessage` | **NONE — file has zero live lines** |
+| **`InspectorView:164`** IsVerifyResultVisible | **NONE — file has zero live lines** |
+
+**Three more instances, on two surfaces, none of them fixed here.** `RestoreWizardBody`'s is the exact
+analogue of what this commit fixed: the Advanced view (`SRSReconstructorView`) carries `ResultStatus`
+for the very same VM property, and the wizard body carries nothing, so the identical rebuild reports
+its outcome aloud on one surface and silently on the other. `InspectorView`'s warning bar is the same
+shape as `ReconstructorView`'s, which has a live line; its verify-result panel is a larger structure
+with its own Close button and wants its own assessment rather than a copied fix.
+
+Stated plainly because the brief for this round called EditSRR "the last silent-outcome sibling": it
+was not. Two surfaces remain.
+
+And the corrected sweep is still a heuristic — it narrowed 83 to 6 by matching property NAMES
+(`Result|Warning|Error|Status|Message|Complete|Done|Success|Failed`). An outcome element bound to a
+property named something outside that set is still invisible to it. Judging all 83 by hand is the
+only complete form, and was not done.
+
+## M4. Evidence
+
+RED first, measured before the fix: `[]` transitions on a repeated identical save (nothing raised at
+all), and `["Failed to save: the file is in use"]` on the failure path (one raise, no clear).
+
+Break-verification, each reverted byte-identically:
+
+| Sabotage | Observed |
+|---|---|
+| `CurrentStepIndex++` moved after `OnLeave` | `the result arrived while the live region was NOT realized … WizardViewModel.Next() must increment CurrentStepIndex before invoking the leaving step's OnLeave hook` |
+| `IsVisible="{Binding ShowResult}"` restored, `LiveSetting` dropped | two tests, separately: `the result line went out of the tree when ShowResult turned false` and `Expected: Polite / Actual: Off` |
+
+Forced `-t:Rebuild` on all four projects: 0 Warning(s), 0 Error(s). **Manager 494/494** (491 + 3),
+**App.Core 724/724** (722 + 2).
+
+One process note, since it cost a revert: the first draft of the App.Core tests was written through a
+Python heredoc, which ate the escapes — `\input\release.srr` became a carriage return, and `\n`
+became a real newline inside a C# string literal. Reverted before building and rewritten with the
+editor. This is the same class of failure as §K2's XAML scripting incidents, now on C#: generated
+text with escapes in it does not survive a shell round-trip.

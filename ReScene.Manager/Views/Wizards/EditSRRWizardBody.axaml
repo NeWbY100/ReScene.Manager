@@ -62,8 +62,27 @@
     <DockPanel IsVisible="{Binding $parent[Window].DataContext.CurrentStepIndex,
                                    Converter={StaticResource IndexEqualsConverter}, ConverterParameter=3}">
       <StackPanel DockPanel.Dock="Top">
-        <TextBlock Text="{Binding ResultMessage}"
-                   IsVisible="{Binding ShowResult}"
+        <!-- The step whose entire purpose is to report the outcome used to announce nothing: this
+             block toggled IsVisible, and an element that is not realized when its text arrives gives
+             an AT no transition to notice. It is now ALWAYS in the tree with LiveSetting="Polite",
+             so the result speaks itself — the same correction SRSReconstructorView's ResultStatus
+             and ReconstructWizardBody's CustomPackerStatus carry.
+             Those two put the live line in a SEPARATE element beside an IsVisible-toggled banner,
+             because their banner is a styled Border (background + corner radius) that would show as
+             an empty coloured box when idle. This one is a bare TextBlock, invisible when empty, so
+             promoting the existing element is available here and is the better shape: a separate
+             line would put the same result text in the tree twice, and a screen-reader user would
+             meet it twice.
+             MEASURED, at 4 significant states: with a result present the header is 67 DIPs either
+             way, so the visible rendering is unchanged. An EMPTY result would reserve 26 DIPs (an
+             18-DIP line box plus this 8-DIP margin) where the old binding collapsed it — a cost this
+             step cannot actually pay, because Save() assigns one of its four messages and sets
+             ShowResult on every path, and step 3 is reachable only by running Save(). ShowResult is
+             therefore always true here, which is what made the old binding dead weight rather than
+             protection. Save() clears ResultMessage first so a repeated save re-announces. -->
+        <TextBlock x:Name="ResultStatus"
+                   Text="{Binding ResultMessage}"
+                   AutomationProperties.LiveSetting="Polite"
                    FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8" />
         <TextBlock Text="Details" FontWeight="SemiBold" Margin="0,4,0,2" />
       </StackPanel>

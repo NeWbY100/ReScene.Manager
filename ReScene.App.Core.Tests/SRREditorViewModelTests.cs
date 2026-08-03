@@ -165,6 +165,9 @@ public class SRREditorViewModelTests
         public int CopyWorkingCopyToCalls { get; private set; }
         public string? LastCopiedTo { get; private set; }
 
+        /// <summary>When set, the next copy throws it — lets the save failure path be driven.</summary>
+        public Exception? FailCopyWith { get; set; }
+
         protected override string CreateWorkingCopy(string sourcePath)
         {
             CreateWorkingCopyCalls++;
@@ -175,6 +178,7 @@ public class SRREditorViewModelTests
         {
             CopyWorkingCopyToCalls++;
             LastCopiedTo = outputPath;
+            if (FailCopyWith is not null) { throw FailCopyWith; }
         }
     }
 
@@ -881,5 +885,79 @@ public class SRREditorViewModelTests
         Assert.Equal("readme.nfo", fileName);
         Assert.NotNull(editing.LastRead);
         Assert.Equal((TestSRREditorViewModel.DummyWorkingPath, "readme.nfo"), editing.LastRead.Value);
+    }
+
+    // ── Save: the result must RE-announce ───────────────────
+
+    /// <summary>
+    /// The wizard's step 3 reports the outcome through a live region bound to
+    /// <see cref="SRREditorViewModel.ResultMessage"/>, and a live region announces a CHANGE. Saving
+    /// twice with the same outcome assigns an equal value, which raises no change notification and
+    /// so would say nothing the second time.
+    /// <para>
+    /// The repeat is reachable, which is what makes this a real defect rather than a theoretical
+    /// one: step 3 offers Back (it declares no <c>CanGoBack</c>), so Back then Next re-runs
+    /// <c>OnLeave = vm.Save</c> against the same output path and produces a byte-identical message.
+    /// </para>
+    /// <para>
+    /// Same hazard and same fix as <c>ReconstructorViewModel.ImportSRRAsync</c>: clear first, so the
+    /// listener sees empty then text. <c>Reset()</c> does not cover it — that runs when the wizard
+    /// OPENS, not between two saves.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RepeatSaveOfTheSameOutcome_ReAnnouncesViaClearThenSetTransition()
+    {
+        TestSRREditorViewModel vm = SavedOnce(out string expected);
+
+        List<string> transitions = RecordResultMessages(vm);
+        vm.Save();
+
+        Assert.Equal([string.Empty, expected], transitions);
+    }
+
+    /// <summary>
+    /// The clear has to sit before the try block, not inside it: a save that throws must still
+    /// re-announce, and must not leave the previous save's success message standing while it does.
+    /// </summary>
+    [Fact]
+    public void RepeatSaveThatFails_ReAnnouncesAndDoesNotStrandTheEarlierMessage()
+    {
+        TestSRREditorViewModel vm = SavedOnce(out _);
+        vm.FailCopyWith = new IOException("the file is in use");
+
+        List<string> transitions = RecordResultMessages(vm);
+        vm.Save();
+
+        Assert.Equal([string.Empty, "Failed to save: the file is in use"], transitions);
+        Assert.Equal("Failed to save: the file is in use", vm.ResultMessage);
+    }
+
+    private const string SourceSrr = @"X:\input\release.srr";
+    private const string OutputSrr = @"X:\output\edited.srr";
+
+    /// <summary>Drives one successful save and hands back the message it produced.</summary>
+    private static TestSRREditorViewModel SavedOnce(out string expectedMessage)
+    {
+        TestSRREditorViewModel vm = CreateVm(out _, out _);
+        vm.SourcePath = SourceSrr;
+        vm.EnsureWorkingCopy();
+        vm.OutputPath = OutputSrr;
+
+        vm.Save();
+
+        expectedMessage = "Saved edited SRR to:\n" + OutputSrr;
+        Assert.Equal(expectedMessage, vm.ResultMessage);
+        return vm;
+    }
+
+    private static List<string> RecordResultMessages(TestSRREditorViewModel vm)
+    {
+        var transitions = new List<string>();
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SRREditorViewModel.ResultMessage)) { transitions.Add(vm.ResultMessage); }
+        };
+        return transitions;
     }
 }
