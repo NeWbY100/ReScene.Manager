@@ -152,14 +152,62 @@ forced `-t:Rebuild` plus both suites were re-run normally: 0 Warning(s), 0 Error
 **728/728**, identical to the workaround's numbers. The disclosure below stays because it is the
 condition the work was actually done under, and because the trap it records outlives this round.
 
-One trap inside that workaround is worth recording. A scratch path under the system temp directory
-made **6** unrelated tests fail —
-`HighContrastTokenTests` (×4), `TextContrastAuditTests`, `IsVisibleCensusTests` — all with
+One trap inside that workaround is worth recording, **and its first two write-ups were both wrong in
+opposite directions** — which is the more useful half of the story.
+
+The fact, re-measured deliberately rather than recalled. A scratch path under the system temp
+directory made **6** tests fail — `HighContrastTokenTests` (×4), `TextContrastAuditTests`,
+`IsVisibleCensusTests` — every one with
 `DirectoryNotFoundException: could not find ReScene.Manager/Resources above <temp>`. Those censuses
-locate the repo by walking up from `AppContext.BaseDirectory`, so an output directory outside the
-tree silently removes them from the run. Moving the scratch output *inside* the repo
-(`.tmp-verify/`, deleted afterwards) restored all 523. A verification that quietly drops six census
-tests is worse than no verification, because it still reports a number.
+locate the repo by walking up from `AppContext.BaseDirectory`, which does not resolve from outside
+the tree. Moving the scratch output *inside* the repo (`.tmp-verify/`, deleted afterwards) restored
+all 523.
+
+```
+Failed: 6, Passed: 517, Skipped: 0, Total: 523
+```
+
+**Nothing was silent, skipped, or undiscovered.** All 523 tests were discovered and the six failed
+loudly, with a named exception, in a red run. My own first write-up said the path "silently removes
+them from the run" — it does not. A later review corrected that to "never discovered" — it is not
+that either; the discovered total was **523** in the bad run, identical to the good one. Both
+descriptions were reached by reasoning about what such a path *would* do, and neither survived
+running it.
+
+This matters beyond bookkeeping, because a guard was nearly built on the wrong premise: a
+discovery-floor meta-test cannot catch this, since the count it would compare against never moved.
+The floor shipped anyway (§A7) for the failure mode it *does* catch, with that limitation stated in
+the test itself rather than in a report nobody re-reads.
+
+The real lesson is narrower and duller than either wrong version: **an output path outside the
+repository breaks tests that read the source tree, and they tell you so.**
+
+## A7. The discovery floor, and what it is honestly for
+
+Each test assembly now asserts a floor under the number of test METHODS it exposes —
+`ReScene.Manager.Tests` **503**, `ReScene.App.Core.Tests` **679**. Counting rule, stated in both
+tests: methods carrying `Fact`, `Theory`, `AvaloniaFact` or `AvaloniaTheory`, matched by attribute
+type NAME so framework-derived attributes count, across every non-abstract class; a theory counts
+ONCE regardless of data rows, which is why 503 sits below the run's reported 523.
+
+It does **not** guard the incident above, and both tests say so in their own doc comments. It guards
+the failure mode that incident made everyone imagine but that did not actually occur: methods that
+stop being discovered at all — a file dropped from compilation, a stray `--filter` left in a CI
+invocation, an attribute renamed by a framework upgrade. Those produce a smaller **green** run, and
+a smaller green number is the one nobody questions.
+
+Two corrections came out of building it, both from trying things rather than reasoning about them:
+
+- The first counting rule used every type `Assembly.GetTypes()` returns. That would have counted
+  internal classes xUnit never runs, so the floor could have held steady while a class stopped being
+  discovered — the guard would not have guarded its own headline case. It now counts **public**
+  non-abstract classes, which is xUnit's own rule.
+- "A test class made non-public" was then dropped from the claims entirely, because attempting that
+  sabotage produced a **build error**: xUnit's analyzer rejects it (`xUnit1000`, "Test classes must
+  be public"). It can never reach a run, so no guard is needed and claiming one would be padding.
+
+Break-verified against a case that can actually happen: removing one test file from compilation drops
+the count to **499** against the floor of 503 and fails by name. Reverted byte-identically.
 
 ## A6. Still open
 
