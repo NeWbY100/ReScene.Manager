@@ -98,10 +98,11 @@
     <!-- Warning bar for custom packer detection -->
     <Border DockPanel.Dock="Top"
             IsVisible="{Binding HasWarning}"
-            Background="#3DE0A030" BorderBrush="#E0A030" BorderThickness="1"
+            Background="{DynamicResource WarningBannerBackground}"
+            BorderBrush="{DynamicResource WarningBannerBorder}" BorderThickness="1"
             CornerRadius="3" Margin="0,0,0,4" Padding="8,5">
       <TextBlock Text="{Binding WarningMessage}"
-                 Foreground="#FFD080"
+                 Foreground="{DynamicResource WarningForeground}"
                  FontSize="{DynamicResource FontSizeBody}"
                  TextWrapping="Wrap" />
     </Border>

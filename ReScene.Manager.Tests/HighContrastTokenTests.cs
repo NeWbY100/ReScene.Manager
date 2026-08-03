@@ -27,7 +27,7 @@ namespace ReScene.Manager.Tests;
 /// </summary>
 public class HighContrastTokenTests
 {
-    private const int ExpectedTokenBrushes = 46;
+    private const int ExpectedTokenBrushes = 48;
 
     private static readonly Regex BrushKey =
         new(@"<SolidColorBrush x:Key=""(?<key>[A-Za-z0-9]+)"" Color=""(?<color>#[0-9A-Fa-f]+)""", RegexOptions.Compiled);
@@ -41,12 +41,12 @@ public class HighContrastTokenTests
 
     /// <summary>
     /// Colours written as literals in view markup instead of tokens, so the HC dictionary cannot
-    /// reach them. Enumerated so the hole is a known size.
+    /// reach them. EMPTY, and that is the point: the Inspector's custom-packer warning bar was the
+    /// only entry, and it was tokenized rather than exempted — a literal cannot be swapped, so the
+    /// bar would have kept its amber-on-dark colours under high contrast while everything around it
+    /// went black and white. Kept as the place a future literal must be argued for.
     /// </summary>
-    private static readonly (string File, string Reason)[] LiteralColoursOutsideTheTokenSystem =
-    [
-        ("InspectorView.axaml", "the custom-packer warning bar's amber fill, border and text are literal hex"),
-    ];
+    private static readonly (string File, string Reason)[] LiteralColoursOutsideTheTokenSystem = [];
 
     [AvaloniaFact]
     public void EveryDesignTokenBrush_HasAHighContrastCounterpart()
@@ -71,7 +71,10 @@ public class HighContrastTokenTests
             $"{stray.Count} high-contrast overrides target brushes the token file no longer defines: " +
             $"{string.Join(", ", stray)}. They override nothing; delete them.");
 
-        Assert.NotEmpty(LiteralColoursOutsideTheTokenSystem);
+        Assert.True(LiteralColoursOutsideTheTokenSystem.Length == 0,
+            $"{LiteralColoursOutsideTheTokenSystem.Length} colours sit outside the token system, so the " +
+            "high-contrast swap cannot reach them: " +
+            $"{string.Join("; ", LiteralColoursOutsideTheTokenSystem.Select(l => $"{l.File} — {l.Reason}"))}");
     }
 
     /// <summary>
@@ -175,6 +178,7 @@ public class HighContrastTokenTests
         "HoverBackground", "ActiveBackground", "SelectedItemBackground",
         "SystemControlHighlightListLowBrush", "PropertyHighlightBrush",
         "HexSelectionBrush", "HexMatchHighlightBrush", "HexDiffHighlightBrush", "DiffRowBackground",
+        "WarningBannerBackground",
     };
 
     private static bool IsSurface(string key) => Surfaces.Contains(key);

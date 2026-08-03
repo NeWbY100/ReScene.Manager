@@ -76,6 +76,8 @@
   <SolidColorBrush x:Key="AccentWarning" Color="#FFFFFF00" />
   <SolidColorBrush x:Key="AccentError" Color="#FFFF6161" />
   <SolidColorBrush x:Key="WarningForeground" Color="#FFFFFF00" />
+  <SolidColorBrush x:Key="WarningBannerBackground" Color="#FF000000" />
+  <SolidColorBrush x:Key="WarningBannerBorder" Color="#FFFFFF00" />
 
   <!-- ── Links ── -->
   <SolidColorBrush x:Key="HyperlinkForeground" Color="#FF00FFFF" />

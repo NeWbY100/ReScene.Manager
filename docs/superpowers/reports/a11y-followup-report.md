@@ -2924,3 +2924,61 @@ the error.
   census's own stray-direction lesson argues for tokenizing them; not done here.
 - **The live OS-level smoke**, which belongs to the controller: no test can toggle a system-wide
   Windows setting, and it must not be touched unattended.
+
+## S1. The three literals, tokenized rather than exempted
+
+The Inspector's custom-packer warning bar carried its colours as literal hex — `#3DE0A030` fill,
+`#E0A030` border, `#FFD080` text. A literal cannot be swapped, so under high contrast the bar would
+have kept its amber-on-dark appearance while every surface around it went black and white: a coloured
+island in a theme that exists precisely because colour is not working for this user.
+
+They are now `WarningBannerBackground`, `WarningBannerBorder` and the existing `WarningForeground`,
+with high-contrast counterparts. **48** token brushes and **48** overrides, up from 46 and 46. The
+census's exemption list for out-of-token literals is now empty, and its assertion inverted to say so:
+it fails if a literal appears, rather than requiring one to exist.
+
+## S2. Tokenizing found a real bug — in the audit, not the app
+
+Bringing the bar into the token system added a composed pair, and §R's audit immediately reported it
+as a failure:
+
+```
+WarningForeground on WarningBannerBackground is 1.58:1, needs 4.5:1 (normal text)
+```
+
+That reading was wrong, and wrong in an instructive way. `#3DE0A030` is amber at **24% alpha**. The
+audit was treating the brush's declared colour as the background, so it measured the text against a
+LIGHT amber that is never drawn anywhere. Composited over the panel behind it, the bar renders as a
+dark muted amber, and the text on it passes comfortably.
+
+`NearestBackground` now walks outward accumulating source-over composites until it reaches something
+opaque, and contrast is computed against what actually reaches the eye. This is the third correction
+of the same family in two rounds — a name is not a classification, a colour is not a token, and a
+declared colour is not a rendered one. The general form is worth keeping: **measure the value the user
+receives, not the value the source declares.**
+
+Population after the fix: **24** composed pairs, **0** failures.
+
+## S3. Evidence
+
+Forced `-t:Rebuild`: 0 Warning(s), 0 Error(s). **Manager 508/508**, **App.Core 728/728**.
+
+Counts as number + pattern + scope: **48** token brushes and **48** high-contrast overrides —
+`grep -c '<SolidColorBrush x:Key' ReScene.Manager/Resources/{Tokens,HighContrast}.axaml`, both guarded
+by `HighContrastTokenTests.ExpectedTokenBrushes`. **24** composed pairs, **0** failures — measured by
+`TextContrastAuditTests`. **0** literal colours outside the token system, asserted rather than
+enumerated.
+
+## S4. What remains, and who holds it
+
+- **The rendered-pixel instruments still run on the simulated fixture.** `CreatorCompactTests`' 46-key
+  high-contrast fixture applies top-level resource overrides rather than the shipped dictionary and
+  swap. It is now one token short of the real inventory (46 against 48), which is a divergence worth
+  fixing on its own: the historical simulation should either be re-pointed at
+  `HighContrastThemeService` or explicitly frozen as a historical artifact with its number pinned.
+  The splitter focus visual, checkbox glyphs, field-status glyphs and selection/hover states are the
+  signals that want verifying under the REAL swap. **Not done here** — this is the largest single
+  remaining piece of the high-contrast work.
+- **The live OS-level smoke** belongs to the controller: no test can toggle a system-wide Windows
+  setting, and it must not be touched unattended.
+- **A real screen-reader session** remains open across the whole workstream, as it has throughout.

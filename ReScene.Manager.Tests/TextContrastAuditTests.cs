@@ -101,9 +101,10 @@ public class TextContrastAuditTests
                 foreach (Visual visual in window.GetVisualDescendants())
                 {
                     if (ForegroundOf(visual) is not { } fg || !tokens.TryGetValue(fg, out string? fgName)) { continue; }
-                    if (NearestBackground(visual) is not { } bg || !tokens.TryGetValue(bg, out string? bgName)) { continue; }
+                    if (NearestBackground(visual) is not var (bgToken, bgRendered) || bgToken is null) { continue; }
+                    if (!tokens.TryGetValue(bgToken, out string? bgName)) { continue; }
 
-                    pairs[(fgName, bgName, IsLargeText(visual))] = ContrastRatio(ColourOf(fg), ColourOf(bg));
+                    pairs[(fgName, bgName, IsLargeText(visual))] = ContrastRatio(ColourOf(fg), bgRendered);
                 }
             }
             finally { window.Close(); }
@@ -140,8 +141,23 @@ public class TextContrastAuditTests
         _ => null,
     };
 
-    private static IBrush? NearestBackground(Visual visual)
+    /// <summary>
+    /// The nearest painted background, and — where that paint is translucent — what it actually
+    /// composites to over whatever lies behind it.
+    /// <para>
+    /// This is not a refinement, it is the difference between a true and a false reading. The
+    /// Inspector's warning bar fills with <c>#3DE0A030</c>: amber at 24% alpha. Treating that colour
+    /// as if it were opaque reports its text at 1.58:1 — a failure against a light amber that is
+    /// never drawn. Composited over the panel behind it, the bar is a dark muted amber and the text
+    /// on it passes. Contrast is a property of what reaches the eye.
+    /// </para>
+    /// </summary>
+    private static (IBrush Token, Color Rendered)? NearestBackground(Visual visual)
     {
+        IBrush? token = null;
+        Color accumulated = default;
+        bool started = false;
+
         foreach (Visual ancestor in visual.GetVisualAncestors())
         {
             ISolidColorBrush? brush = ancestor switch
@@ -152,10 +168,34 @@ public class TextContrastAuditTests
                 _ => null,
             };
 
-            if (brush is { Color.A: > 0 }) { return brush; }
+            if (brush is not { Color.A: > 0 }) { continue; }
+
+            if (!started)
+            {
+                token = brush;
+                accumulated = brush.Color;
+                started = true;
+            }
+            else
+            {
+                accumulated = Composite(accumulated, brush.Color);
+            }
+
+            if (accumulated.A == 255) { return (token!, accumulated); }
         }
 
-        return null;
+        // Nothing opaque behind it: the window itself paints last, so treat the accumulation as final.
+        return started ? (token!, accumulated) : null;
+    }
+
+    /// <summary>Source-over: <paramref name="over"/> composited on top of <paramref name="under"/>.</summary>
+    private static Color Composite(Color over, Color under)
+    {
+        double a = over.A / 255.0;
+        byte Blend(byte o, byte u) => (byte)Math.Round((o * a) + (u * (1 - a)));
+        return Color.FromArgb(
+            (byte)Math.Min(255, over.A + (int)Math.Round(under.A * (1 - a))),
+            Blend(over.R, under.R), Blend(over.G, under.G), Blend(over.B, under.B));
     }
 
     private static IEnumerable<Type> InstantiableControls() =>
