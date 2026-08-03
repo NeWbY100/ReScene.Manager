@@ -1669,3 +1669,155 @@ Baselines Manager 482 / App.Core 722. Delta **+1 Manager** — the census. App.C
    in the per-surface tests; the census deliberately checks only the shared rule, so it stays a
    census rather than becoming a second copy of every expected string that would then need updating
    twice.
+
+---
+
+# Wizard round, part 1 — the TabIndex construction
+
+Date: 2026-08-03. Base `main` @733a1c2. One commit. Nothing pushed.
+
+Closes §8's pickup. Its two-part guidance was treated as binding and both halves are implemented,
+each RED-verified on its own.
+
+## H1. Reproduced first, on the real window
+
+§8 warned that the body-only probe understated the real cycle, so the reproduction was done against
+a real `WizardWindow`. Cold start, step 0, before any change:
+
+```
+WizInputTextBox -> Browse for input file -> Browse folder for release input -> Close -> Next › -> (repeats)
+```
+
+Exactly §8's recorded cycle. Latent rather than trapping, for the reason §8 gave: on step 0 those
+five ARE everything focusable.
+
+**But stepping forward exposed a live defect §8 had not recorded.** On steps 1, 2 and 3:
+
+```
+step 1:  Close -> ‹ Back -> Next › -> Add sample… -> Remove -> Add subtitle… -> Remove
+step 2:  Close -> ‹ Back -> Next › -> Add files… -> Remove -> Remove all -> Rename -> …
+step 3:  Close -> ‹ Back -> Next › -> Browse for output path -> Save SRR to
+```
+
+The navigation footer came before the step's own fields on every step past the first — WCAG 2.4.3
+Focus Order, live in the shipping app, not latent at all.
+
+## H2. Half (b) — the host, and why it had to be a Grid
+
+Tab order follows tree order, and a `DockPanel`'s tree order is its declaration order — but a
+DockPanel forces the FILL child to be declared LAST, so `BodyHost` could only ever come after the
+footer. There was no attribute that fixes this; the container had to change.
+
+`WizardWindow` is now a `Grid` with `RowDefinitions="Auto,*,Auto"`, declaring header → body → footer
+while rendering exactly as before (Auto/*/Auto reproduces Top/fill/Bottom docking; every margin is
+this file's own previous value). Visual layout unchanged, tree order corrected.
+
+## H3. Half (a) — and an honest finding about it
+
+Scoping `CreateSRRWizardBody`'s input row with `TabNavigation="Local"` **changes nothing about
+today's shipped step 0**. Measured: with the host order fixed, removing the attribute again breaks
+none of the other tests in this file. The pinned trio sorts to the front of the window scope, which
+is where it belongs anyway.
+
+That is worth stating rather than shipping an attribute with an unverifiable claim attached — the
+`AccessibilityView="Raw"` lesson from §C1, where a previous round shipped exactly that.
+
+What the scoping DOES protect is the case §8 predicted: *"the moment anything focusable is added to
+that step … it would be excluded exactly as the Creator's form was."* That moment is now created in
+a test. A focusable control inserted into step 0's panel ABOVE the picker row must be tabbed before
+it. Measured both ways:
+
+| | walk |
+|---|---|
+| unscoped | trio → **added field** → Close → Next › |
+| scoped | **added field** → trio → Close → Next › |
+
+Unscoped, a field the user sees ABOVE the row is tabbed AFTER it. `ScopedPins_KeepAFieldAddedAboveTheRow_AheadOfIt`
+is RED without the attribute and green with it, which is the only honest basis for keeping it.
+
+## H4. A third defect, found by reading the walk
+
+Step 3's output row read `Browse for output path -> Save SRR to` — the button before its own field.
+Same construction as the Creator's Output row and found the same way §5b found that one: by reading
+a walk transcript rather than the markup. Fixed with the same pattern (TabIndex 0/1 + Local) in the
+same round.
+
+## H5. "Check every wizard body" — answered by measurement
+
+Only **one of the five** carries `TabIndex` pins at all: `CreateSRRWizardBody`. `CreateSRSWizardBody`,
+`EditSRRWizardBody`, `RestoreWizardBody` and `ReconstructWizardBody` have none, so the pin-scoping
+fix has nothing to apply to there. Half (b) fixes all five at once, since they share the host.
+
+## H6. A LARGER defect this round measured and did NOT fix
+
+Walking every picker row in the app turned up something well outside this commit's scope, so it is
+reported with its denominator rather than half-fixed:
+
+```
+CreatorView            rows=2  correct=2  BACKWARDS=0
+ReconstructorView      rows=4  correct=0  BACKWARDS=4
+SampleRestorerView     rows=3  correct=0  BACKWARDS=3
+SRSCreatorView         rows=3  correct=0  BACKWARDS=3
+SRSReconstructorView   rows=3  correct=0  BACKWARDS=3
+CreateSRRWizardBody    rows=2  correct=2  BACKWARDS=0   (this commit)
+CreateSRSWizardBody    rows=3  correct=0  BACKWARDS=3
+EditSRRWizardBody      rows=2  correct=0  BACKWARDS=2
+RestoreWizardBody      rows=5  correct=0  BACKWARDS=5
+ReconstructWizardBody  rows=4  correct=0  BACKWARDS=4
+                      ------------------------------
+                      rows=31 correct=4  BACKWARDS=27
+```
+
+**27 of 31 picker rows in the app tab backwards** — the Browse button before its own path field —
+because every one is a right-docked `DockPanel` whose button is therefore declared first, and only
+the Creator's two rows and this commit's two carry the correcting pins. The existing tab-order
+fixtures record it plainly once you know to look: `Button "Browse for SRR file"` immediately
+precedes `TextBox "SRR file path"`.
+
+Not fixed here. It is 27 rows across nine files, it moves every tab-order fixture in five suites,
+and it is a different defect from the one this commit was asked to close. It deserves its own gated
+round, and it is now measured rather than suspected.
+
+(The count was itself re-measured after a first attempt under-reported it as 18: the dedup key
+collapsed same-shaped rows in the wizard bodies, whose TextBoxes carry no x:Name. Reference-based
+dedup gives 31, which matches a hand count of the markup.)
+
+## H7. Tests
+
+Six, in `WizardTabOrderTests`, all against a real `WizardWindow`:
+
+| Test | Pins |
+|---|---|
+| `ColdStart_FirstTabLandsInTheBody_NotTheFooter` | (b) |
+| `AdvancingFromAFieldThenTabbing_LandsInTheNewStepsFields_NotTheFooter` | (b) |
+| `WizardHost_DeclaresBodyBeforeFooter_WhileRenderingFooterBelow` | (b), premise |
+| `ScopedPins_KeepAFieldAddedAboveTheRow_AheadOfIt` | (a) |
+| `PickerRows_TabInVisualOrder_DespiteReversedMarkupOrder` | (a), both rows + the inversion premise |
+| `StepTransitions_ForwardAndBack_ReachTheNewlyShownStepsFields` | step gating |
+
+**A false start, recorded because it nearly shipped.** The obvious (b) test — focus Next, change
+step, press Tab — PASSES with the footer declared first, because Next is the footer's last control
+either way, so Tab enters the body from there regardless. It was written, it passed, and it proved
+nothing. Caught by running the sabotage rather than by inspection. Replaced with the case that does
+discriminate: the user was working in a FIELD, advanced, and pressed Tab — the walk then restarts
+from the top of the order, which is where the two constructions differ.
+
+RED-verified per half: removing `Local` fails 1 test; declaring the footer first fails 4.
+
+## H8. Evidence
+
+`-t:Rebuild` 0 Warning(s)/0 Error(s); `Manager 483 -> 489` (+6), App.Core untouched at 722.
+
+## H9. Concerns
+
+1. **§8's own guidance was slightly wrong about the cause**, and the correction matters for anyone
+   reading it: it framed the problem as "Local alone would place footer controls before BodyHost",
+   as though scoping caused the footer-first order. It did not — the footer was already first, on
+   every step, and scoping merely stopped masking it on step 0.
+2. **`Local` is a no-op on today's markup** (§H3). It is kept because the test demonstrates what it
+   protects, but anyone auditing for dead attributes will find it and should read that test before
+   removing it.
+3. **27 backwards rows remain** (§H6). This commit fixed 2 and left 27, which is a worse ratio than
+   it sounds only because nobody had counted before.
+4. **No real screen-reader or manual keyboard session.** All walks are Avalonia's own focus
+   traversal, which is what a Tab key drives, but it is not a person pressing Tab.

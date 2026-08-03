@@ -28,12 +28,22 @@
       <TextBlock x:Name="WizInputHeader" Text="Release .sfv, first .rar, or folder" FontWeight="SemiBold" Margin="0,0,0,2" />
       <!-- Docked right in declaration order (rightmost first): folder Browse sits to the right of the
            file Browse. Explicit TabIndex keeps keyboard order = visual order = TextBox → Browse file
-           → Browse folder. -->
+           → Browse folder.
+           TabNavigation="Local" scopes those pins to this row — half (a) of the two-part fix. Left
+           unscoped they were compared against the WHOLE WINDOW's navigation scope, where every
+           other control carries the default int.MaxValue, so these three sorted ahead of
+           everything. MEASURED on a real WizardWindow: the cold-start cycle was
+           trio → Close → Next › → repeat, exactly as the a11y follow-up report's section 8
+           recorded. On step 0 that happened to cover every focusable control the step has, which
+           is why it was latent rather than an active trap — but only by the coincidence of step 0
+           being sparse, and adding one focusable control here would have excluded it the way the
+           Creator's whole form once was. Scoping alone was NOT sufficient; see WizardWindow.axaml
+           for half (b). -->
       <!-- These two buttons are the SAME two commands on the same CreatorViewModel as CreatorView's
            own Input row, so their names track it exactly (WCAG 3.2.4 Consistent Identification) —
            including the folder button's deliberate departure from the "Browse for <target>"
            phrasing, whose Label-in-Name reason is recorded in full at CreatorView's copy. -->
-      <DockPanel Margin="0,0,0,2">
+      <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
         <Button DockPanel.Dock="Right" Content="Browse folder…" Command="{Binding BrowseInputFolderCommand}"
                 Classes="ghost" TabIndex="2"
                 AutomationProperties.Name="Browse folder for release input"
@@ -176,11 +186,21 @@
            The button takes CreatorView's own name for this same BrowseOutputCommand verbatim
            (WCAG 3.2.4), and the TextBox is LabeledBy the short heading above it, exactly as step
            0's WizInputTextBox is LabeledBy WizInputHeader. -->
-      <DockPanel Margin="0,0,0,2">
+      <!-- Same construction, same correction as step 0's row and as CreatorView's two path rows:
+           the Browse button is docked Right and therefore declared FIRST, so tree order is the
+           REVERSE of what the user sees and an unpinned row tabs backwards. MEASURED on the real
+           WizardWindow during this round's walk — step 3 read
+           "Browse for output path" → "Save SRR to", with the button before its own field. TabIndex
+           restores visual order and TabNavigation="Local" scopes the pins to this row. Found the
+           same way the Creator's Output row was (section 5b): by reading a walk transcript rather
+           than the markup. -->
+      <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseOutputCommand}"
+                TabIndex="1"
                 AutomationProperties.Name="Browse for output path"
                 Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
         <TextBox Text="{Binding OutputPath}"
+                 TabIndex="0"
                  AutomationProperties.LabeledBy="{Binding #WizOutputHeader}" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding OutputStatus}" />

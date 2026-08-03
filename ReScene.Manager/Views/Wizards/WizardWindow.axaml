@@ -11,18 +11,35 @@
   <!-- No root FontSize: wizard body text follows the app-wide 12 (default + :is(Window)
        enforcement), keeping Beginner pages consistent with the hub in MainWindow; headings keep
        their explicit tokens. -->
-  <DockPanel Margin="{DynamicResource PageMargin}">
+  <!-- A Grid, NOT a DockPanel, and the reason is keyboard order rather than layout.
+       Tab order follows TREE order, and a DockPanel's tree order is its DECLARATION order — but a
+       DockPanel forces the FILL child to be declared LAST, so the body host could only ever come
+       after the footer. MEASURED against a real WizardWindow before this change: on every step
+       past the first, a keyboard user tabbed Close -> Back -> Next BEFORE reaching any field of
+       the step they were actually on (WCAG 2.4.3 Focus Order). A Grid decouples visual position
+       (Grid.Row) from declaration order, so the three bands can be declared header -> body ->
+       footer while rendering exactly as before. The row heights Auto/*/Auto reproduce
+       Top/fill/Bottom docking exactly; every margin below is this file's own previous value,
+       unchanged.
+       This is half (b) of the two-part fix the a11y follow-up report's section 8 recorded as
+       BINDING: scoping the Create-SRR body's TabIndex pins alone would have left the footer ahead
+       of the body, i.e. traded a latent trap for a wrong order on four steps out of five. -->
+  <Grid Margin="{DynamicResource PageMargin}" RowDefinitions="Auto,*,Auto">
 
     <!-- Header -->
-    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+    <StackPanel Grid.Row="0" Margin="0,0,0,12">
       <TextBlock Text="{Binding Title}" FontSize="{DynamicResource FontSizeH1}" FontWeight="SemiBold" />
       <TextBlock Text="{Binding StepHeader}"
                  Foreground="{DynamicResource ForegroundSecondary}"
                  FontSize="{DynamicResource FontSizeCaption}" Margin="0,2,0,0" />
     </StackPanel>
 
+    <!-- Body: per-task step panels (DataContext = task VM, injected in code-behind).
+         Declared BEFORE the footer so Tab reaches the step's own fields first. -->
+    <ContentControl Grid.Row="1" x:Name="BodyHost" />
+
     <!-- Footer -->
-    <DockPanel DockPanel.Dock="Bottom" Margin="0,14,0,0">
+    <DockPanel Grid.Row="2" Margin="0,14,0,0">
       <Button DockPanel.Dock="Left" Content="Close" Click="OnCloseClick"
               Classes="ghost" MinWidth="80"
               IsVisible="{Binding IsLastStep, Converter={StaticResource InverseBoolConverter}}" />
@@ -38,8 +55,5 @@
                 IsVisible="{Binding IsLastStep}" />
       </StackPanel>
     </DockPanel>
-
-    <!-- Body: per-task step panels (DataContext = task VM, injected in code-behind) -->
-    <ContentControl x:Name="BodyHost" />
-  </DockPanel>
+  </Grid>
 </Window>
