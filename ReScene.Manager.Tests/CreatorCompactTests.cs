@@ -526,8 +526,10 @@ public class CreatorCompactTests
     /// attribute for TextBoxes/the DataGrid, the sole GridSplitter, distinct Content strings for
     /// the option CheckBoxes), NEVER by re-deriving from a walk's own observed output. Unlike
     /// SRSCreator/SampleRestorer, this view's three "Browse"-labelled buttons do NOT collide by
-    /// description (two of the three carry distinct explicit AutomationProperties.Name values, and
-    /// the third falls back to its own distinct Content) — resolving by Command reference here
+    /// description — all three now carry distinct explicit AutomationProperties.Name values
+    /// ("Browse input file", "Browse folder for release input", "Browse for output path"); the
+    /// output one gained its name after this comment was first written, when two of the three were
+    /// named and the third still fell back to its Content. Resolving by Command reference here
     /// anyway is not redundant caution, it is the same house rule applied uniformly regardless of
     /// whether a REAL collision happens to exist today.
     /// </summary>
@@ -868,7 +870,7 @@ public class CreatorCompactTests
         {
             // Expected UIA names are LITERAL here, never read back off the controls: a test that
             // derives them from the very controls it is checking passes through any rename,
-            // including one that strips a name to the bare "Browse" these buttons all share.
+            // including one that strips a name back to a bare "Browse".
             TextBox inputTextBox = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "InputTextBox");
             Button inputBrowse = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputCommand));
             Button inputBrowseFolder = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.BrowseInputFolderCommand));
@@ -891,10 +893,10 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// Asserts one path row three ways: the markup order is the reverse of
-    /// <paramref name="visualOrder"/> (the premise the pins exist to correct), the rendered
-    /// left-to-right order really is <paramref name="visualOrder"/>, and Tab walks it in that same
-    /// order.
+    /// Asserts one path row four ways: every control announces the name
+    /// <paramref name="visualRow"/> declares for it, the markup order is the reverse of that row's
+    /// order (the premise the pins exist to correct), the rendered left-to-right order really is
+    /// that order, and Tab walks it in that order too.
     /// </summary>
     private static void AssertRowOrder(
         Window window, string rowName, IReadOnlyList<(Control Control, string ExpectedName)> visualRow)
@@ -903,7 +905,9 @@ public class CreatorCompactTests
         var dockPanel = (DockPanel)visualOrder[0].GetVisualParent()!;
 
         // Every control announces itself, which is what keeps the reversed UIA order below merely
-        // surprising rather than ambiguous — four buttons in this view render the word "Browse".
+        // surprising rather than ambiguous — two of this view's buttons render the bare word
+        // "Browse" (the Input row's file Browse and the Output row's), so content alone would not
+        // distinguish them.
         foreach ((Control control, string expectedName) in visualRow)
         {
             Assert.Equal(expectedName, ControlAutomationPeer.CreatePeerForElement(control).GetName());

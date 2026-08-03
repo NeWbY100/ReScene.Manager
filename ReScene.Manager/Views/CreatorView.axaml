@@ -197,9 +197,10 @@
                against the whole window — see the Input row's own note for what that costs when it is
                left off. -->
           <DockPanel KeyboardNavigation.TabNavigation="Local">
-            <!-- Contextual name: four buttons in this view read "Browse", so the bare content is
-                 not a usable label out of context. Follows the "Browse for <target>" phrasing the
-                 Reconstruct wizard's four already use. -->
+            <!-- Contextual name: this button and the Input row's file Browse both render the bare
+                 word "Browse" (a third reads "Browse folder…"), so the content alone is not a
+                 usable label out of context. Follows the "Browse for <target>" phrasing the
+                 Reconstruct wizard's four buttons already use. -->
             <Button DockPanel.Dock="Right" Content="Browse"
                     Command="{Binding BrowseOutputCommand}"
                     Classes="ghost"
