@@ -2430,7 +2430,8 @@ separate-live-line shape instead, sharing the "Details" caption row at no layout
 a live line. No VM change: `LoadFile` already clears `WarningMessage` before it can be set again.
 
 **InspectorView `IsVerifyResultVisible`** — assessed rather than pattern-matched, as instructed.
-Measured: nothing in the view or its code-behind moves focus into the panel when it appears (the only
+Established by code INSPECTION, not measurement — the word matters, and §N used it wrongly: nothing
+in the view or its code-behind moves focus into the panel when it appears (the only
 two `Focus()` calls are the hex search box and a tree item), so pressing Verify changed the screen and
 told a screen-reader user nothing at all. The panel's own text is the wrong thing to announce — it
 carries a line per issue, and a polite live region would read every one of them before the user could
@@ -2495,3 +2496,122 @@ Final sweep, with denominators — each stated as number + pattern + scope, per 
   widest-reaching instance in the workstream. Not measured; recorded in the census test itself.
 - **A real screen-reader session.** Everything in this entire workstream is headless Avalonia walks,
   rendered-pixel sampling and source census. No NVDA or Narrator has spoken one of these names aloud.
+
+## O1. FieldStatusLine — the widest-reaching instance, and the one the census passed
+
+`FieldStatusLine` is the validation status under every path field: **32 instances across 11 files**
+(`grep -rc 'controls:FieldStatusLine' --include=*.axaml ReScene.Manager/Views/`). Its message has
+carried `LiveSetting="Polite"` since it was written. §N6 flagged that nobody had checked whether it
+FIRES, because it sits inside its own `IsVisible`-toggled Grid. It does not — not for the transition
+that matters.
+
+**The mechanism, verified here rather than taken on report.** `ControlAutomationPeer.GetChildrenCore`
+filters `IsVisible=false` controls out of a peer's children, so a hidden subtree has no automation
+nodes at all. Measured on the unfixed control, hosted headless:
+
+| Status | Automation nodes below the control | Message TextBlock |
+|---|---|---|
+| `None` | **1** | in the visual tree, `IsEffectivelyVisible=false` |
+| `Error` | **4** | realized |
+
+So going from None to Ok/Error did not RENAME the message node — it CREATED one, already carrying its
+text. A node that comes into existence holding its content raises no name-change, and there is nothing
+for a screen reader to announce. Only transitions between two already-visible states worked, which is
+exactly the case the control's own comment described ("InputStatus transitions, e.g. Scanning… → the
+Ok/Error result"). The broken case — the FIRST status any field produces — went unstated, and it is
+the common one: fill in a path, get told nothing.
+
+## O2. The fix, and a ruled premise that measurement did not support
+
+The gate is gone. The row is always in the tree and simply has nothing to show when idle:
+`FieldStateToGlyphConverter` maps `None` to an empty string and the message binds to an empty
+`Status.Message`, so an idle line looks exactly as it did. `StateVisibleConverter` is deleted with its
+only use.
+
+The brief offered two shapes and ruled that **if an empty always-in-tree row costs DIPs anywhere, the
+glyph-only gating wins**. Measured, that premise does not hold — gating the glyph saves nothing:
+
+| Configuration, status = `None` | Row height |
+|---|---|
+| Gated (old) | **0 DIPs** |
+| Always in tree | **18 DIPs** |
+| Always in tree, glyph hidden | **18 DIPs** |
+
+The glyph and the message EACH reserve a full caption line box on their own, so hiding the glyph
+leaves the row exactly as tall. The 18 DIPs belong to keeping the message realized, which is the
+entire fix; there is no variant that has both the announcement and the zero. The choice was therefore
+not between two shapes but between the announcement and 18 DIPs per idle line, and I took the
+announcement.
+
+**What that costs, per Advanced form with every field idle** (measured by forcing each gated Grid
+visible and re-measuring): CreatorView **+36**, SampleRestorerView **+36**, SRSCreatorView **+36**,
+SRSReconstructorView **+54**, ReconstructorView **+18** (four of its five lines already carry text in
+the hosted state, so only one was idle).
+
+That cost is real, and the question was whether it breaks the small-window work. It does not: the
+scroll-reachability suite, which walks these forms at their shipping minimum geometry, passes
+unchanged. Had it failed, the answer would have been a different shape rather than a relaxed test.
+
+## O3. What the tests pin
+
+Four new tests, all four RED against the unfixed control first. The load-bearing one asserts the
+mechanism rather than a symptom: **the automation node count must be the same before and after the
+first status arrives**. Unfixed it reported "1 node while idle and 4 once it had something to say";
+the message names `GetChildrenCore` so the next reader does not have to rediscover it.
+
+Two pre-existing tests, `None_IsCollapsed` and `DefaultStatus_IsNoneAndCollapsed`, asserted
+`IsVisible == false` — the old mechanism, and also the bug. They are rewritten to assert the visible
+OUTCOME instead (an idle line renders no text anywhere), with the announcement left to the new tests.
+Renaming them was not cosmetic: a test named `..._IsCollapsed` would have re-taught the wrong contract
+to whoever read it next.
+
+The layout cost is pinned relationally, not as a literal DIP count — an idle line must already be the
+height a speaking line needs, so a status arriving does not reflow the form. Measured, a speaking line
+is 19 DIPs against an idle 18; the extra DIP is the glyph's own ascender, and a literal assertion
+would have been a font-stack premise rather than a fact.
+
+## O4. The census entry, and a guard that passed something wrong
+
+`FieldStatusLine`'s classification is deleted rather than updated, because the binding it keyed on no
+longer exists — `ExpectedOccurrences` drops 84 → **83**. The stale-entry check forced this: a table
+entry describing a binding that is gone fails the census, which is what that assertion is for.
+
+Worth stating plainly: **the census PASSED this instance**. It was classified `AnnouncedByLiveRegion`
+on the evidence that the file contains a `LiveSetting`, and that evidence was true and the
+classification was wrong. §N4 disclosed exactly this limit — "it checks that an outcome HAS an
+announcement counterpart, not that the counterpart actually FIRES" — and named this control as the
+open case. The disclosure did its job; a guard that had not admitted its own limit would have read as
+proof that nothing was left.
+
+## O5. Evidence
+
+RED first, all four tests, against the unfixed control:
+`the status line exposed 1 automation nodes while idle and 4 once it had something to say`;
+`the message is not realized while the status is None`;
+`an idle line that collapses to nothing has no realized message to announce with`.
+
+Forced `-t:Rebuild` on all four projects: 0 Warning(s), 0 Error(s). **Manager 502/502** (498 + 4),
+**App.Core 728/728**, unchanged.
+
+Counts, each as number + pattern + scope per §N1's rule:
+
+- **32** instances across **11** files —
+  `grep -rc 'controls:FieldStatusLine' --include=*.axaml ReScene.Manager/Views/`.
+- **83** data-bound visibilities (was 84; this commit removes one) —
+  `grep -rE 'IsVisible="\{Binding' --include=*.axaml ReScene.Manager/`, whole app. Guarded by
+  `IsVisibleCensusTests.ExpectedOccurrences`, which is the number to quote rather than the grep.
+- **17** live-line attributes across **12** files, unchanged —
+  `grep -rE 'AutomationProperties\.LiveSetting="' --include=*.axaml ReScene.Manager/`.
+
+## O6. The standing headless limit
+
+Everything above is Avalonia's own peer tree, measured in a headless host. It establishes the
+STRUCTURAL fact — the node now exists before the text arrives, so a name-change is raised where
+previously a node was conjured. It does not establish what a screen reader does with that name-change
+at runtime. In particular, an AT may coalesce a name-change with a tree re-walk it is already
+processing, and no headless assertion can see that.
+
+This is the same limit every announcement claim in this workstream carries, and it is the reason gate
+item (e) has never stopped being open: **no NVDA or Narrator has spoken one of these names aloud.**
+The structural fix is necessary and was demonstrably absent; whether it is sufficient is a question
+only a real screen-reader session answers.

@@ -8,8 +8,8 @@ namespace ReScene.App.Core.Tests;
 /// <summary>
 /// The Integrity Verify Result panel toggles <c>IsVisible</c>, so it cannot announce its own arrival:
 /// an element that is not realized when its text lands gives an assistive technology no transition to
-/// notice. A screen-reader user pressing Verify was told nothing — measured, not assumed: nothing in
-/// the view or its code-behind moves focus into the panel when it appears.
+/// notice. A screen-reader user pressing Verify was told nothing, and nothing rescued it: by
+/// inspection, neither the view nor its code-behind moves focus into the panel when it appears.
 /// <para>
 /// The announcement is a one-line verdict rather than the panel's own text, which carries a line per
 /// issue; a polite live region would read all of them before the user could act.

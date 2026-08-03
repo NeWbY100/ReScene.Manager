@@ -129,9 +129,13 @@ public class IsVisibleCensusTests
         new("RestoreWizardBody.axaml", "SingleRebuilder.ShowResult", Kind.AnnouncedByLiveRegion, "ResultStatus"),
         new("InspectorView.axaml", "HasWarning", Kind.AnnouncedByLiveRegion, "WarningStatus"),
         new("InspectorView.axaml", "IsVerifyResultVisible", Kind.AnnouncedByLiveRegion, "VerifyStatus"),
-        new("FieldStatusLine.axaml",
-            "Status.State, ElementName=Root, Converter={x:Static local:FieldStatusLine.StateVisibleConverter",
-            Kind.AnnouncedByLiveRegion, "the message TextBlock inside it carries LiveSetting=Polite"),
+        // FieldStatusLine USED to appear here, gated on "state is not None" and classified as
+        // announced because the message inside it carries LiveSetting=Polite. That classification
+        // was wrong, and this census passed it: a live region inside a visibility-gated container
+        // has no automation node while the container is hidden, so it cannot announce the first
+        // status a field produces. The gate is gone — the control renders nothing when idle instead
+        // of hiding — so there is no entry to make. See FieldStatusAnnouncementTests.
+
         new("ReconstructorView.axaml", "PathsNeedAttention", Kind.AnnouncedOtherwise,
             "a warning glyph in a TabItem header: the tab's own accessible name becomes " +
             "\"Paths — needs attention\" (PathsTabAccessibleName), and the glyph is pruned from the control view"),
@@ -157,7 +161,7 @@ public class IsVisibleCensusTests
     /// within a file (five <c>IsStoredFileSelected</c> controls, eighteen step gates); the guard is
     /// on the TOTAL, so a new one anywhere moves this number and fails until it is judged.
     /// </summary>
-    private const int ExpectedOccurrences = 84;
+    private const int ExpectedOccurrences = 83;
 
     private static readonly Regex IsVisibleBinding =
         new(@"IsVisible=""\{Binding (?<expr>[^}""]*)", RegexOptions.Compiled);

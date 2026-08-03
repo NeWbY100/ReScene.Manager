@@ -8,19 +8,14 @@ namespace ReScene.Manager.Controls;
 
 /// <summary>
 /// Renders a <see cref="FieldStatus"/> as a colored glyph (✓/ℹ/⚠/✗) plus its message.
-/// Hidden when the status state is <see cref="FieldState.None"/>.
+/// <para>
+/// Renders nothing when the state is <see cref="FieldState.None"/> — an empty glyph and an empty
+/// message — but is NOT hidden, because its message is a live region and a hidden subtree has no
+/// automation nodes to announce from. See the remarks in the XAML.
+/// </para>
 /// </summary>
 public partial class FieldStatusLine : UserControl
 {
-    /// <summary>
-    /// Control-local converter (not an app-wide resource, since only this control's own XAML uses
-    /// it): maps <see cref="Status"/>'s <see cref="FieldState"/> to the root grid's
-    /// <see cref="Avalonia.Visual.IsVisible"/> — hidden exactly when the state is
-    /// <see cref="FieldState.None"/>, mirroring the WPF original's Visibility DataTrigger.
-    /// </summary>
-    public static readonly IValueConverter StateVisibleConverter =
-        new FuncValueConverter<FieldState, bool>(state => state != FieldState.None);
-
     public static readonly StyledProperty<FieldStatus?> StatusProperty =
         AvaloniaProperty.Register<FieldStatusLine, FieldStatus?>(nameof(Status), FieldStatus.None);
 

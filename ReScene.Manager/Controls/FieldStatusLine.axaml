@@ -13,8 +13,22 @@
 
   <!-- A Grid, not a horizontal StackPanel: a StackPanel measures children with infinite width,
        which silently disables the message's TextWrapping. -->
-  <Grid VerticalAlignment="Center"
-        IsVisible="{Binding Status.State, ElementName=Root, Converter={x:Static local:FieldStatusLine.StateVisibleConverter}}">
+  <!-- NOT visibility-gated, deliberately, and this is the whole announcement.
+       ControlAutomationPeer.GetChildrenCore filters IsVisible=false controls out of a peer's
+       children, so a hidden subtree has no automation nodes at all. While this row was gated on
+       "state is not None", going from None to Ok/Error did not RENAME the message node — it CREATED
+       one, already carrying its text, which raises no name-change for a screen reader to announce.
+       The FIRST status a field produces is the one that matters most, and it was the one that could
+       not be heard; only transitions between two already-visible states worked.
+       Nothing needs hiding: FieldStateToGlyphConverter maps None to an empty string, and an empty
+       Status.Message renders nothing, so an idle line shows exactly what it did before.
+       MEASURED cost, and it is not zero: an idle line now reserves one caption line box, 18 DIPs,
+       where it used to collapse to 0. Per Advanced form with every field idle that is +36
+       (CreatorView, SampleRestorerView, SRSCreatorView), +54 (SRSReconstructorView), +18
+       (ReconstructorView). Gating the glyph alone instead would have saved none of it: measured, the
+       glyph and the message EACH reserve the full 18-DIP line box on their own, so the cost belongs
+       to keeping the message realized and is the price of the announcement working at all. -->
+  <Grid VerticalAlignment="Center">
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="Auto" />
       <ColumnDefinition Width="*" />

@@ -58,15 +58,15 @@ public class FieldStatusLineTests
     }
 
     [AvaloniaFact]
-    public void None_IsCollapsed()
+    public void None_RendersNothing_ButStaysInTheTree()
     {
-        (_, Grid grid) = ShowInWindow(FieldStatus.None);
+        (FieldStatusLine control, Grid grid) = ShowInWindow(FieldStatus.None);
 
-        Assert.False(grid.IsVisible);
+        AssertRendersNothing(control, grid);
     }
 
     [AvaloniaFact]
-    public void DefaultStatus_IsNoneAndCollapsed()
+    public void DefaultStatus_IsNone_AndRendersNothing()
     {
         var control = new FieldStatusLine();
         var window = new Window { Content = control };
@@ -75,6 +75,26 @@ public class FieldStatusLineTests
         Grid grid = control.GetVisualDescendants().OfType<Grid>().Single();
 
         Assert.Equal(FieldState.None, control.Status?.State);
-        Assert.False(grid.IsVisible);
+        AssertRendersNothing(control, grid);
+    }
+
+    /// <summary>
+    /// An idle line shows nothing — but by having nothing to show, NOT by being hidden. These two
+    /// tests used to assert <c>IsVisible == false</c>, which was the old mechanism and also the bug:
+    /// a hidden subtree has no automation nodes, so the message's live region could not announce the
+    /// first status a field produced. The visible outcome is unchanged, which is what these assert;
+    /// the announcement is covered by <see cref="FieldStatusAnnouncementTests"/>.
+    /// </summary>
+    private static void AssertRendersNothing(FieldStatusLine control, Grid grid)
+    {
+        Assert.True(grid.IsVisible,
+            "the status row is hidden again — its live message then has no automation node, and the first status " +
+            "a field produces cannot be announced");
+
+        foreach (TextBlock text in control.GetVisualDescendants().OfType<TextBlock>())
+        {
+            Assert.True(string.IsNullOrEmpty(text.Text),
+                $"an idle status line renders \"{text.Text}\", so it is not idle to look at");
+        }
     }
 }

@@ -15,7 +15,7 @@ namespace ReScene.Manager.Tests;
 /// <summary>
 /// Two of the Inspector's outcomes toggle <c>IsVisible</c> and so could not announce themselves: the
 /// custom-packer warning bar, and the Integrity Verify Result panel. The verify panel is the starker
-/// case — nothing in the view or its code-behind moves focus into it, so pressing Verify changed the
+/// case — by inspection, neither the view nor its code-behind moves focus into it, so pressing Verify changed the
 /// screen and told a screen-reader user nothing whatsoever.
 /// <para>
 /// Both now ride always-in-tree live lines sharing the File caption's row.
