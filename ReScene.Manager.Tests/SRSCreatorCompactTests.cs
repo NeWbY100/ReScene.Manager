@@ -773,6 +773,20 @@ public class SRSCreatorCompactTests
     /// button collapsing to <c>Height=0</c>) would have slipped past a containment-only check.
     /// Effective visibility and a positive size are asserted FIRST, unconditionally, so a
     /// collapsed/invisible control fails outright instead of being reported as "contained".
+    /// <para>
+    /// CLIP-AWARE since gate finding NEW-4 — see
+    /// <c>SRSReconstructorCompactTests.AssertFullyWithinWindow</c>'s own doc for the full reasoning
+    /// (the window's outer rectangle is not the visible region; the geometry is delegated to
+    /// <see cref="CompactViewRig.IsFullyVisibleWithinWindow"/>, which already owns the cumulative
+    /// clip walk, rather than hand-copied a third time).
+    /// </para>
+    /// <para>
+    /// This view is the one where the distinction bites hardest:
+    /// <see cref="PinnedActionBand_CreateSRSButtonStaysWithinWindow_BandOneScrolledToTopAndBottom"/>
+    /// deliberately scrolls the config band to both extremes, which is exactly the manoeuvre that
+    /// moves content behind a ScrollViewer's clip while leaving its window-space coordinates inside
+    /// the window.
+    /// </para>
     /// </summary>
     private static void AssertFullyWithinWindow(Control control, Window window)
     {
@@ -780,17 +794,85 @@ public class SRSCreatorCompactTests
         Assert.True(control.Bounds.Width > 0 && control.Bounds.Height > 0,
             $"{control.GetType().Name} has a non-positive size ({control.Bounds.Width:F1}x{control.Bounds.Height:F1}) — collapsed, not merely positioned badly.");
 
+        Assert.True(CompactViewRig.IsFullyVisibleWithinWindow(control, window),
+            $"{control.GetType().Name} (bounds {control.Bounds}) is not fully within the CLIP-AWARE visible region of " +
+            $"the window (bounds {window.Bounds}) — it may be positioned outside the window, or hidden by an " +
+            "intermediate ClipToBounds ancestor such as a ScrollViewer's own clipped viewport.");
+    }
+
+    /// <summary>
+    /// The discriminating evidence for gate finding NEW-4, kept as a committed test rather than a
+    /// throwaway diagnostic: the window-rect-only check this suite used to carry genuinely
+    /// FALSE-PASSES a control the user cannot see, and the clip-aware form genuinely catches it.
+    /// <para>
+    /// The scenario is not contrived — it is the shipped compact layout. The config band's
+    /// ScrollViewer is row 1; the pinned action band and the log occupy rows 2 and 3 BELOW it. So
+    /// content scrolled past the band's own bottom edge lands in window space that is still inside
+    /// the window, behind the pinned rows. MEASURED at 700x450 with the band at the top: the
+    /// Output row sits at y≈155 in a viewport only ≈127 DIPs tall, so <c>OutputTextBox</c> is
+    /// entirely hidden while every one of its corners is comfortably inside the window rectangle.
+    /// It is one of 41 controls in this view alone that the old check reported as "contained" in
+    /// that single state.
+    /// </para>
+    /// <para>
+    /// Both halves are asserted, because either alone proves nothing: that the OLD form passes (so
+    /// this really is a false pass, not just a control that happens to be out of bounds), and that
+    /// the NEW form fails. The old form is reproduced inline rather than described — a comment
+    /// claiming what the deleted code did is not checkable.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void ClipAwareContainment_CatchesAControlScrolledBehindTheBandClip_WhichTheWindowRectCheckMisses()
+    {
+        SRSCreatorViewModel vm = CreateVm();
+        var view = new SRSCreatorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, CompactInner);
+        try
+        {
+            Assert.Contains("compactHeight", root.Classes);
+            ScrollViewer band = window.GetVisualDescendants().OfType<ScrollViewer>().Single(sv => Grid.GetRow(sv) == 1);
+            Assert.True(band.Extent.Height > band.Viewport.Height,
+                "test precondition: the config band must genuinely overflow, or nothing can be scrolled out of its clip");
+
+            band.Offset = new Vector(0, 0);
+            Dispatcher.UIThread.RunJobs();
+
+            TextBox hidden = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "OutputTextBox");
+            Assert.True(hidden.IsEffectivelyVisible,
+                "test precondition: the target must be REALIZED and effectively visible — a control hidden by IsVisible would be caught by either check and prove nothing");
+            Assert.True(hidden.Bounds is { Width: > 0, Height: > 0 },
+                "test precondition: the target must have a real size, so this is a clipping case and not a degenerate one");
+
+            Assert.True(NaiveWithinWindowRectOnly(hidden, window),
+                "test precondition: the OLD window-rect-only check must PASS here — if it already failed, this scenario would not " +
+                "demonstrate a false pass and this covering test would be proving nothing");
+
+            Assert.False(CompactViewRig.IsFullyVisibleWithinWindow(hidden, window),
+                "the clip-aware check must REJECT a control hidden behind the config band's own clip — this is the whole of NEW-4");
+
+            Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertFullyWithinWindow(hidden, window));
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// The pre-NEW-4 containment check, verbatim, kept ONLY so
+    /// <see cref="ClipAwareContainment_CatchesAControlScrolledBehindTheBandClip_WhichTheWindowRectCheckMisses"/>
+    /// can demonstrate what it missed. Never used as an assertion by any real test.
+    /// </summary>
+    private static bool NaiveWithinWindowRectOnly(Control control, Window window)
+    {
         Point? topLeft = control.TranslatePoint(new Point(0, 0), window);
         Point? bottomRight = control.TranslatePoint(new Point(control.Bounds.Width, control.Bounds.Height), window);
-        Assert.True(topLeft is not null && bottomRight is not null,
-            $"{control.GetType().Name} could not be translated into window coordinates.");
+        if (topLeft is not { } tl || bottomRight is not { } br)
+        {
+            return false;
+        }
 
         const double Slack = 0.5;
         Rect windowBounds = new(window.Bounds.Size);
-        Assert.True(
-            topLeft!.Value.X >= windowBounds.X - Slack && topLeft.Value.Y >= windowBounds.Y - Slack &&
-            bottomRight!.Value.X <= windowBounds.Right + Slack && bottomRight.Value.Y <= windowBounds.Bottom + Slack,
-            $"{control.GetType().Name} bounds ({topLeft.Value}..{bottomRight.Value}) exceed window bounds {windowBounds}");
+        return tl.X >= windowBounds.X - Slack && tl.Y >= windowBounds.Y - Slack
+            && br.X <= windowBounds.Right + Slack && br.Y <= windowBounds.Bottom + Slack;
     }
 
     // ── 6. Frame-rig parity (criterion F: normal-mode pixels unchanged) ──

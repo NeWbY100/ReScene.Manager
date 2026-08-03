@@ -333,19 +333,17 @@ public class ReconstructorCompactTests
         (Window window, Grid root) = CompactViewRig.HostAt(view, innerHeight);
         try
         {
-            // In compact mode Help starts collapsed (condition 5), so WindowsPackLink — the
-            // RESTORE-direction target, only ever visible with the body force-expanded — is
-            // hidden; the always-visible entry point there is the disclosure's own header
-            // toggle. In expanded/flat mode the body IS force-expanded, so WindowsPackLink is
-            // the genuinely reachable sentinel.
             bool compact = root.Classes.Contains("compactHeight");
-            Control sentinel = compact
-                ? window.GetVisualDescendants().OfType<Expander>().Single(e => e.Name == "HelpDisclosure")
-                    .GetVisualDescendants().OfType<ToggleButton>().Single()
-                : window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "WindowsPackLink");
+
+            // Independent ground truth, resolved BEFORE any walk runs and never derived from a
+            // walk's own output — gate finding NEW-3. The sentinel comes from it too rather than
+            // being hardcoded here, so "which control is first" is a claim the oracle makes and the
+            // reverse walk's own boundary-landing assertion below then PROVES, instead of a
+            // presumption baked into the test's setup.
+            List<Control> independentOrder = ResolveIndependentExpectedOrder(window, vm, compact);
+            Control sentinel = independentOrder[0];
 
             IReadOnlyList<string> forwardFixture = compact ? CompactModeTabOrderFixture : NormalModeTabOrderFixture;
-            List<Control> expectedForwardStops = ResolveExpectedStops(window, forwardFixture);
 
             // The forward walk uses CaptureTabOrderControls (root-SCOPED: stops the moment focus
             // would leave root, exactly like NormalModeTabOrderFixture/CompactModeTabOrderFixture
@@ -358,9 +356,10 @@ public class ReconstructorCompactTests
             // RunTabPass's own "stable loop" boundary is the right one there.
             sentinel.Focus();
             Dispatcher.UIThread.RunJobs();
-            CompactViewRig.TabOrderCapture forwardCapture = CompactViewRig.CaptureTabOrderControls(window, root, expectedForwardStops);
+            CompactViewRig.TabOrderCapture forwardCapture = CompactViewRig.CaptureTabOrderControls(window, root, independentOrder);
             IReadOnlyList<Control> forwardOrder = forwardCapture.Order;
-            Assert.Equal(forwardFixture, forwardOrder.Select(CompactViewRig.Describe));
+            Assert.Equal(forwardFixture, forwardOrder.Select(CompactViewRig.Describe)); // human-readable regression net
+            AssertSameControlSequence(independentOrder, forwardOrder, "forward"); // the actual discriminating check
 
             // The terminal EXTERNAL target (the first control outside root
             // the forward walk lands on) must be the SPECIFIC, expected shell-chrome boundary, not
@@ -385,34 +384,32 @@ public class ReconstructorCompactTests
                 $"not {CompactViewRig.Describe(forwardCapture.FirstExternalTarget!)} — same description does not mean same control instance.");
 
             // Scope split: scope A is everything up to and including the Paths TabItem header;
-            // scope B is everything after (the Paths sub-tab's own content). Resolved by POSITION
-            // in forwardOrder, not by re-querying descriptions. That was originally FORCED — the
-            // four "Browse" buttons described identically, so only the forward walk's own ordered
-            // result could name a specific one — and is now merely CORRECT: the four carry distinct
-            // names, but re-deriving an oracle from descriptions is against the house rule whether
-            // or not a collision happens to exist today.
-            int tabItemIndex = forwardFixture.ToList().FindIndex(s => s.StartsWith("TabItem", StringComparison.Ordinal));
-            Control scopeAAnchor = forwardOrder[tabItemIndex];
-            Control scopeAFirstInScope = forwardOrder[0];
-            Control scopeBAnchor = forwardOrder[^1];
-            Control scopeBFirstInScope = forwardOrder[tabItemIndex + 1];
+            // scope B is everything after (the Paths sub-tab's own content). The split index comes
+            // from the INDEPENDENT order — the sole TabItem in it — not from a fixture string and
+            // not from the walk. The per-scope machinery itself is unchanged and must stay: this
+            // view nests a second TabControl (the Paths/Options sub-tabs) inside the shell's own,
+            // and each scopes keyboard navigation to its selected content, so no single reverse
+            // walk can cross the inner boundary.
+            int tabItemIndex = independentOrder.FindIndex(c => c is TabItem);
+            Assert.True(tabItemIndex > 0 && tabItemIndex < independentOrder.Count - 1,
+                $"the independent order must contain the Paths TabItem strictly inside it (found at {tabItemIndex} of {independentOrder.Count}) — the two-scope split is derived from its position");
+            Control scopeAAnchor = independentOrder[tabItemIndex];
+            Control scopeAFirstInScope = independentOrder[0];
+            Control scopeBAnchor = independentOrder[^1];
+            Control scopeBFirstInScope = independentOrder[tabItemIndex + 1];
 
-            IReadOnlyList<string> scopeAReverseFixture = compact ? CompactScopeAReverseTabOrderFixture : NormalScopeAReverseTabOrderFixture;
-            List<Control> expectedScopeAReverseStops = ResolveExpectedStops(window, scopeAReverseFixture);
-            List<Control> expectedScopeBReverseStops = ResolveExpectedStops(window, ScopeBReverseTabOrderFixture);
+            CompactViewRig.TabWalkResult scopeAReverse = CompactViewRig.RunTabPass(window, scopeAAnchor, forward: false, independentOrder.Take(tabItemIndex + 1).ToList());
+            CompactViewRig.TabWalkResult scopeBReverse = CompactViewRig.RunTabPass(window, scopeBAnchor, forward: false, independentOrder.Skip(tabItemIndex + 1).ToList());
 
-            CompactViewRig.TabWalkResult scopeAReverse = CompactViewRig.RunTabPass(window, scopeAAnchor, forward: false, expectedScopeAReverseStops);
-            CompactViewRig.TabWalkResult scopeBReverse = CompactViewRig.RunTabPass(window, scopeBAnchor, forward: false, expectedScopeBReverseStops);
-
-            // ORDER, explicit and OBJECT-REFERENCE-exact: comparing
-            // DESCRIPTIONS (as this used to) cannot catch a permutation of the four identically
-            // described "Browse" instances — the same four strings in the same positions pass
-            // regardless of which SPECIFIC Browse control actually sat at each position. The
-            // forward walk's own ordered result is the single source of truth for "which specific
-            // control," so each per-scope reverse walk is checked against the REVERSED SLICE of
-            // those SAME references — descriptions are used only inside the failure message.
-            List<Control> expectedScopeAReverseOrder = [.. forwardOrder.Take(tabItemIndex + 1).Reverse()];
-            List<Control> expectedScopeBReverseOrder = [.. forwardOrder.Skip(tabItemIndex + 1).Reverse()];
+            // ORDER, explicit and OBJECT-REFERENCE-exact, against the INDEPENDENT list's own
+            // reversal — NOT forwardOrder.Reverse(), which is what gate finding NEW-3 was about.
+            // Deriving the reverse expectation from the forward walk makes the oracle
+            // self-referential: a tree-level defect that permutes stops moves BOTH sides together,
+            // so reverse "agrees" with a forward order that is already wrong and the pair passes.
+            // Anchoring both directions on a list resolved by command/x:Name identity is what makes
+            // the two walks genuinely independent evidence rather than one walk checked twice.
+            List<Control> expectedScopeAReverseOrder = [.. independentOrder.Take(tabItemIndex + 1).Reverse()];
+            List<Control> expectedScopeBReverseOrder = [.. independentOrder.Skip(tabItemIndex + 1).Reverse()];
             AssertSameControlSequence(expectedScopeAReverseOrder, scopeAReverse.Order, "scope A reverse");
             AssertSameControlSequence(expectedScopeBReverseOrder, scopeBReverse.Order, "scope B reverse");
 
@@ -438,6 +435,80 @@ public class ReconstructorCompactTests
                 "reachable forward but in neither reverse scope.");
         }
         finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// Independent ground truth for this view's tab order — gate finding NEW-3. Every entry is
+    /// resolved by a UNIQUE IDENTIFIER that exists in the authored markup and has nothing to do
+    /// with tab order: a bound <c>RelayCommand</c> reference for the action buttons, an x:Name for
+    /// the four path TextBoxes, the sole <see cref="GridSplitter"/>, the settings
+    /// <see cref="TabControl"/>'s own first item, and distinct authored <c>Content</c> strings for
+    /// the three help links and the Auto-scroll checkbox.
+    /// <para>
+    /// What this replaces, and why it mattered: both reverse walks used to be checked against
+    /// slices of the FORWARD walk's own output. That oracle cannot fail in the one way it most
+    /// needs to — a defect in the visual tree that permutes stops moves the forward order and the
+    /// expectation derived from it together, so the reverse walk "agrees" with an order that is
+    /// already wrong. Resolving identity from the markup instead makes the two directions
+    /// independent evidence. It also lets the walk's own completeness parameter and its starting
+    /// sentinel come from the same authored list, so "the walk visits everything" and "the walk
+    /// starts in the right place" stop being assumptions of the test's setup.
+    /// </para>
+    /// <para>
+    /// MODE DIFFERENCE, and it is real rather than cosmetic: in compact mode Help starts collapsed
+    /// (condition 5), so the three link buttons are <c>IsVisible=false</c> and genuinely absent
+    /// from the order, and the disclosure's own header toggle — visible ONLY in compact — leads
+    /// instead. In expanded/flat mode the body is force-expanded and the header toggle is hidden,
+    /// so the first link is the true first stop.
+    /// </para>
+    /// </summary>
+    private static List<Control> ResolveIndependentExpectedOrder(Window window, ReconstructorViewModel vm, bool compact)
+    {
+        Button ByCommand(System.Windows.Input.ICommand command) =>
+            window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, command));
+        TextBox ByTestId(string id) =>
+            window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == id);
+        Button ByContent(string content) =>
+            window.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == content);
+
+        var settingsTabs = window.GetVisualDescendants().OfType<TabControl>().Single(t => t.ItemCount == 6);
+        var pathsTab = (TabItem)settingsTabs.Items[0]!;
+
+        List<Control> order =
+        [
+            ByCommand(vm.ExportConfigCommand),
+            ByCommand(vm.ImportConfigCommand),
+            ByCommand(vm.ImportSRRCommand),
+            pathsTab,
+            ByCommand(vm.BrowseWinRARCommand), ByTestId("WinRARTextBox"),
+            ByCommand(vm.BrowseReleaseCommand), ByTestId("ReleaseTextBox"),
+            ByCommand(vm.BrowseVerificationCommand), ByTestId("VerifyTextBox"),
+            ByCommand(vm.BrowseOutputCommand), ByTestId("OutputTextBox"),
+            window.GetVisualDescendants().OfType<GridSplitter>().Single(),
+            ByCommand(vm.SaveLogCommand),
+            window.GetVisualDescendants().OfType<CheckBox>().Single(c => c.Content as string == "Auto-scroll"),
+        ];
+
+        // "Start" is deliberately absent from this list: it is command-gated on the inert VM's
+        // empty paths, so it is disabled and Tab correctly skips it. That is a property of the
+        // fixture VM, not of the view, and is recorded in the fixtures' own doc comments too.
+        if (compact)
+        {
+            ToggleButton helpToggle = window.GetVisualDescendants().OfType<Expander>().Single(e => e.Name == "HelpDisclosure")
+                .GetVisualDescendants().OfType<ToggleButton>().Single();
+            order.Insert(0, helpToggle);
+        }
+        else
+        {
+            order.InsertRange(0,
+            [
+                window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "WindowsPackLink"),
+                ByContent("Extracted files for Linux (ready to use)"),
+                ByContent("Original files from RAR FTP (Windows)"),
+            ]);
+        }
+
+        return order;
     }
 
     /// <summary>
@@ -505,15 +576,15 @@ public class ReconstructorCompactTests
         (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
         try
         {
-            Button sentinel = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "WindowsPackLink");
-            sentinel.Focus();
+            List<Control> independentOrder = ResolveIndependentExpectedOrder(window, vm, compact: false);
+            independentOrder[0].Focus();
             Dispatcher.UIThread.RunJobs();
 
-            IReadOnlyList<Control> forwardOrder = CompactViewRig.CaptureTabOrderControls(window, root, ResolveExpectedStops(window, NormalModeTabOrderFixture)).Order;
-            int tabItemIndex = NormalModeTabOrderFixture.ToList().FindIndex(s => s.StartsWith("TabItem", StringComparison.Ordinal));
-            Control scopeBAnchor = forwardOrder[^1];
+            IReadOnlyList<Control> forwardOrder = CompactViewRig.CaptureTabOrderControls(window, root, independentOrder).Order;
+            int tabItemIndex = independentOrder.FindIndex(c => c is TabItem);
+            Control scopeBAnchor = independentOrder[^1];
 
-            List<Control> expectedScopeBReverseOrder = [.. forwardOrder.Skip(tabItemIndex + 1).Reverse()];
+            List<Control> expectedScopeBReverseOrder = [.. independentOrder.Skip(tabItemIndex + 1).Reverse()];
             Assert.True(expectedScopeBReverseOrder.Count >= 2, "this covering test needs at least 2 stops in scope B to swap");
 
             (expectedScopeBReverseOrder[0], expectedScopeBReverseOrder[1]) =
@@ -576,103 +647,108 @@ public class ReconstructorCompactTests
     }
 
     /// <summary>
-    /// Permanentizes an earlier TEMPORARY sanity check (a fake extra fixture entry, manually
-    /// inserted then removed) as a REAL, committed test: a fixture that claims MORE controls
-    /// matching a description than the window actually has must fail loudly, naming the exact
-    /// shortfall, rather than silently resolving to whatever happens to exist.
+    /// The discriminating evidence for gate finding NEW-3: a SELF-REFERENTIAL reverse oracle
+    /// cannot fail on a tree-level permutation, and the independent one can.
     /// <para>
-    /// The duplicated entry used to be a 5th "Browse", back when all four Browse buttons shared
-    /// that one description and the real count was 4. Each now has its own name, so the smallest
-    /// honest version of the same claim is a SECOND copy of one of them: the fixture asks for 2,
-    /// the window has 1. Same code path, same counted-multiset property, real strings.
+    /// The defect is simulated for real rather than described — two sibling picker rows are swapped
+    /// in the live visual tree, which genuinely changes the order a keyboard user walks. Then both
+    /// oracles are evaluated against that same broken tree:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>the OLD expectation, <c>forwardOrder.Skip(k).Reverse()</c>, still agrees exactly with
+    /// the real reverse walk — because both moved together. It PASSES on a broken view.</item>
+    /// <item>the NEW expectation, resolved from authored identity, does not move with the tree and
+    /// FAILS, naming the position.</item>
+    /// </list>
+    /// <para>
+    /// SCOPE, stated because it would be easy to overclaim: at gate time the hole was reachable
+    /// through the FORWARD check too, since all four Browse buttons described identically and the
+    /// description fixture could not tell a swap of two of them from no swap at all. Item 2's
+    /// renames closed that particular door by accident — every stop now describes distinctly, so
+    /// the fixture comparison would catch a Browse-for-Browse swap on its own. This test therefore
+    /// swaps two rows WHOLESALE (each row's Button and TextBox together), which keeps the multiset
+    /// of descriptions identical to a correct walk at the pair level while still permuting the
+    /// order, and it asserts the old oracle's blindness directly rather than assuming it. The
+    /// independence is worth having regardless of whether today's view happens to expose the hole:
+    /// the next repeated row template or duplicated action label re-opens it.
     /// </para>
     /// </summary>
     [AvaloniaFact]
-    public void ResolveExpectedStops_FixtureExpectsMoreThanExist_ThrowsNamingTheShortfall()
+    public void SelfReferentialReverseOracle_PassesAPermutedTree_WhereTheIndependentOracleFails()
     {
         ReconstructorViewModel vm = CreateVm();
         var view = new ReconstructorView { DataContext = vm };
         (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
         try
         {
-            List<string> bogusFixture = [.. NormalModeTabOrderFixture, "Button name=\"Browse for WinRAR versions folder\" id=\"\""];
+            List<Control> independentOrder = ResolveIndependentExpectedOrder(window, vm, compact: false);
 
-            Xunit.Sdk.XunitException ex = Assert.Throws<Xunit.Sdk.XunitException>(() => ResolveExpectedStops(window, bogusFixture));
+            // BREAK: swap the WinRAR and Release picker rows in the live tree. Whole rows, so the
+            // sequence of DESCRIPTIONS a correct walk would produce is permuted rather than
+            // corrupted — no control appears or disappears.
+            var winRarRow = (DockPanel)window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "WinRARTextBox").GetVisualParent()!;
+            var releaseRow = (DockPanel)window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "ReleaseTextBox").GetVisualParent()!;
+            var host = (StackPanel)winRarRow.GetVisualParent()!;
+            Assert.True(ReferenceEquals(host, releaseRow.GetVisualParent()),
+                "test precondition: both rows must share one parent panel, or swapping them is not a simple reorder");
 
-            Assert.Contains("expects 2, this window has 1", ex.Message, StringComparison.Ordinal);
+            int winRarAt = host.Children.IndexOf(winRarRow);
+            int releaseAt = host.Children.IndexOf(releaseRow);
+            Assert.True(winRarAt >= 0 && releaseAt >= 0 && winRarAt < releaseAt, "test precondition: both rows must be children of that panel, WinRAR first");
+
+            host.Children.Remove(releaseRow);
+            host.Children.Remove(winRarRow);
+            host.Children.Insert(winRarAt, releaseRow);
+            host.Children.Insert(releaseAt, winRarRow);
+            Dispatcher.UIThread.RunJobs();
+
+            independentOrder[0].Focus();
+            Dispatcher.UIThread.RunJobs();
+            IReadOnlyList<Control> forwardOrder = CompactViewRig.CaptureTabOrderControls(window, root).Order;
+
+            int tabItemIndex = independentOrder.FindIndex(c => c is TabItem);
+            Control scopeBAnchor = forwardOrder[^1];
+            CompactViewRig.TabWalkResult scopeBReverse = CompactViewRig.RunTabPass(window, scopeBAnchor, forward: false);
+
+            // THE OLD ORACLE, reproduced verbatim: derived from the walk it is supposed to check.
+            List<Control> selfReferentialExpectation = [.. forwardOrder.Skip(tabItemIndex + 1).Reverse()];
+            AssertSameControlSequence(selfReferentialExpectation, scopeBReverse.Order,
+                "scope B reverse (self-referential oracle, on a DELIBERATELY BROKEN tree)");
+
+            // THE NEW ORACLE: authored identity, which did not move when the tree did.
+            List<Control> independentExpectation = [.. independentOrder.Skip(tabItemIndex + 1).Reverse()];
+            Xunit.Sdk.FailException ex = Assert.Throws<Xunit.Sdk.FailException>(
+                () => AssertSameControlSequence(independentExpectation, scopeBReverse.Order, "scope B reverse"));
+            Assert.Contains("same description does not mean same control instance", ex.Message, StringComparison.Ordinal);
+
+            // And the forward direction fails against it too — the permutation is caught in both
+            // directions once the oracle stops being derived from the thing under test.
+            Assert.ThrowsAny<Xunit.Sdk.XunitException>(
+                () => AssertSameControlSequence(independentOrder, forwardOrder, "forward"));
         }
         finally { window.Close(); }
     }
 
-    /// <summary>
-    /// Resolves a committed, description-based fixture (see <see cref="CompactViewRig.Describe"/>)
-    /// back into the REAL <see cref="Control"/> references it names, for THIS SPECIFIC window —
-    /// completeness-checking is reference-based, and a fixture committed to source can only ever
-    /// be strings across separate test runs.
-    /// <para>
-    /// Matching is a COUNTED
-    /// MULTISET, not a set — the fixture's own count of each distinct description is the
-    /// number of REAL, DISTINCT controls required for it, not merely "at least one". (The
-    /// motivating case was this view's four "Browse" buttons, which all described identically and
-    /// so gave that one description a count of 4; they now carry four distinct names, but the
-    /// counting rule is what makes the resolver correct regardless.) A plain
-    /// <c>HashSet&lt;string&gt;</c> membership test would silently deduplicate the fixture's own
-    /// count down to 1 before ever comparing against the real window, so back when one description
-    /// stood for four controls, a regression that removed one of them (leaving three) would still
-    /// have "resolved" successfully — the missing one never noticed, because the check never
-    /// actually counted how many were expected versus how many are real.
-    /// </para>
-    /// <para>
-    /// This view's fixtures no longer contain any duplicated entry at all, so today that failure
-    /// mode has nothing to bite on HERE. The counting is kept, and
-    /// <see cref="ResolveExpectedStops_FixtureExpectsMoreThanExist_ThrowsNamingTheShortfall"/>
-    /// still exercises it, because the resolver is a general mechanism and the next duplicated
-    /// description — a repeated row template, a second identically-labelled action — must not
-    /// silently resolve to one control.
-    /// </para>
-    /// <para>
-    /// A fixture description with FEWER matching real controls than its own count throws here,
-    /// loudly, rather than silently resolving to whatever happens to exist: if resolution just
-    /// filtered the window's own controls down to matches without counting, a regression that
-    /// removed an expected control would silently produce a SMALLER resolved list instead of
-    /// surfacing that anything was wrong — the completeness check downstream would never learn
-    /// that entry was supposed to appear more than it did, defeating the entire point of a
-    /// hardcoded, protective fixture.
-    /// </para>
-    /// </summary>
-    private static List<Control> ResolveExpectedStops(Window window, IReadOnlyCollection<string> fixture)
-    {
-        var expectedCounts = fixture
-            .GroupBy(description => description)
-            .ToDictionary(g => g.Key, g => g.Count());
-
-        ILookup<string, Control> byDescription = window.GetVisualDescendants().OfType<Control>()
-            .ToLookup(CompactViewRig.Describe);
-
-        List<Control> resolved = [];
-        List<string> shortfalls = [];
-        foreach ((string description, int expectedCount) in expectedCounts)
-        {
-            List<Control> matches = [.. byDescription[description]];
-            if (matches.Count < expectedCount)
-            {
-                shortfalls.Add($"\"{description}\" expects {expectedCount}, this window has {matches.Count}");
-                continue;
-            }
-
-            resolved.AddRange(matches.Take(expectedCount));
-        }
-
-        if (shortfalls.Count > 0)
-        {
-            throw new Xunit.Sdk.XunitException(
-                $"{shortfalls.Count} fixture descriptions do not have enough matching controls in " +
-                $"this window (counted, not merely present — not merely unvisited by the walk, " +
-                $"genuinely too few in the tree): {string.Join("; ", shortfalls)}");
-        }
-
-        return resolved;
-    }
+    // ── REMOVED with gate finding NEW-3: ResolveExpectedStops and its covering test
+    // (ResolveExpectedStops_FixtureExpectsMoreThanExist_ThrowsNamingTheShortfall).
+    //
+    // The resolver converted a committed, DESCRIPTION-based fixture back into live Control
+    // references, because the walks' completeness parameter is reference-based and a fixture in
+    // source can only ever be strings. It existed precisely BECAUSE there was no independent
+    // oracle: descriptions were the only committed identity available. ResolveIndependentExpectedOrder
+    // now supplies real references resolved from authored identity (command, x:Name, Content), which
+    // is strictly better for that job — matching by description is exactly the weakness NEW-3 was
+    // raised about — so every real caller moved to it and the resolver was left alive only by its
+    // own covering test.
+    //
+    // Deleted rather than kept: a helper whose sole remaining consumer is the test that proves the
+    // helper works is dead scaffolding, and this chain has repeatedly punished leaving that behind.
+    // Nothing was lost in coverage. Its counted-multiset property protected against a fixture
+    // silently resolving a duplicated description down to one control; the forward walk's
+    // Assert.Equal(fixture, forwardOrder.Select(Describe)) is exact whole-sequence equality and
+    // already catches any fixture/tree divergence, duplicates included. Recorded here rather than
+    // silently dropped because the deletion also removes a test from the count (Manager 471 -> 470
+    // before this package's own additions). ──
 
     /// <summary>
     /// Each route is exercised from a genuine "not yet visible" start (offset reset between
@@ -1050,6 +1126,36 @@ public class ReconstructorCompactTests
         finally { window.Close(); }
     }
 
+    /// <summary>
+    /// REWRITTEN for gate finding NEW-2. The previous version read
+    /// <c>splitter.Background</c>'s own LOGICAL brush colour and compared it against two ASSUMED
+    /// resource keys ("SurfaceBackground" / "PanelBackground"), and both halves of that were wrong
+    /// in the same direction — they measured what the markup is supposed to say rather than what
+    /// the screen actually shows.
+    /// <para>
+    /// The specific defect it could not detect is deletion of the <c>GridSplitter:focus</c> style
+    /// itself. With that style gone the splitter falls back to the base style's
+    /// <c>Transparent</c>, whose <c>Color</c> is <c>#00FFFFFF</c> — WHITE with a zero alpha
+    /// channel that a colour-only contrast computation simply ignores. Against this app's dark
+    /// panes that computes as a very high ratio, so the old test would have gone on passing while
+    /// the focus indicator had ceased to exist. Verified, not reasoned about: see
+    /// <see cref="Splitter_FocusVisual_UnpaintedSplitter_FailsTheCheck"/> for the committed
+    /// discriminating case, and §D2 of the a11y follow-up report for the observed RED from
+    /// deleting the real style.
+    /// </para>
+    /// <para>
+    /// Backported from <c>CreatorCompactTests.MeasureSplitterFocusContrast</c>, which fixed the
+    /// identical defect in that suite: sample the REAL RENDERED PIXEL at the splitter's own centre
+    /// and at the points 3 DIPs above and below it, so an unpainted, suppressed, covered or
+    /// scrolled-away indicator fails, and so the neighbouring colours are whatever is genuinely
+    /// there rather than whichever resource key the test guessed.
+    /// </para>
+    /// <para>
+    /// Scope of the claim, stated exactly: three pixels are sampled, so this proves the focus
+    /// indication is distinguishable from the surfaces immediately adjacent along the splitter's
+    /// own centre line. It does not survey either neighbouring pane as a whole.
+    /// </para>
+    /// </summary>
     [AvaloniaFact]
     public void Splitter_FocusVisual_MeetsContrastAgainstBothPanes()
     {
@@ -1062,22 +1168,140 @@ public class ReconstructorCompactTests
 
             splitter.Focus();
             Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(splitter.IsFocused, "test precondition: the splitter must genuinely hold focus, or the :focus style under test never applies");
 
-            // DynamicResource-resolved brushes come back as ImmutableSolidColorBrush at runtime,
-            // not the mutable SolidColorBrush the resource dictionaries are authored with —
-            // ISolidColorBrush is the common interface both implement.
-            var focusBrush = Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background);
+            (double contrastVsAbove, double contrastVsBelow) = MeasureSplitterFocusContrast(splitter, window);
 
-            var tabStripBrush = Assert.IsAssignableFrom<ISolidColorBrush>(Application.Current!.FindResource("SurfaceBackground"));
-            var logBrush = Assert.IsAssignableFrom<ISolidColorBrush>(Application.Current!.FindResource("PanelBackground"));
-
-            double contrastVsTabStrip = ContrastRatio(focusBrush.Color, tabStripBrush.Color);
-            double contrastVsLog = ContrastRatio(focusBrush.Color, logBrush.Color);
-
-            Assert.True(contrastVsTabStrip >= 3.0, $"focus brush vs tab-strip pane: {contrastVsTabStrip:F2}:1 (need >= 3:1)");
-            Assert.True(contrastVsLog >= 3.0, $"focus brush vs log pane: {contrastVsLog:F2}:1 (need >= 3:1)");
+            Assert.True(contrastVsAbove >= 3.0, $"rendered focus pixel vs the pixel 3 DIPs above: {contrastVsAbove:F2}:1 (need >= 3:1)");
+            Assert.True(contrastVsBelow >= 3.0, $"rendered focus pixel vs the pixel 3 DIPs below: {contrastVsBelow:F2}:1 (need >= 3:1)");
         }
         finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// The discriminating case NEW-2 asked for, mirroring
+    /// <c>CreatorCompactTests.Splitter_FocusVisual_ContrastMeasurement_UnpaintedSplitter_FailsTheCheck</c>:
+    /// proves the rendered-pixel method catches an indicator that is "there" by every property a
+    /// naive check would read, yet invisible on screen. <c>Opacity = 0</c> is the sharpest such
+    /// case — it leaves <c>IsVisible</c>, <c>IsEffectivelyVisible</c>, the layout bounds AND the
+    /// logical <c>Background</c> colour completely unchanged, and only the rendered pixel reverts
+    /// to whatever is behind it. Each of those four is asserted here rather than assumed, because
+    /// they are precisely why the old property-reading form of this test could not have failed.
+    /// </summary>
+    [AvaloniaFact]
+    public void Splitter_FocusVisual_UnpaintedSplitter_FailsTheCheck()
+    {
+        ReconstructorViewModel vm = CreateVm();
+        var view = new ReconstructorView { DataContext = vm };
+        (Window window, Grid root) = CompactViewRig.HostAt(view, CompactInner);
+        try
+        {
+            GridSplitter splitter = window.GetVisualDescendants().OfType<GridSplitter>().Single();
+            splitter.Focus();
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+
+            (double realAbove, double realBelow) = MeasureSplitterFocusContrast(splitter, window);
+            Assert.True(realAbove >= 3.0 && realBelow >= 3.0,
+                "test precondition: the untampered splitter must pass before it is deliberately suppressed");
+
+            Color loggedBackgroundBefore = Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background).Color;
+
+            // BREAK: suppress rendering without touching any property a naive check would read.
+            splitter.Opacity = 0;
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(splitter.IsEffectivelyVisible, "test precondition: Opacity=0 must NOT flip IsEffectivelyVisible — that is exactly what makes this case dangerous");
+            Assert.True(splitter.IsVisible);
+            Assert.True(splitter.Bounds is { Width: > 0, Height: > 0 }, "test precondition: Opacity=0 must NOT collapse layout bounds either");
+            Assert.Equal(loggedBackgroundBefore, Assert.IsAssignableFrom<ISolidColorBrush>(splitter.Background).Color);
+
+            (double brokenAbove, double brokenBelow) = MeasureSplitterFocusContrast(splitter, window);
+            Assert.True(brokenAbove < 3.0 && brokenBelow < 3.0,
+                $"the unpainted (Opacity=0) splitter should have FAILED the 3:1 bar — its rendered pixel no longer shows the focus " +
+                $"colour at all — but measured {brokenAbove:F2}:1 above / {brokenBelow:F2}:1 below: this covering test no longer discriminates.");
+
+            splitter.Opacity = 1;
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+
+            (double revertedAbove, double revertedBelow) = MeasureSplitterFocusContrast(splitter, window);
+            Assert.True(revertedAbove >= 3.0 && revertedBelow >= 3.0, "reverting Opacity should restore the passing, untampered mechanism");
+        }
+        finally { window.Close(); }
+    }
+
+    /// <summary>
+    /// Samples the REAL RENDERED PIXEL at the splitter's own centre and at the points 3 DIPs
+    /// directly above and below it, and returns the WCAG contrast ratio of the first against each
+    /// of the other two. Local copy of <c>CreatorCompactTests</c>' helper of the same name, per the
+    /// no-promotion rule: the two are the same shape but not the same contract — that one names its
+    /// neighbours "the stored-files grid and the output section", this one the Paths/Options
+    /// TabControl and the log, and each suite's own doc explains its own geometry. Nothing is
+    /// shared but the technique, and the technique is four lines.
+    /// <para>
+    /// The in-bounds check first is not redundant with the pixel sampling: a scrolled-away or
+    /// clipped splitter would still sample SOME pixel, so containment and painting are two
+    /// different failures and both need catching.
+    /// </para>
+    /// </summary>
+    private static (double ContrastVsAbove, double ContrastVsBelow) MeasureSplitterFocusContrast(GridSplitter splitter, Window window)
+    {
+        AssertFullyWithinWindow(splitter, window);
+
+        Point center = new(splitter.Bounds.Width / 2, splitter.Bounds.Height / 2);
+        Point? centerInWindow = splitter.TranslatePoint(center, window);
+        Assert.True(centerInWindow is not null, "test precondition: the splitter's own centre must translate into window coordinates");
+        Color focusColor = SamplePixelColor(window, centerInWindow!.Value);
+
+        Point? aboveInWindow = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, -3), window);
+        Point? belowInWindow = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, splitter.Bounds.Height + 3), window);
+        Assert.True(aboveInWindow is not null && belowInWindow is not null, "test precondition: both neighbouring points must translate into window coordinates");
+
+        Color abovePane = SamplePixelColor(window, aboveInWindow!.Value);
+        Color belowPane = SamplePixelColor(window, belowInWindow!.Value);
+
+        return (ContrastRatio(focusColor, abovePane), ContrastRatio(focusColor, belowPane));
+    }
+
+    /// <summary>Renders the whole window and reads back one pixel's RGBA — used to sample a
+    /// neighbouring pane's TRUE rendered colour rather than guessing which named resource applies.</summary>
+    private static Color SamplePixelColor(Window window, Point pointInWindow)
+    {
+        var size = new PixelSize((int)Math.Ceiling(window.Bounds.Width), (int)Math.Ceiling(window.Bounds.Height));
+        byte[] buffer = RenderToPixelBuffer(window, size);
+
+        int x = Math.Clamp((int)pointInWindow.X, 0, size.Width - 1);
+        int y = Math.Clamp((int)pointInWindow.Y, 0, size.Height - 1);
+        int offset = (y * size.Width * 4) + (x * 4);
+        // Avalonia's RenderTargetBitmap default pixel format is BGRA8888.
+        return Color.FromArgb(buffer[offset + 3], buffer[offset + 2], buffer[offset + 1], buffer[offset]);
+    }
+
+    /// <summary>
+    /// CLIP-AWARE containment, added with the NEW-2 rewrite because
+    /// <see cref="MeasureSplitterFocusContrast"/> needs it: the geometry is delegated to
+    /// <see cref="CompactViewRig.IsFullyVisibleWithinWindow"/>, which already owns the cumulative
+    /// clip walk, rather than hand-copied. The two pre-checks stay local because a degenerate
+    /// (zero-size) control translates to a single point and would trivially satisfy any containment
+    /// test, and because a bare bool cannot say which of the three failures occurred.
+    /// </summary>
+    private static void AssertFullyWithinWindow(Control control, Window window)
+    {
+        Assert.True(control.IsEffectivelyVisible, $"{control.GetType().Name} is not effectively visible.");
+        Assert.True(control.Bounds.Width > 0 && control.Bounds.Height > 0,
+            $"{control.GetType().Name} has a non-positive size ({control.Bounds.Width:F1}x{control.Bounds.Height:F1}) — collapsed, not merely positioned badly.");
+
+        Assert.True(CompactViewRig.IsFullyVisibleWithinWindow(control, window),
+            $"{control.GetType().Name} (bounds {control.Bounds}) is not fully within the CLIP-AWARE visible region of " +
+            $"the window (bounds {window.Bounds}) — it may be positioned outside the window, or hidden by an " +
+            "intermediate ClipToBounds ancestor such as a ScrollViewer's own clipped viewport.");
     }
 
     // ── 6. Frame-rig parity (criterion F: normal-mode pixels unchanged) ──

@@ -998,3 +998,180 @@ LINES, not 28 controls — each control appears in two or three fixtures per sui
    left at the old `.superpowers/` paths for the other records that reference them. The concern is
    kept rather than deleted because the underlying hazard is not: anything else written into
    `.superpowers/` is still invisible to git and still one worktree cleanup from being gone.
+
+---
+
+# Package A — the gate's test-hardening trio (NEW-2, NEW-3, NEW-4)
+
+Date: 2026-08-03. Base `main` @18b8907. One commit. Nothing pushed. **Test-only** — no view, no
+ViewModel, no style was changed.
+
+Three findings the gate raised against the suites rather than the app: tests that would keep passing
+through a real defect. Each is fixed and each is BREAK-VERIFIED — the fix is only worth the diff if
+the old form can be shown to miss something the new one catches.
+
+## D1. What the three were
+
+| | Where | The hole |
+|---|---|---|
+| NEW-2 | `ReconstructorCompactTests` splitter contrast | reads a logical property against assumed resource keys; cannot see deletion of the `:focus` style |
+| NEW-3 | `ReconstructorCompactTests` reverse tab oracle | reverse expectation derived from the forward walk it is checking — self-referential |
+| NEW-4 | `SRSCreatorCompactTests`, `SRSReconstructorCompactTests` | containment measured against the window rectangle only, ignoring clipping ancestors |
+
+## D2. NEW-2 — the contrast test measured the markup, not the screen
+
+The old test read `splitter.Background`'s logical colour and compared it against two ASSUMED resource
+keys (`SurfaceBackground`, `PanelBackground`). Both halves measured what the markup is supposed to
+say rather than what a user sees.
+
+**The failure it could not detect, measured rather than argued.** Deleting the real
+`GridSplitter:focus` style from `Styles.axaml` and re-running:
+
+```
+splitter.IsFocused = True          (still focused)
+splitter.Background = Transparent  (base style's fallback)
+OLD form: 13.73:1 vs tab strip, 15.31:1 vs log   -> PASSES the 3:1 bar
+NEW form: 1.00:1                                 -> FAILS
+```
+
+`Transparent`'s `Color` is `#00FFFFFF` — white, with a zero alpha that a colour-only contrast
+computation simply discards. Against this app's dark panes that computes as a *very good* ratio. So
+the old test would have gone on passing, reassuringly, while the focus indicator had ceased to
+exist. The new form samples the real rendered pixel and reports `1.00:1`: the splitter is now
+indistinguishable from the pane behind it, which is the truth.
+
+The style was restored immediately (`git diff` on `Styles.axaml` is empty) and the suite re-run
+green. Method backported from `CreatorCompactTests.MeasureSplitterFocusContrast`, which fixed the
+identical defect there: in-bounds check first, then sample the rendered pixel at the splitter's
+centre and 3 DIPs above and below.
+
+`Splitter_FocusVisual_UnpaintedSplitter_FailsTheCheck` is added as the permanent discriminating
+case — `Opacity = 0` leaves `IsVisible`, `IsEffectivelyVisible`, the layout bounds AND the logical
+`Background` all unchanged, and only the rendered pixel reverts. All four are asserted, because they
+are exactly why the old property-reading form could not have failed.
+
+**Promotion question, answered as asked:** kept LOCAL. `MeasureSplitterFocusContrast` now exists in
+two suites and they are the same shape but not the same contract — the Creator's neighbours are its
+stored-files grid and output section, this one's are the Paths/Options TabControl and the log, and
+each doc explains its own geometry. What is genuinely shared is a four-line technique. The
+containment helper is a different story: see D4.
+
+## D3. NEW-3 — the reverse oracle checked the walk against itself
+
+Both per-scope reverse walks were checked against `forwardOrder.Skip(k).Reverse()`. An oracle
+derived from the thing it is testing cannot fail in the way it most needs to: a defect in the visual
+tree moves the forward order and the expectation derived from it TOGETHER, so reverse "agrees" with
+an order that is already wrong.
+
+`ResolveIndependentExpectedOrder` now resolves every stop by an identifier that has nothing to do
+with tab order — a bound command reference for the action buttons, an x:Name for the four path
+TextBoxes, the sole `GridSplitter`, the settings `TabControl`'s own first item, authored `Content`
+strings for the three help links and Auto-scroll. Forward and both reverse walks check against that
+one authored list. The starting sentinel comes from it too, so "which control is first" became a
+claim the reverse walk's boundary-landing assertion PROVES rather than a presumption baked into the
+setup. The per-scope machinery is untouched — this view nests a second `TabControl` and no single
+reverse walk can cross that boundary.
+
+**Break-verified with a real permutation**, not a description of one:
+`SelfReferentialReverseOracle_PassesAPermutedTree_WhereTheIndependentOracleFails` swaps the WinRAR
+and Release picker rows in the live visual tree, then evaluates BOTH oracles against that broken
+tree. The self-referential expectation still matches the reverse walk exactly — it passes on a
+broken view, which is the whole finding. The independent expectation fails, naming the position, in
+both directions.
+
+**Scope, stated because it would be easy to overclaim.** At gate time the hole was reachable through
+the forward check too: all four Browse buttons described identically, so the description fixture
+could not tell a swap of two of them from no swap. Item 2's renames closed that particular door by
+accident. The discriminating test therefore swaps whole ROWS, keeping the description multiset
+intact at the pair level, and asserts the old oracle's blindness directly. The independence is worth
+having regardless of whether today's view exposes the hole — the next repeated row template
+re-opens it.
+
+**One deletion, disclosed.** `ResolveExpectedStops` (and its covering test) converted a
+description-based fixture back into live references, and existed precisely BECAUSE there was no
+independent oracle. Every real caller moved to `ResolveIndependentExpectedOrder`, leaving the helper
+alive only by the test that proves the helper works — dead scaffolding of the exact kind this chain
+has repeatedly punished. Nothing was lost: its counted-multiset property guarded against a fixture
+silently resolving a duplicated description down to one control, and the forward walk's
+`Assert.Equal(fixture, forwardOrder.Select(Describe))` is exact whole-sequence equality that already
+catches any divergence, duplicates included. It removes one test from the count.
+
+## D4. NEW-4 — containment ignored every clipping ancestor
+
+Both suites compared a control's two translated corners against the WINDOW'S OUTER RECTANGLE. That
+false-passes anything hidden behind an intermediate `ClipToBounds` ancestor, and in these two views
+that is not a corner case — the config band's `ScrollViewer` is row 1 and the pinned action band and
+log occupy rows 2 and 3 BELOW it, so content scrolled past the band's own bottom edge lands in
+window space that is still comfortably inside the window.
+
+**Measured, at 700x450, with each band scrolled to the top:**
+
+| View | band extent / viewport | controls the old check false-passed |
+|---|---|---|
+| SRSCreator | 240.0 / 127.0 | **41** |
+| SRSReconstructor | 162.0 / 132.0 | **20** |
+
+`OutputTextBox` is among them in both, and is what the new committed test pins: realized, effectively
+visible, positive size, every corner inside the window — and completely hidden.
+
+`ClipAwareContainment_CatchesAControlScrolledBehindTheBandClip_WhichTheWindowRectCheckMisses` (one
+per suite) asserts BOTH halves, because either alone proves nothing: that the OLD form passes (so
+this really is a false pass), and that the new one fails. The old form is reproduced inline as
+`NaiveWithinWindowRectOnly` rather than described — a comment claiming what deleted code used to do
+is not checkable.
+
+**Promotion question, answered differently from D2 and deliberately so.** The geometry is delegated
+to `CompactViewRig.IsFullyVisibleWithinWindow`, which already owns this exact cumulative-clip walk,
+is already `internal`, and is the very algorithm the Creator's and SampleRestorer's local copies say
+they "mirror". This is not a promotion — there is no new abstraction, the shared implementation
+already existed and was simply not being used here. Copying a subtle 25-line geometry walk a third
+and fourth time to satisfy a rule aimed at NEW shared code would be following the letter of the rule
+against its purpose. What stays local is the diagnostics: the visibility and positive-size
+pre-checks carry each view's own degenerate-control lesson and name the specific failure, which a
+bare bool cannot. (The Creator's and SampleRestorer's own copies were left alone — they are correct,
+and rewriting passing tests outside the gate's scope is not this package's business.)
+
+## D5. Evidence
+
+`-t:Rebuild` on all four projects, each **0 Warning(s), 0 Error(s)**, then `dotnet test --no-build`:
+
+```
+Manager   Passed!  - Failed: 0, Passed: 474, Skipped: 0, Total: 474
+App.Core  Passed!  - Failed: 0, Passed: 722, Skipped: 0, Total: 722
+```
+
+Baselines Manager 471 / App.Core 722. Manager delta **+3 net**, which is **+4 added − 1 deleted**:
+
+| Test | Finding |
+|---|---|
+| `Splitter_FocusVisual_UnpaintedSplitter_FailsTheCheck` | NEW-2 |
+| `SelfReferentialReverseOracle_PassesAPermutedTree_WhereTheIndependentOracleFails` | NEW-3 |
+| `ClipAwareContainment_…_WhichTheWindowRectCheckMisses` ×2 (SRSCreator, SRSReconstructor) | NEW-4 |
+| *(removed)* `ResolveExpectedStops_FixtureExpectsMoreThanExist_ThrowsNamingTheShortfall` | NEW-3 |
+
+App.Core is untouched — this package changed three test files and nothing else, which `git status`
+confirms.
+
+## D6. Concerns
+
+1. **The NEW-2 sabotage was manual.** Deleting the `:focus` style, observing RED, and restoring it
+   is evidence that the check works today; it is not a permanent guard. The committed
+   `Opacity = 0` test is the permanent one, and it covers "painted but invisible" rather than
+   "style deleted". A test that deletes a style at runtime would be better and is not obviously
+   possible against a compiled `Styles.axaml`.
+2. **Three rendered pixels are not a pane survey.** Both suites' contrast helpers sample the
+   splitter's centre and 3 DIPs above and below. That proves the indicator is distinguishable from
+   what is immediately adjacent along that line — a pane with a light region elsewhere would not be
+   caught. Stated in the helper's own doc too.
+3. **The NEW-3 permutation test mutates the visual tree directly.** It is the sharpest available
+   simulation of a tree-level defect, but it is not the same as a markup change: `TabIndex` pins,
+   `KeyboardNavigation` scopes and template-level ordering could all permute a walk in ways this
+   particular swap does not model.
+4. **`ResolveIndependentExpectedOrder` encodes the expected order by hand**, so it is only as good
+   as the reading of the markup that produced it. It is checked against the measured fixtures and
+   against two real walks in both modes, which is what makes a mistake in it loud rather than
+   silent — but it is authored, not derived, and that is the point and the risk in one.
+5. **The clip-aware helpers now exist in four suites in two forms** — two hand-copies (Creator,
+   SampleRestorer) and two delegating to the rig (SRSCreator, SRSReconstructor). That is more
+   consistent than before in behaviour and less consistent in shape. Converging the other two is a
+   small, safe follow-up that was out of this package's scope.
