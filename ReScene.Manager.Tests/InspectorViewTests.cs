@@ -84,6 +84,37 @@ public class InspectorViewTests
         return (window, vm);
     }
 
+    /// <summary>
+    /// This view's Browse button announced the bare word "Browse", which says nothing about which
+    /// of the app's many Browse buttons it is. It now follows the app-wide
+    /// "Browse for &lt;target&gt;" convention. The expected name is a LITERAL here and the button is
+    /// resolved by its bound command, never by the name under test.
+    /// <para>
+    /// The target is "file to inspect" rather than the row's caption subject, which is the single
+    /// word "File" — a small, deliberate departure from the convention's usual rule, because "file"
+    /// alone would be uninformative among the app's thirty-nine Browse buttons and this view's own
+    /// purpose supplies the qualifier. Label-in-Name (WCAG 2.5.3) is satisfied either way and is
+    /// asserted: the visible label is the bare "Browse", which the name contains.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void BrowseButton_AnnouncesItsTarget_AndContainsItsVisibleLabel()
+    {
+        InspectorViewModel vm = CreateViewModel();
+        (Window window, _) = Show(vm);
+        try
+        {
+            Button browse = window.GetVisualDescendants().OfType<Button>()
+                .Single(b => ReferenceEquals(b.Command, vm.BrowseFileCommand));
+
+            Assert.Equal("Browse", browse.Content as string);
+            Assert.Equal("Browse for file to inspect",
+                Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(browse).GetName());
+            Assert.Contains("Browse", Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(browse).GetName()!, StringComparison.Ordinal);
+        }
+        finally { window.Close(); }
+    }
+
     [AvaloniaFact]
     public void EmptyView_NoFileLoaded_NoBindingErrors()
     {

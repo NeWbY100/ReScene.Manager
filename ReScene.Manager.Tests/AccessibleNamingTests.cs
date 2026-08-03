@@ -517,6 +517,81 @@ public class AccessibleNamingTests
     }
 
     /// <summary>
+    /// The eight Browse buttons in the three Beginner wizard bodies that a review found still
+    /// announcing the bare word — the remainder of the app-wide total that the first two naming
+    /// passes had not counted (they measured how many buttons were NAMED and never how many
+    /// existed).
+    /// <para>
+    /// Seven of the eight take a name that already existed elsewhere, VERBATIM, because they are
+    /// literally the same commands: <c>RestoreWizardBody</c> binds through
+    /// <c>BulkRestorer</c>/<c>SingleRebuilder</c>, which ARE the SampleRestorer and SRSReconstructor
+    /// ViewModels, and <c>CreateSRSWizardBody</c> drives the SRSCreator's own commands. Only
+    /// the Restore wizard's own entry picker needed a new string, and its target comes from its own
+    /// caption ("SRR or SRS file").
+    /// </para>
+    /// <para>
+    /// Worth stating because it is the one place the two conventions genuinely pull apart:
+    /// CreateSRSWizardBody's caption for the main-file row reads "Full movie (optional)" where the
+    /// Advanced tab says "Main file", and the name follows the COMMAND ("Browse for main file")
+    /// rather than this surface's caption. That is safe under WCAG 2.5.3 — the button's own visible
+    /// label is the bare "Browse" on both surfaces, so the caption never constrained the name — and
+    /// it keeps one function to one announced name. Where a caption DOES constrain the name
+    /// (CreatorView's "Browse folder…"), the criterion wins instead; the two rules are recorded
+    /// together at that site.
+    /// </para>
+    /// <para>
+    /// All step panels are realized regardless of the selected step (they are IsVisible-gated, not
+    /// unloaded), so one host per body reaches every button.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void BeginnerWizardBodies_BrowseButtons_UseTheSharedConvention()
+    {
+        BeginnerShellViewModel shell = BeginnerShellTestFactory.Create();
+
+        SRSCreatorViewModel srs = shell.SRSCreator;
+        Window srsWizard = HostWizardBody(new CreateSRSWizardBody { DataContext = srs }, srs, steps: 3);
+        try
+        {
+            AssertBrowseButton(srsWizard, srs.BrowseInputCommand, "Browse for sample file");
+            AssertBrowseButton(srsWizard, srs.BrowseMainFileCommand, "Browse for main file");
+            AssertBrowseButton(srsWizard, srs.BrowseOutputCommand, "Browse for output path");
+        }
+        finally { srsWizard.Close(); }
+
+        SRREditorViewModel editor = shell.SRREditor;
+        Window editWizard = HostWizardBody(new EditSRRWizardBody { DataContext = editor }, editor, steps: 4);
+        try
+        {
+            AssertBrowseButton(editWizard, editor.BrowseSourceCommand, "Browse for SRR file");
+            AssertBrowseButton(editWizard, editor.BrowseOutputCommand, "Browse for output path");
+        }
+        finally { editWizard.Close(); }
+
+        BeginnerRestoreViewModel restore = shell.Restore;
+        Window restoreWizard = HostWizardBody(new RestoreWizardBody { DataContext = restore }, restore, steps: 3);
+        try
+        {
+            AssertBrowseButton(restoreWizard, restore.BrowseInputCommand, "Browse for SRR or SRS file");
+            AssertBrowseButton(restoreWizard, restore.BulkRestorer!.BrowseMediaDirectoryCommand, "Browse for media directory");
+            AssertBrowseButton(restoreWizard, restore.BulkRestorer!.BrowseOutputDirectoryCommand, "Browse for output directory");
+            AssertBrowseButton(restoreWizard, restore.SingleRebuilder!.BrowseMediaCommand, "Browse for media file");
+            AssertBrowseButton(restoreWizard, restore.SingleRebuilder!.BrowseOutputCommand, "Browse for output path");
+        }
+        finally { restoreWizard.Close(); }
+    }
+
+    private static Window HostWizardBody(Control body, object taskVm, int steps)
+    {
+        var wizard = new WizardViewModel("naming probe", taskVm,
+            [.. Enumerable.Range(0, steps).Select(i => new WizardStep { Title = $"step {i}" })]);
+        var window = new Window { Width = 1000, Height = 800, DataContext = wizard, Content = body };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        return window;
+    }
+
+    /// <summary>
     /// The ISO picker only exists while an ISO is the source, so it is not in any tab-order fixture
     /// and needs its own coverage. LabeledBy its "File inside ISO:" caption, so — like the App-name
     /// boxes — the announced value is the caption verbatim.

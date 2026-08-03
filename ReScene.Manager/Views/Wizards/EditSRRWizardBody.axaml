@@ -17,8 +17,13 @@
                  TextWrapping="Wrap" Margin="0,0,0,8" />
       <TextBlock Text="SRR file" FontWeight="SemiBold" Margin="0,0,0,2" />
       <DockPanel Margin="0,0,0,2">
+        <!-- "Browse for SRR file" matches SampleRestorerView's name for the same kind of target,
+             and this row's own caption ("SRR file") independently gives the same words — the two
+             rules agree here. Safe under 2.5.3: visible label is the bare "Browse". -->
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseSourceCommand}"
-                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+                Classes="ghost"
+                AutomationProperties.Name="Browse for SRR file"
+                Margin="4,0,0,0" MinWidth="75" />
         <TextBox Text="{Binding SourcePath}" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding SourceStatus}" />
@@ -39,8 +44,12 @@
                  TextWrapping="Wrap" Margin="0,0,0,8" />
       <TextBlock Text="Save edited SRR to" FontWeight="SemiBold" Margin="0,0,0,2" />
       <DockPanel Margin="0,0,0,2">
+        <!-- The app-wide name for "choose where the output file goes" — now shared by six
+             surfaces (WCAG 3.2.4). -->
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseOutputCommand}"
-                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+                Classes="ghost"
+                AutomationProperties.Name="Browse for output path"
+                Margin="4,0,0,0" MinWidth="75" />
         <TextBox Text="{Binding OutputPath}" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding OutputStatus}" />

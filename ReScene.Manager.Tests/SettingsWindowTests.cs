@@ -68,6 +68,78 @@ public class SettingsWindowTests
         return tabs;
     }
 
+    /// <summary>
+    /// All three Browse buttons in this window announced the bare "Browse...", which is the worst
+    /// case of the app-wide defect: three identical announcements in ONE window, for three
+    /// different folders. Each now says which folder.
+    /// <para>
+    /// LABEL-IN-NAME, and the reason it needs stating here specifically: these are the only Browse
+    /// buttons in the app whose visible Content carries a trailing ellipsis ("Browse..."). WCAG
+    /// 2.5.3 asks the accessible name to contain the visible label, and "Browse for default output
+    /// directory" does not contain the literal string "Browse...". The ellipsis is excluded from
+    /// that containment as a conventional affordance marker meaning "opens a dialog" rather than
+    /// part of the label's words — which is not a liberty invented here: CreatorView's folder
+    /// picker reads "Browse folder…" and has long been named "Browse folder for release input",
+    /// with <c>CreatorViewFolderBindingTests</c> asserting containment of "Browse folder" and not
+    /// the ellipsis. Same rule, asserted the same way below.
+    /// </para>
+    /// <para>
+    /// The WinRAR one is VERBATIM the Reconstructor's own name for the same kind of target, since
+    /// this setting is the default that pre-fills that very field (WCAG 3.2.4). The output one
+    /// deliberately is NOT — it picks the default for reconstruction OUTPUT, and the window's own
+    /// caption calls it the "Reconstruction output folder".
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void BrowseButtons_AnnounceWhichFolder_AndContainTheirVisibleLabel()
+    {
+        // AppDataConfig.FolderName is a process-wide static, so the original MUST be restored or
+        // the next test in this collection reads the temp folder instead (which is exactly what
+        // the first version of this test did to AppDataConfigTests).
+        string originalFolder = AppDataConfig.FolderName;
+        string tempFolder = UseTempAppDataFolder();
+        try
+        {
+            SettingsViewModel vm = CreateViewModel();
+            var window = new SettingsWindow { DataContext = vm };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            try
+            {
+                // Unselected tab content is not materialized, so each button's own tab is selected
+                // before it is looked up (1 General, 3 RAR Reconstruction).
+                SelectTab(window, 1);
+                AssertBrowse(window, vm.BrowseOutputDirCommand, "Browse for default output directory");
+
+                SelectTab(window, 3);
+                AssertBrowse(window, vm.BrowseReconstructWinRARCommand, "Browse for WinRAR versions folder");
+                AssertBrowse(window, vm.BrowseReconstructOutputCommand, "Browse for reconstruction output folder");
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            AppDataConfig.FolderName = originalFolder;
+            CleanUpTempAppDataFolder(tempFolder);
+        }
+    }
+
+    /// <summary>
+    /// Asserts one Browse button's literal name, its visible Content, and the Label-in-Name
+    /// containment that licenses the shared phrasing despite the trailing ellipsis. Resolved by the
+    /// bound command, never by the name under test.
+    /// </summary>
+    private static void AssertBrowse(Window window, System.Windows.Input.ICommand command, string expectedName)
+    {
+        Button button = window.GetVisualDescendants().OfType<Button>()
+            .Single(b => ReferenceEquals(b.Command, command));
+
+        Assert.Equal("Browse...", button.Content as string);
+        string name = Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(button).GetName()!;
+        Assert.Equal(expectedName, name);
+        Assert.Contains("Browse", name, StringComparison.Ordinal);
+    }
+
     [AvaloniaFact]
     public void Window_IsResizable_WithCenteredFooterButtons()
     {

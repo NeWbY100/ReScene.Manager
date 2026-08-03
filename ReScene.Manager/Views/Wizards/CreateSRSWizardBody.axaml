@@ -17,8 +17,18 @@
                  TextWrapping="Wrap" Margin="0,0,0,8" />
       <TextBlock Text="Sample file" FontWeight="SemiBold" Margin="0,0,0,2" />
       <DockPanel Margin="0,0,0,2">
+        <!-- All three Browse names in this body are taken VERBATIM from SRSCreatorView, which
+             drives the SAME SRSCreatorViewModel commands (WCAG 3.2.4). Note the second one: this
+             body's visible caption calls it "Full movie (optional)" where the Advanced tab says
+             "Main file", and the name follows the COMMAND rather than this surface's caption. That
+             is safe under 2.5.3 — the button's own visible label is the bare "Browse" on both
+             surfaces, so the caption never constrained the name — and it keeps one function to one
+             announced name rather than inventing a tenth string for a button that already has
+             one. -->
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseInputCommand}"
-                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+                Classes="ghost"
+                AutomationProperties.Name="Browse for sample file"
+                Margin="4,0,0,0" MinWidth="75" />
         <TextBox Text="{Binding InputPath}" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding SampleStatus}" />
@@ -36,7 +46,9 @@
                  TextWrapping="Wrap" Margin="0,0,0,4" />
       <DockPanel Margin="0,0,0,2">
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseMainFileCommand}"
-                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+                Classes="ghost"
+                AutomationProperties.Name="Browse for main file"
+                Margin="4,0,0,0" MinWidth="75" />
         <Button DockPanel.Dock="Right" Content="Clear" Command="{Binding ClearMainFileCommand}"
                 Classes="ghost" Margin="4,0,0,0" MinWidth="60" />
         <TextBox Text="{Binding MainFilePath}" />
@@ -54,7 +66,9 @@
       <TextBlock Text="Save SRS to" FontWeight="SemiBold" Margin="0,0,0,2" />
       <DockPanel Margin="0,0,0,2">
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseOutputCommand}"
-                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+                Classes="ghost"
+                AutomationProperties.Name="Browse for output path"
+                Margin="4,0,0,0" MinWidth="75" />
         <TextBox Text="{Binding OutputPath}" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding OutputStatus}" />

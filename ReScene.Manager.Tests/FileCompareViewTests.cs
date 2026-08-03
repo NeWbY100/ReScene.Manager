@@ -75,6 +75,45 @@ public class FileCompareViewTests
         return (window, vm);
     }
 
+    /// <summary>
+    /// Both Browse buttons announced the bare word "Browse", and this view is the sharpest case for
+    /// why that matters: the two are IDENTICAL in every visible respect except which side of the
+    /// window they sit on, so a screen-reader user had no way at all to tell the left picker from
+    /// the right. They now say which side, matching the vocabulary the sibling Close buttons'
+    /// tooltips already use ("Close left file").
+    /// <para>
+    /// Literal expected names; each button resolved by its bound command, never by the name under
+    /// test. Label-in-Name (WCAG 2.5.3) is asserted alongside — the visible label is the bare
+    /// "Browse", which both names contain.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void BrowseButtons_DistinguishLeftFromRight_AndContainTheirVisibleLabel()
+    {
+        FileCompareViewModel vm = CreateViewModel();
+        (Window window, _) = Show(vm);
+        try
+        {
+            Button left = window.GetVisualDescendants().OfType<Button>()
+                .Single(b => ReferenceEquals(b.Command, vm.BrowseLeftCommand));
+            Button right = window.GetVisualDescendants().OfType<Button>()
+                .Single(b => ReferenceEquals(b.Command, vm.BrowseRightCommand));
+
+            Assert.Equal("Browse", left.Content as string);
+            Assert.Equal("Browse", right.Content as string);
+
+            string leftName = Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(left).GetName()!;
+            string rightName = Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(right).GetName()!;
+
+            Assert.Equal("Browse for left file", leftName);
+            Assert.Equal("Browse for right file", rightName);
+            Assert.NotEqual(leftName, rightName);
+            Assert.Contains("Browse", leftName, StringComparison.Ordinal);
+            Assert.Contains("Browse", rightName, StringComparison.Ordinal);
+        }
+        finally { window.Close(); }
+    }
+
     [AvaloniaFact]
     public void EmptyView_NoFilesLoaded_NoBindingErrors()
     {

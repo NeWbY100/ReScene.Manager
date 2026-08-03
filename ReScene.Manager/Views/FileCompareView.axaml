@@ -60,11 +60,16 @@
                 ToolTip.Tip="Close left file"
                 Margin="4,0,0,0"
                 Padding="8,4" />
+        <!-- This row has no caption TextBlock of its own — the side is the only thing that
+             distinguishes it — so the target is "left file"/"right file", matching the vocabulary
+             the sibling Close buttons' tooltips already use ("Close left file"). Safe under WCAG
+             2.5.3: the visible label is the bare word "Browse", which the name contains. -->
         <Button DockPanel.Dock="Right"
                 Content="Browse"
                 Command="{Binding BrowseLeftCommand}"
                 IsEnabled="{Binding IsNotComparing}"
                 Classes="ghost"
+                AutomationProperties.Name="Browse for left file"
                 Margin="4,0,0,0"
                 Padding="8,4" />
         <!-- Editable: type or paste a path and press Enter to load (no dialog needed). -->
@@ -103,6 +108,7 @@
                 Command="{Binding BrowseRightCommand}"
                 IsEnabled="{Binding IsNotComparing}"
                 Classes="ghost"
+                AutomationProperties.Name="Browse for right file"
                 Margin="4,0,0,0"
                 Padding="8,4" />
         <!-- Editable: type or paste a path and press Enter to load (no dialog needed). -->

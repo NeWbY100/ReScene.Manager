@@ -43,9 +43,13 @@
                 Command="{Binding CloseFileCommand}"
                 Classes="ghost"
                 Margin="4,0,0,0" MinWidth="55" />
+        <!-- The row's caption is the single word "File", which would make an uninformative name
+             app-wide, so the view's own purpose supplies the qualifier. Safe under WCAG 2.5.3:
+             the visible label is the bare word "Browse", which the name contains. -->
         <Button DockPanel.Dock="Right" Content="Browse"
                 Command="{Binding BrowseFileCommand}"
                 Classes="ghost"
+                AutomationProperties.Name="Browse for file to inspect"
                 Margin="4,0,0,0" MinWidth="75" />
         <!-- Editable: type or paste a path and press Enter to load (no dialog needed). -->
         <TextBox x:Name="LoadedFilePathTextBox"

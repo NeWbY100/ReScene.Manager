@@ -58,10 +58,18 @@
                    Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
             </TextBlock>
             <DockPanel Margin="0,0,0,10">
+              <!-- All three Browse buttons in this window read "Browse..." — WITH the ellipsis —
+                   and WCAG 2.5.3 wants the accessible name to contain the visible label. The
+                   trailing ellipsis is excluded from that containment, which is not a liberty
+                   taken here: CreatorView's folder picker reads "Browse folder…" and is named
+                   "Browse folder for release input", asserted as containing "Browse folder" and
+                   not the ellipsis, since "…" is a conventional affordance marker meaning "opens
+                   a dialog" rather than part of the label's words. Same rule, same test shape. -->
               <Button DockPanel.Dock="Right"
                       Content="Browse..."
                       Command="{Binding BrowseOutputDirCommand}"
                       Classes="ghost"
+                      AutomationProperties.Name="Browse for default output directory"
                       MinWidth="75"
                       Margin="4,0,0,0" />
               <TextBox Text="{Binding DefaultOutputDirectory}" />
@@ -107,10 +115,13 @@
                    Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
             </TextBlock>
             <DockPanel Margin="0,0,0,2">
+              <!-- VERBATIM the Reconstructor's own name for the same kind of target — this
+                   setting is the default that pre-fills that very field (WCAG 3.2.4). -->
               <Button DockPanel.Dock="Right"
                       Content="Browse..."
                       Command="{Binding BrowseReconstructWinRARCommand}"
                       Classes="ghost"
+                      AutomationProperties.Name="Browse for WinRAR versions folder"
                       MinWidth="75"
                       Margin="4,0,0,0" />
               <TextBox Text="{Binding ReconstructWinRARPath}" />
@@ -149,10 +160,15 @@
                    Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
             </TextBlock>
             <DockPanel Margin="0,0,0,10">
+              <!-- NOT the Reconstructor's "Browse for output folder": this picks the DEFAULT that
+                   pre-fills it, and the window's own caption calls it the "Reconstruction output
+                   folder". Three Browse buttons in one window is exactly the case where a bare
+                   "Browse..." leaves a screen-reader user unable to tell them apart. -->
               <Button DockPanel.Dock="Right"
                       Content="Browse..."
                       Command="{Binding BrowseReconstructOutputCommand}"
                       Classes="ghost"
+                      AutomationProperties.Name="Browse for reconstruction output folder"
                       MinWidth="75"
                       Margin="4,0,0,0" />
               <TextBox Text="{Binding ReconstructOutputPath}" />

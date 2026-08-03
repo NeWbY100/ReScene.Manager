@@ -22,8 +22,16 @@
                  TextWrapping="Wrap" Margin="0,0,0,8" />
       <TextBlock Text="SRR or SRS file" FontWeight="SemiBold" Margin="0,0,0,2" />
       <DockPanel Margin="0,0,0,2">
+        <!-- The four Browse buttons on step 1 below take their names VERBATIM from
+             SampleRestorerView and SRSReconstructorView, because they are literally the SAME
+             command objects — this body binds through BulkRestorer/SingleRebuilder, which ARE
+             those two ViewModels (WCAG 3.2.4). This one is the wizard's own, so its target comes
+             from its own caption ("SRR or SRS file"). All five are safe under 2.5.3: every visible
+             label here is the bare word "Browse". -->
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseInputCommand}"
-                Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+                Classes="ghost"
+                AutomationProperties.Name="Browse for SRR or SRS file"
+                Margin="4,0,0,0" MinWidth="75" />
         <TextBox Text="{Binding InputPath}" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding InputStatus}" />
@@ -38,7 +46,9 @@
         <TextBlock Text="Folder with the full media files" FontWeight="SemiBold" Margin="0,0,0,2" />
         <DockPanel Margin="0,0,0,2">
           <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BulkRestorer.BrowseMediaDirectoryCommand}"
-                  Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+                  Classes="ghost"
+                  AutomationProperties.Name="Browse for media directory"
+                  Margin="4,0,0,0" MinWidth="75" />
           <TextBox Text="{Binding BulkRestorer.MediaDirectoryPath}" />
         </DockPanel>
         <controls:FieldStatusLine Status="{Binding BulkRestorer.MatchStatus}" />
@@ -46,7 +56,9 @@
         <TextBlock Text="Save restored samples to" FontWeight="SemiBold" Margin="0,12,0,2" />
         <DockPanel Margin="0,0,0,2">
           <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BulkRestorer.BrowseOutputDirectoryCommand}"
-                  Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+                  Classes="ghost"
+                  AutomationProperties.Name="Browse for output directory"
+                  Margin="4,0,0,0" MinWidth="75" />
           <TextBox Text="{Binding BulkRestorer.OutputDirectoryPath}" />
         </DockPanel>
 
@@ -67,7 +79,9 @@
         <TextBlock Text="Full original media file" FontWeight="SemiBold" Margin="0,0,0,2" />
         <DockPanel Margin="0,0,0,2">
           <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding SingleRebuilder.BrowseMediaCommand}"
-                  Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+                  Classes="ghost"
+                  AutomationProperties.Name="Browse for media file"
+                  Margin="4,0,0,0" MinWidth="75" />
           <TextBox Text="{Binding SingleRebuilder.MediaFilePath}"
                    IsReadOnly="{Binding SingleRebuilder.IsISOSource}" />
         </DockPanel>
@@ -76,7 +90,9 @@
         <TextBlock Text="Save rebuilt sample to" FontWeight="SemiBold" Margin="0,12,0,2" />
         <DockPanel Margin="0,0,0,2">
           <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding SingleRebuilder.BrowseOutputCommand}"
-                  Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
+                  Classes="ghost"
+                  AutomationProperties.Name="Browse for output path"
+                  Margin="4,0,0,0" MinWidth="75" />
           <TextBox Text="{Binding SingleRebuilder.OutputPath}" />
         </DockPanel>
         <controls:FieldStatusLine Status="{Binding SingleRebuilder.OutputStatus}" />

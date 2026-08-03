@@ -1349,6 +1349,30 @@ hit is in `CompactHeightBehaviorTests` about `e.Handled` and is unrelated.
 package. No visible label moved — only accessible names were added, which is what keeps WCAG 2.5.3
 satisfied for all nine.
 
+**THE DENOMINATOR — added after review, because this section did not have one and should have.**
+Every count above is of things NAMED. None of them is of things that EXIST, so "the app is now
+consistent about Browse buttons" (as §E7.4 then claimed) was unsupported by anything here. The two
+greps belong together, permanently, and both numbers get quoted:
+
+```
+$ grep -rn 'Content="Browse' ReScene.Manager/Views/ | wc -l                      # total
+$ grep -rn 'AutomationProperties.Name="Browse' ReScene.Manager/Views/ | wc -l    # named
+```
+
+| After | named / total |
+|---|---|
+| item 2 (`e725154`) | 14 / 39 |
+| package B (`b1970bf`) | 23 / 39 |
+| this round | **39 / 39** |
+
+At the time this section was first written it read 23 named and stopped there. The missing 16 were
+in six surfaces the whole sweep never looked at — FileCompare, Inspector, Settings and the three
+other Beginner wizard bodies — all shipping, all reachable. §F records naming them.
+
+**The rule this cost, stated so it outlives the incident:** every "all X are Y" claim needs the
+count of X, not just the count of Y. A sweep that greps only for the fixed thing measures its own
+work; a sweep that greps for the thing's whole population measures the claim.
+
 ## E7. Concerns
 
 1. **Nine new strings were invented**, where item 2's four were adopted verbatim from an existing
@@ -1365,7 +1389,185 @@ satisfied for all nine.
    "Restore sampleA.srs", which would be an accessibility IMPROVEMENT) would break it. The test
    fails loudly with an explanation rather than passing vacuously, which is the best available
    outcome, but whoever makes that improvement will have to redesign this test at the same time.
-4. **The app is now consistent about Browse buttons for the first time**, which removes §C12.5's
-   concern rather than mitigating it: thirteen buttons, one convention, one documented exception.
-   The exception (CreatorView's folder picker) is the only place a speech-input user meets different
-   words for a similar action, and it is different because the visible label is different.
+4. ~~**The app is now consistent about Browse buttons for the first time**, which removes §C12.5's
+   concern rather than mitigating it: thirteen buttons, one convention, one documented exception.~~
+   **FALSE WHEN WRITTEN, corrected in §F.** It was 23 named of **39** that exist — "thirteen" was
+   not the count of anything, and the claim of app-wide consistency was made from a sweep that only
+   ever counted what this batch had touched. Sixteen buttons in six untouched surfaces still
+   announced the bare word. What is true after §F: 39 of 39 named, one convention, two documented
+   exceptions (CreatorView's folder picker, whose visible label forbids the shared phrasing, and
+   SettingsWindow's ellipsis buttons, where the ellipsis is excluded from Label-in-Name containment
+   under the same precedent).
+
+---
+
+# Package B remainder — the other sixteen
+
+Date: 2026-08-03. Base `main` @e9faf92. One commit. Nothing pushed.
+
+## F1. What review found, and why the previous sweep missed it
+
+The reviewer measured the denominator §E6 never did: **39 Browse-content buttons app-wide, 23 named,
+16 unnamed** — every one of the sixteen in a shipping, reachable surface. Package B's "one
+convention app-wide" was therefore false when committed, and its own sweep could not have caught it,
+because every grep in it counted named buttons and none counted buttons.
+
+Confirmed independently before acting, per file:
+
+| Surface | Browse buttons | Named before |
+|---|---|---|
+| FileCompareView | 2 | 0 |
+| InspectorView | 1 | 0 |
+| SettingsWindow | 3 (`Content="Browse..."`) | 0 |
+| CreateSRSWizardBody | 3 | 0 |
+| EditSRRWizardBody | 2 | 0 |
+| RestoreWizardBody | 5 | 0 |
+| *(the seven already-named surfaces)* | 23 | 23 |
+| | **39** | **23** |
+
+## F2. The sixteen names, and the rule that chose them
+
+Two rules, applied in this order, both recorded at their sites:
+
+1. **If the same command already has a name on another surface, take it VERBATIM** (WCAG 3.2.4),
+   unless that surface's own visible label would make it fail 2.5.3.
+2. **Otherwise** phrase the target from that row's own visible caption subject.
+
+Seven of the sixteen fell to rule 1 without inventing anything, because the wizard bodies bind the
+very same command objects the Advanced views do.
+
+| Surface | Command | Name | Rule |
+|---|---|---|---|
+| FileCompareView | `BrowseLeftCommand` | "Browse for left file" | 2 |
+| FileCompareView | `BrowseRightCommand` | "Browse for right file" | 2 |
+| InspectorView | `BrowseFileCommand` | "Browse for file to inspect" | 2\* |
+| SettingsWindow | `BrowseOutputDirCommand` | "Browse for default output directory" | 2 |
+| SettingsWindow | `BrowseReconstructWinRARCommand` | "Browse for WinRAR versions folder" | 1 |
+| SettingsWindow | `BrowseReconstructOutputCommand` | "Browse for reconstruction output folder" | 2 |
+| CreateSRSWizardBody | `BrowseInputCommand` | "Browse for sample file" | 1 |
+| CreateSRSWizardBody | `BrowseMainFileCommand` | "Browse for main file" | 1 |
+| CreateSRSWizardBody | `BrowseOutputCommand` | "Browse for output path" | 1 |
+| EditSRRWizardBody | `BrowseSourceCommand` | "Browse for SRR file" | 1+2 agree |
+| EditSRRWizardBody | `BrowseOutputCommand` | "Browse for output path" | 1 |
+| RestoreWizardBody | `BrowseInputCommand` | "Browse for SRR or SRS file" | 2 |
+| RestoreWizardBody | `BulkRestorer.BrowseMediaDirectoryCommand` | "Browse for media directory" | 1 |
+| RestoreWizardBody | `BulkRestorer.BrowseOutputDirectoryCommand` | "Browse for output directory" | 1 |
+| RestoreWizardBody | `SingleRebuilder.BrowseMediaCommand` | "Browse for media file" | 1 |
+| RestoreWizardBody | `SingleRebuilder.BrowseOutputCommand` | "Browse for output path" | 1 |
+
+\* Deliberate small departure: the caption is the single word "File", which would be uninformative
+among thirty-nine Browse buttons, so the view's own purpose supplies the qualifier.
+
+**FileCompareView is the sharpest case in the whole workstream.** Its two Browse buttons are
+identical in every visible respect except which half of the window they sit in, so a screen-reader
+user had no way at all to tell the left picker from the right. The test asserts the two names DIFFER,
+not just that each is right.
+
+## F3. The ellipsis question, answered from precedent rather than invented
+
+SettingsWindow's three read `Content="Browse..."` — the only Browse buttons in the app whose visible
+label is not the bare word. WCAG 2.5.3 wants the accessible name to contain the visible label, and
+"Browse for default output directory" does not contain the literal string "Browse...".
+
+The ellipsis is excluded from that containment, and this is not a liberty taken here: CreatorView's
+folder picker reads "Browse folder…" and has been named "Browse folder for release input" since long
+before this workstream, with `CreatorViewFolderBindingTests` asserting containment of "Browse folder"
+and NOT the ellipsis. "…" is a conventional affordance marker meaning "opens a dialog", not part of
+the label's words. Same rule, asserted the same way, and now written down where the next reader will
+meet it.
+
+## F4. One conflict, and how it went
+
+`CreateSRSWizardBody`'s main-file row captions itself "Full movie (optional)" where the Advanced tab
+says "Main file" — so rules 1 and 2 disagree. Rule 1 won: the name is "Browse for main file",
+following the command rather than this surface's caption.
+
+That is safe under 2.5.3 because the BUTTON's own visible label is the bare "Browse" on both
+surfaces, so the caption never constrained the name in the first place — unlike CreatorView's folder
+picker, where the caption IS the button's label and the criterion therefore wins. Recorded at the
+site, because "same rules, opposite outcomes" is exactly what a future reader will otherwise read as
+an inconsistency.
+
+## F5. Which surfaces had fixtures — asked, and answered by measurement
+
+**None of the six.** Tab-order fixtures exist only in the five compact suites (Creator,
+Reconstructor, SampleRestorer, SRSCreator, SRSReconstructor); FileCompare, Inspector, Settings and
+the three wizard bodies have none. Predicted from the fixture inventory and then CONFIRMED by
+running: the full suite went green on the naming edits alone, with zero failures. Sixteen renames
+that touch no fixture is a fact worth stating, since the previous two rounds regenerated 25 and 18
+fixture entries respectively — the difference is which surfaces carry compact suites, not luck.
+
+## F6. Tests
+
+Placed where each surface's host setup already lives, rather than duplicating six sets of service
+doubles into one file:
+
+| Test | Where | Buttons |
+|---|---|---|
+| `BeginnerWizardBodies_BrowseButtons_UseTheSharedConvention` | `AccessibleNamingTests` | 8 |
+| `BrowseButtons_AnnounceWhichFolder_AndContainTheirVisibleLabel` | `SettingsWindowTests` | 3 |
+| `BrowseButtons_DistinguishLeftFromRight_AndContainTheirVisibleLabel` | `FileCompareViewTests` | 2 |
+| `BrowseButton_AnnouncesItsTarget_AndContainsItsVisibleLabel` | `InspectorViewTests` | 1 |
+
+`SettingsWindowTests` is the reason this split is right rather than merely convenient: it is
+`[Collection("AppDataConfig")]` and needs a real `AppSettingsService` pointed at a temp folder.
+Hoisting that into `AccessibleNamingTests` would have serialized that whole class against three
+unrelated ones.
+
+Every expected name is a literal; every button is resolved by its bound command; Label-in-Name is
+asserted alongside each name, so a future change to a visible Content breaks the convention loudly
+instead of silently violating a level-A criterion.
+
+**One self-inflicted failure worth recording.** The first version of the Settings test called
+`UseTempAppDataFolder()` without restoring `AppDataConfig.FolderName` — a process-wide static — and
+broke `AppDataConfigTests.FolderName_DefaultsTo_ReSceneManager`, a test in a different class that
+had nothing to do with this work. The established pattern three methods below captures and restores
+it; I had copied the setup and not the teardown. Fixed, with the reason at the site.
+
+## F7. Evidence
+
+`-t:Rebuild` on all four projects, each **0 Warning(s), 0 Error(s)**, then `dotnet test --no-build`:
+
+```
+Manager   Passed!  - Failed: 0, Passed: 482, Skipped: 0, Total: 482
+App.Core  Passed!  - Failed: 0, Passed: 722, Skipped: 0, Total: 722
+```
+
+Baselines Manager 478 / App.Core 722. Delta **+4 Manager**, one per test above. App.Core untouched —
+this round changed six view files and four test files.
+
+Sweep, run last, with the denominator this time:
+
+```
+$ grep -rn 'Content="Browse' ReScene.Manager/Views/ | wc -l                    39
+$ grep -rn 'AutomationProperties.Name="Browse' ReScene.Manager/Views/ | wc -l  39
+```
+
+## F8. The commit-subject correction
+
+`b1970bf`'s subject reads "name the last nine Browse buttons, one convention app-wide". Both halves
+overclaimed: they were not the last nine, and the app was not consistent afterwards. It is unpushed,
+so the reviewer allowed an amend.
+
+**A correcting follow-up commit was used instead of an amend.** `b1970bf` is no longer HEAD —
+`e9faf92` sits on top of it — so rewording it means rewriting a second commit's hash as well, and
+`git rebase -i` is unavailable in this environment. The follow-up (this round's commit) states the
+correction in its own message, which leaves an honest, append-only history rather than a tidier
+rewritten one. Recorded here because "we amended" and "we corrected forward" are different claims
+and the reviewer asked which.
+
+## F9. Concerns
+
+1. **Sixteen more invented strings**, nine of them adopted verbatim and seven genuinely new. None
+   has been heard by a real screen reader; gate item (e) is still skipped.
+2. **"Browse for file to inspect" departs from the caption rule** and is the only one that does.
+   It is defensible (the caption is one generic word) but it is a judgement, not a derivation.
+3. **The 39/39 guard is a grep in this report, not a test.** Nothing FAILS if a seventeenth
+   unnamed Browse button is added tomorrow — the per-surface tests only cover the buttons that
+   exist today. A test that enumerates every Browse-content button across every view and asserts
+   each carries a name would close that, and would have caught this round's own gap; it needs a way
+   to host or scan all thirteen surfaces, which is real work rather than a one-liner. This is the
+   single most valuable follow-up left in the naming workstream.
+4. **`AutomationProperties.Name` on the wizard bodies is unverified against a real WizardWindow.**
+   The tests host each body under a synthetic `WizardViewModel`, which is how every other wizard
+   test in this suite works, but it is not the shipping window.
