@@ -1821,3 +1821,118 @@ RED-verified per half: removing `Local` fails 1 test; declaring the footer first
    it sounds only because nobody had counted before.
 4. **No real screen-reader or manual keyboard session.** All walks are Avalonia's own focus
    traversal, which is what a Tab key drives, but it is not a person pressing Tab.
+
+---
+
+# Wizard round, part 2 — the Reconstruct wizard's silent banner
+
+Date: 2026-08-03. Base `main` @c9fef20. One commit. Nothing pushed. **No ViewModel change.**
+
+Closes §C11.1. `ReconstructWizardBody`'s custom-packer warning lived in an `IsVisible`-toggled
+Border, so it was not realized when its text arrived and announced nothing at all.
+
+## I1. The recorded obstacle, and the home that resolves it
+
+The Advanced tab fixed the same defect by mirroring the text into a live line in its LOG HEADER,
+deliberately away from the banner. §C11.1 deferred the wizard because "step 0 has no neutral home
+for a live line" — put a second copy directly under the banner and the same sentence renders twice.
+
+**The home is the Import row.** The "Import from SRR…" button and a live outcome line now share one
+`DockPanel`, which is precisely what `SRSReconstructorView` does with `ResultStatus` beside Save-log
+and what the Advanced Reconstructor does with its own `CustomPackerStatus`. An established pattern
+with two precedents, not a new one.
+
+**The alternative was tried first and measured, not reasoned about.** A `Panel` overlaying the
+chrome Border behind an always-present TextBlock is elegant on paper — no duplication at all, the
+banner's own text becomes the live region. Measured, it costs **31 DIPs of permanent empty space**:
+
+```
+overlay, no warning:   panelH=31.0  liveH=19.0   (an empty TextBlock still reserves a line box)
+```
+
+That 31-DIP gap would sit above the import details on every unimported wizard. Rejected. In the
+Import row the button sets the height, so the same empty line costs nothing:
+
+```
+import row, no warning: rowH=32.0  buttonH=32.0  liveH=18.0
+import row, warning:    rowH=32.0  buttonH=32.0  liveH=18.0
+```
+
+Both numbers are asserted in the test, not just recorded here.
+
+## I2. No ViewModel change — checked, not assumed
+
+Both surfaces drive the **same `ImportSRRCommand` on the same `ReconstructorViewModel` instance**,
+and that command already clears `CustomPackerWarning` at the top (added in §C6 for the Advanced
+tab), which is what re-arms the empty-to-text transition so a second import carrying the same
+warning still announces. `ReconstructorAnnouncementTests.FailedSRRImport_ClearsAPreviousCustomPackerWarning`
+in App.Core already pins it. App.Core is untouched and stays at 722.
+
+## I3. A THIRD silent surface, measured and NOT fixed
+
+Sweeping for the defect class rather than the reported instance — `IsVisible`-toggled outcome text
+with no live counterpart — turned up one more:
+
+```
+$ grep -rn 'IsVisible="{Binding (HasCustomPackerWarning|ShowResult|HasImportedSRR)}"' ReScene.Manager/Views/
+SRSReconstructorView.axaml:165   ShowResult              -> has ResultStatus            OK
+ReconstructorView.axaml:129      HasCustomPackerWarning  -> has CustomPackerStatus      OK
+ReconstructWizardBody.axaml:87   HasCustomPackerWarning  -> fixed by this commit        OK
+ReconstructWizardBody.axaml:42   HasImportedSRR          -> details panel, informational
+EditSRRWizardBody.axaml:64       ShowResult              -> NO live line anywhere in the file
+```
+
+**`EditSRRWizardBody`'s step-3 "Done" result is silent**, on the step whose entire purpose is to
+report the outcome. It is the same defect, and it needs MORE than the same fix — measured in
+`SRREditorViewModel.Save()`:
+
+```csharp
+public void Save()
+{
+    ShowResult = true;                 // set first
+    …
+    ResultMessage = "No output path was chosen.";   // one of four, never cleared first
+```
+
+`Save()` never clears `ResultMessage`, so pressing Save twice with the same outcome sets an equal
+value, raises no change notification, and would announce nothing the second time even after the
+markup fix — the identical equal-value hazard §C6 found and fixed in `ImportSRRAsync`. Fixing it
+therefore means an App.Core change plus its own re-arm tests.
+
+Not folded in here: it is a different surface on a different ViewModel, and the round was scoped one
+commit per defect so the gate can judge them separately. It is handed on fully specified rather than
+as a note — the fix is a clear-first in `Save()`, the live line in the step-3 header row beside
+"Details" (which has the same button-free shape problem, so the 31-DIP measurement above applies and
+should be re-taken there), and a `ReAnnounces` test mirroring §C6's.
+
+## I4. Tests
+
+One, `WizardCustomPackerWarning_AnnouncesThroughAnAlwaysInTreeLiveLine_AtNoLayoutCost`, alongside
+the Advanced tab's in `ReconstructorAnnouncementTests`. It asserts the live line is always in the
+tree, `Polite`, idle-empty and unnamed; that the row's height is the button's and does not change
+when the warning arrives; and that the visible banner still appears while carrying **no**
+`LiveSetting` of its own — so "fixing" this by putting the live setting on the banner fails and says
+why.
+
+RED-verified by stripping the `LiveSetting` and renaming the line away: the test fails, and the
+suite is green with it restored.
+
+The class doc was also corrected: it claimed the text is "mirrored into the log header instead",
+which is now true of only one of the two surfaces.
+
+## I5. Evidence
+
+`-t:Rebuild` on all four projects, 0 Warning(s)/0 Error(s). `Manager 489 -> 490` (+1),
+`App.Core 722` unchanged. 12 `LiveSetting="Polite"` lines across 8 view files.
+
+## I6. Concerns
+
+1. **`EditSRRWizardBody` is still silent** (§I3), and it is the "Done" step of a wizard — arguably
+   a worse place to be silent than the one just fixed.
+2. **The live line duplicates the banner's text on screen** when a warning is present, trimmed to
+   one line beside the Import button. That is the accepted precedent (SRSReconstructor does the
+   same), but it is duplication, and on this step the two are closer together than on the Advanced
+   tab.
+3. **No real AT session**, as throughout. The live line is verified by peer, `LiveSetting`,
+   always-in-tree-ness and an empty-to-text transition — the same standard as every other live line
+   in the app, and still not the same thing as hearing it.

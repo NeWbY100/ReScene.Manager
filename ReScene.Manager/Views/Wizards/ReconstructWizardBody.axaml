@@ -14,9 +14,29 @@
                  Foreground="{DynamicResource ForegroundSecondary}"
                  FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,12" />
-      <Button Content="Import from SRR..." Command="{Binding ImportSRRCommand}"
-              Classes="primary" Padding="14,6" HorizontalAlignment="Left"
-              ToolTip.Tip="Pick the release's .srr file. Compression, version, dictionary and timestamps are configured automatically." />
+      <!-- The Import button and a live outcome line share one row, which is the whole reason the
+           row exists. The custom-packer warning below toggles IsVisible and therefore announces
+           nothing (4.1.3) — the same defect the Advanced tab fixed by mirroring the text into a
+           live line in its LOG HEADER, deliberately away from the banner. This step has no log
+           header, which is what was recorded as "no neutral home" and deferred.
+           This row IS that home, and it is the established pattern rather than a new one: it is
+           what SRSReconstructorView does with ResultStatus beside Save-log, and what the Advanced
+           Reconstructor does with CustomPackerStatus. Putting the live line in its own block was
+           MEASURED to cost 31 DIPs of permanent empty space — an empty TextBlock still reserves a
+           line box — whereas here the row's height is the button's and an empty line costs nothing.
+           TextTrimming keeps a long warning from stretching the row; the announced value is the
+           full Text, never the rendered glyphs. -->
+      <DockPanel>
+        <Button DockPanel.Dock="Left" Content="Import from SRR..." Command="{Binding ImportSRRCommand}"
+                Classes="primary" Padding="14,6"
+                ToolTip.Tip="Pick the release's .srr file. Compression, version, dictionary and timestamps are configured automatically." />
+        <!-- Always in the tree; empty text renders nothing. No AutomationProperties.Name: the
+             announced name IS the text. -->
+        <TextBlock x:Name="CustomPackerStatus" Text="{Binding CustomPackerWarning}"
+                   AutomationProperties.LiveSetting="Polite"
+                   Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
+                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0" />
+      </DockPanel>
 
       <!-- Details of the imported SRR -->
       <Border IsVisible="{Binding HasImportedSRR}"
@@ -67,7 +87,12 @@
       <Border IsVisible="{Binding HasCustomPackerWarning}"
               Background="#3DE0A030" BorderBrush="#E0A030" BorderThickness="1"
               CornerRadius="3" Margin="0,8,0,0" Padding="8,5">
-        <!-- FontSizeBody on purpose: mirrors the Advanced tab's CustomPackerWarning, which is
+        <!-- This banner stays announcement-free, exactly as SRSReconstructorView's ResultBanner and
+             the Advanced Reconstructor's own copy of THIS banner do: it toggles IsVisible, so it is
+             not realized when its text arrives and there is no empty-to-text transition for an
+             assistive technology to notice. The announcement rides the always-in-tree live line
+             beside the Import button above.
+             FontSizeBody on purpose: mirrors the Advanced tab's CustomPackerWarning, which is
              v1.9 parity (ReconstructorView.xaml:74 pinned Body) — not a stray root-pin-era 14. -->
         <TextBlock Text="{Binding CustomPackerWarning}" Foreground="#FFD080"
                    FontSize="{DynamicResource FontSizeBody}" TextWrapping="Wrap" />
