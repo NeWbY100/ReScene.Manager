@@ -386,9 +386,11 @@ public class ReconstructorCompactTests
 
             // Scope split: scope A is everything up to and including the Paths TabItem header;
             // scope B is everything after (the Paths sub-tab's own content). Resolved by POSITION
-            // in forwardOrder, not by re-querying descriptions — the four "Browse" buttons
-            // describe identically, so only the forward walk's own disambiguated, ordered result
-            // can name a SPECIFIC one unambiguously (see ScopeBReverseTabOrderFixture's own note).
+            // in forwardOrder, not by re-querying descriptions. That was originally FORCED — the
+            // four "Browse" buttons described identically, so only the forward walk's own ordered
+            // result could name a specific one — and is now merely CORRECT: the four carry distinct
+            // names, but re-deriving an oracle from descriptions is against the house rule whether
+            // or not a collision happens to exist today.
             int tabItemIndex = forwardFixture.ToList().FindIndex(s => s.StartsWith("TabItem", StringComparison.Ordinal));
             Control scopeAAnchor = forwardOrder[tabItemIndex];
             Control scopeAFirstInScope = forwardOrder[0];
@@ -443,9 +445,12 @@ public class ReconstructorCompactTests
     /// <paramref name="actual"/> is, position for position, the SAME control REFERENCES as
     /// <paramref name="expected"/>, not merely the same DESCRIPTIONS. A description-based
     /// <c>Assert.Equal</c> cannot distinguish a permutation of controls that all describe
-    /// identically (this view's four "Browse" buttons, none of which carry a distinguishing
-    /// x:Name or accessible name); this can, since it never converts either side to a string
-    /// until it already knows a mismatch exists and needs to report it.
+    /// identically; this can, since it never converts either side to a string until it already
+    /// knows a mismatch exists and needs to report it. This view supplied the motivating example
+    /// until the naming pass: its four "Browse" buttons carried neither an x:Name nor an accessible
+    /// name and so described identically. They no longer do — the property is proven directly
+    /// instead, by
+    /// <see cref="AssertSameControlSequence_IdenticallyDescribedControls_AreDistinguishedByReference"/>.
     /// </summary>
     private static void AssertSameControlSequence(IReadOnlyList<Control> expected, IReadOnlyList<Control> actual, string context)
     {
@@ -472,18 +477,28 @@ public class ReconstructorCompactTests
     /// <summary>
     /// Proves <see cref="AssertSameControlSequence"/> — and therefore
     /// <see cref="AssertTabWalk"/>'s own per-scope reverse order checks, which rely on it — is
-    /// genuinely sensitive to a PERMUTATION of identically-described controls, not just to
-    /// controls going missing. Captures the REAL forward walk, builds scope B's real, correctly
-    /// reversed expected order from it, then deliberately swaps two of the four identically
-    /// described "Browse" positions within that EXPECTED list — simulating a hypothetical
-    /// regression that reordered them while every description stayed the same, which a
-    /// description-based comparison could never catch. Runs the REAL scope B reverse walk (which
-    /// visits them in the correct, un-swapped order, exactly as the earlier `RenderedMatrix_*`
-    /// tests already confirm) against this deliberately-wrong expectation and asserts it fails,
-    /// naming the specific mismatched position.
+    /// genuinely sensitive to a PERMUTATION, not just to controls going missing. Captures the REAL
+    /// forward walk, builds scope B's real, correctly reversed expected order from it, then
+    /// deliberately swaps two adjacent positions within that EXPECTED list, runs the REAL scope B
+    /// reverse walk (which visits them in the correct, un-swapped order, exactly as the earlier
+    /// <c>RenderedMatrix_*</c> tests already confirm) against that deliberately-wrong expectation,
+    /// and asserts it fails naming the specific mismatched position.
+    /// <para>
+    /// REDESIGNED, and the reason matters. This test used to swap two of the four "Browse" buttons
+    /// specifically BECAUSE all four described identically, which made it a proof about reference-
+    /// versus-description comparison and not merely about ordering. Naming those four buttons
+    /// removed the last identically-described pair from this view, so that premise no longer
+    /// exists here and selecting on it would now match zero controls. Rather than re-point it at
+    /// some other pair without checking the pair is genuinely indistinguishable — which would
+    /// hollow the test out while it kept passing — the two claims are split: this test keeps the
+    /// real-walk grounding and asserts positional sensitivity, and
+    /// <see cref="AssertSameControlSequence_IdenticallyDescribedControls_AreDistinguishedByReference"/>
+    /// carries the reference-versus-description claim directly, against a pair constructed to
+    /// describe identically. Neither claim was dropped; only the vehicle changed.
+    /// </para>
     /// </summary>
     [AvaloniaFact]
-    public void AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch()
+    public void AssertSameControlSequence_SwappedPositions_FailsNamingTheMismatch()
     {
         ReconstructorViewModel vm = CreateVm();
         var view = new ReconstructorView { DataContext = vm };
@@ -499,32 +514,78 @@ public class ReconstructorCompactTests
             Control scopeBAnchor = forwardOrder[^1];
 
             List<Control> expectedScopeBReverseOrder = [.. forwardOrder.Skip(tabItemIndex + 1).Reverse()];
+            Assert.True(expectedScopeBReverseOrder.Count >= 2, "this covering test needs at least 2 stops in scope B to swap");
 
-            // Deliberately swap two of the four identically-described "Browse" positions —
-            // description-based comparison sees no difference at all; reference-based comparison
-            // must.
-            List<int> browseIndexes = [.. Enumerable.Range(0, expectedScopeBReverseOrder.Count)
-                .Where(i => CompactViewRig.Describe(expectedScopeBReverseOrder[i]) == "Button name=\"Browse\" id=\"\"")];
-            Assert.True(browseIndexes.Count >= 2, "this covering test requires at least 2 identically-described Browse buttons to swap");
-            (expectedScopeBReverseOrder[browseIndexes[0]], expectedScopeBReverseOrder[browseIndexes[1]]) =
-                (expectedScopeBReverseOrder[browseIndexes[1]], expectedScopeBReverseOrder[browseIndexes[0]]);
+            (expectedScopeBReverseOrder[0], expectedScopeBReverseOrder[1]) =
+                (expectedScopeBReverseOrder[1], expectedScopeBReverseOrder[0]);
 
             CompactViewRig.TabWalkResult scopeBReverse = CompactViewRig.RunTabPass(window, scopeBAnchor, forward: false);
 
             Xunit.Sdk.FailException ex = Assert.Throws<Xunit.Sdk.FailException>(
                 () => AssertSameControlSequence(expectedScopeBReverseOrder, scopeBReverse.Order, "scope B reverse"));
 
-            Assert.Contains($"position {browseIndexes[0]}", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("position 0", ex.Message, StringComparison.Ordinal);
             Assert.Contains("same description does not mean same control instance", ex.Message, StringComparison.Ordinal);
         }
         finally { window.Close(); }
     }
 
     /// <summary>
-    /// Permanentizes an earlier TEMPORARY sanity check (a fake 5th "Browse"
-    /// entry, manually inserted then removed) as a REAL, committed test. This view has exactly 4
-    /// real "Browse" buttons; a fixture claiming a 5th must fail loudly, naming the exact
-    /// shortfall, rather than silently resolving to whatever 4 happen to exist.
+    /// The half of the old covering test that the naming pass would otherwise have silently
+    /// dropped: that <see cref="AssertSameControlSequence"/> catches a permutation a DESCRIPTION-
+    /// based comparison cannot see at all. It is asserted here against a pair constructed to
+    /// describe identically, because this view no longer contains one — every control in its walk
+    /// now carries a distinct accessible name or x:Name, which is the point of the naming pass and
+    /// is also what removed the natural example.
+    /// <para>
+    /// Both halves are stated explicitly rather than assumed: first that a description comparison
+    /// genuinely PASSES on the swapped sequence (the old test asserted only the second half and
+    /// took this one on trust), then that the reference comparison genuinely FAILS on the same
+    /// swap, naming the position. Controls, not doubles — <see cref="CompactViewRig.Describe"/>
+    /// reads a real automation peer, so this exercises the same code path the walks do.
+    /// </para>
+    /// </summary>
+    [AvaloniaFact]
+    public void AssertSameControlSequence_IdenticallyDescribedControls_AreDistinguishedByReference()
+    {
+        var first = new Button { Content = "Browse" };
+        var second = new Button { Content = "Browse" };
+        var neighbour = new TextBox { Name = "Anchor" };
+
+        // Precondition, measured rather than presumed: these two really are indistinguishable to
+        // the description channel. If Describe ever grew a disambiguator, this test would be
+        // proving nothing and says so here instead of passing quietly.
+        Assert.Equal(CompactViewRig.Describe(first), CompactViewRig.Describe(second));
+        Assert.False(ReferenceEquals(first, second));
+
+        List<Control> actual = [first, neighbour, second];
+        List<Control> swapped = [second, neighbour, first];
+
+        // A description-based oracle is blind to the swap — this is the specific gap
+        // AssertSameControlSequence exists to close, and it is asserted, not assumed.
+        Assert.Equal(actual.Select(CompactViewRig.Describe), swapped.Select(CompactViewRig.Describe));
+
+        Xunit.Sdk.FailException ex = Assert.Throws<Xunit.Sdk.FailException>(
+            () => AssertSameControlSequence(swapped, actual, "constructed identical-description pair"));
+
+        Assert.Contains("position 0", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("same description does not mean same control instance", ex.Message, StringComparison.Ordinal);
+
+        // And it does not cry wolf: the untampered sequence passes against itself.
+        AssertSameControlSequence(actual, actual, "constructed pair (untampered, sanity check)");
+    }
+
+    /// <summary>
+    /// Permanentizes an earlier TEMPORARY sanity check (a fake extra fixture entry, manually
+    /// inserted then removed) as a REAL, committed test: a fixture that claims MORE controls
+    /// matching a description than the window actually has must fail loudly, naming the exact
+    /// shortfall, rather than silently resolving to whatever happens to exist.
+    /// <para>
+    /// The duplicated entry used to be a 5th "Browse", back when all four Browse buttons shared
+    /// that one description and the real count was 4. Each now has its own name, so the smallest
+    /// honest version of the same claim is a SECOND copy of one of them: the fixture asks for 2,
+    /// the window has 1. Same code path, same counted-multiset property, real strings.
+    /// </para>
     /// </summary>
     [AvaloniaFact]
     public void ResolveExpectedStops_FixtureExpectsMoreThanExist_ThrowsNamingTheShortfall()
@@ -534,11 +595,11 @@ public class ReconstructorCompactTests
         (Window window, Grid root) = CompactViewRig.HostAt(view, ExpandedInner);
         try
         {
-            List<string> bogusFixture = [.. NormalModeTabOrderFixture, "Button name=\"Browse\" id=\"\""];
+            List<string> bogusFixture = [.. NormalModeTabOrderFixture, "Button name=\"Browse for WinRAR versions folder\" id=\"\""];
 
             Xunit.Sdk.XunitException ex = Assert.Throws<Xunit.Sdk.XunitException>(() => ResolveExpectedStops(window, bogusFixture));
 
-            Assert.Contains("expects 5, this window has 4", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("expects 2, this window has 1", ex.Message, StringComparison.Ordinal);
         }
         finally { window.Close(); }
     }
@@ -550,19 +611,24 @@ public class ReconstructorCompactTests
     /// be strings across separate test runs.
     /// <para>
     /// Matching is a COUNTED
-    /// MULTISET, not a set — the fixture's own count of each distinct description (the four
-    /// "Browse" buttons all describe identically, so that description's count is 4) is the
-    /// number of REAL, DISTINCT controls required for it, not merely "at least one". A plain
+    /// MULTISET, not a set — the fixture's own count of each distinct description is the
+    /// number of REAL, DISTINCT controls required for it, not merely "at least one". (The
+    /// motivating case was this view's four "Browse" buttons, which all described identically and
+    /// so gave that one description a count of 4; they now carry four distinct names, but the
+    /// counting rule is what makes the resolver correct regardless.) A plain
     /// <c>HashSet&lt;string&gt;</c> membership test would silently deduplicate the fixture's own
-    /// count down to 1 before ever comparing against the real window, so a regression that
-    /// removed, say, one of the four Browse buttons (leaving three) would still "resolve"
-    /// successfully — the missing one would never be noticed, because the check never actually
-    /// counted how many were expected versus how many are real. This view's own fixtures happen
-    /// to have every duplicated entry immediately followed by a uniquely test-id'd sibling (each
-    /// "Browse" by its own path TextBox), so the existing snapshot-equality tests already catch a
-    /// missing Browse button by a side effect of position — but this resolver has no such luck of
-    /// its own, and is used by a different, position-independent check, so it must count for
-    /// itself rather than ride on that coincidence.
+    /// count down to 1 before ever comparing against the real window, so back when one description
+    /// stood for four controls, a regression that removed one of them (leaving three) would still
+    /// have "resolved" successfully — the missing one never noticed, because the check never
+    /// actually counted how many were expected versus how many are real.
+    /// </para>
+    /// <para>
+    /// This view's fixtures no longer contain any duplicated entry at all, so today that failure
+    /// mode has nothing to bite on HERE. The counting is kept, and
+    /// <see cref="ResolveExpectedStops_FixtureExpectsMoreThanExist_ThrowsNamingTheShortfall"/>
+    /// still exercises it, because the resolver is a general mechanism and the next duplicated
+    /// description — a repeated row template, a second identically-labelled action — must not
+    /// silently resolve to one control.
     /// </para>
     /// <para>
     /// A fixture description with FEWER matching real controls than its own count throws here,
@@ -1285,32 +1351,39 @@ public class ReconstructorCompactTests
     private static double LinearizeChannel(double c) =>
         c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
 
-    // ── Fixtures (captured from real, green CompactViewRig.SnapshotTabOrder runs against
-    // this view's finished implementation). Describe() reads the control's REAL automation peer
-    // name, so same-type controls with distinct content are no longer collapsed to
+    // ── Fixtures (REGENERATED from a measured walk: the view was hosted at each mode's own
+    // height, the real Describe sequence captured, and these lists written from that capture —
+    // never edited entry-by-entry against the old ones, which is how a wrong string quietly
+    // becomes a wrong expectation that then passes). Describe() reads the control's REAL
+    // automation peer name, so same-type controls with distinct content are no longer collapsed to
     // indistinguishable "Button:" entries — an early trap, a same-type reorder, or a swapped stop
     // is now caught by content, not just by count.
     // Peer name (accessible-name channel) and x:Name
     // (test-id channel) are reported SEPARATELY, never one masking the other — see Describe()'s
-    // own doc comment. This is why four TextBox entries below show name="" — that is NOT a
-    // formatting quirk, it is the honest, unmasked accessible-name record: these four path-picker
-    // TextBoxes carry an x:Name (for this rig's own fixture matching) but NO
-    // AutomationProperties.Name/LabeledBy, so a screen reader announces nothing for them. REAL,
-    // UNFIXED a11y debt, deliberately NOT papered over with a name in this pass. ──
+    // own doc comment.
+    // The four path-picker TextBoxes used to show name="" here, recorded at the time as real,
+    // unfixed a11y debt rather than a formatting quirk. That debt is now paid: each carries an
+    // explicit AutomationProperties.Name, and so does each of the four Browse buttons beside them
+    // (taken verbatim from ReconstructWizardBody, which already used exactly those four strings
+    // for these same four commands). The consequence for THIS file is that the view no longer
+    // contains ANY identically-described pair — see
+    // AssertSameControlSequence_SwappedPositions_FailsNamingTheMismatch, whose premise that
+    // change removed. ──
 
     /// <summary>
-    /// Normal mode: identical shape to today's — the disclosure's body is force-expanded with
-    /// its header hidden, so the 3 link buttons occupy exactly the StackPanel's old slot. Start
-    /// is absent (disabled — CanExecute false for the inert VM's empty paths, so Tab correctly
-    /// skips it): 3 links (peer name = their Content text; the first also carries the
-    /// WindowsPackLink test-id) + Export/Import-Config/Import-from-SRR, then the Paths sub-tab
-    /// (TabItem peer name falls back to its body content's ToString(), i.e. the hosted
-    /// ScrollViewer — still deterministic and distinct from every other stop's type), its 4
-    /// Browse/TextBox pairs (Browse buttons share identical peer name and carry no test-id; each
-    /// is immediately followed by a uniquely test-id'd TextBox whose OWN peer name is empty — see
-    /// the a11y-debt note above — so a pair-reorder is still caught by the id channel even though
-    /// neither channel alone disambiguates every stop), splitter, Save-log button, Auto-scroll
-    /// checkbox.
+    /// Normal mode: the disclosure's body is force-expanded with its header hidden, so the 3 link
+    /// buttons occupy exactly the StackPanel's old slot. Start is absent (disabled — CanExecute
+    /// false for the inert VM's empty paths, so Tab correctly skips it): 3 links (peer name =
+    /// their Content text; the first also carries the WindowsPackLink test-id) +
+    /// Export/Import-Config/Import-from-SRR, then the Paths sub-tab, its 4 Browse/TextBox pairs,
+    /// splitter, Save-log button, Auto-scroll checkbox.
+    /// <para>
+    /// The TabItem entry reads "Paths — needs attention", not "Paths": its name is bound to
+    /// <c>ReconstructorViewModel.PathsTabAccessibleName</c>, and the inert VM this fixture is
+    /// captured against has all four paths empty, which is exactly the state that raises the
+    /// header's warning glyph. The previous entry, "Avalonia.Controls.ScrollViewer", was the
+    /// composite header leaving the peer nothing but its BODY's ToString() to fall back on.
+    /// </para>
     /// </summary>
     private static readonly IReadOnlyList<string> NormalModeTabOrderFixture =
     [
@@ -1320,15 +1393,15 @@ public class ReconstructorCompactTests
         "Button name=\"Export Config\" id=\"\"",
         "Button name=\"Import Config\" id=\"\"",
         "Button name=\"Import from SRR\" id=\"\"",
-        "TabItem name=\"Avalonia.Controls.ScrollViewer\" id=\"\"",
-        "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"WinRARTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"ReleaseTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"VerifyTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"OutputTextBox\"",
+        "TabItem name=\"Paths — needs attention\" id=\"\"",
+        "Button name=\"Browse for WinRAR versions folder\" id=\"\"",
+        "TextBox name=\"WinRAR versions folder path\" id=\"WinRARTextBox\"",
+        "Button name=\"Browse for extracted release files\" id=\"\"",
+        "TextBox name=\"Release files path\" id=\"ReleaseTextBox\"",
+        "Button name=\"Browse for verification file\" id=\"\"",
+        "TextBox name=\"Verify file path\" id=\"VerifyTextBox\"",
+        "Button name=\"Browse for output folder\" id=\"\"",
+        "TextBox name=\"Output folder path\" id=\"OutputTextBox\"",
         "GridSplitter name=\"Resize options and log\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
         "CheckBox name=\"Auto-scroll\" id=\"\"",
@@ -1348,15 +1421,15 @@ public class ReconstructorCompactTests
         "Button name=\"Export Config\" id=\"\"",
         "Button name=\"Import Config\" id=\"\"",
         "Button name=\"Import from SRR\" id=\"\"",
-        "TabItem name=\"Avalonia.Controls.ScrollViewer\" id=\"\"",
-        "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"WinRARTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"ReleaseTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"VerifyTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"OutputTextBox\"",
+        "TabItem name=\"Paths — needs attention\" id=\"\"",
+        "Button name=\"Browse for WinRAR versions folder\" id=\"\"",
+        "TextBox name=\"WinRAR versions folder path\" id=\"WinRARTextBox\"",
+        "Button name=\"Browse for extracted release files\" id=\"\"",
+        "TextBox name=\"Release files path\" id=\"ReleaseTextBox\"",
+        "Button name=\"Browse for verification file\" id=\"\"",
+        "TextBox name=\"Verify file path\" id=\"VerifyTextBox\"",
+        "Button name=\"Browse for output folder\" id=\"\"",
+        "TextBox name=\"Output folder path\" id=\"OutputTextBox\"",
         "GridSplitter name=\"Resize options and log\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
         "CheckBox name=\"Auto-scroll\" id=\"\"",
@@ -1380,7 +1453,7 @@ public class ReconstructorCompactTests
     /// </summary>
     private static readonly IReadOnlyList<string> NormalScopeAReverseTabOrderFixture =
     [
-        "TabItem name=\"Avalonia.Controls.ScrollViewer\" id=\"\"",
+        "TabItem name=\"Paths — needs attention\" id=\"\"",
         "Button name=\"Import from SRR\" id=\"\"",
         "Button name=\"Import Config\" id=\"\"",
         "Button name=\"Export Config\" id=\"\"",
@@ -1392,7 +1465,7 @@ public class ReconstructorCompactTests
     /// <summary>Compact-mode counterpart to <see cref="NormalScopeAReverseTabOrderFixture"/> — same finding, shorter (the 3 link buttons are hidden), same verification.</summary>
     private static readonly IReadOnlyList<string> CompactScopeAReverseTabOrderFixture =
     [
-        "TabItem name=\"Avalonia.Controls.ScrollViewer\" id=\"\"",
+        "TabItem name=\"Paths — needs attention\" id=\"\"",
         "Button name=\"Import from SRR\" id=\"\"",
         "Button name=\"Import Config\" id=\"\"",
         "Button name=\"Export Config\" id=\"\"",
@@ -1404,24 +1477,26 @@ public class ReconstructorCompactTests
     /// <see cref="NormalScopeAReverseTabOrderFixture"/>'s own doc comment) — identical in both
     /// modes, since compact mode never touches row 4 (the Paths/Options TabControl itself).
     /// Captured from a real Shift+Tab key-press simulation anchored at "Auto-scroll" (scope B's
-    /// own last forward stop), confirmed to land back on the FIRST "Browse" button (scope B's own
-    /// first-in-scope element) via object-identity hash — description alone cannot distinguish it
-    /// from the other three, which all read identically (see the a11y-debt note elsewhere in this
-    /// file), so the boundary-landing assertion in <see cref="AssertTabWalk"/> resolves it by
-    /// POSITION in the forward walk's own ordered result, never by description matching.
+    /// own last forward stop), confirmed to land back on the WinRAR "Browse" button (scope B's own
+    /// first-in-scope element) via object identity. The boundary-landing assertion in
+    /// <see cref="AssertTabWalk"/> resolves that control by POSITION in the forward walk's own
+    /// ordered result rather than by description — it did so originally because all four Browse
+    /// buttons read identically and description could not tell them apart; they now carry four
+    /// distinct names, so the position-based resolution is no longer forced, but it is kept because
+    /// it is the house rule (never re-derive an oracle from descriptions) rather than a workaround.
     /// </summary>
     private static readonly IReadOnlyList<string> ScopeBReverseTabOrderFixture =
     [
         "CheckBox name=\"Auto-scroll\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
         "GridSplitter name=\"Resize options and log\" id=\"\"",
-        "TextBox name=\"\" id=\"OutputTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"VerifyTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"ReleaseTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"WinRARTextBox\"",
-        "Button name=\"Browse\" id=\"\"",
+        "TextBox name=\"Output folder path\" id=\"OutputTextBox\"",
+        "Button name=\"Browse for output folder\" id=\"\"",
+        "TextBox name=\"Verify file path\" id=\"VerifyTextBox\"",
+        "Button name=\"Browse for verification file\" id=\"\"",
+        "TextBox name=\"Release files path\" id=\"ReleaseTextBox\"",
+        "Button name=\"Browse for extracted release files\" id=\"\"",
+        "TextBox name=\"WinRAR versions folder path\" id=\"WinRARTextBox\"",
+        "Button name=\"Browse for WinRAR versions folder\" id=\"\"",
     ];
 }

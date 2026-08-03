@@ -99,7 +99,12 @@
                   Command="{Binding BrowseMediaDirectoryCommand}"
                   Classes="ghost"
                   Margin="4,0,0,0" MinWidth="75" />
+          <!-- Same convention and the same reasoning as SRRFileTextBox above: a short
+               "<subject> path" phrase whose subject is this row's OWN visible caption ("Media
+               Directory"), so the accessible name contains the visible label (WCAG 2.5.3) without
+               inheriting the caption's whole explanatory sentence as its name. -->
           <TextBox x:Name="MediaDirTextBox" Text="{Binding MediaDirectoryPath}"
+                   AutomationProperties.Name="Media directory path"
                    behaviors:TextBoxDropBehavior.DropMode="Folder" />
         </DockPanel>
         <controls:FieldStatusLine Status="{Binding MatchStatus}" />
@@ -119,6 +124,7 @@
                   Classes="ghost"
                   Margin="4,0,0,0" MinWidth="75" />
           <TextBox x:Name="OutputDirTextBox" Text="{Binding OutputDirectoryPath}"
+                   AutomationProperties.Name="Output directory path"
                    behaviors:TextBoxDropBehavior.DropMode="Folder" />
         </DockPanel>
 

@@ -1456,9 +1456,15 @@ public class SampleRestorerCompactTests
     // separately) — a human-readable regression net, NOT the discriminating check itself.
     // Same-typed siblings that describe identically (the three "Browse" buttons, both grid row
     // checkboxes) are disambiguated by AssertTabWalk's OWN independent, reference-based checks.
-    // SRRFileTextBox's own entry updated: its automation peer name
-    // went from "" to "SRR file path" once AutomationProperties.Name was added; MediaDirTextBox
-    // and OutputDirTextBox are untouched pre-existing a11y debt, out of this task's scope. ──
+    // All three picker TextBoxes now carry an explicit AutomationProperties.Name: SRRFileTextBox
+    // gained "SRR file path" during the compact-layout work, and MediaDirTextBox/OutputDirTextBox
+    // — recorded here at the time as untouched pre-existing a11y debt — gained "Media directory
+    // path"/"Output directory path" in the naming pass, following the same "<subject> path"
+    // convention with each subject taken from that row's own visible caption.
+    // The three "Browse" buttons are deliberately NOT renamed: unlike the Reconstructor's four,
+    // which the Reconstruct wizard already had names for, these have no cross-surface twin to
+    // stay consistent with, and inventing three new strings is a wider change than this pass
+    // took on. They remain the identically-described siblings the covering test selects on. ──
 
     /// <summary>
     /// Normal mode, starting at SRR File's own Browse button — PROVEN first (not presumed): the
@@ -1470,9 +1476,9 @@ public class SampleRestorerCompactTests
         "Button name=\"Browse\" id=\"\"",
         "TextBox name=\"SRR file path\" id=\"SRRFileTextBox\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"MediaDirTextBox\"",
+        "TextBox name=\"Media directory path\" id=\"MediaDirTextBox\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"OutputDirTextBox\"",
+        "TextBox name=\"Output directory path\" id=\"OutputDirTextBox\"",
         "DataGrid name=\"Embedded SRS Files\" id=\"SRSEntriesGrid\"",
         "CheckBox name=\"Restore this sample\" id=\"\"",
         "CheckBox name=\"Restore this sample\" id=\"\"",
@@ -1491,9 +1497,9 @@ public class SampleRestorerCompactTests
         "Button name=\"Browse\" id=\"\"",
         "TextBox name=\"SRR file path\" id=\"SRRFileTextBox\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"MediaDirTextBox\"",
+        "TextBox name=\"Media directory path\" id=\"MediaDirTextBox\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"OutputDirTextBox\"",
+        "TextBox name=\"Output directory path\" id=\"OutputDirTextBox\"",
         "DataGrid name=\"Embedded SRS Files\" id=\"SRSEntriesGrid\"",
         "CheckBox name=\"Restore this sample\" id=\"\"",
         "CheckBox name=\"Restore this sample\" id=\"\"",

@@ -169,6 +169,17 @@ public partial class ReconstructorViewModel : ViewModelBase
 
     public bool HasCustomPackerWarning => !string.IsNullOrEmpty(CustomPackerWarning);
 
+    /// <summary>
+    /// The last Import/Export Configuration outcome, bound by the Reconstructor to a visible
+    /// TextBlock with <c>AutomationProperties.LiveSetting=Polite</c> so the outcome is announced to
+    /// screen readers (4.1.3). Before this, both commands reported only into
+    /// <see cref="LogEntries"/>, which is deliberately not a live region, so neither said anything.
+    /// Mirrors <c>SaveLogAnnouncement</c>'s contract exactly, including staying empty when the user
+    /// cancels the dialog — the cancel is its own feedback, and a stale success line would mislead.
+    /// </summary>
+    [ObservableProperty]
+    public partial string ConfigAnnouncement { get; set; } = string.Empty;
+
     /// <summary>True once an SRR has been successfully imported (drives the Beginner wizard's step gating).</summary>
     [ObservableProperty]
     public partial bool HasImportedSRR { get; set; }
@@ -198,20 +209,24 @@ public partial class ReconstructorViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     [NotifyPropertyChangedFor(nameof(PathsNeedAttention))]
+    [NotifyPropertyChangedFor(nameof(PathsTabAccessibleName))]
     public partial string WinRARPath { get; set; } = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     [NotifyPropertyChangedFor(nameof(PathsNeedAttention))]
+    [NotifyPropertyChangedFor(nameof(PathsTabAccessibleName))]
     public partial string ReleasePath { get; set; } = string.Empty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PathsNeedAttention))]
+    [NotifyPropertyChangedFor(nameof(PathsTabAccessibleName))]
     public partial string VerificationPath { get; set; } = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     [NotifyPropertyChangedFor(nameof(PathsNeedAttention))]
+    [NotifyPropertyChangedFor(nameof(PathsTabAccessibleName))]
     public partial string OutputPath { get; set; } = string.Empty;
 
     // ── Path status ──
@@ -282,6 +297,18 @@ public partial class ReconstructorViewModel : ViewModelBase
     /// </summary>
     public bool PathsNeedAttention =>
         ReconstructorFieldGuidance.PathsNeedAttention(WinRARPath, ReleasePath, VerificationPath, OutputPath);
+
+    /// <summary>
+    /// The Paths sub-tab's accessible name, carrying BOTH halves of what that header shows: the
+    /// word "Paths" and, when <see cref="PathsNeedAttention"/> is true, the warning glyph's meaning
+    /// in words. It exists as a VM property rather than a literal in the view because the glyph is
+    /// the only place that state was ever expressed, and it is expressed purely visually — a
+    /// TabItem peer does not expose its header's TextBlocks as children, so nothing about "needs
+    /// attention" reached a screen reader at all. Change-notified from all four path properties
+    /// (the same four <see cref="PathsNeedAttention"/> is derived from), so the announced name
+    /// tracks the glyph exactly rather than going stale behind it.
+    /// </summary>
+    public string PathsTabAccessibleName => PathsNeedAttention ? "Paths — needs attention" : "Paths";
 
     // ── Progress ──
 
@@ -1043,6 +1070,15 @@ public partial class ReconstructorViewModel : ViewModelBase
 
         HasImportedSRR = false;
 
+        // Cleared alongside HasImportedSRR, for two reasons. A failed load must not leave the
+        // PREVIOUS SRR's warning on screen; and the warning now also drives an always-in-tree
+        // polite live region in the view, which only announces on an empty-to-text transition —
+        // without this, importing an SRR whose warning text matches the one already showing would
+        // set an equal value, raise no change notification, and say nothing. Same reasoning as
+        // OperationViewModelBase.SaveLogToFileAsync's own clear-first. Both branches below set it
+        // definitively, so this never leaves it stale.
+        CustomPackerWarning = null;
+
         try
         {
             Log(LogTarget.System, $"=== SRR Import: {Path.GetFileName(path)} ===");
@@ -1267,6 +1303,12 @@ public partial class ReconstructorViewModel : ViewModelBase
     [RelayCommand]
     private async Task ImportConfigAsync()
     {
+        // Cleared FIRST so every outcome below is a genuine empty-to-message transition: both
+        // CommunityToolkit's setter and Avalonia's TextBlock.Text suppress equal-value changes, so
+        // re-importing the same file would otherwise announce nothing. Same reasoning, and the same
+        // "do not simplify this away" warning, as OperationViewModelBase.SaveLogToFileAsync.
+        ConfigAnnouncement = string.Empty;
+
         string? path = await _fileDialog.OpenFileAsync("Select Reconstructor Configuration",
             FileDialogFilters.ReconstructorConfig); // no meaningful anchor — deliberate platform-default start
         if (path is null)
@@ -1281,21 +1323,27 @@ public partial class ReconstructorViewModel : ViewModelBase
             if (config is null)
             {
                 Log(LogTarget.System, "Failed to import configuration: file is empty or invalid");
+                ConfigAnnouncement = "Could not import the configuration: the file is empty or invalid";
                 return;
             }
 
             ApplyConfig(config);
             Log(LogTarget.System, $"Configuration imported from {Path.GetFileName(path)}");
+            ConfigAnnouncement = $"Configuration imported from {Path.GetFileName(path)}";
         }
         catch (Exception ex)
         {
             Log(LogTarget.System, $"Failed to import configuration: {ex.Message}");
+            ConfigAnnouncement = $"Could not import the configuration: {ex.Message}";
         }
     }
 
     [RelayCommand]
     private async Task ExportConfigAsync()
     {
+        // Cleared FIRST — see ImportConfigAsync.
+        ConfigAnnouncement = string.Empty;
+
         string? path = await _fileDialog.SaveFileAsync("Save Reconstructor Configuration",
             ".json", FileDialogFilters.ReconstructorConfig, "reconstructor-config.json");
         if (path is null)
@@ -1309,10 +1357,12 @@ public partial class ReconstructorViewModel : ViewModelBase
             string json = System.Text.Json.JsonSerializer.Serialize(config, _configSerializerOptions);
             await File.WriteAllTextAsync(path, json);
             Log(LogTarget.System, $"Configuration exported to {Path.GetFileName(path)}");
+            ConfigAnnouncement = $"Configuration exported to {Path.GetFileName(path)}";
         }
         catch (Exception ex)
         {
             Log(LogTarget.System, $"Failed to export configuration: {ex.Message}");
+            ConfigAnnouncement = $"Could not export the configuration: {ex.Message}";
         }
     }
 

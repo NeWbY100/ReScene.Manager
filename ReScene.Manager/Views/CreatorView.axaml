@@ -87,6 +87,16 @@
                Local makes the row order among themselves and the row itself take its ordinary place in
                the outer order. -->
           <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
+            <!-- This button's name deliberately does NOT follow the "Browse for <target>" phrasing
+                 the other Browse buttons in this app use, and must not be changed to it. Its
+                 visible Content is "Browse folder…", and WCAG 2.5.3 (Label in Name, level A)
+                 requires the accessible name to CONTAIN the visible label so a speech-input user
+                 can activate the control by saying what they see. "Browse for release folder" does
+                 not contain "Browse folder" — the convention and the success criterion genuinely
+                 conflict on this one control, and the criterion wins. Every other Browse button in
+                 scope renders the bare word "Browse", so "Browse for <target>" is safe for all of
+                 them; this one is the exception. Pinned by
+                 CreatorViewFolderBindingTests.FolderBrowseButton_HasLabelInName_AccessibleName. -->
             <Button DockPanel.Dock="Right" Content="Browse folder…"
                     Command="{Binding BrowseInputFolderCommand}"
                     Classes="ghost"
@@ -98,7 +108,7 @@
                     Command="{Binding BrowseInputCommand}"
                     Classes="ghost"
                     TabIndex="1"
-                    AutomationProperties.Name="Browse input file"
+                    AutomationProperties.Name="Browse for input file"
                     AutomationProperties.HelpText="Pick a single set's .sfv or first .rar file."
                     Margin="4,0,0,0" MinWidth="75" />
             <TextBox x:Name="InputTextBox" Text="{Binding InputPath}"
@@ -246,9 +256,17 @@
           <CheckBox Content="Languages.diz — Extract language metadata from VobSub .idx files and store in the SRR."
                     IsChecked="{Binding GenerateLanguagesDiz}" Margin="0,1,0,4" />
           <DockPanel Margin="0,0,0,2">
-            <TextBlock Text="App name:" VerticalAlignment="Center"
+            <TextBlock x:Name="AppNameCaption" Text="App name:" VerticalAlignment="Center"
                        Margin="0,0,8,0" />
+            <!-- LabeledBy rather than an explicit Name: unlike the Input/Output rows above, whose
+                 captions are subject+prose sentences, this caption is a short standalone label, so
+                 it IS this field's name and pointing at it keeps the visible text the single source
+                 of it (WCAG 2.5.3 holds by construction). Avalonia 11.3.18 has no
+                 AutomationProperties.DescribedBy (MEASURED — the attached class exposes LabeledBy
+                 and HelpText and nothing else), so LabeledBy is the association channel wherever
+                 the caption genuinely is the label. -->
             <TextBox Text="{Binding AppName}" Width="400"
+                     AutomationProperties.LabeledBy="{Binding #AppNameCaption}"
                      HorizontalAlignment="Left" />
             <TextBlock Text="Embedded in the SRR header to identify the creating application."
                        VerticalAlignment="Center" Margin="8,0,0,0"

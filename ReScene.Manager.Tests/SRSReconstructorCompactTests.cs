@@ -1204,7 +1204,12 @@ public class SRSReconstructorCompactTests
     // siblings that describe identically (this view's three "Browse" buttons) are disambiguated
     // by AssertTabWalk's OWN independent, reference-based checks (ResolveIndependentExpectedOrder
     // + AssertSameControlSequence, both forward and reverse), proven to genuinely discriminate
-    // by AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch. ──
+    // by AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch.
+    // MediaFileTextBox and OutputTextBox previously read name="" — real a11y debt, paid in the
+    // naming pass with "Media file path"/"Output path", the same "<subject> path" convention
+    // SRSFileTextBox already used, each subject taken from that row's own visible caption. The
+    // three "Browse" buttons are deliberately left alone; see SampleRestorerCompactTests' own
+    // fixture note for why that is a scope decision rather than an omission. ──
 
     /// <summary>
     /// Normal mode, starting at SRS File's own Browse button — PROVEN first (not presumed): the
@@ -1220,9 +1225,9 @@ public class SRSReconstructorCompactTests
         "Button name=\"Browse\" id=\"\"",
         "TextBox name=\"SRS file path\" id=\"SRSFileTextBox\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"MediaFileTextBox\"",
+        "TextBox name=\"Media file path\" id=\"MediaFileTextBox\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"OutputTextBox\"",
+        "TextBox name=\"Output path\" id=\"OutputTextBox\"",
         "Button name=\"Rebuild Sample\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
     ];
@@ -1240,9 +1245,9 @@ public class SRSReconstructorCompactTests
         "Button name=\"Browse\" id=\"\"",
         "TextBox name=\"SRS file path\" id=\"SRSFileTextBox\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"MediaFileTextBox\"",
+        "TextBox name=\"Media file path\" id=\"MediaFileTextBox\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"OutputTextBox\"",
+        "TextBox name=\"Output path\" id=\"OutputTextBox\"",
         "Button name=\"Rebuild Sample\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
     ];

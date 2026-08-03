@@ -73,10 +73,17 @@
         <!-- ── ISO file selection (visible only when ISO loaded, single mode) ── -->
         <DockPanel IsVisible="{Binding ShowISOSelection}"
                    Margin="0,4,0,0">
-          <TextBlock Text="File inside ISO:" VerticalAlignment="Center"
+          <TextBlock x:Name="ISOFileCaption" Text="File inside ISO:" VerticalAlignment="Center"
                      Margin="0,0,8,0" />
+          <!-- LabeledBy, not an explicit Name: this caption is a short standalone label rather than
+               the subject+prose sentences the picker rows above carry, so the caption IS this
+               control's name and pointing at it keeps the visible text the single source of it
+               (WCAG 2.5.3 holds by construction). Avalonia 11.3.18 has no
+               AutomationProperties.DescribedBy (MEASURED), so LabeledBy is the association channel
+               available wherever the caption genuinely is the label. -->
           <ComboBox ItemsSource="{Binding ISOMediaFiles}"
                     SelectedItem="{Binding SelectedISOMediaFile}"
+                    AutomationProperties.LabeledBy="{Binding #ISOFileCaption}"
                     FontFamily="{DynamicResource MonoFontFamily}"
                     FontSize="{DynamicResource FontSizeCaption}" />
         </DockPanel>
@@ -100,7 +107,10 @@
                   Command="{Binding ClearMainFileCommand}"
                   Classes="ghost"
                   Margin="4,0,0,0" MinWidth="60" />
-          <TextBox Text="{Binding MainFilePath}" />
+          <!-- "<subject> path", subject taken from this row's own visible caption ("Main file"),
+               matching InputTextBox above and CreatorView's own Input/Output boxes. -->
+          <TextBox Text="{Binding MainFilePath}"
+                   AutomationProperties.Name="Main file path" />
         </DockPanel>
         <controls:FieldStatusLine Status="{Binding MainFileStatus}" Margin="0,2,0,0" />
 
@@ -119,6 +129,7 @@
                   Classes="ghost"
                   Margin="4,0,0,0" MinWidth="75" />
           <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}"
+                   AutomationProperties.Name="Output path"
                    behaviors:TextBoxDropBehavior.DropMode="File" />
         </DockPanel>
         <controls:FieldStatusLine Status="{Binding OutputStatus}" />
@@ -129,9 +140,11 @@
         <!-- ── Options ───────────────────────────────────────────── -->
         <TextBlock Text="Options" FontWeight="SemiBold" Margin="0,0,0,2" />
         <DockPanel Margin="0,0,0,2">
-          <TextBlock Text="App name:" VerticalAlignment="Center"
+          <TextBlock x:Name="AppNameCaption" Text="App name:" VerticalAlignment="Center"
                      Margin="0,0,8,0" />
+          <!-- LabeledBy the short caption beside it — see the ISO ComboBox above for the rule. -->
           <TextBox Text="{Binding AppName}" Width="400"
+                   AutomationProperties.LabeledBy="{Binding #AppNameCaption}"
                    HorizontalAlignment="Left" />
           <TextBlock Text="Embedded in the SRS file to identify the creating application."
                      VerticalAlignment="Center" Margin="8,0,0,0"

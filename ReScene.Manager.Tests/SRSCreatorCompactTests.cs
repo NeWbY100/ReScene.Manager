@@ -1091,12 +1091,16 @@ public class SRSCreatorCompactTests
     // format (real automation peer name plus x:Name, reported separately — see its own doc) — a
     // human-readable regression net
     // (catches renames, additions, removals), NOT the discriminating check itself. Same-typed
-    // siblings that describe identically (this view's three "Browse" buttons, two unnamed
-    // TextBoxes) are disambiguated by AssertTabWalk's OWN independent, reference-based checks
+    // siblings that describe identically (this view's three "Browse" buttons) are disambiguated by
+    // AssertTabWalk's OWN independent, reference-based checks
     // (ResolveIndependentExpectedOrder + AssertSameControlSequence, both forward and reverse —
     // see AssertTabWalk's own doc for why the fixture strings alone cannot do this), proven to
     // genuinely discriminate by
-    // AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch. ──
+    // AssertSameControlSequence_SwappedIdenticallyDescribedBrowsePositions_FailsNamingTheMismatch.
+    // The two entries that used to read name="" — the Main-file picker and the App-name box —
+    // were a SECOND identically-described pair, and real a11y debt behind it. Both are named now:
+    // "Main file path" follows the "<subject> path" convention, and the App-name box is LabeledBy
+    // its "App name:" caption, which is why its measured peer name carries the caption's colon. ──
 
     /// <summary>
     /// Normal mode, starting at Sample File's own Browse button — PROVEN first (not presumed):
@@ -1115,10 +1119,10 @@ public class SRSCreatorCompactTests
         "TextBox name=\"Sample file path\" id=\"InputTextBox\"",
         "Button name=\"Browse\" id=\"\"",
         "Button name=\"Clear\" id=\"\"",
-        "TextBox name=\"\" id=\"\"",
+        "TextBox name=\"Main file path\" id=\"\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"OutputTextBox\"",
-        "TextBox name=\"\" id=\"\"",
+        "TextBox name=\"Output path\" id=\"OutputTextBox\"",
+        "TextBox name=\"App name:\" id=\"\"",
         "Button name=\"Create SRS\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
     ];
@@ -1137,10 +1141,10 @@ public class SRSCreatorCompactTests
         "TextBox name=\"Sample file path\" id=\"InputTextBox\"",
         "Button name=\"Browse\" id=\"\"",
         "Button name=\"Clear\" id=\"\"",
-        "TextBox name=\"\" id=\"\"",
+        "TextBox name=\"Main file path\" id=\"\"",
         "Button name=\"Browse\" id=\"\"",
-        "TextBox name=\"\" id=\"OutputTextBox\"",
-        "TextBox name=\"\" id=\"\"",
+        "TextBox name=\"Output path\" id=\"OutputTextBox\"",
+        "TextBox name=\"App name:\" id=\"\"",
         "Button name=\"Create SRS\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
     ];

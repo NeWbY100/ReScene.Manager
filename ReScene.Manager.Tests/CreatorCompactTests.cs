@@ -526,10 +526,14 @@ public class CreatorCompactTests
     /// attribute for TextBoxes/the DataGrid, the sole GridSplitter, distinct Content strings for
     /// the option CheckBoxes), NEVER by re-deriving from a walk's own observed output. Unlike
     /// SRSCreator/SampleRestorer, this view's three "Browse"-labelled buttons do NOT collide by
-    /// description — all three now carry distinct explicit AutomationProperties.Name values
-    /// ("Browse input file", "Browse folder for release input", "Browse for output path"); the
+    /// description — all three carry distinct explicit AutomationProperties.Name values
+    /// ("Browse for input file", "Browse folder for release input", "Browse for output path"); the
     /// output one gained its name after this comment was first written, when two of the three were
-    /// named and the third still fell back to its Content. Resolving by Command reference here
+    /// named and the third still fell back to its Content, and the input one was "Browse input
+    /// file" until the naming pass brought it onto the shared "Browse for &lt;target&gt;" phrasing.
+    /// The folder one deliberately stays off that phrasing — see
+    /// <see cref="PathRows_TabOrderFollowsVisualOrder_DespiteReversedTreeOrder"/> for the
+    /// Label-in-Name reason. Resolving by Command reference here
     /// anyway is not redundant caution, it is the same house rule applied uniformly regardless of
     /// whether a REAL collision happens to exist today.
     /// </summary>
@@ -877,7 +881,14 @@ public class CreatorCompactTests
             AssertRowOrder(window, "Input",
             [
                 (inputTextBox, "Input path"),
-                (inputBrowse, "Browse input file"),
+                (inputBrowse, "Browse for input file"),
+                // NOT "Browse for release folder", and this is load-bearing rather than an
+                // oversight in the naming pass: this button's visible Content is "Browse folder…",
+                // and WCAG 2.5.3 requires the accessible name to CONTAIN it. It is the one Browse
+                // button in the app whose Content is not the bare word, so it is the one that
+                // cannot take the shared phrasing. CreatorViewFolderBindingTests'
+                // FolderBrowseButton_HasLabelInName_AccessibleName pins the same string from the
+                // Label-in-Name side.
                 (inputBrowseFolder, "Browse folder for release input"),
             ]);
 
@@ -3102,7 +3113,7 @@ public class CreatorCompactTests
     private static readonly IReadOnlyList<string> NormalModeTabOrderFixture =
     [
         "TextBox name=\"Input path\" id=\"InputTextBox\"",
-        "Button name=\"Browse input file\" id=\"\"",
+        "Button name=\"Browse for input file\" id=\"\"",
         "Button name=\"Browse folder for release input\" id=\"\"",
         "Button name=\"Add...\" id=\"\"",
         "Button name=\"Remove\" id=\"\"",
@@ -3120,7 +3131,7 @@ public class CreatorCompactTests
         "CheckBox name=\"Allow compressed — Accept RAR volumes that use compression (method != Store).\" id=\"\"",
         "CheckBox name=\"OSO hashes — Compute and store OpenSubtitles OSO hashes for archived files.\" id=\"\"",
         "CheckBox name=\"Languages.diz — Extract language metadata from VobSub .idx files and store in the SRR.\" id=\"\"",
-        "TextBox name=\"\" id=\"\"",
+        "TextBox name=\"App name:\" id=\"\"",
         "Button name=\"Create SRR\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
     ];
@@ -3129,7 +3140,7 @@ public class CreatorCompactTests
     [
         "ToggleButton name=\"Help\" id=\"\"",
         "TextBox name=\"Input path\" id=\"InputTextBox\"",
-        "Button name=\"Browse input file\" id=\"\"",
+        "Button name=\"Browse for input file\" id=\"\"",
         "Button name=\"Browse folder for release input\" id=\"\"",
         "Button name=\"Add...\" id=\"\"",
         "Button name=\"Remove\" id=\"\"",
@@ -3147,7 +3158,7 @@ public class CreatorCompactTests
         "CheckBox name=\"Allow compressed — Accept RAR volumes that use compression (method != Store).\" id=\"\"",
         "CheckBox name=\"OSO hashes — Compute and store OpenSubtitles OSO hashes for archived files.\" id=\"\"",
         "CheckBox name=\"Languages.diz — Extract language metadata from VobSub .idx files and store in the SRR.\" id=\"\"",
-        "TextBox name=\"\" id=\"\"",
+        "TextBox name=\"App name:\" id=\"\"",
         "Button name=\"Create SRR\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
     ];
