@@ -57,7 +57,7 @@
               <Run Text="— Pre-filled as the save location when creating SRR and SRS files."
                    Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
             </TextBlock>
-            <DockPanel Margin="0,0,0,10">
+            <DockPanel Margin="0,0,0,10" KeyboardNavigation.TabNavigation="Local">
               <!-- All three Browse buttons in this window read "Browse..." — WITH the ellipsis —
                    and WCAG 2.5.3 wants the accessible name to contain the visible label. The
                    trailing ellipsis is excluded from that containment, which is not a liberty
@@ -70,9 +70,10 @@
                       Command="{Binding BrowseOutputDirCommand}"
                       Classes="ghost"
                       AutomationProperties.Name="Browse for default output directory"
+                      TabIndex="1"
                       MinWidth="75"
                       Margin="4,0,0,0" />
-              <TextBox Text="{Binding DefaultOutputDirectory}" />
+              <TextBox Text="{Binding DefaultOutputDirectory}" TabIndex="0" />
             </DockPanel>
 
             <TextBlock TextWrapping="Wrap" Margin="0,0,0,2">
@@ -114,7 +115,7 @@
               <Run Text="— Folder holding your WinRAR versions, each in its own subfolder. Pre-filled into the Reconstructor."
                    Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
             </TextBlock>
-            <DockPanel Margin="0,0,0,2">
+            <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
               <!-- VERBATIM the Reconstructor's own name for the same kind of target — this
                    setting is the default that pre-fills that very field (WCAG 3.2.4). -->
               <Button DockPanel.Dock="Right"
@@ -122,9 +123,10 @@
                       Command="{Binding BrowseReconstructWinRARCommand}"
                       Classes="ghost"
                       AutomationProperties.Name="Browse for WinRAR versions folder"
+                      TabIndex="1"
                       MinWidth="75"
                       Margin="4,0,0,0" />
-              <TextBox Text="{Binding ReconstructWinRARPath}" />
+              <TextBox Text="{Binding ReconstructWinRARPath}" TabIndex="0" />
             </DockPanel>
             <!-- Same three links as the Reconstructor tab header and the Reconstruct wizard
                  (WCAG 3.2.4: identical labels + URLs, opened via OnResourceLinkClick ->
@@ -159,7 +161,7 @@
               <Run Text="— Pre-filled into the Reconstructor. Anything inside is deleted when a reconstruction starts."
                    Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
             </TextBlock>
-            <DockPanel Margin="0,0,0,10">
+            <DockPanel Margin="0,0,0,10" KeyboardNavigation.TabNavigation="Local">
               <!-- NOT the Reconstructor's "Browse for output folder": this picks the DEFAULT that
                    pre-fills it, and the window's own caption calls it the "Reconstruction output
                    folder". Three Browse buttons in one window is exactly the case where a bare
@@ -169,9 +171,10 @@
                       Command="{Binding BrowseReconstructOutputCommand}"
                       Classes="ghost"
                       AutomationProperties.Name="Browse for reconstruction output folder"
+                      TabIndex="1"
                       MinWidth="75"
                       Margin="4,0,0,0" />
-              <TextBox Text="{Binding ReconstructOutputPath}" />
+              <TextBox Text="{Binding ReconstructOutputPath}" TabIndex="0" />
             </DockPanel>
 
             <!-- Header + self-labeled CheckBox + indented caption — the window's Mode-row anatomy.

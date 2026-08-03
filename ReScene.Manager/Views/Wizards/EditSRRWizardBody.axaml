@@ -16,15 +16,16 @@
                  FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,8" />
       <TextBlock Text="SRR file" FontWeight="SemiBold" Margin="0,0,0,2" />
-      <DockPanel Margin="0,0,0,2">
+      <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
         <!-- "Browse for SRR file" matches SampleRestorerView's name for the same kind of target,
              and this row's own caption ("SRR file") independently gives the same words — the two
              rules agree here. Safe under 2.5.3: visible label is the bare "Browse". -->
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseSourceCommand}"
                 Classes="ghost"
                 AutomationProperties.Name="Browse for SRR file"
+                TabIndex="1"
                 Margin="4,0,0,0" MinWidth="75" />
-        <TextBox Text="{Binding SourcePath}" />
+        <TextBox Text="{Binding SourcePath}" TabIndex="0" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding SourceStatus}" />
     </StackPanel>
@@ -43,15 +44,16 @@
                  FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,8" />
       <TextBlock Text="Save edited SRR to" FontWeight="SemiBold" Margin="0,0,0,2" />
-      <DockPanel Margin="0,0,0,2">
+      <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
         <!-- The app-wide name for "choose where the output file goes" — shared by SEVEN surfaces
              (CreatorView, SRSCreatorView, SRSReconstructorView and the Create-SRR, Create-SRS,
              Edit-SRR and Restore wizard bodies), per WCAG 3.2.4. -->
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseOutputCommand}"
                 Classes="ghost"
                 AutomationProperties.Name="Browse for output path"
+                TabIndex="1"
                 Margin="4,0,0,0" MinWidth="75" />
-        <TextBox Text="{Binding OutputPath}" />
+        <TextBox Text="{Binding OutputPath}" TabIndex="0" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding OutputStatus}" />
     </StackPanel>

@@ -203,13 +203,18 @@ public class ScrollReachabilityTests
 
     /// <summary>
     /// PROVEN (throwaway diagnostic probe, not committed): forward from DefaultAppName's TextBox
-    /// (document order places it before the Browse+DefaultOutputDirectory DockPanel) visits
-    /// [AppName, Browse, OutputDir, RecentFilesLimit's own PART_TextBox, Cancel, Save], then a
+    /// (document order places it before the DefaultOutputDirectory row) visits
+    /// [AppName, OutputDir, Browse, RecentFilesLimit's own PART_TextBox, Cancel, Save], then a
     /// stable loop closes back on RecentFilesLimit's PART_TextBox — its NumericUpDown's editable
     /// part is a separate, later keyboard-navigation scope from the rest of the tab, the same
     /// "closes on a middle stop, not the sentinel" phenomenon the Interface tab's RadioButton
     /// group shows. Reverse anchored at Save retraces the same six stops backwards and closes
     /// back on AppName's own TextBox (first in its own scope).
+    /// <para>
+    /// OutputDir before its Browse button is the fixed order: the row is right-docked, so its
+    /// markup declares the button first, and it is pinned back to render order with TabIndex plus
+    /// <c>TabNavigation="Local"</c>. This fixture was re-measured when that landed.
+    /// </para>
     /// </summary>
     private static void AssertGeneralTabWalk(Window window, TabControl tabs, SettingsViewModel vm)
     {
@@ -235,7 +240,7 @@ public class ScrollReachabilityTests
         // PART_TextBox in this tab's scope.
         TextBox recentFilesLimitPart = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "PART_TextBox");
 
-        List<Control> stops = [appNameTextBox, browseOutputDir, outputDirTextBox, recentFilesLimitPart, cancel, save];
+        List<Control> stops = [appNameTextBox, outputDirTextBox, browseOutputDir, recentFilesLimitPart, cancel, save];
         CompactViewRig.AssertTabWalkStaysVisible(window, appNameTextBox,
             expectedForwardStops: stops, expectedReverseStops: stops, reverseSentinel: save);
     }
@@ -271,12 +276,19 @@ public class ScrollReachabilityTests
     }
 
     /// <summary>
-    /// PROVEN (throwaway diagnostic probe, not committed): forward from the WinRAR Browse button
-    /// (document order places the <c>DockPanel.Dock="Right"</c> Button before its TextBox, so it
-    /// — not the path field — is first in tab order) visits all ten controls in document order,
-    /// then a stable loop closes back on the CheckBox. Reverse anchored at Save retraces the same
-    /// ten stops backwards and closes back on the WinRAR Browse button itself (first in its own
-    /// scope, the same phenomenon every other tab above shows).
+    /// PROVEN (throwaway diagnostic probe, not committed): forward from the WinRAR path FIELD
+    /// visits all ten controls — each of the two rows field-then-button — then a stable loop closes
+    /// back on the CheckBox. Reverse anchored at Save retraces the same ten stops backwards and
+    /// closes back on the WinRAR field itself (first in its own scope, the same phenomenon every
+    /// other tab above shows).
+    /// <para>
+    /// This fixture previously started at the WinRAR BROWSE button, because document order places a
+    /// <c>DockPanel.Dock="Right"</c> Button before its TextBox and the button really was first in
+    /// tab order. That was the bug, not the contract: both rows are now pinned to render order with
+    /// TabIndex plus <c>TabNavigation="Local"</c>. The old sentinel then left the WinRAR field
+    /// unreachable in the forward pass — the completeness assert caught it, which is what it is for
+    /// — and this fixture was re-measured rather than reordered by hand.
+    /// </para>
     /// </summary>
     private static void AssertRarReconstructionTabWalk(Window window, TabControl tabs, SettingsViewModel vm)
     {
@@ -300,10 +312,10 @@ public class ScrollReachabilityTests
 
         List<Control> stops =
         [
-            browseWinRAR, winRarPathTextBox, windowsLink, linuxLink, ftpLink,
-            browseOutput, outputPathTextBox, cleanupCheckBox, cancel, save,
+            winRarPathTextBox, browseWinRAR, windowsLink, linuxLink, ftpLink,
+            outputPathTextBox, browseOutput, cleanupCheckBox, cancel, save,
         ];
-        CompactViewRig.AssertTabWalkStaysVisible(window, browseWinRAR,
+        CompactViewRig.AssertTabWalkStaysVisible(window, winRarPathTextBox,
             expectedForwardStops: stops, expectedReverseStops: stops, reverseSentinel: save);
     }
 

@@ -51,13 +51,15 @@
           ColumnDefinitions="*,Auto,*">
 
       <!-- Left file -->
-      <DockPanel Grid.Column="0" Margin="6,4,2,4" x:Name="LeftDropZone">
+      <DockPanel Grid.Column="0" Margin="6,4,2,4" x:Name="LeftDropZone"
+                 KeyboardNavigation.TabNavigation="Local">
         <Button DockPanel.Dock="Right"
                 Content="Close"
                 Command="{Binding CloseLeftCommand}"
                 IsEnabled="{Binding IsNotComparing}"
                 Classes="ghost"
                 ToolTip.Tip="Close left file"
+                TabIndex="2"
                 Margin="4,0,0,0"
                 Padding="8,4" />
         <!-- This row has no caption TextBlock of its own — the side is the only thing that
@@ -70,12 +72,14 @@
                 IsEnabled="{Binding IsNotComparing}"
                 Classes="ghost"
                 AutomationProperties.Name="Browse for left file"
+                TabIndex="1"
                 Margin="4,0,0,0"
                 Padding="8,4" />
         <!-- Editable: type or paste a path and press Enter to load (no dialog needed). -->
         <TextBox x:Name="LeftFilePathTextBox"
                  Text="{Binding LeftFilePath}"
                  Watermark="Type a path and press Enter, or Browse"
+                 TabIndex="0"
                  FontSize="{DynamicResource FontSizeBody}">
           <TextBox.KeyBindings>
             <KeyBinding Gesture="Enter" Command="{Binding LoadLeftFromPathCommand}" />
@@ -94,13 +98,15 @@
               Padding="8,4" />
 
       <!-- Right file -->
-      <DockPanel Grid.Column="2" Margin="2,4,6,4" x:Name="RightDropZone">
+      <DockPanel Grid.Column="2" Margin="2,4,6,4" x:Name="RightDropZone"
+                 KeyboardNavigation.TabNavigation="Local">
         <Button DockPanel.Dock="Right"
                 Content="Close"
                 Command="{Binding CloseRightCommand}"
                 IsEnabled="{Binding IsNotComparing}"
                 Classes="ghost"
                 ToolTip.Tip="Close right file"
+                TabIndex="2"
                 Margin="4,0,0,0"
                 Padding="8,4" />
         <Button DockPanel.Dock="Right"
@@ -109,12 +115,14 @@
                 IsEnabled="{Binding IsNotComparing}"
                 Classes="ghost"
                 AutomationProperties.Name="Browse for right file"
+                TabIndex="1"
                 Margin="4,0,0,0"
                 Padding="8,4" />
         <!-- Editable: type or paste a path and press Enter to load (no dialog needed). -->
         <TextBox x:Name="RightFilePathTextBox"
                  Text="{Binding RightFilePath}"
                  Watermark="Type a path and press Enter, or Browse"
+                 TabIndex="0"
                  FontSize="{DynamicResource FontSizeBody}">
           <TextBox.KeyBindings>
             <KeyBinding Gesture="Enter" Command="{Binding LoadRightFromPathCommand}" />

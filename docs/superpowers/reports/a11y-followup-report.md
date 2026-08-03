@@ -2131,3 +2131,100 @@ final group.
 
 `-t:Rebuild` 0 Warning(s)/0 Error(s). Manager **490** unchanged (no tests added or moved), App.Core
 **722** unchanged. Census 20 → 13.
+
+## L1. The wave closes — final 13 rows, census green
+
+The last thirteen backwards picker rows are pinned to render order and Local-scoped: EditSRRWizardBody
+2, RestoreWizardBody 5, FileCompareView 2, InspectorView 1, SettingsWindow 3. Twenty-nine `TabIndex`
+pins and thirteen `KeyboardNavigation.TabNavigation="Local"` scopings, each written as an explicit
+anchored edit per the K2 rule — no scripted regex went near the XAML.
+
+The three-control rows (FileCompareView's two drop zones, InspectorView's file bar) were checked for
+real structure first rather than assumed. In all three, `Close` is declared before `Browse` and both
+are `DockPanel.Dock="Right"`, so docking consumes the right edge in declaration order and **Close
+renders rightmost**. Rendered order is therefore field, Browse, Close — pinned 0/1/2. This is the
+mirror image of CreateSRSWizardBody's field/Clear/Browse row, where Browse was declared first and so
+renders last; deriving the pins from markup order in either row would have produced a wrong answer in
+one of them.
+
+## L2. The hidden-panel decision: driven, not deferred
+
+RestoreWizardBody's four sub-panel rows are gated on `IsBulk`/`IsSingle`, which are mutually exclusive
+and both false until a file is routed. **Decision: drive them.** `PickerRowOrderTests.CollectRows`
+passes two states for that body — `Kind = SampleRestoreKind.SRR` and `Kind = SampleRestoreKind.SRS` —
+and `Sweep` cycles states outside the step loop. `Kind` is set directly rather than through
+`InputPath`, because the path setter also pushes into the sub-ViewModels; `Kind` alone is inert.
+
+All thirty-seven rows are now proved by a real Tab walk. The structural tier survives as the honest
+fallback for a future row nobody thought to reveal, and a new assertion makes falling back visible:
+`walked == ExpectedTotal`, with the failure message naming the surfaces that fell back. Silence was
+the failure mode that let six rows be reported fixed without being touched; it is now impossible.
+
+## L3. Two defects the closing round found in its own census
+
+**The first encounter is not the one that can prove anything.** Rows were de-duplicated by reference
+on discovery, and a hidden panel keeps its children in the visual tree — so step 0 discovered the rows
+belonging to later steps and froze all of them at the structural tier. Measured: 30 of 37 walked, with
+CreateSRRWizardBody, CreateSRSWizardBody and EditSRRWizardBody each contributing one row that was
+never walked despite being perfectly visible one step later. Rows are now re-checked until an
+encounter in which they can actually be walked. Driving `IsBulk`/`IsSingle` alone would NOT have fixed
+this; without the re-check, RestoreWizardBody's rows were still discovered hidden at step 0 and the
+driving bought nothing.
+
+**A row-local walk cannot see the Local scoping.** Sabotage of `TabNavigation="Local"` on
+InspectorView's row changed nothing the census could observe, and it passed. The reason is the
+mechanism itself: unscoped pins are compared against the whole window, where every other control sits
+at `int.MaxValue`, so a row that happens to come first still tabs correctly. What the scoping actually
+protects is any control added ABOVE the row later. The census now asserts pins AND scoping structurally
+for all thirty-seven rows — the behavioural consequence is proved once, by
+`WizardTabOrderTests.ScopedPins_KeepAFieldAddedAboveTheRow_AheadOfIt`.
+
+## L4. A sixth fixture site the wave invalidated
+
+`ScrollReachabilityTests.SettingsWindow_TabPages_ScrollToEnd_ReachesLastContent` went red:
+`AssertRarReconstructionTabWalk` started its forward pass AT the WinRAR Browse button, which was no
+longer first in its row, leaving the WinRAR path field unvisited — 1 of 10 expected stops. The
+completeness assert caught it, which is exactly what it exists for.
+
+Its doc comment had documented the bug as the contract, in as many words: *"document order places the
+`DockPanel.Dock="Right"` Button before its TextBox, so it — not the path field — is first in tab
+order."* Both Settings fixtures (RAR Reconstruction and General) were **re-measured** with a throwaway
+probe and rewritten from the measurement, sentinel and stop order and prose together — not reordered
+by hand. The General tab passed throughout, because completeness is a set assertion: its stop list had
+been silently encoding `Browse, OutputDir` while the app tabbed `OutputDir, Browse`. A passing suite
+does not mean a fixture is telling the truth about order.
+
+A sweep for other fixtures encoding button-before-field found none.
+
+## L5. Evidence
+
+Forced `-t:Rebuild` on all four projects: 0 Warning(s), 0 Error(s). **Manager 491/491** (490 baseline
+plus `PickerRowOrderTests`), **App.Core 722/722**.
+
+Census: **37 rows across 13 surfaces, 0 backwards, 37 of 37 walk-proved** — the guard is the literal
+`ExpectedTotal = 37` plus a per-surface table. The wave's arc, measured at each step: 33 backwards →
+20 → 13 → **0**.
+
+Independent corroboration, from a different source than the runtime census: `grep -c
+'KeyboardNavigation.TabNavigation="Local"'` over `ReScene.Manager/**/*.axaml` returns **37**, and its
+per-file distribution matches `ExpectedRowsPerSurface` entry for entry (CreatorView 2, FileCompareView
+2, InspectorView 1, ReconstructorView 4, SampleRestorerView 3, SettingsWindow 3, SRSCreatorView 3,
+SRSReconstructorView 3, CreateSRRWizardBody 2, CreateSRSWizardBody 3, EditSRRWizardBody 2,
+ReconstructWizardBody 4, RestoreWizardBody 5). Markup grep versus hosted-view Tab walk are genuinely
+independent — unlike the H6 "hand count matches" that read the same ten files twice.
+
+Break-verification, each mechanism sabotaged separately, observed, and reverted byte-identically:
+
+| Sabotage | Observed |
+|---|---|
+| Pins removed from SettingsWindow's default-output row | `1 of 37 picker rows tab their Browse button before the field it belongs to. SettingsWindow: the row rendering [TextBox, Button "Browse for default output directory"] tabs TextBox PART_TextBox at position 1…` |
+| `Local` removed from InspectorView's row | First pass: **PASSED** — the gap in L3. After the census was strengthened: `InspectorView: a picker row carries TabIndex pins but no Local scoping…` |
+| `Kind` state driving removed from the census | `only 33 of 37 picker rows were proved by an actual Tab walk … RestoreWizardBody (4 of 5)` |
+
+## L6. Not attempted, still open
+
+- **EditSRRWizardBody's silent step-3 result** — needs `SRREditorViewModel.Save()` to clear first plus
+  an always-in-tree live line. Fully specified in §I3; untouched here.
+- **The high-contrast theme initiative** (gate item c).
+- **A real screen-reader session.** Every claim in this wave is from headless Avalonia walks and
+  rendered-pixel sampling. No NVDA or Narrator has spoken any of these names aloud.

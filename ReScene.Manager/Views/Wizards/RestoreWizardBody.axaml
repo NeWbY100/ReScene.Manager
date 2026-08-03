@@ -21,7 +21,7 @@
                  FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,8" />
       <TextBlock Text="SRR or SRS file" FontWeight="SemiBold" Margin="0,0,0,2" />
-      <DockPanel Margin="0,0,0,2">
+      <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
         <!-- The four Browse buttons on step 1 below take their names VERBATIM from
              SampleRestorerView and SRSReconstructorView, because they are literally the SAME
              command objects — this body binds through BulkRestorer/SingleRebuilder, which ARE
@@ -31,8 +31,9 @@
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseInputCommand}"
                 Classes="ghost"
                 AutomationProperties.Name="Browse for SRR or SRS file"
+                TabIndex="1"
                 Margin="4,0,0,0" MinWidth="75" />
-        <TextBox Text="{Binding InputPath}" />
+        <TextBox Text="{Binding InputPath}" TabIndex="0" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding InputStatus}" />
     </StackPanel>
@@ -44,22 +45,24 @@
       <!-- Bulk sub-panel (SRR): media directory, output directory, SRS entries grid -->
       <StackPanel IsVisible="{Binding IsBulk}">
         <TextBlock Text="Folder with the full media files" FontWeight="SemiBold" Margin="0,0,0,2" />
-        <DockPanel Margin="0,0,0,2">
+        <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
           <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BulkRestorer.BrowseMediaDirectoryCommand}"
                   Classes="ghost"
                   AutomationProperties.Name="Browse for media directory"
+                  TabIndex="1"
                   Margin="4,0,0,0" MinWidth="75" />
-          <TextBox Text="{Binding BulkRestorer.MediaDirectoryPath}" />
+          <TextBox Text="{Binding BulkRestorer.MediaDirectoryPath}" TabIndex="0" />
         </DockPanel>
         <controls:FieldStatusLine Status="{Binding BulkRestorer.MatchStatus}" />
 
         <TextBlock Text="Save restored samples to" FontWeight="SemiBold" Margin="0,12,0,2" />
-        <DockPanel Margin="0,0,0,2">
+        <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
           <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BulkRestorer.BrowseOutputDirectoryCommand}"
                   Classes="ghost"
                   AutomationProperties.Name="Browse for output directory"
+                  TabIndex="1"
                   Margin="4,0,0,0" MinWidth="75" />
-          <TextBox Text="{Binding BulkRestorer.OutputDirectoryPath}" />
+          <TextBox Text="{Binding BulkRestorer.OutputDirectoryPath}" TabIndex="0" />
         </DockPanel>
 
         <TextBlock Text="Samples found" FontWeight="SemiBold" Margin="0,12,0,2" />
@@ -77,23 +80,25 @@
       <!-- Single sub-panel (SRS): media file, output path -->
       <StackPanel IsVisible="{Binding IsSingle}">
         <TextBlock Text="Full original media file" FontWeight="SemiBold" Margin="0,0,0,2" />
-        <DockPanel Margin="0,0,0,2">
+        <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
           <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding SingleRebuilder.BrowseMediaCommand}"
                   Classes="ghost"
                   AutomationProperties.Name="Browse for media file"
+                  TabIndex="1"
                   Margin="4,0,0,0" MinWidth="75" />
           <TextBox Text="{Binding SingleRebuilder.MediaFilePath}"
-                   IsReadOnly="{Binding SingleRebuilder.IsISOSource}" />
+                   IsReadOnly="{Binding SingleRebuilder.IsISOSource}" TabIndex="0" />
         </DockPanel>
         <controls:FieldStatusLine Status="{Binding SingleRebuilder.MediaStatus}" />
 
         <TextBlock Text="Save rebuilt sample to" FontWeight="SemiBold" Margin="0,12,0,2" />
-        <DockPanel Margin="0,0,0,2">
+        <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
           <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding SingleRebuilder.BrowseOutputCommand}"
                   Classes="ghost"
                   AutomationProperties.Name="Browse for output path"
+                  TabIndex="1"
                   Margin="4,0,0,0" MinWidth="75" />
-          <TextBox Text="{Binding SingleRebuilder.OutputPath}" />
+          <TextBox Text="{Binding SingleRebuilder.OutputPath}" TabIndex="0" />
         </DockPanel>
         <controls:FieldStatusLine Status="{Binding SingleRebuilder.OutputStatus}" />
       </StackPanel>
