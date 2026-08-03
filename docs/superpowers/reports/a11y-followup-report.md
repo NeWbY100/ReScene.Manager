@@ -2615,3 +2615,100 @@ This is the same limit every announcement claim in this workstream carries, and 
 item (e) has never stopped being open: **no NVDA or Narrator has spoken one of these names aloud.**
 The structural fix is necessary and was demonstrably absent; whether it is sufficient is a question
 only a real screen-reader session answers.
+
+## P1. The lesson, mechanized
+
+`FieldStatusLine` was found by a human noticing a disclosure in a test's own doc comment. That is not
+a repeatable way to find the next one, so the rule now runs: **no element carrying a live region may
+sit under an ancestor whose visibility is switched.**
+
+Ancestry is a tree relationship, which is why no grep could settle it. Files containing both a live
+region and a bound `IsVisible` are ordinary and prove nothing either way — `InspectorView` holds 17
+bound visibilities and 2 live lines and is entirely correct. `LiveRegionAncestryTests` walks real
+visual trees instead: for every element with `LiveSetting != Off`, it walks the visual ancestors and
+fails if any has `IsVisible` locally set.
+
+**Detection, verified before it was trusted.** `AvaloniaObject.IsSet(Visual.IsVisibleProperty)` was
+probed against three controls: one with a bound `IsVisible` → `True`, one with a literal
+`IsVisible="False"` → `True`, one untouched → `False`. It sees bindings, which is what the rule needs.
+Catching literal `False` too is a bonus rather than a false positive: a live region permanently hidden
+is worse than one intermittently hidden, and this app contains no literal `IsVisible="True"` for it to
+trip over — measured, **3** literal usages app-wide, all `False`
+(`grep -rnoE 'IsVisible="[^{][^"]*"' --include=*.axaml ReScene.Manager/`).
+
+## P2. Population by reflection, not by list
+
+This is the third census in the workstream, and the first whose population needs no maintenance:
+**every instantiable `Control` in the ReScene.Manager assembly**, found by reflection. A new view is
+included the moment it compiles. No ViewModels are attached, deliberately — unresolved bindings leave
+properties at their defaults, which does not alter the ANCESTRY under examination, and it keeps the
+population free of any hand-written hosting that could drift from the app.
+
+Measured at the time of writing: **33** surfaces hosted, **50** live regions reached. The
+live-region figure exceeds the 17 `LiveSetting` attributes in markup because `FieldStatusLine` is
+embedded 32 times and each hosted surface reaches its own copies. Rig-validity floors sit at 25 and 30
+— below both, so ordinary churn does not fail the test, and far enough above zero that reflection
+silently finding nothing does.
+
+Controls whose constructor takes arguments are skipped and named in the failure message, and the skip
+list is asserted empty, so the test cannot quietly shrink.
+
+## P3. RED, and what it revealed about reach
+
+The first sabotage was WRONG and passed, which is worth recording because it nearly shipped a
+non-discriminating test. Re-gating the Grid with `IsVisible="{Binding Status.State, ElementName=Root}"`
+bound a `FieldState` enum to a `bool` property; the conversion fails, no value is ever applied, and
+`IsSet` correctly reports nothing set. The test was right to pass. Restoring the gate VERBATIM —
+converter and all, the shape the control actually shipped with — produced the real result:
+
+```
+34 live regions cannot announce their first message.
+CreateSRRWizardBody: a live region (TextBlock) sits under Grid, whose IsVisible is switched…
+CreateSRSWizardBody: …  CreatorView: …  EditSRRWizardBody: …  FieldStatusLine: …
+ReconstructWizardBody: …  ReconstructorView: …  RestoreWizardBody: …
+```
+
+Thirty-four violations from re-gating ONE control, across every surface that embeds it. That is the
+reach argument of §O1 stated mechanically rather than by counting greps, and it is the clearest
+evidence in this workstream that a shared control's defect is not a local one.
+
+The lesson from the bad sabotage generalizes: **a sabotage that does not actually change behaviour
+proves the test is fine when it may not be.** The first attempt looked like a re-gate in the diff and
+was not one at runtime. Only restoring the original verbatim tested what was meant.
+
+## P4. Reach, disclosed
+
+- Visibility applied by a style `Setter` rather than a local value is invisible to this rule.
+  Measured: **5** such setters exist (`grep -rn 'Property="IsVisible"' --include=*.axaml
+  ReScene.Manager/`), 4 constant and 1 bound, none of them over a live region — checked by hand, and
+  not guarded.
+- It proves a live region CAN be reached, never that a screen reader announces it. That distinction
+  is the whole subject of §O6 and is not narrowed by this test.
+- It examines the tree as constructed, so a container that only becomes an ancestor at runtime — by
+  code-behind reparenting, say — is outside it. This app does none, which is a fact about today
+  rather than a property of the guard.
+
+## P5. Evidence
+
+RED as described above: 34 violations with the original gate restored, naming eight surfaces plus the
+control itself. Reverted byte-identically (`git checkout` of both files), green after.
+
+Forced `-t:Rebuild` on all four projects: 0 Warning(s), 0 Error(s). **Manager 503/503** (502 + 1),
+**App.Core 728/728**, unchanged.
+
+Counts, each as number + pattern + scope:
+
+- **33** surfaces, **50** live regions reached — measured by the test itself; quote
+  `LiveRegionAncestryTests`' rig-validity output rather than a grep.
+- **3** literal `IsVisible` usages, all `False` —
+  `grep -rnoE 'IsVisible="[^{][^"]*"' --include=*.axaml ReScene.Manager/`.
+- **5** style-Setter visibilities — `grep -rn 'Property="IsVisible"' --include=*.axaml
+  ReScene.Manager/`.
+- **83** data-bound visibilities, **17** live-line attributes across **12** files — unchanged from
+  §O5, same patterns.
+
+## P6. What is left
+
+Gate item **(c)**, the app-wide high-contrast theme and text-contrast audit, is now the only open item
+from the A–F gate — with the standing exception of **(e)**, a real screen-reader session, which the
+user set aside and which no amount of structural work replaces.
