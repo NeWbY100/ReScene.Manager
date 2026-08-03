@@ -21,55 +21,91 @@ internal sealed class ModalProgressWindowController<TWindow>(Control owner, Func
     private readonly Action _cancel = cancel;
 
     private TWindow? _window;
+    private bool _desiredBusy;
+    private bool _reconcilePending;
 
     /// <summary>
-    /// Opens (when <paramref name="busy"/> is <see langword="true"/>) or closes the progress dialog.
-    /// Call from the view model's property-changed notification for the busy flag, and once up front
-    /// to catch up with state that may already be true when the owner's DataContext is wired.
+    /// Notifies the controller that the busy flag moved. The dialog is opened or closed to match, on
+    /// the dispatcher. Call from the view model's property-changed notification for the busy flag,
+    /// and once up front to catch up with state that may already be true when the owner's DataContext
+    /// is wired.
+    /// <para>
+    /// The LATEST <paramref name="busy"/> wins, and the work is done once. Previously each call
+    /// posted its own open or close, so several changes before the queue drained ran in sequence
+    /// against a single tracked reference: two queued opens each constructed a window while only the
+    /// last was tracked, and a stale close could run after a newer open. Recording the desired state
+    /// and reconciling once collapses every such interleaving to the outcome the caller last asked
+    /// for.
+    /// </para>
     /// </summary>
     public void OnBusyChanged(bool busy)
     {
-        if (busy)
+        _desiredBusy = busy;
+
+        if (_reconcilePending)
         {
-            Dispatcher.UIThread.Post(() =>
+            return;
+        }
+
+        _reconcilePending = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _reconcilePending = false;
+            Reconcile();
+        });
+    }
+
+    private void Reconcile()
+    {
+        if (_desiredBusy)
+        {
+            if (_window is not null)
             {
-                // The owner here is the BruteForceProgressWindow itself, so it is always its own
-                // TopLevel — a bare "is Window" check never skips. Require a VISIBLE owner: if this
-                // catch-up call runs before the owner is shown (headless, or DataContext wired before
-                // the window is displayed), ShowDialog over a not-yet-shown window throws, so skip.
-                if (TopLevel.GetTopLevel(_owner) is not Window { IsVisible: true } ownerWindow)
+                return;
+            }
+
+            // The owner here is the BruteForceProgressWindow itself, so it is always its own
+            // TopLevel — a bare "is Window" check never skips. Require a VISIBLE owner: if this
+            // catch-up call runs before the owner is shown (headless, or DataContext wired before
+            // the window is displayed), ShowDialog over a not-yet-shown window throws, so skip.
+            if (TopLevel.GetTopLevel(_owner) is not Window { IsVisible: true } ownerWindow)
+            {
+                return;
+            }
+
+            var window = new TWindow { DataContext = _owner.DataContext };
+            _window = window;
+
+            window.Closed += (sender, _) =>
+            {
+                // If the window was closed by the user (not programmatically by Reconcile), treat it
+                // as a cancel request.
+                if (_isBusy())
                 {
-                    return;
+                    _cancel();
                 }
 
-                _window = new TWindow { DataContext = _owner.DataContext };
-
-                _window.Closed += (_, _) =>
+                // Only clear the reference if THIS window is still the tracked one. Closed can be
+                // raised after a newer window has been opened and tracked, and clearing
+                // unconditionally then nulled the newer window's reference — after which nothing
+                // could close it.
+                if (ReferenceEquals(_window, sender))
                 {
-                    // If the window was closed by the user (not programmatically by the "not busy"
-                    // branch below), treat it as a cancel request.
-                    if (_isBusy())
-                    {
-                        _cancel();
-                    }
-
                     _window = null;
-                };
+                }
+            };
 
-                // Avalonia's ShowDialog is async (returns a Task) unlike WPF's synchronous
-                // ShowDialog(); fire-and-forget it here — the window shows modally over ownerWindow and
-                // is closed programmatically by the "not busy" branch below (or by the user, which the
-                // Closed handler above turns into a cancel).
-                _ = _window.ShowDialog(ownerWindow);
-            });
+            // Avalonia's ShowDialog is async (returns a Task) unlike WPF's synchronous
+            // ShowDialog(); fire-and-forget it here — the window shows modally over ownerWindow and
+            // is closed programmatically by the not-busy path (or by the user, which the Closed
+            // handler above turns into a cancel).
+            _ = window.ShowDialog(ownerWindow);
         }
         else
         {
-            Dispatcher.UIThread.Post(() =>
-            {
-                _window?.Close();
-                _window = null;
-            });
+            // The reference is cleared by the Closed handler, which knows whether the window closing
+            // is still the tracked one.
+            _window?.Close();
         }
     }
 }
