@@ -283,48 +283,39 @@ public class ReconstructorCompactTests
     }
 
     /// <summary>
-    /// Completeness was opt-in but never actually wired into
-    /// this, the REAL Reconstructor walk — so a genuine, present-day regression in either
-    /// direction would have gone uncaught by the walk's own stability check alone. Wires
-    /// direction-specific expected-stop sets, resolved from committed, description-based fixtures
-    /// back into real <see cref="Control"/> references for THIS window
-    /// (<see cref="ResolveExpectedStops"/>) — completeness is reference-based, and a hardcoded
-    /// fixture can only ever be strings across separate test runs.
+    /// One FORWARD walk plus TWO independent, per-scope REVERSE walks — one per keyboard-navigation
+    /// scope this view actually has. There are two because this view nests a second
+    /// <see cref="TabControl"/> (the Paths/Options sub-tabs) inside the shell's own, and each scopes
+    /// keyboard navigation to its selected content, so no single reverse walk can cross the inner
+    /// boundary. Scope A is everything up to and including the Paths <c>TabItem</c> header; scope B
+    /// is the Paths sub-tab's own content.
     /// <para>
-    /// FORWARD reuses the existing, already-captured, already-asserted-elsewhere
-    /// <see cref="NormalModeTabOrderFixture"/>/<see cref="CompactModeTabOrderFixture"/> directly —
-    /// no new fixture needed; they are already the exhaustive forward set.
+    /// EVERY check is anchored on <see cref="ResolveIndependentExpectedOrder"/> — one authored list
+    /// resolved by bound command, x:Name and <c>Content</c>, never derived from a walk's own output.
+    /// The forward walk's completeness set, its starting sentinel, both reverse walks' completeness
+    /// sets and both reverse ORDER expectations all come from that same list. The committed
+    /// description fixtures (<see cref="NormalModeTabOrderFixture"/> /
+    /// <see cref="CompactModeTabOrderFixture"/>) are compared too, but only as a human-readable
+    /// regression net; they are not the discriminating check.
     /// </para>
     /// <para>
-    /// REVERSE needed a genuinely new capture, and it surfaced something worth recording rather
-    /// than assuming: Shift+Tab from EITHER sentinel does not explore backward through the
-    /// window at all — confirmed two independent ways (a direct, key-press-free query,
-    /// <c>KeyboardNavigationHandler.GetNext(sentinel, NavigationDirection.Previous)</c>, and a
-    /// real Shift+Tab key-press simulation) that both agree: "previous" from either sentinel
-    /// resolves to the sentinel itself. This is consistent with Avalonia's TabControl scoping
-    /// keyboard navigation to the SELECTED tab's own content (a conventional, almost certainly
-    /// deliberate framework behavior — Tab/Shift+Tab staying inside the active tab rather than
-    /// leaking into the tab strip or shell chrome mid-navigation), and both sentinels happen to be
-    /// the first focusable element within that scope. The reverse fixtures below are therefore
-    /// deliberately single-entry (the sentinel itself) — an honest reflection of this VERIFIED
-    /// reality, not an oversight. This weakens (without invalidating) the reverse completeness
-    /// check specifically for these two entry points.
+    /// This replaced an oracle that derived each reverse expectation from the forward walk it was
+    /// checking (gate finding NEW-3). That cannot fail on a tree-level permutation, because both
+    /// sides move together —
+    /// <see cref="SelfReferentialReverseOracle_PassesAPermutedTree_WhereTheIndependentOracleFails"/>
+    /// demonstrates exactly that against a deliberately broken tree. The same change retired
+    /// <c>ResolveExpectedStops</c>, which existed only to turn description fixtures back into
+    /// references because no independent oracle was available.
     /// </para>
-    /// </summary>
-    /// <summary>
-    /// Replaces the previous single combined
-    /// <see cref="CompactViewRig.AssertTabWalkStaysVisible"/> call
-    /// with the FORWARD walk plus TWO independent, per-scope REVERSE walks — one per
-    /// keyboard-navigation scope this view actually has (see
-    /// <see cref="NormalScopeAReverseTabOrderFixture"/>'s own doc comment for why there are two,
-    /// not one). Each reverse walk is anchored at ITS OWN scope's last forward stop, checked
-    /// against an ORDERED fixture (not membership-only), and asserted to land on ITS OWN scope's
-    /// first-in-scope element explicitly — so a topology change that merges or splits the two
-    /// scopes differently fails loudly rather than being silently absorbed by whichever walk
-    /// happens to run. Finally, the exact reference UNION of both reverse walks' visited controls
-    /// is asserted equal to the forward walk's own full inventory — any control in neither reverse
-    /// scope (a real regression, not a hypothetical one — this is exactly what "the forward walk
-    /// passes but reverse quietly stops reaching something" would look like) fails here.
+    /// <para>
+    /// Beyond order, three things are asserted that an order check alone would miss: each reverse
+    /// walk LANDS on its own scope's first-in-scope element (so a topology change that merges or
+    /// splits the scopes fails loudly instead of being absorbed by whichever walk happens to run);
+    /// the forward walk's terminal EXTERNAL target is the specific expected shell-chrome boundary,
+    /// by object identity; and the exact reference UNION of both reverse walks equals the forward
+    /// walk's full inventory, so a control reachable forward but in neither reverse scope fails
+    /// here rather than passing quietly.
+    /// </para>
     /// </summary>
     private static void AssertTabWalk(double innerHeight)
     {
@@ -1659,68 +1650,19 @@ public class ReconstructorCompactTests
         "CheckBox name=\"Auto-scroll\" id=\"\"",
     ];
 
-    /// <summary>
-    /// PER-SCOPE reverse walks, superseding earlier single-entry
-    /// fixtures. Reconstructor hosts a SECOND, nested <c>TabControl</c>
-    /// (<c>settingsTabs</c>, the Paths/Options sub-tab container) inside the outer shell's own
-    /// TabControl, and each independently scopes keyboard navigation to its own selected
-    /// content — so a single, view-wide reverse walk can never cross the inner boundary. Scope A
-    /// (this fixture) is the Reconstructor tab's OWN content: everything up to and including the
-    /// Paths <c>TabItem</c> header. Scope B (<see cref="ScopeBReverseTabOrderFixture"/>, identical
-    /// in both modes since compact mode only affects row 0) is the Paths sub-tab's own content —
-    /// everything after. Captured from a real Shift+Tab key-press simulation anchored at scope A's
-    /// own LAST forward stop (the TabItem header) — confirmed to land back on WindowsPackLink
-    /// (scope A's own first-in-scope element) via object-identity hash,
-    /// not just description. Scope A ∪ scope B, as a set of object references, equals the FULL
-    /// forward inventory exactly (7 + 11 = 18 here; 5 + 11 = 16 in compact mode) — asserted by
-    /// <see cref="AssertTabWalk"/>.
-    /// </summary>
-    private static readonly IReadOnlyList<string> NormalScopeAReverseTabOrderFixture =
-    [
-        "TabItem name=\"Paths — needs attention\" id=\"\"",
-        "Button name=\"Import from SRR\" id=\"\"",
-        "Button name=\"Import Config\" id=\"\"",
-        "Button name=\"Export Config\" id=\"\"",
-        "Button name=\"Original files from RAR FTP (Windows)\" id=\"\"",
-        "Button name=\"Extracted files for Linux (ready to use)\" id=\"\"",
-        "Button name=\"Extracted files for Windows (ready to use)\" id=\"WindowsPackLink\"",
-    ];
-
-    /// <summary>Compact-mode counterpart to <see cref="NormalScopeAReverseTabOrderFixture"/> — same finding, shorter (the 3 link buttons are hidden), same verification.</summary>
-    private static readonly IReadOnlyList<string> CompactScopeAReverseTabOrderFixture =
-    [
-        "TabItem name=\"Paths — needs attention\" id=\"\"",
-        "Button name=\"Import from SRR\" id=\"\"",
-        "Button name=\"Import Config\" id=\"\"",
-        "Button name=\"Export Config\" id=\"\"",
-        "ToggleButton name=\"Help & links\" id=\"\"",
-    ];
-
-    /// <summary>
-    /// Scope B (the Paths sub-tab's own keyboard-navigation scope — see
-    /// <see cref="NormalScopeAReverseTabOrderFixture"/>'s own doc comment) — identical in both
-    /// modes, since compact mode never touches row 4 (the Paths/Options TabControl itself).
-    /// Captured from a real Shift+Tab key-press simulation anchored at "Auto-scroll" (scope B's
-    /// own last forward stop), confirmed to land back on the WinRAR "Browse" button (scope B's own
-    /// first-in-scope element) via object identity. The boundary-landing assertion in
-    /// <see cref="AssertTabWalk"/> resolves that control by POSITION in the forward walk's own
-    /// ordered result rather than by description — it did so originally because all four Browse
-    /// buttons read identically and description could not tell them apart; they now carry four
-    /// distinct names, so the position-based resolution is no longer forced, but it is kept because
-    /// it is the house rule (never re-derive an oracle from descriptions) rather than a workaround.
-    /// </summary>
-    private static readonly IReadOnlyList<string> ScopeBReverseTabOrderFixture =
-    [
-        "CheckBox name=\"Auto-scroll\" id=\"\"",
-        "Button name=\"Save log...\" id=\"\"",
-        "GridSplitter name=\"Resize options and log\" id=\"\"",
-        "TextBox name=\"Output folder path\" id=\"OutputTextBox\"",
-        "Button name=\"Browse for output folder\" id=\"\"",
-        "TextBox name=\"Verify file path\" id=\"VerifyTextBox\"",
-        "Button name=\"Browse for verification file\" id=\"\"",
-        "TextBox name=\"Release files path\" id=\"ReleaseTextBox\"",
-        "Button name=\"Browse for extracted release files\" id=\"\"",
-        "TextBox name=\"WinRAR versions folder path\" id=\"WinRARTextBox\"",
-        "Button name=\"Browse for WinRAR versions folder\" id=\"\"",
-    ];
+    // ── REMOVED alongside ResolveExpectedStops (gate finding NEW-3): the three per-scope REVERSE
+    // fixtures — NormalScopeAReverseTabOrderFixture, CompactScopeAReverseTabOrderFixture and
+    // ScopeBReverseTabOrderFixture.
+    //
+    // They were description lists that ResolveExpectedStops turned back into references to feed the
+    // two reverse walks' completeness sets, and their reversed slices were the reverse ORDER
+    // expectations. Both jobs now come from ResolveIndependentExpectedOrder, so after that deletion
+    // all three had ZERO code references — reachable only from each other's doc comments. Left in
+    // place they would have been exactly the dead scaffolding whose removal justified deleting
+    // ResolveExpectedStops in the first place, which is the inconsistency this cleanup closes.
+    //
+    // Nothing they asserted is now unasserted. Both reverse walks still check ORDER (against the
+    // independent list's own reversed slices), still check COMPLETENESS (against the same slices),
+    // and still assert their boundary landing by object identity — see AssertTabWalk. What is gone
+    // is a second, weaker, description-based copy of the same expectation. ──
 }

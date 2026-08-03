@@ -1176,6 +1176,36 @@ confirms.
    consistent than before in behaviour and less consistent in shape. Converging the other two is a
    small, safe follow-up that was out of this package's scope.
 
+## D7. Cleanup — the deletion in D3 was half-done
+
+Found in review, and it is the same defect D3 named while justifying itself. Deleting
+`ResolveExpectedStops` removed the only CODE consumer of three per-scope reverse fixtures —
+`NormalScopeAReverseTabOrderFixture`, `CompactScopeAReverseTabOrderFixture`,
+`ScopeBReverseTabOrderFixture` — and I left all three in the file, reachable only from each other's
+doc comments. D3 argued that "a helper whose sole remaining consumer is the test that proves the
+helper works is dead scaffolding, and this chain has repeatedly punished leaving that behind", and
+then left ~50 lines of exactly that behind, one screen further down.
+
+Removed, with a tombstone naming what went and why. Nothing they asserted is now unasserted: both
+reverse walks still check order and completeness against the independent list's own reversed slices
+and still assert their boundary landing by object identity. What is gone is a second, weaker,
+description-based copy of the same expectation. The suite is unchanged at 478 — which is itself the
+proof they were dead, since removing 50 lines of live fixture would have failed something.
+
+Three smaller things in the same block, all pre-existing except the first:
+
+- a dangling `<see cref="ResolveExpectedStops"/>` left by the deletion;
+- `AssertTabWalk` carried **two** `<summary>` elements (a doc-comment bug that predates this
+  workstream — the second silently wins), the first of which described the deleted
+  `ResolveExpectedStops` mechanism AND called the reverse fixtures "deliberately single-entry",
+  which stopped being true when they became per-scope lists long before Package A touched anything;
+- merged into one summary that describes the mechanism that actually runs.
+
+**The lesson, stated because it generalises past this file:** a deletion is not finished when the
+symbol compiles away. Whatever ONLY that symbol reached is now dead too, and the compiler will not
+say so for `readonly` fields any more than it did for the helper. The check is a reference count on
+everything the deleted member touched, not a green build.
+
 ---
 
 # Package B — the nine bare-"Browse" buttons
