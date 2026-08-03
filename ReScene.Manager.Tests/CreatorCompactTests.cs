@@ -893,10 +893,17 @@ public class CreatorCompactTests
     }
 
     /// <summary>
-    /// Asserts one path row four ways: every control announces the name
-    /// <paramref name="visualRow"/> declares for it, the markup order is the reverse of that row's
-    /// order (the premise the pins exist to correct), the rendered left-to-right order really is
-    /// that order, and Tab walks it in that order too.
+    /// Asserts one path row five ways, in this order:
+    /// <list type="number">
+    /// <item>every control announces the exact name <paramref name="visualRow"/> declares for it;</item>
+    /// <item>the markup order (<c>DockPanel.Children</c>) is the REVERSE of that row's order — the
+    /// premise the TabIndex pins exist to correct;</item>
+    /// <item>the UIA child order mirrors that same reversal, which is what an assistive technology
+    /// walking the tree structurally actually meets (see the comment at that assertion — it is the
+    /// one with a user-visible consequence the pins cannot fix);</item>
+    /// <item>the rendered left-to-right order really is <paramref name="visualRow"/>'s order;</item>
+    /// <item>Tab walks it in that order too.</item>
+    /// </list>
     /// </summary>
     private static void AssertRowOrder(
         Window window, string rowName, IReadOnlyList<(Control Control, string ExpectedName)> visualRow)
