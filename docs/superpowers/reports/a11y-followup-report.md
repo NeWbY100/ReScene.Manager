@@ -2223,6 +2223,15 @@ Break-verification, each mechanism sabotaged separately, observed, and reverted 
 
 ## L6. Not attempted, still open
 
+- **`RunTabPass`'s `expectedStops` is membership-only, and its call sites read as if it were
+  ordered.** Measured: all **seven** call sites supply a list written in walk order — four in
+  `ScrollReachabilityTests` as named variables (`stops` in three, `forwardStops`/`reverseStops` in
+  the fourth) and three inline in the rig's own `CompactViewRigTests` — into a parameter that ignores
+  order entirely. That mismatch is how a Settings fixture sat green for a whole round while its
+  listed order described the bug (§L4). The ask: either assert order when an ordered collection is
+  supplied, or rename/annotate the parameter so call sites read as completeness sets. Low priority
+  and there is no live gap — `PickerRowOrderTests` enforces order for all 37 rows by real walks — but
+  the shape invites the next stale fixture.
 - **EditSRRWizardBody's silent step-3 result** — needs `SRREditorViewModel.Save()` to clear first plus
   an always-in-tree live line. Fully specified in §I3; untouched here.
 - **The high-contrast theme initiative** (gate item c).

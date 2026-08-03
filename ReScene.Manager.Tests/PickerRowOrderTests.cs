@@ -43,9 +43,31 @@ namespace ReScene.Manager.Tests;
 public class PickerRowOrderTests
 {
     /// <summary>
-    /// Rows per surface. The completeness guard: a new picker row anywhere changes its surface's
-    /// count and fails until the row is pinned and this table updated, so the fix cannot be
+    /// Rows per surface. The completeness guard: a new picker row on one of these surfaces changes
+    /// its count and fails until the row is pinned and this table updated, so the fix cannot be
     /// forgotten on a surface nobody was looking at.
+    /// <para>
+    /// WHAT THIS DOES NOT CATCH, stated because overclaiming a guard's reach is the same error the
+    /// guard exists to prevent — and this file's own class doc opens with three surfaces that were
+    /// missed three times running. TWO holes, both of which leave the total at 37 and pass:
+    /// </para>
+    /// <para>
+    /// (1) A brand-new VIEW is invisible. The census walks only the surfaces it is told about,
+    /// inherited from <see cref="BrowseButtonCensusTests"/>'s list. Closing this needs the list
+    /// derived rather than authored — scanning the .axaml sources at test time, a different kind of
+    /// test.
+    /// </para>
+    /// <para>
+    /// (2) A row of a different SHAPE is invisible even on a known surface. <c>Sweep</c> matches a
+    /// <see cref="DockPanel"/> with a <see cref="TextBox"/> and a Browse <see cref="Button"/> among
+    /// its DIRECT children. A Grid-based row, or one that nests its field inside a wrapper, has the
+    /// identical backwards-tab-order defect and is never examined. The shape filter is what makes
+    /// the census cheap; it is also its blind spot.
+    /// </para>
+    /// <para>
+    /// What it does catch: a new DockPanel-shaped picker row on a known surface, a row losing its
+    /// pins or its Local scoping, and any row whose Tab order stops matching the order it renders.
+    /// </para>
     /// </summary>
     private static readonly (string Surface, int Expected)[] ExpectedRowsPerSurface =
     [
