@@ -15,6 +15,8 @@ namespace ReScene.Manager;
 
 public partial class App : Application
 {
+    private HighContrastThemeService? _highContrast;
+
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     public override void OnFrameworkInitializationCompleted()
@@ -38,6 +40,13 @@ public partial class App : Application
             // second head can't silently inherit this head's identity.
             AppDataConfig.FolderName = "ReScene.Manager";
             AppInfo.DisplayName = "ReScene Manager";
+
+            // Follow the OS contrast preference for the life of the process. Started before the
+            // window is built so a machine already in high contrast never shows a normal-theme
+            // frame first, and kept in a field so the ColorValuesChanged subscription outlives
+            // this method.
+            _highContrast = new HighContrastThemeService(this, PlatformSettings);
+            _highContrast.Start();
 
             var window = new MainWindow
             {

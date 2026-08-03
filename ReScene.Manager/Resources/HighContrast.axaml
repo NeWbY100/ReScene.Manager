@@ -1,0 +1,105 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       High-contrast overrides — merged over Tokens.axaml when the OS
+       reports ColorContrastPreference.High, removed when it does not.
+       See HighContrastThemeService.
+       ═══════════════════════════════════════════════════════════
+
+       WHERE THESE VALUES COME FROM, since "no hand-designed palette" was the
+       instruction and this is the honest answer to it.
+
+       Avalonia 11.3.18 does NOT surface the operating system's high-contrast
+       palette. Verified against the shipped assemblies rather than assumed:
+       PlatformColorValues exposes exactly ThemeVariant, ContrastPreference
+       (NoPreference | High) and AccentColor1..3 — a PREFERENCE and an accent,
+       no ButtonFace/WindowText/Hilight equivalents. There is nothing to copy.
+
+       So these are not designed, they are DERIVED: pure black surfaces and pure
+       white text and borders, which is the mechanical maximum (21:1) rather
+       than an aesthetic choice, plus the smallest set of saturated hues needed
+       to keep signals that differ by MEANING still differing by hue — error,
+       warning and success stay distinguishable, as real HC themes keep them.
+       Every pair is asserted against WCAG AA by HighContrastTokenTests; no
+       value here is a matter of taste that a test does not check.
+
+       The one thing genuinely lost is the OS's own accent. AccentColor1 IS
+       available at runtime, but a static dictionary cannot hold a value that
+       changes, and applying it would reintroduce a colour this file cannot
+       verify the contrast of. Recorded as a limit rather than smuggled in. -->
+
+  <!-- ── Surfaces: uniformly black, distinguished by border rather than fill ── -->
+  <SolidColorBrush x:Key="WindowBackground" Color="#FF000000" />
+  <SolidColorBrush x:Key="PanelBackground" Color="#FF000000" />
+  <SolidColorBrush x:Key="SurfaceBackground" Color="#FF000000" />
+  <SolidColorBrush x:Key="InputBackground" Color="#FF000000" />
+  <SolidColorBrush x:Key="HexHeaderBrush" Color="#FF000000" />
+  <SolidColorBrush x:Key="SystemControlBackgroundListLowBrush" Color="#FF000000" />
+  <SolidColorBrush x:Key="SystemControlBackgroundAltHighBrush" Color="#FF000000" />
+
+  <!-- ── Transient states: never colour-only. Hover and selection invert to a
+       light fill so they read as a change of shape, not a change of shade. ── -->
+  <SolidColorBrush x:Key="HoverBackground" Color="#FF3F3F3F" />
+  <SolidColorBrush x:Key="ActiveBackground" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="SelectedItemBackground" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="SystemControlHighlightListLowBrush" Color="#FF3F3F3F" />
+  <SolidColorBrush x:Key="PropertyHighlightBrush" Color="#FFFFFFFF" />
+
+  <!-- ── Text ── -->
+  <SolidColorBrush x:Key="ForegroundPrimary" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="ForegroundSecondary" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="HeaderForeground" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="SystemControlForegroundBaseHighBrush" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="SystemControlForegroundBaseMediumHighBrush" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="SystemControlForegroundBaseMediumBrush" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="SystemControlForegroundBaseMediumLowBrush" Color="#FFFFFFFF" />
+
+  <!-- Disabled text is the one deliberate exception, and it is an exception the
+       standard grants: WCAG 2.2 SC 1.4.3 exempts "inactive user interface
+       components". It still clears 4.5:1 on black here, so the exemption is not
+       being leaned on — it is recorded because the value is intentionally the
+       dimmest thing in the file. -->
+  <SolidColorBrush x:Key="ForegroundDisabled" Color="#FF949494" />
+  <SolidColorBrush x:Key="SystemControlForegroundBaseLowBrush" Color="#FF949494" />
+
+  <!-- ── Accent and focus: white, because on a black ground nothing outranks it ── -->
+  <SolidColorBrush x:Key="AccentPrimary" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="AccentHover" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="AccentPressed" Color="#FFC0C0C0" />
+  <SolidColorBrush x:Key="SystemAccentBrush" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="BorderFocused" Color="#FFFFFF00" />
+
+  <!-- ── Semantic hues: kept apart by HUE as well as luminance, because these
+       three carry different meanings and must not collapse into one another ── -->
+  <SolidColorBrush x:Key="AccentSuccess" Color="#FF00FF00" />
+  <SolidColorBrush x:Key="AccentWarning" Color="#FFFFFF00" />
+  <SolidColorBrush x:Key="AccentError" Color="#FFFF6161" />
+  <SolidColorBrush x:Key="WarningForeground" Color="#FFFFFF00" />
+
+  <!-- ── Links ── -->
+  <SolidColorBrush x:Key="HyperlinkForeground" Color="#FF00FFFF" />
+  <SolidColorBrush x:Key="HyperlinkHoverForeground" Color="#FFFFFFFF" />
+
+  <!-- ── Borders: the primary structural signal once every surface is black ── -->
+  <SolidColorBrush x:Key="BorderSubtle" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="BorderMedium" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="BorderSeparator" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="PanelBorderBrush" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="StatusSeparatorBrush" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="PanelHeaderSeparatorBrush" Color="#FFFFFFFF" />
+
+  <!-- ── Hex view: four roles that must stay mutually distinguishable ── -->
+  <SolidColorBrush x:Key="HexOffsetForeground" Color="#FFFFFF00" />
+  <SolidColorBrush x:Key="HexBytesForeground" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="HexAsciiForeground" Color="#FF00FFFF" />
+  <SolidColorBrush x:Key="LogTerminalForeground" Color="#FF00FF00" />
+
+  <!-- Highlights stay translucent so the glyph under them survives; alpha is
+       raised from the default theme's so the band is visible against black. -->
+  <SolidColorBrush x:Key="HexSelectionBrush" Color="#80FFFF00" />
+  <SolidColorBrush x:Key="HexMatchHighlightBrush" Color="#80FF8C00" />
+  <SolidColorBrush x:Key="HexDiffHighlightBrush" Color="#FF7A0000" />
+  <SolidColorBrush x:Key="DiffRowBackground" Color="#66FF6161" />
+
+</ResourceDictionary>

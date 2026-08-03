@@ -4,6 +4,14 @@ All notable changes to ReScene Manager (formerly ReScene.NET) are documented her
 
 ## [Unreleased]
 
+### Added
+
+- The app now follows your operating system's high-contrast setting. Turn high contrast on in
+  Windows, and ReScene Manager switches to a maximum-contrast theme — black surfaces, white text
+  and borders, and a yellow focus outline — without a restart; turn it off and the normal theme
+  returns exactly as it was. There is no in-app switch on purpose: if you have told your system you
+  need high contrast, you should not have to tell every application again.
+
 ## [2.1.0] — 2026-08-02
 
 ### Changed
