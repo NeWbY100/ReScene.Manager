@@ -85,7 +85,8 @@
       </Border>
 
       <Border IsVisible="{Binding HasCustomPackerWarning}"
-              Background="#3DE0A030" BorderBrush="#E0A030" BorderThickness="1"
+              Background="{DynamicResource WarningBannerBackground}"
+              BorderBrush="{DynamicResource WarningBannerBorder}" BorderThickness="1"
               CornerRadius="3" Margin="0,8,0,0" Padding="8,5">
         <!-- This banner stays announcement-free, exactly as SRSReconstructorView's ResultBanner and
              the Advanced Reconstructor's own copy of THIS banner do: it toggles IsVisible, so it is
@@ -94,7 +95,8 @@
              beside the Import button above.
              FontSizeBody on purpose: mirrors the Advanced tab's CustomPackerWarning, which is
              v1.9 parity (ReconstructorView.xaml:74 pinned Body) — not a stray root-pin-era 14. -->
-        <TextBlock Text="{Binding CustomPackerWarning}" Foreground="#FFD080"
+        <TextBlock Text="{Binding CustomPackerWarning}"
+                   Foreground="{DynamicResource WarningForeground}"
                    FontSize="{DynamicResource FontSizeBody}" TextWrapping="Wrap" />
       </Border>
     </StackPanel>

@@ -75,27 +75,43 @@ public class HighContrastTokenTests
     /// this list said "3, in InspectorView" — which was the files I happened to have open, not the
     /// app. The real population, counted as
     /// <c>grep -rnoE '(Background|Foreground|BorderBrush)="(#[0-9A-Fa-f]+|[A-Za-z]+)"'</c> over
-    /// <c>ReScene.Manager/**/*.axaml</c> excluding <c>Transparent</c> (a no-paint, not a colour):
-    /// <b>14 attributes across 3 files</b>, after InspectorView's 3 were tokenized.
+    /// <c>ReScene.Manager/{Views,Controls}/**/*.axaml</c> excluding <c>Transparent</c> (a no-paint,
+    /// not a colour): <b>8 attributes across 1 file</b>, now that all three copies of the warning
+    /// bar have been tokenized.
     /// <para>
-    /// The warning bar is the sharp one: it exists in THREE byte-identical copies, and only
-    /// InspectorView has been pointed at the new tokens. The same warning therefore swaps on one
-    /// surface and stays amber-on-dark on the other two until the follow-up commit lands.
+    /// The warning bar was the sharp one: it existed in THREE byte-identical copies while only
+    /// InspectorView had been pointed at the new tokens, so the same warning swapped on one surface
+    /// and stayed amber-on-dark on the other two. ReconstructorView and ReconstructWizardBody now
+    /// use the tokens too and have left this list.
+    /// </para>
+    /// <para>
+    /// This table is COMPARED AGAINST THE MARKUP rather than against a remembered total. It used to
+    /// assert only that its own rows summed to a constant, which cannot notice a file being
+    /// tokenized — and did not: the two warning-bar rows survived their own fix and described a
+    /// tree that no longer existed. Counting from source is the shape every other census in this
+    /// workstream converged on, and the reason is exactly this.
     /// </para>
     /// </summary>
     private static readonly (string File, int Attributes, string Reason)[] LiteralColoursOutsideTheTokenSystem =
     [
-        ("ReconstructorView.axaml", 3,
-            "the custom-packer warning bar — the same three literals InspectorView's copy used; " +
-            "tokens now exist for them and pointing this file at them is a follow-up commit"),
-        ("ReconstructWizardBody.axaml", 3, "the third copy of that same warning bar"),
         ("FileCompareView.axaml", 8,
             "drop-zone overlays and the busy scrim: translucent accent fills plus three Foreground=\"White\" " +
             "labels drawn over them. A hex-only grep misses the named colours, which is why this count " +
-            "states its pattern"),
+            "states its pattern. NOT yet tokenized, and the honest reason is that it needs a decision " +
+            "rather than a mechanical swap: under high contrast the 50%-alpha border composites to " +
+            "near-black against a black pane, so the drop target dims — but these are transient " +
+            "drag-and-drop and busy affordances, and choosing what they should become is design work " +
+            "this round did not do"),
     ];
 
-    private const int ExpectedLiteralColourAttributes = 14;
+    /// <summary>
+    /// The pattern the count above states, as code. Anchored on a word boundary because an
+    /// unanchored version matched <c>LastChildFill="False"</c> and reported 23 across 9 — a count
+    /// that was wrong in the direction that looks like diligence.
+    /// </summary>
+    private static readonly Regex LiteralColourAttribute = new(
+        @"(?<=^|\s)(?:Background|Foreground|BorderBrush|Fill|Stroke)=""(?<value>#[0-9A-Fa-f]{3,8}|[A-Z][A-Za-z]+)""",
+        RegexOptions.Compiled | RegexOptions.Multiline);
 
     [AvaloniaFact]
     public void EveryDesignTokenBrush_HasAHighContrastCounterpart()
@@ -121,10 +137,51 @@ public class HighContrastTokenTests
             $"{string.Join(", ", stray)}. They override nothing; delete them.");
 
         // Not asserted to be empty — it is not, and pretending otherwise was the defect. What is
-        // asserted is that the recorded total still matches what the markup contains, so tokenizing
-        // one of these files fails here until this table is updated to say so.
-        Assert.True(LiteralColoursOutsideTheTokenSystem.Sum(l => l.Attributes) == ExpectedLiteralColourAttributes,
-            $"the recorded literal-colour population no longer adds up to {ExpectedLiteralColourAttributes}");
+        // asserted is that the table still DESCRIBES THE MARKUP: a file that gets tokenized has to
+        // leave the list, a file that gains a literal has to join it, and a stale row naming a file
+        // that no longer has literals fails rather than sitting there as fiction.
+        IReadOnlyDictionary<string, int> measured = MeasureLiteralColours();
+        var recorded = LiteralColoursOutsideTheTokenSystem.ToDictionary(l => l.File, l => l.Attributes, StringComparer.Ordinal);
+
+        List<string> drift =
+        [
+            .. measured.Where(m => !recorded.ContainsKey(m.Key))
+                .Select(m => $"{m.Key} has {m.Value} literal colour attributes and is not recorded"),
+            .. recorded.Where(r => !measured.ContainsKey(r.Key))
+                .Select(r => $"{r.Key} is recorded with {r.Value} but has no literal colours left — delete the row"),
+            .. measured.Where(m => recorded.TryGetValue(m.Key, out int n) && n != m.Value)
+                .Select(m => $"{m.Key} has {m.Value} literal colour attributes, recorded as {recorded[m.Key]}"),
+        ];
+
+        Assert.True(drift.Count == 0,
+            $"the literal-colour census no longer describes the markup:{Environment.NewLine}" +
+            string.Join(Environment.NewLine, drift));
+    }
+
+    /// <summary>
+    /// Counts literal colour attributes per view file, from source. <c>Transparent</c> is excluded
+    /// deliberately: it paints nothing, so there is no colour for the high-contrast swap to miss.
+    /// </summary>
+    private static IReadOnlyDictionary<string, int> MeasureLiteralColours()
+    {
+        string root = Path.GetDirectoryName(ResourcesRoot())!;
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (string dir in new[] { "Views", "Controls" })
+        {
+            string path = Path.Combine(root, dir);
+            if (!Directory.Exists(path)) { continue; }
+
+            foreach (string file in Directory.EnumerateFiles(path, "*.axaml", SearchOption.AllDirectories))
+            {
+                int n = LiteralColourAttribute.Matches(File.ReadAllText(file))
+                    .Count(m => m.Groups["value"].Value != "Transparent");
+                if (n > 0) { counts[Path.GetFileName(file)] = n; }
+            }
+        }
+
+        Assert.NotEmpty(counts);
+        return counts;
     }
 
     /// <summary>
