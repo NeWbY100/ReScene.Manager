@@ -147,6 +147,11 @@ the whole round. That process was left alone deliberately: it may hold the live 
 warning under investigation, and ending a user's session is not this round's call. The build was
 directed elsewhere with `-p:BaseOutputPath -p:UseAppHost=false`.
 
+**Since confirmed on the default path.** The user's app exited shortly after the commit landed, and a
+forced `-t:Rebuild` plus both suites were re-run normally: 0 Warning(s), 0 Error(s), **523/523** and
+**728/728**, identical to the workaround's numbers. The disclosure below stays because it is the
+condition the work was actually done under, and because the trap it records outlives this round.
+
 One trap inside that workaround is worth recording. A scratch path under the system temp directory
 made **6** unrelated tests fail —
 `HighContrastTokenTests` (×4), `TextContrastAuditTests`, `IsVisibleCensusTests` — all with
@@ -161,6 +166,5 @@ tests is worse than no verification, because it still reports a number.
 - **The reported warning**, per §A1: diagnosed to mechanism, benign, no app route reproduced. Next
   step if anyone wants it settled is a bridge-enabled Debug session reproduced live, not more headless
   work.
-- **Re-running verification on the default output path** once the user's app and VS release the lock.
-  Nothing suggests a different result — the same forced rebuild and the same 523/728 ran green — but
-  it has not been done on the standard path.
+- ~~Re-running verification on the default output path.~~ **Done** — see §A5. Same forced rebuild,
+  same 523/728, no difference from the workaround's result.
