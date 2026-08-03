@@ -450,8 +450,8 @@
       <!-- Drop zone overlays (shown during drag; toggled from code-behind) -->
       <Border x:Name="LeftDropOverlay"
               Grid.Column="0"
-              Background="#400078D4"
-              BorderBrush="#800078D4"
+              Background="{DynamicResource DropTargetBackground}"
+              BorderBrush="{DynamicResource DropTargetBorder}"
               BorderThickness="2"
               CornerRadius="4"
               Margin="2"
@@ -462,13 +462,13 @@
                    VerticalAlignment="Center"
                    FontSize="{DynamicResource FontSizeH1}"
                    FontWeight="Bold"
-                   Foreground="White" />
+                   Foreground="{DynamicResource OverlayForeground}" />
       </Border>
 
       <Border x:Name="RightDropOverlay"
               Grid.Column="2"
-              Background="#400078D4"
-              BorderBrush="#800078D4"
+              Background="{DynamicResource DropTargetBackground}"
+              BorderBrush="{DynamicResource DropTargetBorder}"
               BorderThickness="2"
               CornerRadius="4"
               Margin="2"
@@ -479,18 +479,18 @@
                    VerticalAlignment="Center"
                    FontSize="{DynamicResource FontSizeH1}"
                    FontWeight="Bold"
-                   Foreground="White" />
+                   Foreground="{DynamicResource OverlayForeground}" />
       </Border>
 
       <!-- Busy overlay: shown while a comparison runs (work happens off the UI thread). -->
       <Border Grid.Column="0" Grid.ColumnSpan="3"
-              Background="#80000000"
+              Background="{DynamicResource OverlayScrimBackground}"
               IsVisible="{Binding IsComparing}">
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="240">
           <TextBlock Text="Comparing files…"
                      HorizontalAlignment="Center"
                      Margin="0,0,0,8"
-                     Foreground="White" />
+                     Foreground="{DynamicResource OverlayForeground}" />
           <ProgressBar IsIndeterminate="True" Height="6" />
         </StackPanel>
       </Border>

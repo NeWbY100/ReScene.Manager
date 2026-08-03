@@ -105,6 +105,26 @@
   <SolidColorBrush x:Key="WarningBannerBackground" Color="#FF000000" />
   <SolidColorBrush x:Key="WarningBannerBorder" Color="#FFFFFF00" />
 
+  <!-- ── Compare-tab overlays ──
+       The drop target loses its TINT and keeps its BORDER, which is this file's
+       standing idiom: once every surface is black, structure is carried by the
+       border rather than the fill. It also has to be, because the default
+       theme's #400078D4 is a 25%-alpha blue that composites to roughly #001E35
+       over a black pane — a fill that is present in the markup and invisible on
+       screen. An opaque black fill with a white border says the same thing
+       honestly, and the label on top goes from 3.86:1 over the composited tint
+       to 21:1 on black.
+
+       The scrim deliberately keeps its default value. A scrim's job is to dim
+       what is behind it; under high contrast the surface behind it is already
+       black, so there is nothing left to dim and the busy state is carried by
+       the text and progress indicator drawn on top. Raising the alpha would
+       change nothing a user can see. -->
+  <SolidColorBrush x:Key="DropTargetBackground" Color="#FF000000" />
+  <SolidColorBrush x:Key="DropTargetBorder" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="OverlayScrimBackground" Color="#80000000" />
+  <SolidColorBrush x:Key="OverlayForeground" Color="#FFFFFFFF" />
+
   <!-- ── Links ── -->
   <SolidColorBrush x:Key="HyperlinkForeground" Color="#FF00FFFF" />
   <SolidColorBrush x:Key="HyperlinkHoverForeground" Color="#FFFFFFFF" />

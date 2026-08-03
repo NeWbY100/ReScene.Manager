@@ -2552,11 +2552,23 @@ public class CreatorCompactTests
     // indication survives a genuine WHOLE-THEME swap the way a real Windows high-contrast
     // activation would produce (the two neighboring panes' own colors, whatever resources feed
     // them, would ALSO change under a real HC theme). This section builds the complete equivalent:
-    // every SolidColorBrush key Resources/Tokens.axaml defines (46 total — re-verified against
-    // that file's own current contents; a comment there should flag this list if new keys are
-    // ever added) is overridden at once, modeled on an actual Windows "High Contrast Black" theme
+    // 46 token keys are overridden at once, modeled on an actual Windows "High Contrast Black" theme
     // (near-uniform black surfaces, white text/borders, a saturated yellow accent — Windows HC
     // themes still differentiate error/warning/success semantically by hue, not just lightness).
+    //
+    // DELIBERATELY FROZEN, and no longer a census. This list was written when the app had NO
+    // high-contrast skin, and its 46 keys were then every brush Tokens.axaml defined. That is no
+    // longer true: the app now owns 64 brushes across two merged dictionaries, and ships a real
+    // HighContrast.axaml. The number here is pinned at 46 rather than chased, because this fixture's
+    // job was always to prove the splitter's focus indication survives a WHOLE-THEME swap, and 46
+    // simultaneous overrides prove that just as well as 64 would.
+    //
+    // What it must NOT be mistaken for is a check on the shipped palette — its colours are this
+    // fixture's own, not HighContrast.axaml's. That question belongs to
+    // HighContrastShippedDictionaryTests, which drives the real dictionary through the real
+    // HighContrastThemeService; and the token inventory is guarded by HighContrastTokenTests. The
+    // alternative was to re-point this at the real dictionary, which would have made it a duplicate
+    // of the former with a worse mechanism, so it stays as the historical instrument it is.
     // Applied/restored via the SAME proven mechanism as the single-key test above (direct
     // top-level Resources[key] set/remove — MEASURED there that these keys are absent at the top
     // level, so restoration removes rather than reassigns), wrapped in an IDisposable so three

@@ -3185,3 +3185,116 @@ driven one at a time, so a composition needing two at once is out of reach.
 - **The tab strip's selection idiom** (§T3), unchanged: still recorded as open rather than decided.
 - **A live OS-level smoke.** No test can toggle the real Windows setting, and §U3 makes this more
   valuable than it was — the live path is exactly the one with a known defect in it.
+
+## V1. The literal-colour population reaches zero
+
+`FileCompareView`'s eight literals — the last ones — are tokenized, and the app now paints no colour
+the high-contrast dictionary cannot reach. The population's whole history, each step measured with
+its pattern and scope stated:
+
+| State | Count | Why it moved |
+|---|---|---|
+| First claim | 3, in 1 file | The files someone had open, not the app |
+| Measured | 14 across 3 | Anchored pattern, named colours included |
+| §U | 8 across 1 | Three warning-bar copies tokenized |
+| Now | **0 across 0** | The Compare tab's overlays tokenized |
+
+Four tokens do it: `DropTargetBackground`, `DropTargetBorder`, `OverlayScrimBackground`,
+`OverlayForeground`. All four keep their exact former values in the default theme, so the shipped
+appearance is byte-identical; what changed is that the swap can see them. Two of them —
+`OverlayScrimBackground` and `OverlayForeground` — carry the SAME value in both dictionaries, which
+is a real answer rather than an unfinished one. White on a dark overlay is already what high contrast
+would choose, and a scrim's job is to dim what is behind it, so on an all-black surface there is
+nothing left to dim. The tokens exist to put those values inside the census, not to change them.
+
+The drop target is the one that genuinely changes under high contrast, and the reason is the
+compositing lesson: `#800078D4` is a 50%-alpha blue that composites to roughly `#003C6A` over a black
+pane — a border that is present in the markup and nearly invisible on screen. Under HC it loses the
+tint and keeps a white border, which is this dictionary's standing idiom (once every surface is
+black, structure is carried by the border), and the label on top goes from **3.86:1** over the
+composited tint to **21:1** on black.
+
+**An empty census needs a different kind of guard,** because "found nothing" and "looked at nothing"
+are indistinguishable in the result and only one is good news. The scan now asserts it actually READ
+markup — at least 20 files, against a measured **30** (`find ReScene.Manager/{Views,Controls} -name
+'*.axaml' | wc -l`, 28 and 2) — so a broken path fails instead of reporting a clean app.
+
+## V2. The census caught the fix that made it, one test later
+
+Minting `DropTargetBackground` failed `HighContrastTokenTests` immediately:
+
+```
+1 high-contrast tokens do not meet WCAG AA against the surface they sit on.
+DropTargetBackground #FF000000 on #FF000000 is 1.00:1, needs 3.0:1
+```
+
+A new fill that is not enumerated in `Surfaces` is treated as something that must contrast against
+the window, so a black fill on a black window reads as a failure. This is exactly the
+`HexHeaderBrush` bug of §Q3 — a name is not a classification — arriving a second time, and it arrived
+the right way: from the test, before review, on the first run after the token existed. Both new fills
+are now enumerated, with that history recorded beside them so the third occurrence is cheaper.
+
+## V3. The fixture divergence: frozen, not chased
+
+`CreatorCompactTests`' 46-key fixture claimed to be "every SolidColorBrush key Tokens.axaml defines".
+That stopped being true some time ago and is now wrong by a wide margin — the app owns **64** brushes
+across two merged dictionaries, and ships a real `HighContrast.axaml` besides.
+
+It is **frozen at 46 and relabelled**, not re-pointed. The fixture's job was always to prove the
+splitter's focus indication survives a WHOLE-THEME swap, and 46 simultaneous overrides prove that as
+well as 64 would; its colours were never `HighContrast.axaml`'s, so re-pointing it at the real
+dictionary would have produced a duplicate of `HighContrastShippedDictionaryTests` with a worse
+mechanism. What it must not be mistaken for is a check on the shipped palette, and the comment now
+says so and names the two tests that do hold that ground.
+
+## V4. What the audit's reach turned out to be
+
+The composed-pairs audit was expected to miss the drop overlays, since both are `IsVisible="False"`
+until a drag begins. **It does not.** Measured by sabotage — setting `DropTargetBackground` to
+`#FFEEEEEE` produced:
+
+```
+1 of 26 composed text pairs fall below WCAG AA.
+OverlayForeground on DropTargetBackground is 1.16:1, needs 3.0:1 (large text or graphical object)
+```
+
+So an `IsVisible="False"` element is still in the visual tree and still composed, the population grew
+**24 → 26** with the two pairs this round added, and both pass at their real values. That is a reach
+limit narrower than assumed, and worth recording in the direction that surprised: the guard covers
+more than its own disclosure promised.
+
+The audit does NOT composite alpha — it takes the first ancestor brush with a non-zero alpha and
+computes on its RGB — so `#400078D4` is judged as `#0078D4`. For these two pairs that is the
+conservative direction (the composited colour is darker, so the real ratio against white text is
+higher than reported), but it is a general limitation rather than a local one.
+
+## V5. Evidence
+
+Forced `-t:Rebuild` on the solution: 0 Warning(s), 0 Error(s). **Manager 520/520**,
+**App.Core 728/728** — unchanged counts, since this round tokenized and reclassified rather than
+adding tests.
+
+Break-verification, each reverted byte-identically and green after:
+
+| Sabotage | Observed |
+|---|---|
+| One overlay foreground back to the literal `White` | `FileCompareView.axaml has 1 literal colour attributes and is not recorded` |
+| `DropTargetBackground` to `#FFEEEEEE` | `1 of 26 composed text pairs… 1.16:1, needs 3.0:1` |
+
+Counts as number + pattern + scope: **0** literal colour attributes across **0** files, pattern
+`grep -rnoE '(^|[[:space:]])(Background|Foreground|BorderBrush|Fill|Stroke)="(#[0-9A-Fa-f]{3,8}|[A-Z][A-Za-z]+)"'`
+over `ReScene.Manager/{Views,Controls}` excluding `Transparent`; **30** `.axaml` files scanned, the
+census's own rig-validity floor set at 20. **64** app-owned brushes (52 `Tokens.axaml` + 12
+`Density.axaml`), **52** high-contrast counterparts, `grep -c '<SolidColorBrush x:Key'`. **26**
+composed pairs, **0** failures.
+
+## V6. Still open, unchanged
+
+The list from §U6 stands, minus `FileCompareView`, which this round closed:
+
+- **The converter live-toggle staleness** (§U3) — still the top item.
+- **The tab strip's selection idiom** (§T3) — recorded open, not decided.
+- **Fluent's own brushes under high contrast** — outside the token system, so outside the swap. The
+  checkbox glyph is measured and passes; the rest of Fluent's palette is not.
+- **A live OS-level smoke** — and it should now include a field-status glyph in view, since §U3 makes
+  that the specific thing a real toggle would expose.

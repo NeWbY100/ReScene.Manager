@@ -109,12 +109,23 @@
        with the same three literal colours. Were literal hex until the high-contrast work: a
        literal cannot be swapped, so the bar kept its amber-on-dark colours under HC while
        everything around it went black-and-white.
-       SCOPE, stated because it is currently uneven: only InspectorView has been pointed at
-       these tokens. ReconstructorView:130,133 and ReconstructWizardBody:88,97 still carry the
-       literals and are a separate commit's work. Until then the same warning swaps on one
-       surface and not on the other two. -->
+       All three copies now use these tokens, so the same warning swaps on every surface that
+       renders it. -->
   <SolidColorBrush x:Key="WarningBannerBackground" Color="#3DE0A030" />
   <SolidColorBrush x:Key="WarningBannerBorder" Color="#E0A030" />
+
+  <!-- ══ Compare-tab overlays ════════════════════════════════
+       FileCompareView's drop-zone targets and busy scrim, literal hex until the high-contrast
+       work reached them. All four keep their exact former values here, so the default theme is
+       byte-identical; what changes is that the swap can now see them.
+
+       The two overlay foregrounds are white in BOTH dictionaries, and that is a real answer
+       rather than a placeholder: white on a dark overlay is already what high contrast would
+       choose, so the token exists to put the value inside the census rather than to change it. -->
+  <SolidColorBrush x:Key="DropTargetBackground" Color="#400078D4" />
+  <SolidColorBrush x:Key="DropTargetBorder" Color="#800078D4" />
+  <SolidColorBrush x:Key="OverlayScrimBackground" Color="#80000000" />
+  <SolidColorBrush x:Key="OverlayForeground" Color="#FFFFFFFF" />
 
   <!-- ══ Borders (legacy keys) ═══════════════════════════════ -->
   <SolidColorBrush x:Key="PanelBorderBrush" Color="#FF3C3C3C" />

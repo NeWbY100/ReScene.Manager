@@ -33,7 +33,7 @@ public class HighContrastTokenTests
     /// were outside this census and outside the swap, so "every token has a counterpart" was true of
     /// a population that was not the whole population.
     /// </summary>
-    private const int ExpectedTokenBrushes = 60;
+    private const int ExpectedTokenBrushes = 64;
 
     private static readonly string[] TokenFiles = ["Tokens.axaml", "Density.axaml"];
 
@@ -76,13 +76,20 @@ public class HighContrastTokenTests
     /// app. The real population, counted as
     /// <c>grep -rnoE '(Background|Foreground|BorderBrush)="(#[0-9A-Fa-f]+|[A-Za-z]+)"'</c> over
     /// <c>ReScene.Manager/{Views,Controls}/**/*.axaml</c> excluding <c>Transparent</c> (a no-paint,
-    /// not a colour): <b>8 attributes across 1 file</b>, now that all three copies of the warning
-    /// bar have been tokenized.
+    /// not a colour): <b>0 attributes across 0 files</b>. Every colour the app paints is now a token
+    /// the high-contrast dictionary can reach.
     /// <para>
-    /// The warning bar was the sharp one: it existed in THREE byte-identical copies while only
-    /// InspectorView had been pointed at the new tokens, so the same warning swapped on one surface
-    /// and stayed amber-on-dark on the other two. ReconstructorView and ReconstructWizardBody now
-    /// use the tokens too and have left this list.
+    /// The population went 3-in-1-file (wrong, the files someone had open) → 14 across 3 (measured)
+    /// → 8 across 1 (the three warning-bar copies tokenized) → 0. The last step was
+    /// <c>FileCompareView</c>'s drop-zone overlays and busy scrim, including three
+    /// <c>Foreground="White"</c> named colours that a hex-only pattern never saw.
+    /// </para>
+    /// <para>
+    /// EMPTY IS THE INTERESTING STATE, so read the assertion carefully: the table is compared
+    /// against the markup, and empty means the scan found nothing rather than that nobody looked.
+    /// The scan's own validity is asserted separately — it must have READ files — because "no
+    /// literals found" and "no files examined" are indistinguishable in the result and only one of
+    /// them is good news.
     /// </para>
     /// <para>
     /// This table is COMPARED AGAINST THE MARKUP rather than against a remembered total. It used to
@@ -92,17 +99,7 @@ public class HighContrastTokenTests
     /// workstream converged on, and the reason is exactly this.
     /// </para>
     /// </summary>
-    private static readonly (string File, int Attributes, string Reason)[] LiteralColoursOutsideTheTokenSystem =
-    [
-        ("FileCompareView.axaml", 8,
-            "drop-zone overlays and the busy scrim: translucent accent fills plus three Foreground=\"White\" " +
-            "labels drawn over them. A hex-only grep misses the named colours, which is why this count " +
-            "states its pattern. NOT yet tokenized, and the honest reason is that it needs a decision " +
-            "rather than a mechanical swap: under high contrast the 50%-alpha border composites to " +
-            "near-black against a black pane, so the drop target dims — but these are transient " +
-            "drag-and-drop and busy affordances, and choosing what they should become is design work " +
-            "this round did not do"),
-    ];
+    private static readonly (string File, int Attributes, string Reason)[] LiteralColoursOutsideTheTokenSystem = [];
 
     /// <summary>
     /// The pattern the count above states, as code. Anchored on a word boundary because an
@@ -166,21 +163,31 @@ public class HighContrastTokenTests
     {
         string root = Path.GetDirectoryName(ResourcesRoot())!;
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        int scanned = 0;
 
         foreach (string dir in new[] { "Views", "Controls" })
         {
             string path = Path.Combine(root, dir);
-            if (!Directory.Exists(path)) { continue; }
+            Assert.True(Directory.Exists(path),
+                $"rig validity: {path} does not exist, so this census scanned nothing and its emptiness means nothing");
 
             foreach (string file in Directory.EnumerateFiles(path, "*.axaml", SearchOption.AllDirectories))
             {
+                scanned++;
                 int n = LiteralColourAttribute.Matches(File.ReadAllText(file))
                     .Count(m => m.Groups["value"].Value != "Transparent");
                 if (n > 0) { counts[Path.GetFileName(file)] = n; }
             }
         }
 
-        Assert.NotEmpty(counts);
+        // The population is empty on purpose now, so "found nothing" has to be distinguished from
+        // "looked at nothing". The floor sits below the real file count (measured: 30 .axaml files,
+        // 28 under Views and 2 under Controls) so ordinary churn never trips it, and far enough
+        // above zero that a broken path does.
+        Assert.True(scanned >= 20,
+            $"rig validity: only {scanned} .axaml files were scanned under {root}; an empty literal-colour " +
+            "census is only meaningful if the scan actually read the markup");
+
         return counts;
     }
 
@@ -310,6 +317,12 @@ public class HighContrastTokenTests
         "SystemControlHighlightListLowBrush", "PropertyHighlightBrush",
         "HexSelectionBrush", "HexMatchHighlightBrush", "HexDiffHighlightBrush", "DiffRowBackground",
         "WarningBannerBackground",
+        // The Compare tab's two overlay fills. Adding these was not optional bookkeeping: minting
+        // DropTargetBackground without classifying it failed this very test at 1.00:1 black-on-black,
+        // because an unenumerated fill is treated as something that must contrast against the window.
+        // That is the HexHeaderBrush lesson arriving a second time, and it arrived the right way —
+        // from the test rather than from review.
+        "DropTargetBackground", "OverlayScrimBackground",
     };
 
     private static bool IsSurface(string key) => Surfaces.Contains(key);
