@@ -2827,3 +2827,100 @@ in the default-theme cross-product, 22 foregrounds × 12 surfaces — a superset
 
 Literal colours outside the token system, so outside the swap: **3**, all in `InspectorView.axaml`'s
 custom-packer warning bar. Enumerated in the test rather than left implicit.
+
+## R1. The composed-pairs audit — 23 pairs, not 82
+
+The population is the finding. Reading (foreground, background) pairs off REAL VISUAL TREES — every
+instantiable control hosted, each element carrying a foreground matched with the nearest ancestor that
+actually paints a background — gives **23 composed pairs**. The cross-product of §Q4 gave 82 failures
+from 264 notional pairs. Nearly all of it was fiction, and the refusal to act on it was worth more
+than the audit that produced it.
+
+**Verdict: zero genuine failures in the default theme.** Every pair the app composes meets WCAG AA at
+the threshold its role requires.
+
+That verdict took two corrections to reach, and both are the same mistake in different clothes.
+
+## R2. A colour is not a token
+
+The first version matched rendered brushes back to token names BY COLOUR. It reported two failures:
+
+```
+AccentPrimary on SurfaceBackground is 3.03:1, needs 4.5:1
+AccentPrimary on WindowBackground  is 3.68:1, needs 4.5:1
+```
+
+Both were false. `AccentPrimary` is `#FF0078D4` — and so is the Fluent palette's accent, because
+`App.axaml` deliberately sets `ColorPaletteResources Accent="#FF0078D4"` so Fluent derives its shades
+from the app's own. So every Fluent-supplied foreground at that colour was attributed to a token that
+`grep -rn 'AccentPrimary' --include=*.axaml` shows appears only as `Background` and `BorderBrush`,
+never as a foreground anywhere in the app. Acting on the report would have meant changing a colour
+that could not affect the pair reported.
+
+Fixed by matching on brush REFERENCE instead: a `DynamicResource` resolves to the very instance held
+in the dictionary, so identity answers "did this come from OUR token?" exactly, and brushes the app
+does not own simply fail to map and are skipped. This is the same lesson as §Q3's classifier — a name
+is not a classification, a colour is not a token — and it is now twice in two rounds, which suggests
+the general form is worth stating: **an identifier that merely correlates with the thing is not the
+thing.**
+
+## R3. The role split, taken from the standard
+
+With reference matching, one failure remained: `AccentPrimary on WindowBackground, 3.68:1`. Rather
+than argue it into an exemption table, the element was identified — `MessageDialog`'s severity glyph,
+a 26px icon (ℹ / ⚠ / ✗) beside a message that states the same thing in words, coloured per severity by
+`SeverityVisual`.
+
+It qualifies for a 3:1 threshold on two independent grounds: WCAG 2.2 SC 1.4.11 sets 3:1 for graphical
+objects, and SC 1.4.3 independently sets 3:1 for LARGE text, which the standard defines as 18pt — 24px
+at this app's DPI — or 14pt bold. At 26px it clears both routes, and at 3.68:1 it passes.
+
+Two independent routes to the same threshold is a classification, not a judgment, so it is applied in
+code — `IsLargeText` uses the standard's own 24px / 18.66px-bold rule — rather than written into the
+exemption table as an argument. The exemption table is for pairs that genuinely fail a threshold they
+are genuinely subject to.
+
+## R4. What the exemption table holds
+
+Two entries, both the same exemption: `ForegroundDisabled` and its Fluent-facing alias
+`SystemControlForegroundBaseLowBrush`, against any background, cited to **WCAG 2.2 SC 1.4.3**, which
+exempts text that is part of an inactive user interface component. Neither is being leaned on: the
+tokens exist only to render disabled controls.
+
+An entry here has to say why the standard permits the failure. It is an argument, not a suppression.
+
+## R5. Reach, disclosed
+
+- **State-dependent compositions are outside it.** A hover brush applied by a style trigger, a
+  selected row, a control whose colours change with data — none is reached by default construction.
+  The specific signals that matter are covered instead by the rendered-pixel tests, which drive real
+  states.
+- **Fluent's own palette is outside it**, by construction: a pair is reported only when BOTH ends map
+  to a token this app owns, because changing Fluent's colours is not in this app's gift.
+- **Literal colours in markup cannot map**, so they are invisible here. Three exist, enumerated in
+  `HighContrastTokenTests`.
+
+## R6. Evidence
+
+Break-verified: dimming `ForegroundSecondary` to `#FF6A6A6A` reports all FOUR of that token's real
+compositions — on `SurfaceBackground` 2.54:1, `SystemControlBackgroundAltHighBrush` 2.83:1,
+`PanelBackground` 2.83:1, `WindowBackground` 3.08:1 — each labelled "normal text". Reverted
+byte-identically.
+
+Forced `-t:Rebuild`: 0 Warning(s), 0 Error(s). **Manager 508/508** (507 + 1), **App.Core 728/728**.
+
+Counts as number + pattern + scope: **23** composed pairs and **0** failures — measured by
+`TextContrastAuditTests` itself, which is the number to quote rather than any grep. **82** sub-AA
+pairs in the abandoned cross-product, 22 foregrounds × 12 surfaces — recorded only to mark the size of
+the error.
+
+## R7. Still open from the HC group
+
+- **Driving the rendered-pixel instruments through the SHIPPED dictionary.** The 46-key fixture in
+  `CreatorCompactTests` still simulates high contrast with top-level resource overrides; now that a
+  real dictionary and a real swap exist, those tests should apply the merge the way the app does.
+  Splitter focus visual, checkbox glyphs, field-status glyphs, selection and hover are the signals.
+- **The three literal colours in `InspectorView`'s warning bar**, which the swap cannot reach. The
+  census's own stray-direction lesson argues for tokenizing them; not done here.
+- **The live OS-level smoke**, which belongs to the controller: no test can toggle a system-wide
+  Windows setting, and it must not be touched unattended.
