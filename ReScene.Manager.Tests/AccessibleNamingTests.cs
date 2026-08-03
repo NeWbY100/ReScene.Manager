@@ -477,10 +477,20 @@ public class AccessibleNamingTests
     }
 
     /// <summary>
-    /// WCAG 3.2.4 across the four surfaces that pick an output FILE path: CreatorView, the
-    /// Create-SRR wizard, SRSCreatorView and SRSReconstructorView all say "Browse for output path".
-    /// All four are compared against one literal rather than against each other, so the test cannot
-    /// pass by them drifting together.
+    /// WCAG 3.2.4 for the output-FILE picker: three of the surfaces that use it — CreatorView,
+    /// SRSCreatorView and SRSReconstructorView — are hosted here and each compared against ONE
+    /// literal rather than against each other, so the test cannot pass by them drifting together.
+    /// <para>
+    /// SCOPE, corrected: an earlier version of this comment said "the four surfaces … all four are
+    /// compared", naming the Create-SRR wizard among them, while the body has only ever hosted
+    /// three. **Seven** surfaces now share "Browse for output path" — the three here plus the
+    /// Create-SRR, Create-SRS, Edit-SRR and Restore wizard bodies. The other four are asserted in
+    /// <see cref="CreateSRRWizard_Step3OutputRow_AnnouncesBothControls"/> and
+    /// <see cref="BeginnerWizardBodies_BrowseButtons_UseTheSharedConvention"/>, and every one of the
+    /// seven is swept by <c>BrowseButtonCensusTests</c>. Saying "all four" while checking three was
+    /// the same overclaim-by-uncounted-denominator this workstream kept making; the count is now
+    /// stated as what this test covers, not as what exists.
+    /// </para>
     /// <para>
     /// The Reconstructor's own output picker deliberately reads "Browse for output folder" and is
     /// asserted to DIFFER — it chooses a directory, which is a different thing to choose, and

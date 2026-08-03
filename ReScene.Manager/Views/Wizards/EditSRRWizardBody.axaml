@@ -44,8 +44,9 @@
                  TextWrapping="Wrap" Margin="0,0,0,8" />
       <TextBlock Text="Save edited SRR to" FontWeight="SemiBold" Margin="0,0,0,2" />
       <DockPanel Margin="0,0,0,2">
-        <!-- The app-wide name for "choose where the output file goes" — now shared by six
-             surfaces (WCAG 3.2.4). -->
+        <!-- The app-wide name for "choose where the output file goes" — shared by SEVEN surfaces
+             (CreatorView, SRSCreatorView, SRSReconstructorView and the Create-SRR, Create-SRS,
+             Edit-SRR and Restore wizard bodies), per WCAG 3.2.4. -->
         <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseOutputCommand}"
                 Classes="ghost"
                 AutomationProperties.Name="Browse for output path"

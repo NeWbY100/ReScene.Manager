@@ -1504,10 +1504,16 @@ doubles into one file:
 
 | Test | Where | Buttons |
 |---|---|---|
-| `BeginnerWizardBodies_BrowseButtons_UseTheSharedConvention` | `AccessibleNamingTests` | 8 |
+| `BeginnerWizardBodies_BrowseButtons_UseTheSharedConvention` | `AccessibleNamingTests` | 10 |
 | `BrowseButtons_AnnounceWhichFolder_AndContainTheirVisibleLabel` | `SettingsWindowTests` | 3 |
 | `BrowseButtons_DistinguishLeftFromRight_AndContainTheirVisibleLabel` | `FileCompareViewTests` | 2 |
 | `BrowseButton_AnnouncesItsTarget_AndContainsItsVisibleLabel` | `InspectorViewTests` | 1 |
+| | | **16** |
+
+(This table first read 8 and totalled 14. The wizard test makes ten `AssertBrowseButton` calls, not
+eight — three for CreateSRS, two for EditSRR, five for Restore. Corrected to the artifact: the
+coverage was better than the table claimed, which is a less dangerous error than the reverse and
+still the same failure to count before writing.)
 
 `SettingsWindowTests` is the reason this split is right rather than merely convenient: it is
 `[Collection("AppDataConfig")]` and needs a real `AppSettingsService` pointed at a temp folder.
@@ -1571,3 +1577,95 @@ and the reviewer asked which.
 4. **`AutomationProperties.Name` on the wizard bodies is unverified against a real WizardWindow.**
    The tests host each body under a synthetic `WizardViewModel`, which is how every other wizard
    test in this suite works, but it is not the shipping window.
+
+---
+
+# Polish — the census test, and two counts
+
+Date: 2026-08-03. Base `main` @81f2e8c. One commit. Nothing pushed.
+
+## G1. The enumeration test — §F9.3 built
+
+`BrowseButtonCensusTests.EveryBrowseButtonOnEverySurface_AnnouncesAName_StartingWithBrowse` hosts all
+thirteen surfaces with real ViewModels, finds every button whose visible label starts with "Browse",
+and asserts each announces a name starting with "Browse". An unnamed button anywhere now fails a
+TEST rather than being absent from a grep in a report.
+
+The denominator lives in `ExpectedBrowseButtonsPerSurface` — per surface, not one grand total, so a
+failure says WHICH surface moved rather than only that the number changed:
+
+```
+CreatorView 3 · ReconstructorView 4 · SampleRestorerView 3 · SRSCreatorView 3 ·
+SRSReconstructorView 3 · InspectorView 1 · FileCompareView 2 · SettingsWindow 3 ·
+CreateSRRWizardBody 3 · CreateSRSWizardBody 3 · ReconstructWizardBody 4 ·
+EditSRRWizardBody 2 · RestoreWizardBody 5                                        = 39
+```
+
+**Break-verified**: deleting one `AutomationProperties.Name` (InspectorView's) fails with
+"InspectorView: a button labelled "Browse" has NO accessible name — a screen reader announces only
+"Browse", which does not say which of the app's 39 Browse buttons it is", then reverted and green.
+The message names the surface, the label, and the fix.
+
+**What it does NOT catch, said plainly rather than left to be discovered:** a brand-new VIEW that
+adds Browse buttons and is never added to the list is invisible to it — the census walks only
+surfaces it is told about, so the total stays 39 and it passes. It catches a new button on a KNOWN
+surface, a rename that breaks the convention, and a name being dropped. Closing the new-surface hole
+needs the surface list to be derived rather than authored, i.e. scanning the `.axaml` sources at
+test time, which is a different kind of test. Recording the limit is the point: a guard whose reach
+is overstated is how this chain got here.
+
+## G2. The census caught a real defect in itself on its first run
+
+It reported **zero** Browse buttons in `ReconstructWizardBody`, where four exist.
+
+The cause is worth keeping. Wizard step panels are `IsVisible`-bound, and an `IsVisible=false`
+`StackPanel` keeps its children in the visual tree while an `IsVisible=false` `ScrollViewer` does
+**not** realize its content. `ReconstructWizardBody` is the one body that wraps its pickers in a
+ScrollViewer, so a single-pass walk silently under-counted exactly one surface — which is precisely
+the under-counting failure the test exists to prevent, committed by the test itself before it had
+run once.
+
+Fixed by cycling `CurrentStepIndex` through every step and accumulating by reference, the same way
+the sweep already cycled every `TabControl` index (needed for `SettingsWindow`, whose three buttons
+live on two different tabs and would otherwise have counted as one).
+
+## G3. Two counts corrected
+
+- **§F6's coverage table** read 8 for the wizard test and totalled 14. It makes **ten**
+  `AssertBrowseButton` calls — 3 + 2 + 5 — so the column is **16**, matching the sixteen buttons
+  this round named. Under-claimed rather than over-claimed, but the same failure to count before
+  writing.
+- **`EditSRRWizardBody`'s comment** said "Browse for output path" is "now shared by six surfaces".
+  Measured: **seven** (CreatorView, SRSCreatorView, SRSReconstructorView, and the Create-SRR,
+  Create-SRS, Edit-SRR and Restore wizard bodies). Rewritten to enumerate them rather than assert a
+  number.
+- **`OutputPathPickers_ShareOneName_AndTheFolderPickerDeliberatelyDiffers`'s doc** (pre-existing)
+  said "the four surfaces … all four are compared" while the body has only ever hosted three, and
+  named the Create-SRR wizard among the four though it is not there. Rewritten to state what THAT
+  test covers (three, each against one literal), where the other four are asserted, and that the
+  census sweeps all seven. Same overclaim-by-uncounted-denominator, one more instance.
+
+## G4. Evidence
+
+`-t:Rebuild` on all four projects, each **0 Warning(s), 0 Error(s)**, then `dotnet test --no-build`:
+
+```
+Manager   Passed!  - Failed: 0, Passed: 483, Skipped: 0, Total: 483
+App.Core  Passed!  - Failed: 0, Passed: 722, Skipped: 0, Total: 722
+```
+
+Baselines Manager 482 / App.Core 722. Delta **+1 Manager** — the census. App.Core untouched.
+
+## G5. Concerns
+
+1. **The census is slower than a unit test**: it builds thirteen windows and cycles every tab and
+   wizard step. It runs in about a second here, which is fine, but it is the most expensive single
+   test in the suite and grows with the app.
+2. **`BrowseButtonCensusTests` joins the `AppDataConfig` collection** because `SettingsWindow` needs
+   a real `AppSettingsService`. That serializes it against three other classes. The alternative —
+   dropping SettingsWindow from the census — would leave the three worst-affected buttons in the app
+   uncovered, so the coupling is the right trade, but it is a coupling.
+3. **The convention check is `StartsWith("Browse")`, not the full literal.** Per-button literals live
+   in the per-surface tests; the census deliberately checks only the shared rule, so it stays a
+   census rather than becoming a second copy of every expected string that would then need updating
+   twice.
