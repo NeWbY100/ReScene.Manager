@@ -307,8 +307,6 @@ public class WizardTabOrderTests
             var row = (DockPanel)input.GetVisualParent()!;
             var stepPanel = (StackPanel)row.GetVisualParent()!;
 
-            Assert.Equal(KeyboardNavigationMode.Local, KeyboardNavigation.GetTabNavigation(row));
-
             var addedAbove = new CheckBox { Content = "a field added above the picker row" };
             stepPanel.Children.Insert(stepPanel.Children.IndexOf(row), addedAbove);
             Dispatcher.UIThread.RunJobs();
@@ -323,6 +321,14 @@ public class WizardTabOrderTests
             Control? second = CompactViewRig.StepFocus(window, forward: true);
             Assert.True(second is not null && ReferenceEquals(second, input),
                 "after the added field, the row's own first control (the path box) should follow");
+
+            // The markup property is asserted LAST, deliberately. Asserted first — as this test
+            // originally did — a sabotage that removes the attribute trips here and reports
+            // "expected Local, got Continue", which says what changed but not what it COSTS. Run
+            // last, the same sabotage reports the behavioural failure instead: Tab landed on the
+            // wrong control. That is the message a future sabotage-runner needs, and it is the one
+            // that would also fire if the attribute survived but stopped working.
+            Assert.Equal(KeyboardNavigationMode.Local, KeyboardNavigation.GetTabNavigation(row));
         }
         finally { window.Close(); }
     }

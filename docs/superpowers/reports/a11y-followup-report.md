@@ -1735,6 +1735,14 @@ it. Measured both ways:
 Unscoped, a field the user sees ABOVE the row is tabbed AFTER it. `ScopedPins_KeepAFieldAddedAboveTheRow_AheadOfIt`
 is RED without the attribute and green with it, which is the only honest basis for keeping it.
 
+**Assert ordering, for whoever runs that sabotage next.** The test originally asserted the markup
+property (`TabNavigation == Local`) FIRST, so removing the attribute tripped on that line and
+reported "expected Local, got Continue" — true, but it names what changed rather than what it costs,
+and a sabotage-runner reading only that could conclude the test merely restates the markup. The
+property assert now runs LAST, after the behavioural walk, so the same sabotage reports the failure
+that matters: Tab landed on the wrong control. It is also the ordering that still fails correctly in
+the case where the attribute survives but stops working.
+
 ## H4. A third defect, found by reading the walk
 
 Step 3's output row read `Browse for output path -> Save SRR to` — the button before its own field.
@@ -1751,36 +1759,66 @@ fix has nothing to apply to there. Half (b) fixes all five at once, since they s
 ## H6. A LARGER defect this round measured and did NOT fix
 
 Walking every picker row in the app turned up something well outside this commit's scope, so it is
-reported with its denominator rather than half-fixed:
+reported with its denominator rather than half-fixed.
+
+**Population = the thirteen surfaces enumerated by `BrowseButtonCensusTests.CollectBrowseButtons`.**
+That list is now the canonical definition of "every surface this app has", and using it is the
+correction described in §H6a — an earlier version of this table defined the population as "the files
+this round happened to open" and was wrong by six rows.
 
 ```
-CreatorView            rows=2  correct=2  BACKWARDS=0
-ReconstructorView      rows=4  correct=0  BACKWARDS=4
-SampleRestorerView     rows=3  correct=0  BACKWARDS=3
-SRSCreatorView         rows=3  correct=0  BACKWARDS=3
-SRSReconstructorView   rows=3  correct=0  BACKWARDS=3
-CreateSRRWizardBody    rows=2  correct=2  BACKWARDS=0   (this commit)
-CreateSRSWizardBody    rows=3  correct=0  BACKWARDS=3
-EditSRRWizardBody      rows=2  correct=0  BACKWARDS=2
-RestoreWizardBody      rows=5  correct=0  BACKWARDS=5
-ReconstructWizardBody  rows=4  correct=0  BACKWARDS=4
-                      ------------------------------
-                      rows=31 correct=4  BACKWARDS=27
+CreatorView            rows= 2  correct=2  BACKWARDS=0
+ReconstructorView      rows= 4  correct=0  BACKWARDS=4
+SampleRestorerView     rows= 3  correct=0  BACKWARDS=3
+SRSCreatorView         rows= 3  correct=0  BACKWARDS=3
+SRSReconstructorView   rows= 3  correct=0  BACKWARDS=3
+InspectorView          rows= 1  correct=0  BACKWARDS=1
+FileCompareView        rows= 2  correct=0  BACKWARDS=2
+SettingsWindow         rows= 3  correct=0  BACKWARDS=3
+CreateSRRWizardBody    rows= 2  correct=2  BACKWARDS=0   (this commit)
+CreateSRSWizardBody    rows= 3  correct=0  BACKWARDS=3
+ReconstructWizardBody  rows= 4  correct=0  BACKWARDS=4
+EditSRRWizardBody      rows= 2  correct=0  BACKWARDS=2
+RestoreWizardBody      rows= 5  correct=0  BACKWARDS=5
+                      -------------------------------
+                      rows=37  correct=4  BACKWARDS=33
 ```
 
-**27 of 31 picker rows in the app tab backwards** — the Browse button before its own path field —
+**33 of 37 picker rows in the app tab backwards** — the Browse button before its own path field —
 because every one is a right-docked `DockPanel` whose button is therefore declared first, and only
 the Creator's two rows and this commit's two carry the correcting pins. The existing tab-order
 fixtures record it plainly once you know to look: `Button "Browse for SRR file"` immediately
 precedes `TextBox "SRR file path"`.
 
-Not fixed here. It is 27 rows across nine files, it moves every tab-order fixture in five suites,
+Not fixed here. It is 33 rows across twelve files, it moves every tab-order fixture in five suites,
 and it is a different defect from the one this commit was asked to close. It deserves its own gated
 round, and it is now measured rather than suspected.
 
-(The count was itself re-measured after a first attempt under-reported it as 18: the dedup key
-collapsed same-shaped rows in the wizard bodies, whose TextBoxes carry no x:Name. Reference-based
-dedup gives 31, which matches a hand count of the markup.)
+## H6a. This table was wrong twice, by two different mechanisms
+
+Recorded because the second mechanism is the one that keeps recurring.
+
+**First**, a dedup key built from row SHAPE collapsed the wizard bodies' identically-shaped rows
+(their TextBoxes carry no x:Name), reporting 18. Re-measuring with reference-based dedup gave the
+right per-file counts. That one I caught myself, because the number disagreed with the markup.
+
+**Second — and this is the third occurrence of the same mechanism in this workstream — the
+POPULATION was wrong.** The census walked ten surfaces: the five Advanced views and the five wizard
+bodies. It silently omitted `InspectorView`, `FileCompareView` and `SettingsWindow`, whose six rows
+are all backwards. Those are the SAME three files Package B's Browse-button sweep missed (§E6/§F1),
+for the same reason both times: the population was taken to be the files the round happened to have
+open, rather than an enumerated list of what the app contains.
+
+An earlier version of this section then said the corrected count "matches a hand count of the
+markup". It did not. The hand count covered the same ten files as the probe, so the two agreed
+because they shared the omission — a cross-check between two derivations of the same mistake, which
+is worth less than no cross-check at all, because it reads like corroboration.
+
+**The durable fix already exists and should have been used here.**
+`BrowseButtonCensusTests.ExpectedBrowseButtonsPerSurface` and its `CollectBrowseButtons` list were
+written one round earlier for exactly this: to be the one place the app's surface population is
+enumerated. Any future app-wide count — Browse buttons, picker rows, live regions, anything — should
+start from that list rather than from a fresh reading of whichever files are in hand.
 
 ## H7. Tests
 
@@ -1817,8 +1855,9 @@ RED-verified per half: removing `Local` fails 1 test; declaring the footer first
 2. **`Local` is a no-op on today's markup** (§H3). It is kept because the test demonstrates what it
    protects, but anyone auditing for dead attributes will find it and should read that test before
    removing it.
-3. **27 backwards rows remain** (§H6). This commit fixed 2 and left 27, which is a worse ratio than
-   it sounds only because nobody had counted before.
+3. **33 backwards rows remain** (§H6). This commit fixed 2 and left 33, which is a worse ratio than
+   it sounds only because nobody had counted before — and the figure was itself 27 until the
+   population was corrected (§H6a).
 4. **No real screen-reader or manual keyboard session.** All walks are Avalonia's own focus
    traversal, which is what a Tab key drives, but it is not a person pressing Tab.
 
