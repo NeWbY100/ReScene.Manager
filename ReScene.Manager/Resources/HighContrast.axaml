@@ -108,12 +108,23 @@
   <!-- ── Compare-tab overlays ──
        The drop target loses its TINT and keeps its BORDER, which is this file's
        standing idiom: once every surface is black, structure is carried by the
-       border rather than the fill. It also has to be, because the default
-       theme's #400078D4 is a 25%-alpha blue that composites to roughly #001E35
-       over a black pane — a fill that is present in the markup and invisible on
-       screen. An opaque black fill with a white border says the same thing
-       honestly, and the label on top goes from 3.86:1 over the composited tint
-       to 21:1 on black.
+       border rather than the fill.
+
+       The argument is about the BORDER, not the label — an earlier version of
+       this comment said otherwise and cited a ratio belonging to no pair in the
+       palette. The border is #800078D4, a 50%-alpha blue, and composited over
+       the panes it can sit on it lands at #0F4B79 / #124F7D / #165382, which is
+       1.83:1 / 1.78:1 / 1.70:1 against those same panes (WindowBackground,
+       PanelBackground, SurfaceBackground). A 2px outline under 2:1 from the
+       surface it is drawn on is the invisibility worth fixing, and a white
+       border on black takes it to 21:1.
+
+       The LABEL was never in trouble: white on the composited fill measures
+       12.74 / 11.82 / 10.79:1 over those same three panes. It goes to 21:1 on
+       black, which is an improvement rather than a rescue. Note that the
+       composed-pairs audit reports this pair as 4.53:1, because it reads
+       #400078D4 as its bare RGB without compositing — conservative, and the
+       reason its figure and this one differ.
 
        The scrim deliberately keeps its default value. A scrim's job is to dim
        what is behind it; under high contrast the surface behind it is already

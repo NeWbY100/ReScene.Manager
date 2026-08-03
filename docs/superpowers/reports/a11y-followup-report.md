@@ -3208,11 +3208,18 @@ would choose, and a scrim's job is to dim what is behind it, so on an all-black 
 nothing left to dim. The tokens exist to put those values inside the census, not to change them.
 
 The drop target is the one that genuinely changes under high contrast, and the reason is the
-compositing lesson: `#800078D4` is a 50%-alpha blue that composites to roughly `#003C6A` over a black
-pane — a border that is present in the markup and nearly invisible on screen. Under HC it loses the
-tint and keeps a white border, which is this dictionary's standing idiom (once every surface is
-black, structure is carried by the border), and the label on top goes from **3.86:1** over the
-composited tint to **21:1** on black.
+compositing lesson — carried by the BORDER, not the label (see §V7, which retracts an earlier version
+of this paragraph). `DropTargetBorder` is `#800078D4`, a 50%-alpha blue; composited over the three
+panes it can sit on it lands at `#0F4B79`, `#124F7D` and `#165382`, which is **1.83:1**, **1.78:1**
+and **1.70:1** against `WindowBackground`, `PanelBackground` and `SurfaceBackground` respectively. A
+2px outline under 2:1 against the surface it is drawn on is a drop target that is present in the
+markup and nearly invisible on screen. Under HC it loses the tint and keeps a white border — this
+dictionary's standing idiom, that once every surface is black structure is carried by the border —
+taking it to **21:1**.
+
+The label was never in trouble, which is worth saying because the retracted version claimed it was:
+`OverlayForeground` white on the composited fill measures **12.74:1**, **11.82:1** and **10.79:1**
+over those same three panes, and goes to 21:1 on black. That is an improvement, not a rescue.
 
 **An empty census needs a different kind of guard,** because "found nothing" and "looked at nothing"
 are indistinguishable in the result and only one is good news. The scan now asserts it actually READ
@@ -3298,3 +3305,49 @@ The list from §U6 stands, minus `FileCompareView`, which this round closed:
   checkbox glyph is measured and passes; the rest of Fluent's palette is not.
 - **A live OS-level smoke** — and it should now include a field-status glyph in view, since §U3 makes
   that the specific thing a real toggle would expose.
+
+## V7. Retraction: a ratio I never computed
+
+§V1 and `HighContrast.axaml`'s comment both claimed the drop-zone label "goes from **3.86:1** over the
+composited tint to 21:1 on black". **3.86:1 is not a measurement of anything.** Review could not
+reconcile it with any constructible pair, and re-deriving it confirms that: back-solving for a
+backdrop that puts white text at 3.86:1 gives a flat grey near `#828282` (review's own back-solve
+said `#7E7E7E`; the difference is search precision, the conclusion identical), and no such colour
+exists anywhere in this palette.
+
+**Where it came from.** I computed it mentally while reasoning about what the composed-pairs audit
+would report for `OverlayForeground` on `DropTargetBackground` — the audit reads `#400078D4` as its
+bare RGB `#0078D4` without compositing — and never put it through the calculator I had already
+written and used for every other figure in this round. It then propagated into the report, into the
+dictionary comment, and into `924e2c1`'s commit message, which is immutable and now carries a wrong
+number; this section is that retraction.
+
+**The correct figures, each with its pair identity and compositing chain**, all recomputed:
+
+| Quantity | Pair and chain | Ratio |
+|---|---|---|
+| What the audit reports | white on `#400078D4` read as bare `#0078D4`, no compositing | **4.53:1** |
+| What the label really renders at | white on `#400078D4` over `WindowBackground` / `PanelBackground` / `SurfaceBackground` → `#16354C` / `#1C3A52` / `#224059` | **12.74 / 11.82 / 10.79:1** |
+| The border's visibility | `#800078D4` over those panes → `#0F4B79` / `#124F7D` / `#165382`, each against its own pane | **1.83 / 1.78 / 1.70:1** |
+| Both under high contrast | white on opaque black | **21:1** |
+
+So the number was wrong AND attached to the wrong claim. 4.53:1 is the audit's non-composited reading
+of the label pair, not anything "over the composited tint"; the truly composited label sits at
+10.79–12.74:1 and was never the problem. The invisibility is the border at 1.70–1.83:1, which review
+correctly observed is the stronger argument — a 2px outline under 2:1 from its own backdrop is a drop
+target you cannot see, and it justifies the HC change on its own without needing a claim about the
+label at all.
+
+**The lesson, and it is not a new one.** This round twice caught numbers that were asserted rather
+than measured: the "40 .axaml files" that was 30, caught before commit because I checked, and this
+one, which shipped because I did not. The difference between them was not care or knowledge — it was
+whether the calculator got run. §N1's rule was "every count ships as number + pattern + scope"; the
+addendum this earns is that a ratio's *pair identity and compositing chain* are part of its pattern.
+`3.86:1` alone is unfalsifiable. `white on #400078D4 composited over PanelBackground` can be checked
+by anyone in thirty seconds, which is exactly how review found this.
+
+Also worth recording: the composed-pairs audit's non-compositing behaviour is CONSERVATIVE for this
+pair — it reports 4.53:1 where the real rendering is 11.82:1 — so the audit understating a pair is
+the safe direction. That does not hold in general, and §V4 already discloses the limit; it is noted
+here only because the two figures differ by more than a factor of two and someone comparing them
+later deserves to know why.
