@@ -2712,3 +2712,118 @@ Counts, each as number + pattern + scope:
 Gate item **(c)**, the app-wide high-contrast theme and text-contrast audit, is now the only open item
 from the A–F gate — with the standing exception of **(e)**, a real screen-reader session, which the
 user set aside and which no amount of structural work replaces.
+
+## Q1. High contrast: what the platform actually gives
+
+The brief's direction was to follow the OS and invent no palette, using the OS's own high-contrast
+colours "where Avalonia surfaces them". Verified against the shipped assemblies first, per the
+`DescribedBy` lesson, and the answer is that it does not surface them at all:
+
+```
+Application.Current.PlatformSettings -> Avalonia.Platform.DefaultPlatformSettings
+GetColorValues() -> PlatformColorValues
+  prop: PlatformThemeVariant     ThemeVariant
+  prop: ColorContrastPreference  ContrastPreference
+  prop: Color                    AccentColor1, AccentColor2, AccentColor3
+ColorContrastPreference.NoPreference = 0
+ColorContrastPreference.High         = 1
+ColorValuesChanged: EventHandler<PlatformColorValues>
+```
+
+A preference and an accent. No `ButtonFace`, no `WindowText`, no `Hilight` — nothing to copy. So the
+dictionary is DERIVED, and the derivation is stated in the file itself: black surfaces and white text
+are the mechanical maximum at 21:1 rather than a taste, and the only hues present are the minimum
+needed to keep error, warning and success apart by hue as well as luminance. Every value is asserted
+by a test; none is a designer's preference.
+
+The one real loss: `AccentColor1` IS available at runtime, but a static dictionary cannot hold a
+changing value, and threading it through would reintroduce a colour whose contrast the dictionary
+cannot verify. Recorded as a limit rather than quietly used.
+
+## Q2. The switch
+
+`HighContrastThemeService` merges `HighContrast.axaml` over the tokens while the OS reports `High` and
+removes it otherwise. It subscribes to `ColorValuesChanged`, so a contrast change while the app runs
+applies with no restart — **if** the platform backend raises it. Whether Windows, X11 and macOS all do
+is not something a headless test can establish and is not claimed; it is the runtime item in Q5.
+
+`Apply` is idempotent, because the platform may raise `ColorValuesChanged` for an accent or theme
+change while the contrast preference has not moved, and a naive handler would stack duplicate
+dictionaries. Asserted.
+
+There is deliberately no in-app toggle. A user who needs high contrast has told their operating system
+once, and should not have to tell each application again.
+
+## Q3. The census, and a classifier that was wrong
+
+All **46** token brushes are read from `Tokens.axaml` at test time — population from source, the shape
+this workstream converged on — and every one must have a counterpart or a written exemption. Today all
+46 are overridden and the exemption list is empty; it exists so an exemption must be argued rather than
+achieved by deletion. Strays are caught in the other direction too: an override targeting a brush the
+token file no longer defines fails, because it overrides nothing.
+
+**A classifier bug worth keeping.** Contrast is checked against the surfaces a token actually sits on,
+which needs to know which tokens ARE surfaces. The first version asked whether the key contained
+"Background" — and `HexHeaderBrush`, a header fill, failed against itself at 1.00:1, because its name
+says nothing about what it is. Surfaces are now enumerated explicitly. A name is not a classification,
+which is the same lesson as §N2's mis-attributed bindings in a different costume.
+
+Break-verified: removing one override reports `HyperlinkForeground` by name; dimming
+`ForegroundSecondary` to `#FF3A3A3A` reports `1.85:1, needs 4.5:1`.
+
+## Q4. The text-contrast audit — MEASURED, NOT YET CLASSIFIED
+
+This is the gate's companion item and it is **not complete**. What exists is the measurement; what is
+missing is the part that makes it trustworthy.
+
+Computing WCAG ratios across every foreground-ish token against every surface token in the DEFAULT
+theme — 22 × 12 — yields **82 pairs below 4.5:1**. That number is real and it is also nearly
+meaningless, because the cross-product is a SUPERSET of what the app composes: `AccentPressed` is a
+button's pressed fill and never sits as text on `PropertyHighlightBrush`, yet the pair is in there at
+1.37:1. Reporting "82 contrast failures" would be precisely the overclaiming this workstream has spent
+several rounds correcting — a population defined by what was easy to enumerate rather than by what
+exists.
+
+The pairs that look genuinely composed, and are the place to start:
+
+| Pair | Ratio | Note |
+|---|---|---|
+| `AccentError` on `PanelBackground` | 4.26 | error text on a panel — plausibly real, just under AA |
+| `AccentHover` on `PanelBackground` | 4.25 | same shape |
+| `ForegroundSecondary` on `ActiveBackground` | 4.20 | caption text on a selected row |
+| `AccentSuccess` on `HoverBackground` | 4.42 | status glyph on a hovered row |
+| `AccentPrimary` on `WindowBackground` | 3.68 | passes 3:1 as a UI component; would fail as text |
+| `ForegroundDisabled` (all surfaces) | 1.42–2.42 | exempt: WCAG 2.2 SC 1.4.3, inactive components |
+
+Finishing this honestly needs the composed pairs established from the markup — which foreground is
+actually painted on which surface — rather than from a cross-product, and then a literal classification
+table with a cited reason per intentional exemption. That is the same population-first work the picker
+and `IsVisible` censuses each needed, and it is a round of its own rather than a coda to this one.
+
+**Nothing was changed in the default theme on the strength of the cross-product.** Fixing a real
+failure is in scope; fixing a pair the app never composes would be churn justified by a bad
+denominator.
+
+## Q5. Not attempted, enumerated
+
+- **The text-contrast audit proper** (§Q4): composed pairs from markup, classification table, and any
+  real default-theme failures fixed.
+- **Extending the rendered-pixel contrast tests to run under the shipped dictionary.** The existing
+  46-key fixture in `CreatorCompactTests` simulates HC with top-level resource overrides; now that a
+  real dictionary exists, those tests should drive `HighContrastThemeService` instead, so what is
+  verified is what ships. The splitter focus visual, checkbox glyphs, field-status glyphs and
+  selection/hover states are the specific signals to re-verify.
+- **A live OS-level smoke.** No test can toggle the real Windows contrast setting; this needs the app
+  running while it is switched, which is the controller/user side.
+
+## Q6. Evidence
+
+Forced `-t:Rebuild`: 0 Warning(s), 0 Error(s). **Manager 507/507** (503 + 4), **App.Core 728/728**.
+
+Counts as number + pattern + scope: **46** token brushes and **46** high-contrast overrides —
+`grep -c '<SolidColorBrush x:Key' ReScene.Manager/Resources/{Tokens,HighContrast}.axaml`, and both are
+guarded by `HighContrastTokenTests.ExpectedTokenBrushes` rather than by the grep. **82** sub-AA pairs
+in the default-theme cross-product, 22 foregrounds × 12 surfaces — a superset, per §Q4.
+
+Literal colours outside the token system, so outside the swap: **3**, all in `InspectorView.axaml`'s
+custom-packer warning bar. Enumerated in the test rather than left implicit.
