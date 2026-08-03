@@ -2298,9 +2298,11 @@ Re-swept from the general population — all **83** `IsVisible="{Binding …}"` 
 (the `Views/` boundary excluded exactly one element elsewhere, `Controls/FieldStatusLine.axaml`, and
 its exclusion is defensible only because it is not silent: it carries a `LiveSetting="Polite"` message
 line of its own. §N re-draws the boundary at the whole app rather than relying on that)
-against the live-line population (**14** `LiveSetting` ATTRIBUTES across **10** files — see §N1: the
-"17 across 8" first written here counted prose inside XML comments, and the gate's correction to "17
-across 9" inherited that same bad grep):
+against the live-line population — **14 occurrences across 10 files**, measured as
+`grep -rE 'AutomationProperties\.LiveSetting="' --include=*.axaml ReScene.Manager/`, comment prose
+EXCLUDED (that is what pinning the pattern to the attribute achieves). The figure first written here,
+"17 across 8", was a different pattern over a different scope and is reconciled in §N1 rather than
+simply overwritten:
 
 | Element | Live counterpart |
 |---|---|
@@ -2354,19 +2356,47 @@ The three remaining silent outcomes are fixed, but the durable result of this ro
 classification behind them. Every data-bound visibility in the application is now judged, once, by
 hand, and the judgment is held by a test rather than by a report nobody re-reads.
 
-**Measured population: 84** `IsVisible="{Binding …}"` occurrences, 55 distinct (file, expression)
-pairs. Not 83: the `Views/`-only boundary §M3 used excluded exactly one element,
+**Measured population: 84** occurrences, 55 distinct (file, expression) pairs —
+`grep -rE 'IsVisible="\{Binding' --include=*.axaml ReScene.Manager/`, whole app. Not 83: the
+`Views/`-only boundary §M3 used excluded exactly one element,
 `Controls/FieldStatusLine.axaml`. That exclusion happens to be defensible — the control is not silent,
 carrying a `LiveSetting="Polite"` message line of its own — but "happens to be defensible" is not a
 boundary. The census now reads the whole application.
 
-**The live-line count was wrong three times in a row, the same way.** §M3 said 17 across 8 files. The
-gate corrected it to 17 across 9. Both are wrong: the grep was `LiveSetting`, which matches the word
-inside XML comments, and three of this codebase's comments discuss the attribute in prose. Matching
-the ATTRIBUTE gives **14 across 10 files** before this round, **17 across 12** after it. The gate's
-correction inherited my bad pattern rather than re-measuring from source — which is how the population
-failures in this workstream have always propagated, and is worth recording as a fourth instance of one
-lesson: **a correction that reuses the original method reproduces the original error.**
+**The live-line count came out different for every person who measured it — and almost every number
+was RIGHT.** Four counts were reported: "17 across 8" (§M3), "17 across 9" (the gate's correction),
+"13 with the exact attribute pattern", and "14 with the literal `LiveSetting="Polite"`". Measured
+against the pre-round tree (commit `0e29ffe`), every one of them reproduces exactly, from its own
+pattern over its own scope:
+
+| Reported | Pattern | Scope | Measured |
+|---|---|---|---|
+| 17 across **8** (§M3) | `LiveSetting` | `Views/` | 17 occurrences across **9** files |
+| 17 across 9 (gate) | `LiveSetting` | `Views/` | **17 across 9 — correct** |
+| 13 (third counter) | `AutomationProperties.LiveSetting` | `Views/` | **13 — correct** |
+| 14 (third counter) | `LiveSetting="Polite"` | `Views/` | **14 — correct** (13 attributes + 1 prose) |
+| 14 across 10 (§N1) | `AutomationProperties.LiveSetting="` | whole app | **14 across 10 — correct** |
+
+So the story is not "three wrong counts". It is one genuinely wrong number — my file count of 8, which
+should have been 9 — surrounded by four correct ones that could not be compared because **none of them
+stated its pattern or its scope**. The spread has three separate causes, each worth a sentence:
+`Views/` versus the whole application differs by one file (`Controls/FieldStatusLine.axaml`); the bare
+word `LiveSetting` matches prose inside XML comments, of which this codebase has several; and
+`LiveSetting="Polite"` matches one such comment — the one I wrote in `EditSRRWizardBody.axaml` last
+round, quoting the attribute while explaining it.
+
+I should also retract, in the same breath, the sentence this section previously carried: that the
+gate's correction "inherited my bad grep" and was wrong. It was not wrong. It was right for a pattern
+I had not disclosed, which is precisely the failure being described, and I reproduced that failure by
+asserting a correction without measuring what the other count had actually counted.
+
+**House rule, adopted from here on: every count in these reports ships as number + exact pattern +
+scope, or it does not ship.** A bare number cannot be reproduced, cannot be compared with anyone
+else's, and — as this episode shows — cannot even be shown to be wrong.
+
+For the record, both states under one fixed method
+(`grep -rE 'AutomationProperties\.LiveSetting="' --include=*.axaml ReScene.Manager/`, comment prose
+excluded by construction): **14 across 10 files** before this round, **17 across 12 files** after it.
 
 ## N2. What the hand-judgment found
 
@@ -2446,9 +2476,15 @@ Break-verification, each reverted byte-identically:
 Forced `-t:Rebuild` on all four projects: 0 Warning(s), 0 Error(s). **Manager 498/498** (494 + 4),
 **App.Core 728/728** (724 + 4).
 
-Final sweep, with denominators: **84** data-bound visibilities app-wide, all 55 distinct pairs
-classified; **17** `LiveSetting` attributes across **12** files, up from 14 across 10; **zero**
-outcome-classified elements without an announcement counterpart.
+Final sweep, with denominators — each stated as number + pattern + scope, per the rule §N1 adopts:
+
+- **84** data-bound visibilities, 55 distinct (file, expression) pairs, all classified.
+  `grep -rE 'IsVisible="\{Binding' --include=*.axaml ReScene.Manager/` — whole app, not just `Views/`.
+- **17** live-line attributes across **12** files, up from 14 across 10.
+  `grep -rE 'AutomationProperties\.LiveSetting="' --include=*.axaml ReScene.Manager/` — whole app;
+  comment prose excluded by pinning the pattern to the attribute rather than the bare word.
+- **Zero** outcome-classified elements without an announcement counterpart — asserted by
+  `IsVisibleCensusTests`, not by a grep, so it cannot drift.
 
 ## N6. Still open
 
