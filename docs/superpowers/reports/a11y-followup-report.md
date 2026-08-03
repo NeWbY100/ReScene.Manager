@@ -3045,3 +3045,143 @@ Counts as number + pattern + scope: **60** app-owned brushes across both merged 
 (`grep -c '<SolidColorBrush x:Key'` over `Tokens.axaml` + `Density.axaml`), guarded by
 `HighContrastTokenTests.ExpectedTokenBrushes`. **14** literal colour attributes across **3** files,
 pattern above. **10** same-hex token groups. **24** composed pairs, **0** failures.
+
+## U1. The rendered-pixel tests found two ways the dictionary erased its own text
+
+The high-contrast round's remaining item was to stop simulating the swap and drive the rendered-pixel
+instruments through the real one. `HighContrastShippedDictionaryTests` does that: it applies
+`HighContrast.axaml` by constructing `HighContrastThemeService` and calling `Apply`, which is what
+`App.OnFrameworkInitializationCompleted` does, so a change to the merge mechanism breaks the tests
+rather than leaving them measuring a private copy of it. The 46-key fixture in `CreatorCompactTests`
+stays exactly where it is, as the historical simulation it always was.
+
+Eleven tests, and **three were RED on the first run** — the two below plus §U3.
+
+**A selected log row rendered its text at 1.37:1.** `HighContrast.axaml` turns
+`SelectedItemBackground` white on purpose, so selection reads "as a change of shape, not a change of
+shade"; the log list paints its rows `LogTerminalForeground`, which the same dictionary turns
+`#FF00FF00`. Green on white. Both decisions are defensible alone and neither was checked against the
+other.
+
+**A pressed recent-file row rendered its caption at 1.00:1** — `#FFFFFFFF` on `#FFFFFFFF`, text and
+fill the identical colour. `Button.recentItem:pressed` fills its content presenter with
+`ActiveBackground` (white under HC) and the caption inside it is `ForegroundSecondary` (also white).
+
+Neither is reachable by the token census, and the reason is structural rather than an oversight:
+`HighContrastTokenTests` resolves every foreground against `WindowBackground` and `continue`s past
+every surface. Its name says "the surfaces it sits on", plural; it checks exactly one. A surface the
+dictionary deliberately INVERTS is precisely the case that construction cannot see. Both compositions
+also live in `Styles.axaml` as `:selected` and `:pressed` setters, which is the style-conditional
+reach limit `TextContrastAuditTests` discloses — so the two instruments' blind spots overlapped
+exactly here.
+
+## U2. The fix is derived, not chosen — and the band is eight greys wide
+
+Completing the inversion was not available. One of the two foregrounds is set in `HomeView`'s markup,
+and no resource dictionary can override a local value on a `TextBlock`. So the fill moves instead,
+and it is derived from the three constraints it has to satisfy simultaneously:
+
+- at least **3:1** against the black rest state (SC 1.4.11 — a selection has to be visible *as* a
+  selection),
+- at least **4.5:1** under white text,
+- at least **4.5:1** under the log terminal's `#FF00FF00` green.
+
+Exactly **8** of the 256 greys satisfy all three — `#5A5A5A` through `#616161`. `#5E5E5E` is the one
+with the largest minimum margin: **3.24:1** against black, **6.48:1** under white, **4.73:1** under
+green. `ActiveBackground`, `SelectedItemBackground` and `PropertyHighlightBrush` all take it.
+
+`PropertyHighlightBrush` has **no consumer** (measured: no reference in any `.axaml` or `.cs` outside
+the token files), so changing it closes a trap rather than fixing a bug — a future selection surface
+inheriting white would have inherited 1.00:1 with it.
+
+**Disclosed, because it is a real cost:** selection now sits only **1.62:1** from hover
+(`#FF3F3F3F`). They are told apart by persistence rather than shade — hover follows the pointer,
+selection stays — and widening the gap means moving `HoverBackground`, which has consumers this
+change did not measure.
+
+## U3. A defect characterized rather than fixed, and why
+
+The third RED is real and is **not fixed**: a field-status glyph does not follow a contrast change
+that happens while it is on screen. `FieldStateToBrushConverter` resolves a brush INSTANCE inside
+`Convert` and returns it; a converter re-runs when its binding re-evaluates, and merging a dictionary
+does not change `Status.State`. Measured: the glyph still painted `#FF1ABC9C` after the swap, where
+the dictionary says `#FF00FF00`.
+
+Scope, measured rather than guessed: **3** converters share the shape —
+`FieldStateToBrushConverter`, `BoolToBrushConverter`, `IndentDiffBrushConverter`
+(`grep -rn 'TryGetResource' --include=*.cs ReScene.Manager/Converters/`). It does **not** affect the
+common path: the app reads the contrast preference before any window exists, so a session that
+*starts* in high contrast builds every converter-driven brush from the high-contrast palette and is
+correct. It bites only on a live toggle — which is also the one path no headless test can prove the
+platform even raises.
+
+The repair is to drive these brushes from state-keyed style setters instead of a converter, which is
+a change to a control embedded **32** times plus its existing colour assertions in two test files.
+Doing that at the end of a round is how the mistakes in §J2 and §K2 happened, so it is left as the
+top open item. The test asserts the CURRENT behaviour under the name
+`FieldStatusGlyph_DoesNotYetFollowAContrastChangeThatHappensWhileItIsOnScreen`, and it fails the
+moment someone fixes it, with a message saying to invert it. It also pins the cost: the stale colour
+must still clear 3:1 on the now-black panel, so if staleness ever crosses from cosmetic into
+unreadable the characterization escalates itself.
+
+## U4. The census that could not notice its own fix
+
+Pointing `ReconstructorView` and `ReconstructWizardBody` at the warning-bar tokens — the two copies
+§S4 scope-noted — should have failed `HighContrastTokenTests` and did not. Its literal-colour guard
+compared **its own table to a constant**, so it could only catch someone editing the table, never
+someone editing the markup the table describes. Its comment claimed tokenizing a file "fails here
+until this table is updated"; that was not true of the code beneath it. The two warning-bar rows
+survived their own fix and sat there describing a tree that no longer existed.
+
+It now counts from source, per file, and fails three ways: a file with literals that is not recorded,
+a recorded file with no literals left, and a count that disagrees. Break-verified — reverting one
+`Foreground` to `#FFD080` reports `ReconstructorView.axaml has 1 literal colour attributes and is not
+recorded`, where the old guard stayed green.
+
+This is the same lesson as §N1 in a third costume: a number that is not measured against the thing it
+describes is not a guard, however carefully it is written down.
+
+## U5. Evidence
+
+Forced `-t:Rebuild` on the solution: 0 Warning(s), 0 Error(s). **Manager 520/520** (509 + 11),
+**App.Core 728/728**.
+
+RED first, all three from the first run of the new file, before any fix:
+
+| Test | Measured |
+|---|---|
+| `SelectedLogRow_…KeepsItsTextReadable` | `1.37:1`, `#FF00FF00` on `#FFFFFFFF` |
+| `PressedRecentItem_…KeepsItsTextReadable` | `1.00:1`, `#FFFFFFFF` on `#FFFFFFFF` |
+| `FieldStatusGlyph_…FollowAContrastChange…` | glyph `#FF1ABC9C`, dictionary `#FF00FF00` |
+
+Break-verification, each reverted byte-identically and re-run green after:
+
+| Sabotage | Observed |
+|---|---|
+| `SelectedItemBackground` back to `#FFFFFFFF` (the shape that shipped at `4360b6d`) | `1.37:1 … needs 4.5:1` |
+| `ReconstructorView` foreground back to the literal `#FFD080` | `ReconstructorView.axaml has 1 literal colour attributes and is not recorded` |
+
+Counts as number + pattern + scope: **8** literal colour attributes across **1** file
+(`FileCompareView.axaml`), pattern
+`grep -rnoE '(^|[[:space:]])(Background|Foreground|BorderBrush|Fill|Stroke)="(#[0-9A-Fa-f]{3,8}|[A-Z][A-Za-z]+)"'`
+over `ReScene.Manager/{Views,Controls}`, excluding `Transparent` as a no-paint value — down from
+**14** across **3** now that all three warning-bar copies are tokenized, and now measured by the test
+rather than recited. An unanchored earlier form of that pattern reported **23** across **9** by
+matching `LastChildFill="False"`, which is why the anchor is part of the stated pattern. **8**
+admissible greys for the selection fill, of 256. **3** eager-resolving converters.
+
+WHAT THIS DOES NOT CATCH is stated in the test class: headless Skia rather than a real compositor;
+Fluent's own brushes, which the swap cannot reach — though the checkbox-glyph test PASSED, so that
+hole is measured rather than assumed at least for the box; contrast is not legibility; and states are
+driven one at a time, so a composition needing two at once is out of reach.
+
+## U6. Still open
+
+- **The converter staleness** (§U3) — the top item, with the repair described.
+- **`FileCompareView`'s 8 literals.** Not tokenized, and the honest reason is that it needs a
+  decision rather than a mechanical swap: under high contrast the 50%-alpha border composites to
+  near-black against a black pane, so the drop target dims. They are transient drag and busy
+  affordances, and choosing what they should become is design work this round did not do.
+- **The tab strip's selection idiom** (§T3), unchanged: still recorded as open rather than decided.
+- **A live OS-level smoke.** No test can toggle the real Windows setting, and §U3 makes this more
+  valuable than it was — the live path is exactly the one with a known defect in it.

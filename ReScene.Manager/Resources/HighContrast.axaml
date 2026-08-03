@@ -38,13 +38,39 @@
   <SolidColorBrush x:Key="SystemControlBackgroundListLowBrush" Color="#FF000000" />
   <SolidColorBrush x:Key="SystemControlBackgroundAltHighBrush" Color="#FF000000" />
 
-  <!-- ── Transient states: never colour-only. Hover and selection invert to a
-       light fill so they read as a change of shape, not a change of shade. ── -->
+  <!-- ── Transient states: never colour-only, and never brighter than the text
+       that lands on them.
+
+       These three were pure white until the rendered-pixel tests measured what
+       is actually drawn on them. Inverting the FILL without inverting the TEXT
+       erased both compositions the app has: a selected log row rendered
+       LogTerminalForeground green on white at 1.37:1, and a pressed recent-file
+       row rendered ForegroundSecondary white on white at 1.00:1 — invisible.
+       The inversion could not be completed from here, because one of those two
+       foregrounds is set in view markup (HomeView's caption) where no resource
+       dictionary can reach it.
+
+       So the fill is DERIVED from the three constraints it has to satisfy at
+       once, rather than chosen: at least 3:1 against the black rest state
+       (SC 1.4.11, the selection has to be visible AS a selection), and at least
+       4.5:1 under both foregrounds that land on it — white text and the log
+       terminal's #FF00FF00 green. Exactly eight greys satisfy all three,
+       #5A5A5A through #616161; #5E5E5E is the one with the largest minimum
+       margin, at 3.24:1 / 6.48:1 / 4.73:1. Guarded by
+       HighContrastShippedDictionaryTests.
+
+       DISCLOSED: this leaves selection only 1.62:1 from hover (#FF3F3F3F).
+       They are told apart by persistence rather than by shade — hover follows
+       the pointer, selection stays — and widening the gap would mean moving
+       HoverBackground, which has consumers this change did not measure. ── -->
   <SolidColorBrush x:Key="HoverBackground" Color="#FF3F3F3F" />
-  <SolidColorBrush x:Key="ActiveBackground" Color="#FFFFFFFF" />
-  <SolidColorBrush x:Key="SelectedItemBackground" Color="#FFFFFFFF" />
+  <SolidColorBrush x:Key="ActiveBackground" Color="#FF5E5E5E" />
+  <SolidColorBrush x:Key="SelectedItemBackground" Color="#FF5E5E5E" />
   <SolidColorBrush x:Key="SystemControlHighlightListLowBrush" Color="#FF3F3F3F" />
-  <SolidColorBrush x:Key="PropertyHighlightBrush" Color="#FFFFFFFF" />
+  <!-- No consumer today (measured: no reference in any .axaml or .cs outside the
+       token files), so this is a trap being closed rather than a bug being fixed
+       — a future selection surface inheriting white would inherit 1.00:1 with it. -->
+  <SolidColorBrush x:Key="PropertyHighlightBrush" Color="#FF5E5E5E" />
 
   <!-- ── Text ── -->
   <SolidColorBrush x:Key="ForegroundPrimary" Color="#FFFFFFFF" />
