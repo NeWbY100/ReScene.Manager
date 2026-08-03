@@ -131,13 +131,32 @@
       <!-- Single run panel (rebuild is started by the "Rebuild" button on the previous step) -->
       <DockPanel IsVisible="{Binding IsSingle}">
         <StackPanel DockPanel.Dock="Top">
+          <!-- The banner keeps its IsVisible toggle and stays announcement-free: it is a styled
+               Border (coloured background, corner radius) that would show as an empty box if left
+               in the tree, and an element not realized when its text arrives announces nothing
+               anyway. The announcement rides the always-in-tree ResultStatus line below —
+               SRSReconstructorView's exact arrangement for this same ViewModel property, which is
+               the point: the identical rebuild must not report aloud on the Advanced tab and
+               silently here. -->
           <Border IsVisible="{Binding SingleRebuilder.ShowResult}"
                   Background="{Binding SingleRebuilder.ResultSuccess, Converter={StaticResource ResultSuccessToBrush}}"
                   Padding="8,6" Margin="0,0,0,12" CornerRadius="4">
             <TextBlock Text="{Binding SingleRebuilder.ResultSummary}"
                        FontWeight="SemiBold" TextWrapping="Wrap" />
           </Border>
-          <TextBlock Text="Details" FontWeight="SemiBold" Margin="0,0,0,2" />
+          <!-- Shares the Details caption's own row, so the live line costs no layout: the row is
+               measured by the caption, and the status text is trimmed to a single line rather than
+               wrapped. RebuildAsync already clears ResultSummary first, so a repeat re-announces. -->
+          <DockPanel Margin="0,0,0,2">
+            <TextBlock DockPanel.Dock="Left" Text="Details" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <TextBlock x:Name="ResultStatus"
+                       Text="{Binding SingleRebuilder.ResultSummary}"
+                       AutomationProperties.LiveSetting="Polite"
+                       Foreground="{DynamicResource ForegroundSecondary}"
+                       FontSize="{DynamicResource FontSizeCaption}"
+                       TextTrimming="CharacterEllipsis"
+                       TextAlignment="Right" VerticalAlignment="Center" Margin="8,0,0,0" />
+          </DockPanel>
         </StackPanel>
         <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1"
                 Background="{DynamicResource SystemControlBackgroundAltHighBrush}" MinHeight="140">

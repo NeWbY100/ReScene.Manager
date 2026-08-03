@@ -2295,7 +2295,12 @@ workstream keeps recording: it enumerated what was already known rather than wha
 
 Re-swept from the general population — all **83** `IsVisible="{Binding …}"` elements under
 `ReScene.Manager/Views/`, narrowed to **6** whose bound property names an outcome — then checked each
-against the live-line population (17 `LiveSetting` occurrences across 8 files):
+(the `Views/` boundary excluded exactly one element elsewhere, `Controls/FieldStatusLine.axaml`, and
+its exclusion is defensible only because it is not silent: it carries a `LiveSetting="Polite"` message
+line of its own. §N re-draws the boundary at the whole app rather than relying on that)
+against the live-line population (**14** `LiveSetting` ATTRIBUTES across **10** files — see §N1: the
+"17 across 8" first written here counted prose inside XML comments, and the gate's correction to "17
+across 9" inherited that same bad grep):
 
 | Element | Live counterpart |
 |---|---|
@@ -2342,3 +2347,115 @@ Python heredoc, which ate the escapes — `\input\release.srr` became a carriage
 became a real newline inside a C# string literal. Reverted before building and rewritten with the
 editor. This is the same class of failure as §K2's XAML scripting incidents, now on C#: generated
 text with escapes in it does not survive a shell round-trip.
+
+## N1. The population, hand-judged — and a number that was wrong three times
+
+The three remaining silent outcomes are fixed, but the durable result of this round is the
+classification behind them. Every data-bound visibility in the application is now judged, once, by
+hand, and the judgment is held by a test rather than by a report nobody re-reads.
+
+**Measured population: 84** `IsVisible="{Binding …}"` occurrences, 55 distinct (file, expression)
+pairs. Not 83: the `Views/`-only boundary §M3 used excluded exactly one element,
+`Controls/FieldStatusLine.axaml`. That exclusion happens to be defensible — the control is not silent,
+carrying a `LiveSetting="Polite"` message line of its own — but "happens to be defensible" is not a
+boundary. The census now reads the whole application.
+
+**The live-line count was wrong three times in a row, the same way.** §M3 said 17 across 8 files. The
+gate corrected it to 17 across 9. Both are wrong: the grep was `LiveSetting`, which matches the word
+inside XML comments, and three of this codebase's comments discuss the attribute in prose. Matching
+the ATTRIBUTE gives **14 across 10 files** before this round, **17 across 12** after it. The gate's
+correction inherited my bad pattern rather than re-measuring from source — which is how the population
+failures in this workstream have always propagated, and is worth recording as a fourth instance of one
+lesson: **a correction that reuses the original method reproduces the original error.**
+
+## N2. What the hand-judgment found
+
+Building the table forced 55 individual decisions, and writing them down turned up mistakes prose
+review had not:
+
+- **My first draft mis-attributed five bindings to the wrong file** — `IsScanning` to SampleRestorer
+  when it is CreatorView's, `ShowISOSelection` to SRSReconstructor when it is SRSCreator's, and so on.
+  I had written the table from the aggregate expression list rather than from per-file measurement.
+  The test caught all five immediately, because it compares the table against the source rather than
+  against my memory of it. The table was rebuilt from a measured per-file dump.
+- **Two categories are judgments, not measurements**, and are labelled so: standing notes met in
+  reading order (`TextViewTruncated`, `ShowNoVersionsHint`), and action buttons that appear on success
+  (`LastRunSucceeded`, twice) whose outcome is reported by the run's own result text. Someone may
+  reasonably disagree with either; the reasons are recorded per entry so a future reader can argue
+  with one line instead of redoing all 55.
+- **One entry is announced by a different mechanism entirely** and needed its own classification:
+  `PathsNeedAttention` is a warning glyph in a TabItem header, announced through the tab's accessible
+  name (`PathsTabAccessibleName` → "Paths — needs attention"), not through a live region.
+
+## N3. The three fixes
+
+**RestoreWizardBody** (`SingleRebuilder.ShowResult`) — the sharpest of the three, because the
+asymmetry was the bug: the SAME rebuild, driven by the SAME ViewModel property, announced itself aloud
+on the Advanced tab and silently in the wizard. Its banner is a styled `Border` with a
+converter-driven background, so promoting it (the EditSRR move) was not available; it takes the
+separate-live-line shape instead, sharing the "Details" caption row at no layout cost. No VM change:
+`RebuildAsync` already clears `ResultSummary` first, with a comment explaining why.
+
+**InspectorView `HasWarning`** — the same shape as ReconstructorView's warning bar, which already had
+a live line. No VM change: `LoadFile` already clears `WarningMessage` before it can be set again.
+
+**InspectorView `IsVerifyResultVisible`** — assessed rather than pattern-matched, as instructed.
+Measured: nothing in the view or its code-behind moves focus into the panel when it appears (the only
+two `Focus()` calls are the hex search box and a tree item), so pressing Verify changed the screen and
+told a screen-reader user nothing at all. The panel's own text is the wrong thing to announce — it
+carries a line per issue, and a polite live region would read every one of them before the user could
+act. The announcement is therefore a one-line verdict from a new VM property, `VerifyAnnouncement`:
+"Integrity verify: no errors found." / "…errors detected, 3 issues." The detail stays in the panel's
+text box where it already was. This is the only one of the three needing a VM change, and it needed
+the clear-first too: verifying the same file twice produces a byte-identical verdict, and the unfixed
+path raised `[]` — nothing at all — on the second press.
+
+Both new Inspector lines share the File caption's row in a fixed `1*/1*` Grid rather than being
+separately docked, because two same-direction docked TextBlocks left DockPanel's arrange bookkeeping
+unpredictable under long text in both — the failure SRSReconstructorView's own comment records. The
+test puts long text in both at once and asserts each keeps non-zero width.
+
+## N4. The guard
+
+`IsVisibleCensusTests` reads the XAML SOURCE at test time rather than walking a hosted view. That is
+what lets it close the two holes its sibling censuses have to disclose: a brand-new view is included
+the moment it exists, and no element can hide behind an unusual shape, because nothing is being
+pattern-matched in a visual tree. Every binding must be either classified non-outcome with a reason,
+or recorded as announced — and a stale entry describing a binding that no longer exists fails too, so
+the table cannot drift into fiction.
+
+Its own reach is disclosed in the same house form. It reads XAML as text, so visibility bound in C#,
+set by a style Setter, or written in element syntax is invisible to it. And it checks that an outcome
+HAS an announcement counterpart, not that the counterpart FIRES — `FieldStatusLine` is a live line
+inside its own toggled container, which this census passes and which nobody has measured end to end.
+That is now the most interesting open question in this defect class, and it is stated in the test.
+
+## N5. Evidence
+
+RED first: the census named all three unfixed instances before any fix
+(`RestoreWizardBody.axaml (SingleRebuilder.ShowResult) claims the live region "ResultStatus"`, plus
+the two Inspector entries). The VM re-arm was red separately, measured as `[]` transitions.
+
+Break-verification, each reverted byte-identically:
+
+| Sabotage | Observed |
+|---|---|
+| `LiveSetting` dropped from all three new lines | the census named all three files again; both hosted tests failed `Expected: Polite / Actual: Off` |
+| `VerifyAnnouncement` clear-first removed | `Expected: ["", "Integrity verify: no errors found."] / Actual: []` |
+
+Forced `-t:Rebuild` on all four projects: 0 Warning(s), 0 Error(s). **Manager 498/498** (494 + 4),
+**App.Core 728/728** (724 + 4).
+
+Final sweep, with denominators: **84** data-bound visibilities app-wide, all 55 distinct pairs
+classified; **17** `LiveSetting` attributes across **12** files, up from 14 across 10; **zero**
+outcome-classified elements without an announcement counterpart.
+
+## N6. Still open
+
+- **(c) the high-contrast theme and text-contrast audit** — the original gate item, and now the only
+  one left from the A–F gate.
+- **Whether `FieldStatusLine`'s live line actually fires**, given that it sits inside its own
+  `IsVisible`-toggled Grid. It reaches all five task forms, so if it does not fire it is the
+  widest-reaching instance in the workstream. Not measured; recorded in the census test itself.
+- **A real screen-reader session.** Everything in this entire workstream is headless Avalonia walks,
+  rendered-pixel sampling and source census. No NVDA or Narrator has spoken one of these names aloud.

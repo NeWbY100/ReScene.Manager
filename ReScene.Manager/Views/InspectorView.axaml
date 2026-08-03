@@ -37,7 +37,36 @@
 
     <!-- File selection bar -->
     <StackPanel DockPanel.Dock="Top" Margin="0,0,0,4">
-      <TextBlock Text="File" FontWeight="SemiBold" Margin="0,0,0,2" />
+      <!-- The File caption shares its row with this view's two live regions, so neither costs any
+           layout: the row is measured by the caption, and both status texts are trimmed to one line
+           rather than wrapped. They sit in a fixed 1*/1* Grid rather than each being separately
+           docked, because two same-direction docked TextBlocks left DockPanel's arrange bookkeeping
+           unpredictable under long text in both — the failure SRSReconstructorView's own log-header
+           comment records, and its 1*/2* split is the precedent for this shape.
+           Both of the things they announce are IsVisible-toggled panels that cannot announce
+           themselves: the custom-packer warning bar below, and the Integrity Verify Result panel.
+           Neither ViewModel needed a re-arm added here — LoadFile already clears WarningMessage
+           before it can be set again, and VerifyIntegrityAsync now clears VerifyAnnouncement first
+           for the same reason. -->
+      <DockPanel Margin="0,0,0,2">
+        <TextBlock DockPanel.Dock="Left" Text="File" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <Grid ColumnDefinitions="1*,1*" Margin="8,0,0,0">
+          <TextBlock x:Name="WarningStatus" Grid.Column="0"
+                     Text="{Binding WarningMessage}"
+                     AutomationProperties.LiveSetting="Polite"
+                     Foreground="{DynamicResource ForegroundSecondary}"
+                     FontSize="{DynamicResource FontSizeCaption}"
+                     TextTrimming="CharacterEllipsis"
+                     TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0" />
+          <TextBlock x:Name="VerifyStatus" Grid.Column="1"
+                     Text="{Binding VerifyAnnouncement}"
+                     AutomationProperties.LiveSetting="Polite"
+                     Foreground="{DynamicResource ForegroundSecondary}"
+                     FontSize="{DynamicResource FontSizeCaption}"
+                     TextTrimming="CharacterEllipsis"
+                     TextAlignment="Right" VerticalAlignment="Center" />
+        </Grid>
+      </DockPanel>
       <DockPanel KeyboardNavigation.TabNavigation="Local">
         <Button DockPanel.Dock="Right" Content="Close"
                 Command="{Binding CloseFileCommand}"

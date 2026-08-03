@@ -253,6 +253,13 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
     [ObservableProperty]
     public partial bool IsVerifyResultVisible { get; set; }
 
+    /// <summary>
+    /// One-line verdict for the verify panel's live region. The panel itself toggles
+    /// <see cref="IsVerifyResultVisible"/>, so it cannot announce its own arrival.
+    /// </summary>
+    [ObservableProperty]
+    public partial string VerifyAnnouncement { get; set; } = string.Empty;
+
     public async Task LoadFileAsync(string filePath)
     {
         // Bump the generation so any in-flight load (or a CloseFile) is superseded: when this
@@ -894,10 +901,34 @@ public partial class InspectorViewModel(IFileDialogService fileDialog, ISRREditi
             return;
         }
 
+        // Cleared first, before the await: VerifyAnnouncement drives a live region, and verifying
+        // the same file twice produces a byte-identical string, which the generated setter would
+        // suppress as an equal value — leaving the second verify silent. Clearing guarantees a real
+        // empty->text transition. Same reasoning as SRSReconstructorViewModel.RebuildAsync and
+        // SRREditorViewModel.Save().
+        VerifyAnnouncement = string.Empty;
+
         SRRVerifyResult result = await _verifyService.VerifyAsync(LoadedFilePath);
         VerifyResultText = FormatVerifyResult(result);
+        VerifyAnnouncement = SummarizeVerifyResult(result);
         IsVerifyResultVisible = true;
     }
+
+    /// <summary>
+    /// The one-line verdict a screen reader should hear when the verify panel appears.
+    /// <para>
+    /// Deliberately NOT <see cref="VerifyResultText"/>: that carries a line per issue, and a polite
+    /// live region would read every one of them aloud before the user could act. The detail stays
+    /// where it is, in the panel's own text box, reachable whenever it is wanted.
+    /// </para>
+    /// </summary>
+    private static string SummarizeVerifyResult(SRRVerifyResult result) => result.Issues.Count switch
+    {
+        0 when result.IsValid => "Integrity verify: no errors found.",
+        0 => "Integrity verify: errors detected.",
+        1 => "Integrity verify: errors detected, 1 issue.",
+        int n => $"Integrity verify: errors detected, {n} issues.",
+    };
 
     [RelayCommand]
     private void DismissVerifyResult() => IsVerifyResultVisible = false;
