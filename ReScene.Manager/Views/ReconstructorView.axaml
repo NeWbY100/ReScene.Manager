@@ -179,13 +179,15 @@
                    sentences, so LabeledBy would make the whole sentence the field's NAME. An
                    explicit short name is used instead; the caption stays an adjacent text node,
                    which is where a screen reader reads it in document order anyway. -->
-            <DockPanel Margin="0,0,0,2">
+            <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
               <Button DockPanel.Dock="Right" Content="Browse"
+                      TabIndex="1"
                       Command="{Binding BrowseWinRARCommand}"
                       Classes="ghost"
                       AutomationProperties.Name="Browse for WinRAR versions folder"
                       Margin="4,0,0,0" MinWidth="75" />
               <TextBox x:Name="WinRARTextBox" Text="{Binding WinRARPath}"
+                       TabIndex="0"
                        AutomationProperties.Name="WinRAR versions folder path"
                        behaviors:TextBoxDropBehavior.DropMode="Folder" />
             </DockPanel>
@@ -196,13 +198,15 @@
               <Run Text="— Folder with the extracted original files to recompress into RAR archives."
                    Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
             </TextBlock>
-            <DockPanel Margin="0,0,0,2">
+            <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
               <Button DockPanel.Dock="Right" Content="Browse"
+                      TabIndex="1"
                       Command="{Binding BrowseReleaseCommand}"
                       Classes="ghost"
                       AutomationProperties.Name="Browse for extracted release files"
                       Margin="4,0,0,0" MinWidth="75" />
               <TextBox x:Name="ReleaseTextBox" Text="{Binding ReleasePath}"
+                       TabIndex="0"
                        AutomationProperties.Name="Release files path"
                        behaviors:TextBoxDropBehavior.DropMode="Folder" />
             </DockPanel>
@@ -213,13 +217,15 @@
               <Run Text="— The .sfv or .sha1 file to verify reconstructed archives against."
                    Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
             </TextBlock>
-            <DockPanel Margin="0,0,0,2">
+            <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
               <Button DockPanel.Dock="Right" Content="Browse"
+                      TabIndex="1"
                       Command="{Binding BrowseVerificationCommand}"
                       Classes="ghost"
                       AutomationProperties.Name="Browse for verification file"
                       Margin="4,0,0,0" MinWidth="75" />
               <TextBox x:Name="VerifyTextBox" Text="{Binding VerificationPath}"
+                       TabIndex="0"
                        AutomationProperties.Name="Verify file path"
                        behaviors:TextBoxDropBehavior.DropMode="File" />
             </DockPanel>
@@ -230,13 +236,15 @@
               <Run Text="— Folder where reconstructed RAR archives are written."
                    Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
             </TextBlock>
-            <DockPanel Margin="0,0,0,2">
+            <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
               <Button DockPanel.Dock="Right" Content="Browse"
+                      TabIndex="1"
                       Command="{Binding BrowseOutputCommand}"
                       Classes="ghost"
                       AutomationProperties.Name="Browse for output folder"
                       Margin="4,0,0,0" MinWidth="75" />
               <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}"
+                       TabIndex="0"
                        AutomationProperties.Name="Output folder path"
                        behaviors:TextBoxDropBehavior.DropMode="Folder" />
             </DockPanel>

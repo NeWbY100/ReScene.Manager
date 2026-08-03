@@ -59,16 +59,16 @@
           <Run Text="— The small sample clip (.mkv, .avi, .mp4, …) to store. Usually in a Sample/ subfolder of the release."
                Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
         </TextBlock>
-        <DockPanel>
+        <DockPanel KeyboardNavigation.TabNavigation="Local">
           <!-- "Browse for <target>", target from this row's own visible caption subject — see
                SampleRestorerView's first Browse button for the convention and the WCAG 2.5.3
                reasoning that makes it safe here (Content is the bare word "Browse"). -->
           <Button DockPanel.Dock="Right" Content="Browse"
-                  Command="{Binding BrowseInputCommand}"
+                  Command="{Binding BrowseInputCommand}" TabIndex="2"
                   Classes="ghost"
                   AutomationProperties.Name="Browse for sample file"
                   Margin="4,0,0,0" MinWidth="75" />
-          <TextBox x:Name="InputTextBox" Text="{Binding InputPath}"
+          <TextBox x:Name="InputTextBox" Text="{Binding InputPath}" TabIndex="0"
                    AutomationProperties.Name="Sample file path"
                    behaviors:TextBoxDropBehavior.DropMode="File" />
         </DockPanel>
@@ -102,19 +102,21 @@
                Foreground="{DynamicResource ForegroundSecondary}"
                FontSize="{DynamicResource FontSizeCaption}" />
         </TextBlock>
-        <DockPanel>
+        <DockPanel KeyboardNavigation.TabNavigation="Local">
           <Button DockPanel.Dock="Right" Content="Browse"
-                  Command="{Binding BrowseMainFileCommand}"
+                  Command="{Binding BrowseMainFileCommand}" TabIndex="2"
                   Classes="ghost"
                   AutomationProperties.Name="Browse for main file"
                   Margin="4,0,0,0" MinWidth="75" />
           <Button DockPanel.Dock="Right" Content="Clear"
                   Command="{Binding ClearMainFileCommand}"
                   Classes="ghost"
+                  TabIndex="1"
                   Margin="4,0,0,0" MinWidth="60" />
           <!-- "<subject> path", subject taken from this row's own visible caption ("Main file"),
                matching InputTextBox above and CreatorView's own Input/Output boxes. -->
           <TextBox Text="{Binding MainFilePath}"
+                   TabIndex="0"
                    AutomationProperties.Name="Main file path" />
         </DockPanel>
         <controls:FieldStatusLine Status="{Binding MainFileStatus}" Margin="0,2,0,0" />
@@ -128,18 +130,18 @@
           <Run Text="— Where the .srs file will be written."
                Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
         </TextBlock>
-        <DockPanel>
+        <DockPanel KeyboardNavigation.TabNavigation="Local">
           <!-- "Browse for output path" VERBATIM from CreatorView, the Create-SRR wizard and
                SRSReconstructorView: four surfaces, one function (choose where the output file is
                written), so one name (WCAG 3.2.4). The Reconstructor's own output picker reads
                "Browse for output folder" instead, and that is not an inconsistency — it picks a
                DIRECTORY, which is a different thing to choose. -->
           <Button DockPanel.Dock="Right" Content="Browse"
-                  Command="{Binding BrowseOutputCommand}"
+                  Command="{Binding BrowseOutputCommand}" TabIndex="2"
                   Classes="ghost"
                   AutomationProperties.Name="Browse for output path"
                   Margin="4,0,0,0" MinWidth="75" />
-          <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}"
+          <TextBox x:Name="OutputTextBox" Text="{Binding OutputPath}" TabIndex="0"
                    AutomationProperties.Name="Output path"
                    behaviors:TextBoxDropBehavior.DropMode="File" />
         </DockPanel>

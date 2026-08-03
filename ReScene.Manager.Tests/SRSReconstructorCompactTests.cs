@@ -383,7 +383,9 @@ public class SRSReconstructorCompactTests
         Button rebuildButton = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.RebuildCommand));
         Button saveLog = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.SaveLogCommand));
 
-        List<Control> order = [srsBrowse, srsTextBox, mediaBrowse, mediaTextBox, outputBrowse, outputTextBox, rebuildButton, saveLog];
+        // Field THEN button, per row — see SampleRestorerCompactTests' own note for the reversed
+        // markup order these pins correct. Before that fix this list read button-then-field.
+        List<Control> order = [srsTextBox, srsBrowse, mediaTextBox, mediaBrowse, outputTextBox, outputBrowse, rebuildButton, saveLog];
 
         if (compact)
         {
@@ -1337,12 +1339,12 @@ public class SRSReconstructorCompactTests
     /// </summary>
     private static readonly IReadOnlyList<string> NormalModeTabOrderFixture =
     [
-        "Button name=\"Browse for SRS file\" id=\"\"",
         "TextBox name=\"SRS file path\" id=\"SRSFileTextBox\"",
-        "Button name=\"Browse for media file\" id=\"\"",
+        "Button name=\"Browse for SRS file\" id=\"\"",
         "TextBox name=\"Media file path\" id=\"MediaFileTextBox\"",
-        "Button name=\"Browse for output path\" id=\"\"",
+        "Button name=\"Browse for media file\" id=\"\"",
         "TextBox name=\"Output path\" id=\"OutputTextBox\"",
+        "Button name=\"Browse for output path\" id=\"\"",
         "Button name=\"Rebuild Sample\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
     ];
@@ -1357,12 +1359,12 @@ public class SRSReconstructorCompactTests
     private static readonly IReadOnlyList<string> CompactModeTabOrderFixture =
     [
         "ToggleButton name=\"Help\" id=\"\"",
-        "Button name=\"Browse for SRS file\" id=\"\"",
         "TextBox name=\"SRS file path\" id=\"SRSFileTextBox\"",
-        "Button name=\"Browse for media file\" id=\"\"",
+        "Button name=\"Browse for SRS file\" id=\"\"",
         "TextBox name=\"Media file path\" id=\"MediaFileTextBox\"",
-        "Button name=\"Browse for output path\" id=\"\"",
+        "Button name=\"Browse for media file\" id=\"\"",
         "TextBox name=\"Output path\" id=\"OutputTextBox\"",
+        "Button name=\"Browse for output path\" id=\"\"",
         "Button name=\"Rebuild Sample\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
     ];

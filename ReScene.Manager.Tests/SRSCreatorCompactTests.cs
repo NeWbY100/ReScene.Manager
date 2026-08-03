@@ -411,7 +411,11 @@ public class SRSCreatorCompactTests
         Button createSrs = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.CreateSRSCommand));
         Button saveLog = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.SaveLogCommand));
 
-        List<Control> order = [sampleBrowse, inputTextBox, mainBrowse, mainClear, mainFilePath, outputBrowse, outputTextBox, appName, createSrs, saveLog];
+        // Field THEN button(s), per row — see SampleRestorerCompactTests' own note for the reversed
+        // markup order these pins correct. The main-file row has TWO right-docked buttons, so it
+        // renders field, Clear, Browse and its markup declares them in exactly the opposite order.
+        // Before that fix this list read button-then-field.
+        List<Control> order = [inputTextBox, sampleBrowse, mainFilePath, mainClear, mainBrowse, outputTextBox, outputBrowse, appName, createSrs, saveLog];
 
         if (compact)
         {
@@ -1260,13 +1264,13 @@ public class SRSCreatorCompactTests
     /// </summary>
     private static readonly IReadOnlyList<string> NormalModeTabOrderFixture =
     [
-        "Button name=\"Browse for sample file\" id=\"\"",
         "TextBox name=\"Sample file path\" id=\"InputTextBox\"",
-        "Button name=\"Browse for main file\" id=\"\"",
-        "Button name=\"Clear\" id=\"\"",
+        "Button name=\"Browse for sample file\" id=\"\"",
         "TextBox name=\"Main file path\" id=\"\"",
-        "Button name=\"Browse for output path\" id=\"\"",
+        "Button name=\"Clear\" id=\"\"",
+        "Button name=\"Browse for main file\" id=\"\"",
         "TextBox name=\"Output path\" id=\"OutputTextBox\"",
+        "Button name=\"Browse for output path\" id=\"\"",
         "TextBox name=\"App name:\" id=\"\"",
         "Button name=\"Create SRS\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",
@@ -1282,13 +1286,13 @@ public class SRSCreatorCompactTests
     private static readonly IReadOnlyList<string> CompactModeTabOrderFixture =
     [
         "ToggleButton name=\"Help\" id=\"\"",
-        "Button name=\"Browse for sample file\" id=\"\"",
         "TextBox name=\"Sample file path\" id=\"InputTextBox\"",
-        "Button name=\"Browse for main file\" id=\"\"",
-        "Button name=\"Clear\" id=\"\"",
+        "Button name=\"Browse for sample file\" id=\"\"",
         "TextBox name=\"Main file path\" id=\"\"",
-        "Button name=\"Browse for output path\" id=\"\"",
+        "Button name=\"Clear\" id=\"\"",
+        "Button name=\"Browse for main file\" id=\"\"",
         "TextBox name=\"Output path\" id=\"OutputTextBox\"",
+        "Button name=\"Browse for output path\" id=\"\"",
         "TextBox name=\"App name:\" id=\"\"",
         "Button name=\"Create SRS\" id=\"\"",
         "Button name=\"Save log...\" id=\"\"",

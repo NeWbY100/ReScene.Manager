@@ -68,7 +68,7 @@
           <Run Text="— The .srr file containing embedded .srs sample data."
                Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
         </TextBlock>
-        <DockPanel>
+        <DockPanel KeyboardNavigation.TabNavigation="Local">
           <!-- Naming convention for all three Browse buttons on this view, stated once here:
                "Browse for <target>", with the target phrased from that row's OWN visible caption
                subject, matching the Reconstructor's four and the Creator's. The bare Content
@@ -78,7 +78,7 @@
                app that cannot take this phrasing is CreatorView's folder picker, whose Content
                reads "Browse folder…"; its own site records why. -->
           <Button DockPanel.Dock="Right" Content="Browse"
-                  Command="{Binding BrowseSRRCommand}"
+                  Command="{Binding BrowseSRRCommand}" TabIndex="2"
                   Classes="ghost"
                   AutomationProperties.Name="Browse for SRR file"
                   Margin="4,0,0,0" MinWidth="75" />
@@ -88,7 +88,7 @@
                reader announced this TextBox with no accessible name at all. "SRR file path"
                mirrors CreatorView's own InputTextBox naming convention (a short "<subject> path"
                phrase, distinct from the longer visible caption sentence above). -->
-          <TextBox x:Name="SRRFileTextBox" Text="{Binding SRRFilePath}"
+          <TextBox x:Name="SRRFileTextBox" Text="{Binding SRRFilePath}" TabIndex="0"
                    AutomationProperties.Name="SRR file path"
                    behaviors:TextBoxDropBehavior.DropMode="File" />
         </DockPanel>
@@ -103,9 +103,9 @@
           <Run Text="— Folder holding the full media files the samples were cut from. Files are matched to samples automatically."
                Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
         </TextBlock>
-        <DockPanel>
+        <DockPanel KeyboardNavigation.TabNavigation="Local">
           <Button DockPanel.Dock="Right" Content="Browse"
-                  Command="{Binding BrowseMediaDirectoryCommand}"
+                  Command="{Binding BrowseMediaDirectoryCommand}" TabIndex="2"
                   Classes="ghost"
                   AutomationProperties.Name="Browse for media directory"
                   Margin="4,0,0,0" MinWidth="75" />
@@ -113,7 +113,7 @@
                "<subject> path" phrase whose subject is this row's OWN visible caption ("Media
                Directory"), so the accessible name contains the visible label (WCAG 2.5.3) without
                inheriting the caption's whole explanatory sentence as its name. -->
-          <TextBox x:Name="MediaDirTextBox" Text="{Binding MediaDirectoryPath}"
+          <TextBox x:Name="MediaDirTextBox" Text="{Binding MediaDirectoryPath}" TabIndex="0"
                    AutomationProperties.Name="Media directory path"
                    behaviors:TextBoxDropBehavior.DropMode="Folder" />
         </DockPanel>
@@ -128,13 +128,13 @@
           <Run Text="— Folder where restored samples will be written. Defaults to the media folder."
                Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}" />
         </TextBlock>
-        <DockPanel>
+        <DockPanel KeyboardNavigation.TabNavigation="Local">
           <Button DockPanel.Dock="Right" Content="Browse"
-                  Command="{Binding BrowseOutputDirectoryCommand}"
+                  Command="{Binding BrowseOutputDirectoryCommand}" TabIndex="2"
                   Classes="ghost"
                   AutomationProperties.Name="Browse for output directory"
                   Margin="4,0,0,0" MinWidth="75" />
-          <TextBox x:Name="OutputDirTextBox" Text="{Binding OutputDirectoryPath}"
+          <TextBox x:Name="OutputDirTextBox" Text="{Binding OutputDirectoryPath}" TabIndex="0"
                    AutomationProperties.Name="Output directory path"
                    behaviors:TextBoxDropBehavior.DropMode="Folder" />
         </DockPanel>

@@ -528,7 +528,11 @@ public class SampleRestorerCompactTests
         Button restoreAll = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.RestoreCommand));
         Button saveLog = window.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.SaveLogCommand));
 
-        List<Control> order = [srrBrowse, srrTextBox, mediaBrowse, mediaTextBox, outputBrowse, outputTextBox, srsEntriesGrid, checkboxA, checkboxB, restoreAll, saveLog];
+        // Field THEN button, per row: each row is a right-docked DockPanel whose button is declared
+        // first, so its markup order is the reverse of what the user sees. TabIndex pins plus
+        // KeyboardNavigation.TabNavigation="Local" now put the walk back into the rendered order.
+        // Before that fix this list read button-then-field, which is what the rows actually did.
+        List<Control> order = [srrTextBox, srrBrowse, mediaTextBox, mediaBrowse, outputTextBox, outputBrowse, srsEntriesGrid, checkboxA, checkboxB, restoreAll, saveLog];
 
         if (compact)
         {
@@ -1500,12 +1504,12 @@ public class SampleRestorerCompactTests
     /// </summary>
     private static readonly IReadOnlyList<string> NormalModeTabOrderFixture =
     [
-        "Button name=\"Browse for SRR file\" id=\"\"",
         "TextBox name=\"SRR file path\" id=\"SRRFileTextBox\"",
-        "Button name=\"Browse for media directory\" id=\"\"",
+        "Button name=\"Browse for SRR file\" id=\"\"",
         "TextBox name=\"Media directory path\" id=\"MediaDirTextBox\"",
-        "Button name=\"Browse for output directory\" id=\"\"",
+        "Button name=\"Browse for media directory\" id=\"\"",
         "TextBox name=\"Output directory path\" id=\"OutputDirTextBox\"",
+        "Button name=\"Browse for output directory\" id=\"\"",
         "DataGrid name=\"Embedded SRS Files\" id=\"SRSEntriesGrid\"",
         "CheckBox name=\"Restore this sample\" id=\"\"",
         "CheckBox name=\"Restore this sample\" id=\"\"",
@@ -1521,12 +1525,12 @@ public class SampleRestorerCompactTests
     private static readonly IReadOnlyList<string> CompactModeTabOrderFixture =
     [
         "ToggleButton name=\"Help\" id=\"\"",
-        "Button name=\"Browse for SRR file\" id=\"\"",
         "TextBox name=\"SRR file path\" id=\"SRRFileTextBox\"",
-        "Button name=\"Browse for media directory\" id=\"\"",
+        "Button name=\"Browse for SRR file\" id=\"\"",
         "TextBox name=\"Media directory path\" id=\"MediaDirTextBox\"",
-        "Button name=\"Browse for output directory\" id=\"\"",
+        "Button name=\"Browse for media directory\" id=\"\"",
         "TextBox name=\"Output directory path\" id=\"OutputDirTextBox\"",
+        "Button name=\"Browse for output directory\" id=\"\"",
         "DataGrid name=\"Embedded SRS Files\" id=\"SRSEntriesGrid\"",
         "CheckBox name=\"Restore this sample\" id=\"\"",
         "CheckBox name=\"Restore this sample\" id=\"\"",

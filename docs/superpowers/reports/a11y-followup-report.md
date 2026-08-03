@@ -1975,3 +1975,99 @@ which is now true of only one of the two surfaces.
 3. **No real AT session**, as throughout. The live line is verified by peer, `LiveSetting`,
    always-in-tree-ness and an empty-to-text transition — the same standard as every other live line
    in the app, and still not the same thing as hearing it.
+
+---
+
+# Backwards picker rows — group A (the Advanced views)
+
+Date: 2026-08-03. Base `main` @877c96f. One commit. **Deliberately stopped at a clean boundary; 20
+of the 33 rows remain and are enumerated in §J5.**
+
+## J1. Reconciling the census first — 33, but not the way §H6 counted it
+
+§H6's figure came from a MARKUP criterion ("the row has no `TabIndex` pins"). A behavioural census —
+focus the row's leftmost control, Tab, require the rendered order — reported **27**, not 33.
+
+Both were right about different things, and the gap matters. Six rows sit inside panels that are
+`IsVisible=false` in the ViewModel state these surfaces are hosted in (`RestoreWizardBody`'s
+bulk/single sub-panels are gated on `IsBulk`/`IsSingle`, both false until a file is loaded). Their
+controls are not focusable, so a Tab walk cannot exercise them — and the first version of the census
+silently returned "no failure" for exactly those six. **Had that shipped, six rows could have been
+declared fixed without ever being touched.**
+
+`PickerRowOrderTests` is therefore TWO-TIER: walk the row where it can be walked, and where it
+cannot, check its structure instead (Local scoping plus pins). Weaker evidence for those six, stated
+as such at the site. With the fallback in place the census reports **33 of 37**, reconciling with
+§H6 exactly.
+
+Population comes from the same thirteen-surface list as `BrowseButtonCensusTests`, per the rule
+§H6a established.
+
+## J2. What group A changed
+
+13 rows, in the four Advanced views that carry compact suites:
+
+| View | Rows |
+|---|---|
+| ReconstructorView | 4 |
+| SampleRestorerView | 3 |
+| SRSCreatorView | 3 (one with two buttons: field, Clear, Browse) |
+| SRSReconstructorView | 3 |
+
+Each row: `TabIndex` expressing the rendered order plus
+`KeyboardNavigation.TabNavigation="Local"` on the `DockPanel`. Census after: **33 → 20**, which is
+exactly 13.
+
+## J3. Fixtures — regenerated, and the oracles too
+
+All four suites' tab-order fixtures were regenerated from measured walks (host the view, capture the
+real `Describe` sequence, write that). Every picker row's two entries swap; nothing else moves.
+
+**The independent order oracles had to move as well**, which is the part a fixture-only update would
+have missed: `ResolveIndependentExpectedOrder` in each suite listed `browse, textBox` per row, and
+that list is the discriminating check, not the fixture. Left alone it would have kept asserting the
+old, wrong order — and the walk would have failed against it, which is how it was caught rather than
+reasoned about.
+
+## J4. A recovery worth recording
+
+Removing the four temporary dump methods with a line-based script cut on the first `    }` it found,
+which is an inner closing brace, and corrupted three test files. `git checkout` restored them and the
+edits were redone with targeted replacements. Nothing was lost because the measured walks were
+already captured in the transcript — but this is precisely the "half-regenerated fixture set" failure
+mode this round was warned about, met and recovered from rather than avoided. **Scripted edits to
+C# by brace-matching are not safe; the dumps should have been removed the same way they were added.**
+
+## J5. THE REMAINDER — 20 rows, not attempted
+
+Stopped here deliberately, at a boundary where the tree is green (Manager 490/490 with the census
+test held back, App.Core 722/722) rather than pushing on into a second fixture-moving group with
+depleted context.
+
+| Surface | Rows left | Notes |
+|---|---|---|
+| ReconstructWizardBody | 4 | step 1; plain rows |
+| CreateSRSWizardBody | 3 | one has Browse + Clear |
+| EditSRRWizardBody | 2 | |
+| RestoreWizardBody | 5 | **4 of these are the hidden-panel rows** — structural check only |
+| FileCompareView | 2 | rows also contain a Close button; check the real structure first |
+| InspectorView | 1 | row has TWO right-docked buttons (Close and Browse) |
+| SettingsWindow | 3 | |
+| | **20** | |
+
+`PickerRowOrderTests` is written, working and currently RED at 20 — it is **held out of this commit**
+so the tree stays green, and it lands with the final group as that group's own proof. It is in the
+working tree, not deleted.
+
+Two things the next group must not assume:
+1. **FileCompare and Inspector rows are not the standard two-control shape.** Inspector's row is
+   Close + Browse + TextBox, so its pins are 0/1/2 across three controls, and FileCompare's drop
+   zones need their real structure checked before the pattern is applied.
+2. **RestoreWizardBody's four hidden rows cannot be walk-verified** in the default VM state. Either
+   drive `IsBulk`/`IsSingle` true in the census so they become exercisable, or accept the structural
+   tier for them and say so.
+
+## J6. Evidence
+
+`-t:Rebuild` 0 Warning(s)/0 Error(s). Manager **490** (unchanged — this group moved fixture contents
+and oracles, adding no tests), App.Core **722** unchanged.
