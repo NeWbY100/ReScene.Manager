@@ -16,7 +16,7 @@
                  FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,8" />
       <TextBlock Text="Sample file" FontWeight="SemiBold" Margin="0,0,0,2" />
-      <DockPanel Margin="0,0,0,2">
+      <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
         <!-- All three Browse names in this body are taken VERBATIM from SRSCreatorView, which
              drives the SAME SRSCreatorViewModel commands (WCAG 3.2.4). Note the second one: this
              body's visible caption calls it "Full movie (optional)" where the Advanced tab says
@@ -25,11 +25,11 @@
              surfaces, so the caption never constrained the name — and it keeps one function to one
              announced name rather than inventing a tenth string for a button that already has
              one. -->
-        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseInputCommand}"
+        <Button DockPanel.Dock="Right" TabIndex="1" Content="Browse" Command="{Binding BrowseInputCommand}"
                 Classes="ghost"
                 AutomationProperties.Name="Browse for sample file"
                 Margin="4,0,0,0" MinWidth="75" />
-        <TextBox Text="{Binding InputPath}" />
+        <TextBox Text="{Binding InputPath}" TabIndex="0" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding SampleStatus}" />
       <DockPanel Margin="0,8,0,0" IsVisible="{Binding ShowISOSelection}">
@@ -44,14 +44,16 @@
                  Foreground="{DynamicResource ForegroundSecondary}"
                  FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,4" />
-      <DockPanel Margin="0,0,0,2">
-        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseMainFileCommand}"
+      <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
+        <!-- Two right-docked buttons, so this row renders field, Clear, Browse and declares them in
+             exactly the opposite order — the pins run 0/1/2 across three controls, not two. -->
+        <Button DockPanel.Dock="Right" TabIndex="2" Content="Browse" Command="{Binding BrowseMainFileCommand}"
                 Classes="ghost"
                 AutomationProperties.Name="Browse for main file"
                 Margin="4,0,0,0" MinWidth="75" />
-        <Button DockPanel.Dock="Right" Content="Clear" Command="{Binding ClearMainFileCommand}"
+        <Button DockPanel.Dock="Right" TabIndex="1" Content="Clear" Command="{Binding ClearMainFileCommand}"
                 Classes="ghost" Margin="4,0,0,0" MinWidth="60" />
-        <TextBox Text="{Binding MainFilePath}" />
+        <TextBox Text="{Binding MainFilePath}" TabIndex="0" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding MainFileStatus}" />
     </StackPanel>
@@ -64,12 +66,12 @@
                  FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,8" />
       <TextBlock Text="Save SRS to" FontWeight="SemiBold" Margin="0,0,0,2" />
-      <DockPanel Margin="0,0,0,2">
-        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseOutputCommand}"
+      <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
+        <Button DockPanel.Dock="Right" TabIndex="1" Content="Browse" Command="{Binding BrowseOutputCommand}"
                 Classes="ghost"
                 AutomationProperties.Name="Browse for output path"
                 Margin="4,0,0,0" MinWidth="75" />
-        <TextBox Text="{Binding OutputPath}" />
+        <TextBox Text="{Binding OutputPath}" TabIndex="0" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding OutputStatus}" />
     </StackPanel>

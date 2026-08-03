@@ -142,11 +142,11 @@
                 Click="OnResourceLinkClick"
                 FontSize="{DynamicResource FontSizeCaption}" VerticalAlignment="Center" />
       </WrapPanel>
-      <DockPanel Margin="0,0,0,2">
-        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseWinRARCommand}"
+      <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
+        <Button DockPanel.Dock="Right" TabIndex="1" Content="Browse" Command="{Binding BrowseWinRARCommand}"
                 AutomationProperties.Name="Browse for WinRAR versions folder"
                 Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
-        <TextBox Text="{Binding WinRARPath}" AutomationProperties.LabeledBy="{Binding #WinRarFolderLabel}" />
+        <TextBox Text="{Binding WinRARPath}" TabIndex="0" AutomationProperties.LabeledBy="{Binding #WinRarFolderLabel}" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding WinRARStatus}" />
 
@@ -154,11 +154,11 @@
       <TextBlock Text="The folder with the release's already-extracted files — the originals that were inside the .rar archives (the movie, sample, subtitles, …)."
                  Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,2" />
-      <DockPanel Margin="0,0,0,2">
-        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseReleaseCommand}"
+      <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
+        <Button DockPanel.Dock="Right" TabIndex="1" Content="Browse" Command="{Binding BrowseReleaseCommand}"
                 AutomationProperties.Name="Browse for extracted release files"
                 Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
-        <TextBox Text="{Binding ReleasePath}" AutomationProperties.LabeledBy="{Binding #ReleaseFilesLabel}" />
+        <TextBox Text="{Binding ReleasePath}" TabIndex="0" AutomationProperties.LabeledBy="{Binding #ReleaseFilesLabel}" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding ReleaseStatus}" />
 
@@ -166,11 +166,11 @@
       <TextBlock Text="Where the rebuilt .rar / .r00… volumes are written. Pick an empty folder so nothing is overwritten."
                  Foreground="{DynamicResource ForegroundSecondary}" FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,2" />
-      <DockPanel Margin="0,0,0,2">
-        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseOutputCommand}"
+      <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
+        <Button DockPanel.Dock="Right" TabIndex="1" Content="Browse" Command="{Binding BrowseOutputCommand}"
                 AutomationProperties.Name="Browse for output folder"
                 Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
-        <TextBox Text="{Binding OutputPath}" AutomationProperties.LabeledBy="{Binding #OutputFolderLabel}" />
+        <TextBox Text="{Binding OutputPath}" TabIndex="0" AutomationProperties.LabeledBy="{Binding #OutputFolderLabel}" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding OutputStatus}" />
 
@@ -179,11 +179,11 @@
                  Foreground="{DynamicResource ForegroundSecondary}"
                  FontSize="{DynamicResource FontSizeCaption}"
                  TextWrapping="Wrap" Margin="0,0,0,2" />
-      <DockPanel Margin="0,0,0,2">
-        <Button DockPanel.Dock="Right" Content="Browse" Command="{Binding BrowseVerificationCommand}"
+      <DockPanel Margin="0,0,0,2" KeyboardNavigation.TabNavigation="Local">
+        <Button DockPanel.Dock="Right" TabIndex="1" Content="Browse" Command="{Binding BrowseVerificationCommand}"
                 AutomationProperties.Name="Browse for verification file"
                 Classes="ghost" Margin="4,0,0,0" MinWidth="75" />
-        <TextBox Text="{Binding VerificationPath}" AutomationProperties.LabeledBy="{Binding #VerificationFileLabel}" />
+        <TextBox Text="{Binding VerificationPath}" TabIndex="0" AutomationProperties.LabeledBy="{Binding #VerificationFileLabel}" />
       </DockPanel>
       <controls:FieldStatusLine Status="{Binding VerifyStatus}" />
 

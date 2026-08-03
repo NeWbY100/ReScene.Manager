@@ -2071,3 +2071,63 @@ Two things the next group must not assume:
 
 `-t:Rebuild` 0 Warning(s)/0 Error(s). Manager **490** (unchanged — this group moved fixture contents
 and oracles, adding no tests), App.Core **722** unchanged.
+
+---
+
+# Backwards picker rows — group B (two wizard bodies)
+
+Date: 2026-08-03. Base `main` @b2f44c2. One commit. **Stopped again at a clean boundary; 13 rows
+remain (§K3).**
+
+## K1. What changed
+
+7 rows, in the two wizard bodies whose rows are reachable without driving the ViewModel into a
+particular state:
+
+| Body | Rows |
+|---|---|
+| ReconstructWizardBody | 4 (step 1) |
+| CreateSRSWizardBody | 3 — one with TWO right-docked buttons, so its pins run 0/1/2 across three controls (field, Clear, Browse) |
+
+Census: **20 → 13**, exactly 7. No fixtures moved: neither body has a compact suite, and no other
+test asserted these orders.
+
+## K2. Two scripted-edit failures, and the rule they cost
+
+§J4 recorded that brace-matching scripts are unsafe for C#. This group found that **attribute-
+inserting scripts are unsafe for XAML too**, twice, and the second was worse than the first:
+
+1. A lookahead regex meant to scope "a DockPanel containing a Browse button" crossed `</DockPanel>`
+   boundaries, scoping four panels that were not picker rows and missing two files entirely
+   (SettingsWindow and FileCompareView split their `<Button>` attributes across lines).
+2. A line-scanning replacement then **scoped the ROOT DockPanel of two views** — which would have
+   re-scoped each view's entire tab order — tagged a dozen unrelated buttons, and corrupted
+   `<TextBox.KeyBindings>` into `<TextBox TabIndex="0".KeyBindings>`, i.e. invalid XAML.
+
+Both were reverted with `git checkout` before any build; the residue check for the placeholder
+`TabIndex="9"` returns zero. Nothing reached a commit.
+
+**The rule, now learned twice: these edits are made one row at a time with explicit, anchored
+replacements.** The rows differ more than they look — comments between the container and its first
+child, attributes split across lines, two-button rows, root containers of the same element type.
+Every attempt to generalise across them has produced damage, and the "saving" is a handful of tool
+calls against a whole-file revert plus re-verification.
+
+## K3. THE REMAINDER — 13 rows
+
+| Surface | Rows | Note |
+|---|---|---|
+| EditSRRWizardBody | 2 | comments sit between the container and its first child |
+| RestoreWizardBody | 5 | 4 are the hidden-panel rows — structural tier only unless `IsBulk`/`IsSingle` are driven |
+| FileCompareView | 2 | three controls (field, Browse, Close); attributes split across lines; do NOT touch the root DockPanel or the `<TextBox.KeyBindings>` child element |
+| InspectorView | 1 | three controls (field, Browse, Close); same cautions |
+| SettingsWindow | 3 | `<Button>` attributes split across lines |
+| | **13** | |
+
+`PickerRowOrderTests` remains held back, now RED at 13. It is in the working tree and lands with the
+final group.
+
+## K4. Evidence
+
+`-t:Rebuild` 0 Warning(s)/0 Error(s). Manager **490** unchanged (no tests added or moved), App.Core
+**722** unchanged. Census 20 → 13.
