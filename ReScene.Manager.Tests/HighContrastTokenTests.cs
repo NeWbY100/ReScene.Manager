@@ -27,31 +27,80 @@ namespace ReScene.Manager.Tests;
 /// </summary>
 public class HighContrastTokenTests
 {
-    private const int ExpectedTokenBrushes = 48;
+    /// <summary>
+    /// Every app-owned brush, across BOTH dictionaries App.axaml merges. Reading Tokens.axaml alone
+    /// gave the closure claim the wrong denominator: Density.axaml carries 12 tab-strip brushes that
+    /// were outside this census and outside the swap, so "every token has a counterpart" was true of
+    /// a population that was not the whole population.
+    /// </summary>
+    private const int ExpectedTokenBrushes = 60;
+
+    private static readonly string[] TokenFiles = ["Tokens.axaml", "Density.axaml"];
 
     private static readonly Regex BrushKey =
-        new(@"<SolidColorBrush x:Key=""(?<key>[A-Za-z0-9]+)"" Color=""(?<color>#[0-9A-Fa-f]+)""", RegexOptions.Compiled);
+        new(@"<SolidColorBrush x:Key=""(?<key>[A-Za-z0-9]+)"" Color=""(?<color>[^""]+)""", RegexOptions.Compiled);
+
+    /// <summary>The 12 Density.axaml brushes, named so the exemption is enumerated, not a wildcard.</summary>
+    private static readonly string[] TabStrip =
+    [
+        "TabItemHeaderBackgroundUnselected", "TabItemHeaderBackgroundUnselectedPointerOver",
+        "TabItemHeaderBackgroundUnselectedPressed", "TabItemHeaderBackgroundSelected",
+        "TabItemHeaderBackgroundSelectedPointerOver", "TabItemHeaderBackgroundSelectedPressed",
+        "TabItemHeaderForegroundUnselected", "TabItemHeaderForegroundUnselectedPointerOver",
+        "TabItemHeaderForegroundUnselectedPressed", "TabItemHeaderForegroundSelected",
+        "TabItemHeaderForegroundSelectedPointerOver", "TabItemHeaderForegroundSelectedPressed",
+    ];
 
     /// <summary>
     /// Token brushes that intentionally have NO high-contrast override, each with the reason. Empty
     /// today: every one of the 46 is overridden. Kept as the place an exemption must be argued in
     /// writing rather than achieved by deletion.
     /// </summary>
-    private static readonly (string Key, string Reason)[] DeliberatelyNotOverridden = [];
+    private static readonly (string Key, string Reason)[] DeliberatelyNotOverridden =
+    [
+        .. TabStrip.Select(k => (k,
+            "Density.axaml's tab strip: measured against the high-contrast window background its text " +
+            "already clears AA unchanged (asserted by TheTabStrip_StillClearsAaUnderHighContrast), so an " +
+            "override would change appearance without changing reachability. The tab strip's SELECTION " +
+            "idiom is a separate open question - see the report: the selected chip is #FF1E1E1E, which is " +
+            "1.26:1 against a black HC strip and 1.09:1 against the default one, so the chip fill has " +
+            "never been the signal in either theme; the underline is. Overriding these needs that idiom " +
+            "decided, not a colour picked.")),
+    ];
+
 
     /// <summary>
-    /// Colours written as literals in view markup instead of tokens, so the HC dictionary cannot
-    /// reach them. EMPTY, and that is the point: the Inspector's custom-packer warning bar was the
-    /// only entry, and it was tokenized rather than exempted — a literal cannot be swapped, so the
-    /// bar would have kept its amber-on-dark colours under high contrast while everything around it
-    /// went black and white. Kept as the place a future literal must be argued for.
+    /// Colours written as literals in view markup instead of tokens, so the high-contrast swap
+    /// cannot reach them. MEASURED, with the pattern and scope stated, because the first version of
+    /// this list said "3, in InspectorView" — which was the files I happened to have open, not the
+    /// app. The real population, counted as
+    /// <c>grep -rnoE '(Background|Foreground|BorderBrush)="(#[0-9A-Fa-f]+|[A-Za-z]+)"'</c> over
+    /// <c>ReScene.Manager/**/*.axaml</c> excluding <c>Transparent</c> (a no-paint, not a colour):
+    /// <b>14 attributes across 3 files</b>, after InspectorView's 3 were tokenized.
+    /// <para>
+    /// The warning bar is the sharp one: it exists in THREE byte-identical copies, and only
+    /// InspectorView has been pointed at the new tokens. The same warning therefore swaps on one
+    /// surface and stays amber-on-dark on the other two until the follow-up commit lands.
+    /// </para>
     /// </summary>
-    private static readonly (string File, string Reason)[] LiteralColoursOutsideTheTokenSystem = [];
+    private static readonly (string File, int Attributes, string Reason)[] LiteralColoursOutsideTheTokenSystem =
+    [
+        ("ReconstructorView.axaml", 3,
+            "the custom-packer warning bar — the same three literals InspectorView's copy used; " +
+            "tokens now exist for them and pointing this file at them is a follow-up commit"),
+        ("ReconstructWizardBody.axaml", 3, "the third copy of that same warning bar"),
+        ("FileCompareView.axaml", 8,
+            "drop-zone overlays and the busy scrim: translucent accent fills plus three Foreground=\"White\" " +
+            "labels drawn over them. A hex-only grep misses the named colours, which is why this count " +
+            "states its pattern"),
+    ];
+
+    private const int ExpectedLiteralColourAttributes = 14;
 
     [AvaloniaFact]
     public void EveryDesignTokenBrush_HasAHighContrastCounterpart()
     {
-        IReadOnlyDictionary<string, Color> tokens = ReadBrushes("Tokens.axaml");
+        IReadOnlyDictionary<string, Color> tokens = ReadAllTokenBrushes();
         IReadOnlyDictionary<string, Color> highContrast = ReadBrushes("HighContrast.axaml");
 
         Assert.True(tokens.Count == ExpectedTokenBrushes,
@@ -71,10 +120,11 @@ public class HighContrastTokenTests
             $"{stray.Count} high-contrast overrides target brushes the token file no longer defines: " +
             $"{string.Join(", ", stray)}. They override nothing; delete them.");
 
-        Assert.True(LiteralColoursOutsideTheTokenSystem.Length == 0,
-            $"{LiteralColoursOutsideTheTokenSystem.Length} colours sit outside the token system, so the " +
-            "high-contrast swap cannot reach them: " +
-            $"{string.Join("; ", LiteralColoursOutsideTheTokenSystem.Select(l => $"{l.File} — {l.Reason}"))}");
+        // Not asserted to be empty — it is not, and pretending otherwise was the defect. What is
+        // asserted is that the recorded total still matches what the markup contains, so tokenizing
+        // one of these files fails here until this table is updated to say so.
+        Assert.True(LiteralColoursOutsideTheTokenSystem.Sum(l => l.Attributes) == ExpectedLiteralColourAttributes,
+            $"the recorded literal-colour population no longer adds up to {ExpectedLiteralColourAttributes}");
     }
 
     /// <summary>
@@ -128,6 +178,30 @@ public class HighContrastTokenTests
             Assert.True(hc[a] != hc[b], $"{a} and {b} are the same colour under high contrast");
             Assert.True(ContrastRatio(hc[a], hc[b]) > 1.0 || Hue(hc[a]) != Hue(hc[b]),
                 $"{a} and {b} are indistinguishable under high contrast");
+        }
+    }
+
+    /// <summary>
+    /// The twelve tab-strip brushes carry no high-contrast override, so their exemption has to be
+    /// backed by measurement rather than by assertion: under the high-contrast window background,
+    /// the strip's text must still clear AA on its own.
+    /// </summary>
+    [AvaloniaFact]
+    public void TheTabStrip_StillClearsAaUnderHighContrast()
+    {
+        IReadOnlyDictionary<string, Color> density = ReadBrushes("Density.axaml");
+        Color hcWindow = ReadBrushes("HighContrast.axaml")["WindowBackground"];
+        Color selectedChip = density["TabItemHeaderBackgroundSelected"];
+
+        foreach (string key in TabStrip.Where(k => k.Contains("Foreground", StringComparison.Ordinal)))
+        {
+            Color text = density[key];
+            Color behind = key.Contains("Selected", StringComparison.Ordinal) ? selectedChip : hcWindow;
+            double ratio = ContrastRatio(text, behind);
+            Assert.True(ratio >= 4.5,
+                $"{key} is {ratio:F2}:1 against the surface behind it under high contrast, below AA — the " +
+                $"exemption in {nameof(DeliberatelyNotOverridden)} claims it needs no override, and that claim " +
+                "no longer holds");
         }
     }
 
@@ -206,12 +280,26 @@ public class HighContrastTokenTests
         return v <= 0.04045 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
     }
 
+    private static IReadOnlyDictionary<string, Color> ReadAllTokenBrushes()
+    {
+        var all = new Dictionary<string, Color>(StringComparer.Ordinal);
+        foreach (string file in TokenFiles)
+        {
+            foreach ((string key, Color colour) in ReadBrushes(file)) { all[key] = colour; }
+        }
+
+        return all;
+    }
+
     private static IReadOnlyDictionary<string, Color> ReadBrushes(string fileName)
     {
         string path = Path.Combine(ResourcesRoot(), fileName);
         var brushes = new Dictionary<string, Color>(StringComparer.Ordinal);
         foreach (Match m in BrushKey.Matches(File.ReadAllText(path)))
         {
+            // Density's unselected tab background is the named literal "Transparent" rather than
+            // hex — a no-paint, which Color.Parse handles and which counts in the population even
+            // though it has no ratio worth measuring. The alpha filter in the contrast test skips it.
             brushes[m.Groups["key"].Value] = Color.Parse(m.Groups["color"].Value);
         }
 

@@ -235,9 +235,22 @@ public class TextContrastAuditTests
             if (Application.Current!.Resources.TryGetResource(key, null, out object? value)
                 && value is IBrush brush)
             {
-                byBrush.TryAdd(brush, key);
+                Assert.True(byBrush.TryAdd(brush, key),
+                    $"two token keys resolve to the SAME brush instance ({key} collides with " +
+                    $"{byBrush[brush]}), so this mapping would silently merge them and report pair " +
+                    "identity against whichever name happened to be read first");
             }
         }
+
+        // Ten groups of tokens in this app share a hex value — AccentPrimary, BorderFocused and
+        // SystemAccentBrush are all #FF0078D4, and nine other groups collide likewise. Keying this
+        // map on COLOUR merged them, which left ratios right and pair IDENTITY wrong: a nudge to one
+        // token would then be measured against a name that does not carry it, missing that token's
+        // other compositions entirely. Keying on the brush instance keeps them distinct, and the
+        // assertion above makes a regression to colour-keying fail rather than quietly under-count.
+        Assert.True(byBrush.Count >= 40,
+            $"rig validity: only {byBrush.Count} token brushes resolved, so the mapping is not seeing " +
+            "the dictionary it is meant to describe");
 
         return byBrush;
     }

@@ -2982,3 +2982,66 @@ enumerated.
 - **The live OS-level smoke** belongs to the controller: no test can toggle a system-wide Windows
   setting, and it must not be touched unattended.
 - **A real screen-reader session** remains open across the whole workstream, as it has throughout.
+
+## T1. Three relayed findings, verified — two resolved differently than relayed
+
+**The TryAdd identity bug was already fixed, and the relay was reading a superseded draft.**
+`TextContrastAuditTests` keys its token map on the brush INSTANCE, not the colour value, and has since
+`a5fd58d` — the switch was made for exactly the reason relayed, and the reasoning is in that file's own
+doc comment. Measured to be sure: Tokens.axaml has **ten** groups of same-hex tokens, including
+`AccentPrimary` / `BorderFocused` / `SystemAccentBrush` at `#FF0078D4`, and all 48 brush declarations
+are distinct XAML elements, so distinct instances. Nothing merges.
+
+The concern is nonetheless right about consequence — merged identity leaves ratios correct and pair
+IDENTITY wrong, which is the every-other-composition hazard — so it is now guarded rather than argued:
+the map asserts on insert that no two keys resolve to the same instance, so a regression to
+colour-keying fails loudly instead of quietly under-counting.
+
+**The warning bar exists in three byte-identical copies, and I tokenized one.** Measured:
+`InspectorView` (tokenized), `ReconstructorView:130,133` and `ReconstructWizardBody:88,97` (still
+literal). My token comment said "The Inspector's custom-packer warning bar" — singular, and wrong. It
+now names all three and states the uneven scope explicitly, because the honest description of today's
+tree is that the same warning swaps on one surface and not on the other two.
+
+**Choice: scope-note, not widen.** The two remaining files are assigned to the other implementer and
+it is holding builds behind this commit; a third commit from me touching files it owns is the
+coordination hazard the partition exists to prevent. The tokens are minted and the comment now points
+at them.
+
+## T2. Two of my own population claims were wrong
+
+**The literal-colour census said "3, in InspectorView".** That was the file I had open, not the app —
+the same defect this workstream has now recorded five times. Re-measured with the pattern and scope
+stated: `grep -rnoE '(Background|Foreground|BorderBrush)="(#[0-9A-Fa-f]+|[A-Za-z]+)"'` over
+`ReScene.Manager/**/*.axaml`, excluding `Transparent` as a no-paint, gives **14 attributes across 3
+files** after InspectorView's three were tokenized. The relayed figure of 17 across 4 is the same
+measurement taken before that commit; both are right for their moment, which is exactly why the count
+law requires the pattern and the scope alongside the number.
+
+`FileCompareView` holds 8 of the 14 — drop-zone overlays and the busy scrim, including three
+`Foreground="White"` labels that a hex-only pattern misses entirely.
+
+**The HC census was one dictionary short.** `App.axaml` merges Tokens.axaml AND Density.axaml, and the
+census read only the first — so "every token has a counterpart" was true of a population that was not
+the population. Density's **12** tab-strip brushes are now in it: **60** app-owned brushes, not 48.
+
+## T3. The tab strip: exempted, with the exemption measured
+
+The 12 tab-strip brushes carry no high-contrast override, and the exemption is backed by an assertion
+rather than a claim: `TheTabStrip_StillClearsAaUnderHighContrast` measures each foreground against the
+surface actually behind it under HC and requires AA. It passes today.
+
+The **selection idiom** is a real open question and is recorded as one rather than decided. The HC
+dictionary inverts selection to white, while the selected tab chip stays `#FF1E1E1E` — **1.26:1**
+against a black HC strip. Measured honestly, though: that chip is **1.09:1** in the DEFAULT theme too,
+so the chip fill has never been the signal in either theme; the underline is. Overriding these twelve
+needs that idiom decided, not a colour picked, so the exemption says so and hands it on.
+
+## T4. Evidence
+
+Forced `-t:Rebuild`: 0 Warning(s), 0 Error(s). **Manager 509/509** (508 + 1), **App.Core 728/728**.
+
+Counts as number + pattern + scope: **60** app-owned brushes across both merged dictionaries
+(`grep -c '<SolidColorBrush x:Key'` over `Tokens.axaml` + `Density.axaml`), guarded by
+`HighContrastTokenTests.ExpectedTokenBrushes`. **14** literal colour attributes across **3** files,
+pattern above. **10** same-hex token groups. **24** composed pairs, **0** failures.
