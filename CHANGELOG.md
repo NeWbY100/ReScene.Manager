@@ -2,7 +2,7 @@
 
 All notable changes to ReScene Manager (formerly ReScene.NET) are documented here. Releases follow [SemVer](https://semver.org/) and this file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [2.2.0] — 2026-08-06
 
 ### Added
 
@@ -11,6 +11,19 @@ All notable changes to ReScene Manager (formerly ReScene.NET) are documented her
   and borders, and a yellow focus outline — without a restart; turn it off and the normal theme
   returns exactly as it was. There is no in-app switch on purpose: if you have told your system you
   need high contrast, you should not have to tell every application again.
+
+### Fixed
+
+- Keyboard order now matches visual order everywhere: the SRR Creator's Input and Output rows
+  no longer trap or reorder Tab movement, wizard pages put their own fields ahead of the
+  Back/Next footer, and every path field in the app tabs before its own Browse button.
+- Screen readers hear the whole app: every Browse button announces what it browses for, a
+  field's first status message is announced (it used to reach assistive tech only from the
+  second message on), and previously silent outcomes now speak — the Edit SRR wizard's save
+  result, the Reconstruct wizard's custom-packer warning, and the Inspector's verify outcome.
+- A brief busy flicker could open a progress dialog that nothing could close — it sat over the
+  page swallowing clicks until the app was restarted. Both progress-window controllers now
+  settle to the latest requested state, however fast that state changes.
 
 ## [2.1.0] — 2026-08-02
 
