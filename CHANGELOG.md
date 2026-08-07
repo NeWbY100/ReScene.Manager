@@ -2,6 +2,26 @@
 
 All notable changes to ReScene Manager (formerly ReScene.NET) are documented here. Releases follow [SemVer](https://semver.org/) and this file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- Reconstruction is now immune to rar switches injected by the user's environment: every rar
+  invocation passes `-cfg-`, so a forgotten `switches=` line in `~/.rarrc`, a `rar.ini` beside
+  the executable, or a `RAR` environment variable can no longer silently alter the produced
+  archives. Found in the field: a Linux user's `-ds` (disable name sort) made rar pack a solid
+  set in directory order instead of the release's order, so every combination compressed a
+  different byte stream and could never match — while the archives themselves stayed perfectly
+  valid and extractable. The switch is part of the copied full command line, and it exists in
+  every rar version the app supports (verified 2.03 through 7.20).
+
+### Added
+
+- When assembly rejects a candidate and the produced archive packed files in a different order
+  than the release, the log now says so directly — once per run, naming both first files — so
+  an environment-level cause like the one above identifies itself instead of reading as an
+  endless clean "no match".
+
 ## [2.2.0] — 2026-08-06
 
 ### Added
