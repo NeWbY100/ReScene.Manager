@@ -436,7 +436,8 @@ public partial class ReconstructorViewModel : ViewModelBase
 
         /// <summary>
         /// The argument string rar was ACTUALLY invoked with — the display form plus engine-added
-        /// switches (-cfg-, -ma4 for 5.50–6.x, -vn, -z&lt;commentfile&gt;). Empty when unknown. The runnable
+        /// switches (-cfg-, -ds with an explicit file order, -ma4 for 5.50–6.x, -vn, -z&lt;commentfile&gt;).
+        /// Empty when unknown. The runnable
         /// copied command must use this; the grid column and "Testing …" log lines keep the display
         /// form (<see cref="Arguments"/>).
         /// </summary>
@@ -487,7 +488,7 @@ public partial class ReconstructorViewModel : ViewModelBase
                     return ExeAndArguments;
                 }
 
-                // Compose with the EXECUTED argument string (engine-added -cfg-/-ma4/-vn/-z included): the
+                // Compose with the EXECUTED argument string (engine-added -cfg-/-ds/-ma4/-vn/-z included): the
                 // display form omits switches that change the produced bytes — e.g. rar 5.50-6.x
                 // defaults to RAR5 format without -ma4 — so pasting it would silently build a
                 // different archive than the run this line claims to reproduce.

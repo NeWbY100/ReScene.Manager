@@ -6,6 +6,14 @@ All notable changes to ReScene Manager (formerly ReScene.NET) are documented her
 
 ### Fixed
 
+- Solid archives are now packed in the release's own file order. The reconstructor reads the
+  original order from the SRR's embedded headers and passes the files to rar explicitly with
+  rar's own sorting disabled (`-ds`), so machine-side order lists can no longer scramble the
+  produced bytes — most notably the `/etc/rarfiles.lst` that Ubuntu's `rar` package installs,
+  whose Debian-modified ordering packs `*.cue` files before `*.bin` and made bin/cue releases
+  unmatchable on such machines. As a side effect, releases whose original order differs from
+  rar's plain name sort become reconstructable for the first time. The copied full command line
+  includes the explicit file list, so a pasted command reproduces the run exactly.
 - Reconstruction is now immune to rar switches injected by the user's environment: every rar
   invocation passes `-cfg-`, so a forgotten `switches=` line in `~/.rarrc`, a `rar.ini` beside
   the executable, or a `RAR` environment variable can no longer silently alter the produced
