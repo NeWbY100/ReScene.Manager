@@ -2,7 +2,7 @@
 
 All notable changes to ReScene Manager (formerly ReScene.NET) are documented here. Releases follow [SemVer](https://semver.org/) and this file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [2.3.0] — 2026-08-08
 
 ### Fixed
 
@@ -29,6 +29,12 @@ All notable changes to ReScene Manager (formerly ReScene.NET) are documented her
   than the release, the log now says so directly — once per run, naming both first files — so
   an environment-level cause like the one above identifies itself instead of reading as an
   endless clean "no match".
+
+### Changed
+
+- Assembly's per-volume log lines now read plainly "written" — the old "(no hash to verify)"
+  suffix described the inner layer's inputs and read as "unverified", when in fact the engine
+  verifies every assembled volume against the release's checksums right afterwards.
 
 ## [2.2.0] — 2026-08-06
 
