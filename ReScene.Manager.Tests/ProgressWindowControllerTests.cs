@@ -2,6 +2,7 @@ using System.Reflection;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using ReScene.Manager.Helpers;
 using ReScene.Manager.Views;
@@ -156,45 +157,84 @@ public class ProgressWindowControllerTests
     }
 
     /// <summary>
-    /// Lets a test hold a window's close genuinely pending and then let the SAME close complete —
-    /// standing in for a platform whose native close is not synchronous with the managed
-    /// <c>Close()</c> call that starts it — without resorting to a second <c>Close()</c> call to
-    /// "release" it, which would be a second, genuinely different close negotiation rather than
-    /// the completion of the first.
+    /// Lets a test hold a window's <c>Closed</c> NOTIFICATION genuinely outstanding after its
+    /// close negotiation has already run to completion — never simulating "pending" by cancelling
+    /// <c>Closing</c>, which would abort the close outright instead of deferring it (see below).
     /// <para>
-    /// <c>Window.Close()</c> raises the public <c>Closing</c> event synchronously while deciding
-    /// whether to proceed (<c>ShouldCancelClose</c> calls <c>OnClosing</c>, which raises
-    /// <c>Closing</c>, then reads <c>e.Cancel</c>) — cancelling it there is enough to stop
-    /// <c>CloseInternal()</c> from ever running, so <c>PlatformImpl</c> is never disposed and
-    /// <c>Closed</c> never fires, exactly as a close a real platform has not finished yet would
-    /// look from the outside. Releasing calls <c>PlatformImpl.Dispose()</c> directly: that is
-    /// exactly what <c>CloseInternal()</c> would have gone on to do had <c>Closing</c> not been
-    /// held, so it finishes the SAME close <c>CloseCore</c> already accepted — <c>Closing</c> does
-    /// not fire again, and whatever called <c>Close()</c> the one time is never invoked again
-    /// either.
+    /// Decompiled with <c>ilspycmd</c> against the referenced Avalonia 11.3.18 binaries:
+    /// <c>Window.Close()</c> → <c>CloseCore</c> → <c>ShouldCancelClose</c> calls
+    /// <c>OnClosing</c> (raises the public <c>Closing</c> event) and reads <c>e.Cancel</c>; only
+    /// when that is <c>false</c> does <c>CloseInternal()</c> run, which calls
+    /// <c>PlatformImpl.Dispose()</c>. Cancelling <c>Closing</c> (the first version of this rig)
+    /// stops <c>CloseInternal()</c> from ever running at all — the close negotiation is aborted,
+    /// full stop, not deferred — so a later close can only be a second, separate negotiation, not
+    /// the completion of the first.
+    /// </para>
+    /// <para>
+    /// For the headless backend (<c>Avalonia.Headless.HeadlessWindowImpl</c>, an internal type,
+    /// also decompiled), <c>Dispose()</c>'s entire body is <c>Closed?.Invoke()</c> then disposing
+    /// the last rendered frame. That <c>Closed</c> is <c>ITopLevelImpl.Closed</c> — reflection
+    /// confirms both accessors are public at the CLR level (<c>[Unstable]</c> on the interface
+    /// only stops the C# COMPILER from binding to it directly; <see cref="ClosedProperty"/> is how
+    /// this class gets past that without touching anything that is not, in fact, public) — wired
+    /// by <c>TopLevel</c>'s constructor to its own <c>HandleClosed</c>, which nulls the managed
+    /// <c>PlatformImpl</c> field and raises the public <c>Closed</c> event everyone else
+    /// subscribes to. Reassigning <c>PlatformImpl.Closed</c> to a delegate that holds the call
+    /// instead of forwarding it lets the ENTIRE close negotiation run to genuine completion —
+    /// <c>Closing</c> is never cancelled, <c>CloseInternal()</c> genuinely executes — while the
+    /// one notification that tells the managed <c>TopLevel</c> "you're done" stays outstanding
+    /// until <see cref="Release"/> forwards the held call through to the original handler:
+    /// completing the SAME close <c>CloseCore</c> already accepted, not a second <c>Close()</c>
+    /// call and not a <c>Closing</c> that never really succeeded.
     /// </para>
     /// </summary>
     private sealed class PendingClose
     {
-        private readonly Window _window;
+        private static readonly PropertyInfo ClosedProperty =
+            typeof(ITopLevelImpl).GetProperty("Closed")
+                ?? throw new InvalidOperationException("ITopLevelImpl.Closed was not found by reflection");
+
+        private readonly Action _originalClosedHandler;
         private bool _hold = true;
+        private bool _closedIsPending;
 
         public PendingClose(Window window)
         {
-            _window = window;
-            _window.Closing += (_, e) =>
+            window.Closing += (_, _) => ClosingCount++;
+            window.Closed += (_, _) => ClosedCount++;
+
+            object impl = window.PlatformImpl
+                ?? throw new InvalidOperationException($"{window.GetType().Name} has no PlatformImpl yet");
+            _originalClosedHandler = (Action?)ClosedProperty.GetValue(impl)
+                ?? throw new InvalidOperationException(
+                    $"{window.GetType().Name}'s PlatformImpl.Closed was never wired — nothing to hold");
+
+            Action interceptor = () =>
             {
-                ClosingCount++;
-                if (_hold) { e.Cancel = true; }
+                if (_hold) { _closedIsPending = true; }
+                else { _originalClosedHandler(); }
             };
+            ClosedProperty.SetValue(impl, interceptor);
         }
 
+        /// <summary>How many times the public <c>Closing</c> event fired for this window.</summary>
         public int ClosingCount { get; private set; }
+
+        /// <summary>
+        /// How many times the public <c>Closed</c> event fired for this window — asserted directly
+        /// (rather than inferred from <c>PlatformImpl</c> liveness) so "still pending" and
+        /// "delivered" are unambiguous.
+        /// </summary>
+        public int ClosedCount { get; private set; }
 
         public void Release()
         {
             _hold = false;
-            _window.PlatformImpl?.Dispose();
+            if (_closedIsPending)
+            {
+                _closedIsPending = false;
+                _originalClosedHandler();
+            }
         }
     }
 
@@ -236,9 +276,10 @@ public class ProgressWindowControllerTests
         Pump();
         Assert.True(pending.ClosingCount == 1,
             "rig invalid: the controller's Close() call must have raised Closing exactly once here");
+        Assert.True(pending.ClosedCount == 0,
+            "rig invalid: Closed must not have fired while this close is held pending");
         Assert.True(Live<TWindow>() == baseline + 1,
-            "rig invalid: the close must still be pending here (Closed must not have fired), or " +
-            "this leg proves nothing");
+            "rig invalid: the close must still be pending here, or this leg proves nothing");
 
         // The reopen intent arrives while that close is still in flight.
         _ = setTrue();
@@ -255,6 +296,8 @@ public class ProgressWindowControllerTests
         Assert.True(pending.ClosingCount == 1,
             "releasing the pending close must not raise Closing again — it completes the SAME " +
             "close, not a second one");
+        Assert.True(pending.ClosedCount == 1,
+            "releasing the pending close must deliver exactly one Closed");
         Assert.True(Live<TWindow>() == baseline + 1,
             $"expected exactly one live {typeof(TWindow).Name} after the flicker, found " +
             $"{Live<TWindow>() - baseline}. The busy=true that arrived while the previous " +
@@ -301,6 +344,8 @@ public class ProgressWindowControllerTests
         firstWindow.Close();
         Assert.True(pending.ClosingCount == 1,
             "rig invalid: the simulated user close must have raised Closing exactly once");
+        Assert.True(pending.ClosedCount == 0,
+            "rig invalid: Closed must not have fired while this close is held pending");
         Assert.True(Live<TWindow>() == baseline + 1,
             "rig invalid: the close must still be pending here, or this leg proves nothing");
 
@@ -319,6 +364,8 @@ public class ProgressWindowControllerTests
         pending.Release();
         Pump();
 
+        Assert.True(pending.ClosedCount == 1,
+            "releasing the pending close must deliver exactly one Closed");
         Assert.True(cancelCount() == cancelsBefore,
             $"the stale window's delayed Closed cancelled the newer request " +
             $"({cancelCount() - cancelsBefore} time(s)) — a window must be judged by the request " +
@@ -329,25 +376,39 @@ public class ProgressWindowControllerTests
     }
 
     /// <summary>
-    /// The per-window half of the same fix, isolated from the generation check above: window W1's
-    /// close is requested programmatically — marking ITS OWN captured "did I request this" flag,
-    /// not a controller-wide one — and, once released, correctly cancels nothing. A fresh request
-    /// then opens a second window, W2, an entirely new capture starting from scratch. This time
-    /// the close is genuinely the user's, driven directly exactly as the leg above does. If the
-    /// flag were shared by the controller instead of captured per window, W1 having set it would
-    /// leave it set for W2 too, and this cancel would go missing.
+    /// The reviewer's exact stale-flag scenario: a programmatic close attempt on window W is
+    /// VETOED outright (some other <c>Closing</c> subscriber sets <c>e.Cancel = true</c> —
+    /// production wires exactly such a guard onto these same windows via
+    /// <see cref="ProgressWindowLifecycle"/> — so <c>ShouldCancelClose</c> never even lets
+    /// <c>CloseCore</c> reach <c>CloseInternal()</c>; the window stays fully open, nothing pending,
+    /// nothing to release), and the SAME window instance is later closed again, genuinely.
+    /// <para>
+    /// <c>closingProgrammatically</c> was captured <c>true</c> for THIS window by the vetoed
+    /// attempt and nothing ever resets it — the controller does not observe <c>Closing</c> at
+    /// all, so it has no signal that the attempt it made was refused rather than merely delayed.
+    /// That is a known, narrow limitation of the per-window capture, called out in review and
+    /// explicitly left as-is (no production change required): a window whose OWN earlier
+    /// programmatic close attempt was vetoed will not cancel a later, otherwise-genuine close of
+    /// that SAME instance. This test pins the actual behaviour down precisely rather than leaving
+    /// it undocumented, so a future change to the reset behaviour is a deliberate, visible one.
+    /// </para>
+    /// <para>
+    /// <c>setTrue()</c> is called directly (bypassing <c>drive()</c>) before the second close, so
+    /// <c>_isBusy()</c> reads <c>true</c> while <c>_generation</c> is left untouched — isolating
+    /// what the per-window flag alone decides from the generation check
+    /// (<see cref="AssertStaleUserCloseDuringRequestSwitchDoesNotCancelNewerRequest{TWindow}"/>
+    /// already covers), rather than leaving open the objection that nothing was live to cancel
+    /// anyway.
+    /// </para>
     /// </summary>
-    private static void AssertEarlierProgrammaticCloseDoesNotTaintALaterWindowsCancel<TWindow>(
+    private static void AssertVetoedProgrammaticCloseThenGenuineCloseOfSameWindow<TWindow>(
         Action<bool> drive, Func<bool> setTrue, Action setFalse, Func<int> cancelCount)
         where TWindow : Window
     {
         int baseline = Live<TWindow>();
         int cancelsBefore = cancelCount();
+        var before = new HashSet<Window>(Tracked);
 
-        // First window: closed programmatically (busy goes false, the controller requests the
-        // close), held pending, then released — must not cancel, and must fully close before a
-        // second window can open.
-        var beforeFirst = new HashSet<Window>(Tracked);
         _ = setTrue();
         drive(true);
         Pump();
@@ -355,50 +416,69 @@ public class ProgressWindowControllerTests
             $"rig validity: a plain busy=true did not open a {typeof(TWindow).Name}, so nothing " +
             "below is measuring anything");
 
-        TWindow firstWindow = Tracked.OfType<TWindow>()
-            .Single(w => !beforeFirst.Contains(w) && w.PlatformImpl is not null);
-        var firstPending = new PendingClose(firstWindow);
+        TWindow window = Tracked.OfType<TWindow>()
+            .Single(w => !before.Contains(w) && w.PlatformImpl is not null);
 
+        bool vetoNextClosing = true;
+        int vetoedClosingCount = 0;
+        window.Closing += (_, e) =>
+        {
+            if (vetoNextClosing)
+            {
+                vetoedClosingCount++;
+                e.Cancel = true;
+            }
+        };
+
+        // The controller's own not-busy branch requests the close, marking closingProgrammatically
+        // true for THIS window — but this specific attempt is vetoed outright: the negotiation
+        // never completes, so there is nothing pending and nothing to release.
         setFalse();
         drive(false);
         Pump();
-        Assert.True(firstPending.ClosingCount == 1,
-            "rig invalid: the controller's Close() call on the first window must have raised " +
-            "Closing exactly once");
-
-        firstPending.Release();
-        Pump();
-        Assert.True(cancelCount() == cancelsBefore,
-            "rig invalid: releasing the first window's own programmatic close must not cancel " +
-            "anything, or this leg is not isolating what it claims to");
-        Assert.True(Live<TWindow>() == baseline,
-            "rig invalid: the first window must be fully closed before the second opens, or this " +
-            "leg is not testing two windows");
-
-        // Second window: a fresh request, a fresh capture — closed by the user this time.
-        var beforeSecond = new HashSet<Window>(Tracked);
-        _ = setTrue();
-        drive(true);
-        Pump();
+        Assert.True(vetoedClosingCount == 1,
+            "rig invalid: the controller's Close() call must have raised Closing exactly once here");
         Assert.True(Live<TWindow>() == baseline + 1,
-            $"rig validity: busy=true did not open a second {typeof(TWindow).Name}");
+            "rig invalid: a vetoed close must leave the window fully open, or this leg proves " +
+            "nothing");
 
-        TWindow secondWindow = Tracked.OfType<TWindow>()
-            .Single(w => !beforeSecond.Contains(w) && w.PlatformImpl is not null);
-        var secondPending = new PendingClose(secondWindow);
+        // The operation is (or becomes) busy again without a fresh request ever reaching the
+        // controller through drive() — keeps _generation unchanged, isolating what
+        // closingProgrammatically alone decides from the generation check.
+        _ = setTrue();
+        vetoNextClosing = false;
 
-        secondWindow.Close();
-        Assert.True(secondPending.ClosingCount == 1,
-            "rig invalid: the simulated user close of the second window must have raised Closing " +
-            "exactly once");
+        // The SAME window instance is closed again, genuinely this time — standing in for the
+        // user closing it — held pending and released exactly like every other close in this
+        // file, so the same direct Closed-absence assertion applies here too.
+        var pending = new PendingClose(window);
+        window.Close();
+        Assert.True(pending.ClosingCount == 1,
+            "rig invalid: the genuine close must have raised Closing exactly once");
+        Assert.True(pending.ClosedCount == 0,
+            "rig invalid: Closed must not have fired while this close is held pending");
+        Assert.True(Live<TWindow>() == baseline + 1,
+            "rig invalid: the close must still be pending here, or this leg proves nothing");
 
-        secondPending.Release();
+        pending.Release();
         Pump();
+        Assert.True(pending.ClosedCount == 1,
+            "releasing the pending close must deliver exactly one Closed");
 
-        Assert.True(cancelCount() == cancelsBefore + 1,
-            $"the second window's genuine user close was not cancelled " +
-            $"({cancelCount() - cancelsBefore} cancel(s) total, expected 1) — the first window's " +
-            "own programmatic-close flag must not leak into a later window's classification.");
+        // Documents the accepted limitation: closingProgrammatically was captured true by the
+        // EARLIER, vetoed attempt and nothing resets it, so this later, genuine close of the SAME
+        // window is still classified as programmatic and does not cancel. If this ever starts
+        // asserting a cancel instead, the flag's reset behaviour changed and this comment (and the
+        // limitation it documents) need revisiting.
+        Assert.True(cancelCount() == cancelsBefore,
+            $"expected no cancel ({cancelCount() - cancelsBefore} recorded) for this known, " +
+            "accepted limitation — closingProgrammatically is captured per window, but nothing " +
+            "resets it after a vetoed attempt, so a later genuine close of the SAME window " +
+            "instance is still classified as programmatic.");
+        Assert.True(Live<TWindow>() == baseline,
+            $"rig sanity: expected no reopen ({Live<TWindow>() - baseline} extra live " +
+            $"{typeof(TWindow).Name}(s)) — _desiredBusy was never told true through drive() in " +
+            "this leg, only the live predicate was, so nothing should want a new dialog");
     }
 
     [AvaloniaFact]
@@ -468,7 +548,7 @@ public class ProgressWindowControllerTests
     }
 
     [AvaloniaFact]
-    public void ModalProgressWindowController_EarlierProgrammaticCloseDoesNotTaintALaterWindowsCancel()
+    public void ModalProgressWindowController_VetoedProgrammaticCloseThenGenuineCloseOfSameWindow()
     {
         Window owner = ShownOwner();
         try
@@ -478,14 +558,14 @@ public class ProgressWindowControllerTests
             var controller = new ModalProgressWindowController<FileCopyProgressWindow>(
                 owner, () => busy, () => cancelCount++);
 
-            AssertEarlierProgrammaticCloseDoesNotTaintALaterWindowsCancel<FileCopyProgressWindow>(
+            AssertVetoedProgrammaticCloseThenGenuineCloseOfSameWindow<FileCopyProgressWindow>(
                 controller.OnBusyChanged, () => busy = true, () => busy = false, () => cancelCount);
         }
         finally { owner.Close(); Pump(); }
     }
 
     [AvaloniaFact]
-    public void IsoProgressWindowController_EarlierProgrammaticCloseDoesNotTaintALaterWindowsCancel()
+    public void IsoProgressWindowController_VetoedProgrammaticCloseThenGenuineCloseOfSameWindow()
     {
         Window owner = ShownOwner();
         try
@@ -494,7 +574,7 @@ public class ProgressWindowControllerTests
             int cancelCount = 0;
             var controller = new IsoProgressWindowController(owner, () => busy, () => cancelCount++);
 
-            AssertEarlierProgrammaticCloseDoesNotTaintALaterWindowsCancel<ISOProgressWindow>(
+            AssertVetoedProgrammaticCloseThenGenuineCloseOfSameWindow<ISOProgressWindow>(
                 controller.OnProcessingChanged, () => busy = true, () => busy = false, () => cancelCount);
         }
         finally { owner.Close(); Pump(); }
