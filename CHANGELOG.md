@@ -2,6 +2,16 @@
 
 All notable changes to ReScene Manager (formerly ReScene.NET) are documented here. Releases follow [SemVer](https://semver.org/) and this file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- Rapidly stopping and restarting an operation could leave its progress dialog missing — and in
+  the worst interleaving, cancel the restarted operation outright. Both progress-window
+  controllers now record which operation each window belongs to, reopen the dialog when busy
+  returns before the old window has finished closing, and can no longer route a stale window's
+  close handling to the new operation.
+
 ## [2.3.0] — 2026-08-08
 
 ### Fixed
