@@ -27,7 +27,8 @@ internal sealed class IsoProgressWindowController(
     private ISOProgressWindow? _isoWindow;
     private bool _desiredProcessing;
     private bool _reconcilePending;
-    private bool _closingProgrammatically;
+    private int _generation;
+    private Action? _requestClose;
 
     /// <summary>
     /// Notifies the controller that <c>ISOProcessing</c> moved. The dialog is opened or closed to
@@ -42,6 +43,15 @@ internal sealed class IsoProgressWindowController(
     /// </summary>
     public void OnProcessingChanged(bool processing)
     {
+        // A false->true transition starts a new request for a dialog, distinct from whatever
+        // request is already in flight. Recorded even when Reconcile below cannot act on it yet
+        // (it may still be waiting on a previous window's close) — see the Closed handler in
+        // Reconcile for why a window needs to know which request it was opened for.
+        if (processing && !_desiredProcessing)
+        {
+            _generation++;
+        }
+
         _desiredProcessing = processing;
         ScheduleReconcile();
     }
@@ -85,19 +95,32 @@ internal sealed class IsoProgressWindowController(
                 DataContext = _windowDataContext is not null ? _windowDataContext() : _owner.DataContext,
             };
             _isoWindow = window;
-            _closingProgrammatically = false;
+
+            // Captured HERE, per window, rather than read from the controller's current fields when
+            // Closed eventually fires. Closing a real window is not necessarily synchronous with the
+            // Close() call that starts it, so a processing=true for a fresh request can arrive — and
+            // even run its own no-op reconcile, since this window is still the tracked one — before
+            // this window's Closed is delivered. By then the controller may be serving a request
+            // this window has nothing to do with; its Closed handler must judge it by what was true
+            // when IT opened, never by whatever the controller's live fields say once it actually
+            // closes.
+            int myGeneration = _generation;
+            bool closingProgrammatically = false;
+            _requestClose = () =>
+            {
+                closingProgrammatically = true;
+                window.Close();
+            };
 
             window.Closed += (sender, _) =>
             {
-                // If the window was cancelled (not closed by code), cancel the operation. Gated on
-                // _closingProgrammatically — set right before WE call Close() below, for exactly
-                // this window — rather than on _isProcessing() alone: closing a real window is not
-                // necessarily synchronous with the Close() call that starts it, so a processing=true
-                // for a RESTARTED operation can arrive (and its own reconcile run) before this
-                // Closed is delivered. _isProcessing() would then read the restarted operation's
-                // live state and cancel it by mistake; whether WE asked this window to close does
-                // not depend on what is processing now.
-                if (!_closingProgrammatically && _isProcessing())
+                // Cancel only if the user closed this window (not us, via _requestClose below) AND
+                // no newer request has since superseded the one this window was opened for. Both
+                // conjuncts come from what THIS window's own open captured — never from
+                // _isProcessing()/_generation read fresh against whatever is current by the time
+                // this fires, which may already belong to a request this window never showed
+                // progress for.
+                if (!closingProgrammatically && myGeneration == _generation && _isProcessing())
                 {
                     _cancel();
                 }
@@ -108,6 +131,7 @@ internal sealed class IsoProgressWindowController(
                 if (ReferenceEquals(_isoWindow, sender))
                 {
                     _isoWindow = null;
+                    _requestClose = null;
 
                     // A processing=true that arrived while this window's close was still pending
                     // saw a non-null reference and deferred to us, believing the request already
@@ -126,12 +150,13 @@ internal sealed class IsoProgressWindowController(
             // Closed handler above turns into a cancel).
             _ = window.ShowDialog(ownerWindow);
         }
-        else if (_isoWindow is not null)
+        else
         {
-            // The reference is cleared by the Closed handler, which knows whether the window closing
-            // is still the tracked one.
-            _closingProgrammatically = true;
-            _isoWindow.Close();
+            // Routed through the window's own captured close request rather than closing _isoWindow
+            // directly, so the programmatic-close flag the Closed handler above reads lands on the
+            // SAME per-window state — a controller-wide flag could be overwritten by a later
+            // request before this window's delayed Closed had a chance to read it.
+            _requestClose?.Invoke();
         }
     }
 }
