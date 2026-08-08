@@ -29,6 +29,29 @@ public class VersionEntryTests
     }
 
     [Fact]
+    public void FullCommandLine_WithInputFileArguments_UsesExplicitOrderedTailInsteadOfMask()
+    {
+        // SRR-guided assembly supplied an explicit, ordered file list (already whole-token quoted,
+        // like ExecutedArguments) — the copied command must reproduce that exact input, not rar's own
+        // platform mask, which can resolve a different byte order on the machine that pastes it.
+        var row = new ReconstructorViewModel.VersionEntry
+        {
+            VersionDirectory = "/rars/winrar-500",
+            Arguments = "a -r -s- -m0",
+            ExecutedArguments = "-ma4 a -r -s- -m0 -ds",
+            InputDirectory = "/tmp/work/input",
+            OutputFilePath = "/tmp/work/rar/winrar-500-m0.rar",
+            InputFileArguments = "./z.bin ./a.cue",
+        };
+
+        string rar = $"\"{RarExecutable.ResolveIn("/rars/winrar-500")}\" -ma4 a -r -s- -m0 -ds";
+        string expected = OperatingSystem.IsWindows()
+            ? $"pushd \"/tmp/work/input\" && {rar} \"/tmp/work/rar/winrar-500-m0.rar\" ./z.bin ./a.cue"
+            : $"cd \"/tmp/work/input\" && {rar} \"/tmp/work/rar/winrar-500-m0.rar\" ./z.bin ./a.cue";
+        Assert.Equal(expected, row.FullCommandLine);
+    }
+
+    [Fact]
     public void FullCommandLine_WithoutInvocationDetails_FallsBackToExeAndSwitches()
     {
         // Phase-1 comment-filter rows (and legacy events) carry no input/output — keep the old form.

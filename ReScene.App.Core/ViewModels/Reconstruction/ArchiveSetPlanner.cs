@@ -140,6 +140,7 @@ internal static class ArchiveSetPlanner
                 CompleteAllVolumes = shared.CompleteAllVolumes,
                 RenameToOriginalNames = shared.RenameToReleaseNames,
                 OriginalRARFileNames = [.. set.VolumeNames],
+                OrderedArchiveFiles = [.. set.ArchivedFilesInOrder],
                 ArchiveFileCrcs = new Dictionary<string, string>(set.ArchivedFileCrcs, StringComparer.OrdinalIgnoreCase),
                 ArchiveFilePaths = new HashSet<string>(set.ArchivedFiles, StringComparer.OrdinalIgnoreCase),
                 ArchiveDirectoryPaths = new HashSet<string>(
@@ -378,6 +379,7 @@ internal static class ArchiveSetPlanner
             CompleteAllVolumes = src.CompleteAllVolumes,
             RenameToOriginalNames = src.RenameToOriginalNames,
             OriginalRARFileNames = [.. src.OriginalRARFileNames],
+            OrderedArchiveFiles = [.. src.OrderedArchiveFiles],
             ArchiveFileCrcs = new Dictionary<string, string>(src.ArchiveFileCrcs, StringComparer.OrdinalIgnoreCase),
             ArchiveFilePaths = new HashSet<string>(src.ArchiveFilePaths, StringComparer.OrdinalIgnoreCase),
             ArchiveDirectoryPaths = new HashSet<string>(src.ArchiveDirectoryPaths, StringComparer.OrdinalIgnoreCase),

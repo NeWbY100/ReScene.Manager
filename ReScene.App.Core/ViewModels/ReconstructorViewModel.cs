@@ -100,7 +100,7 @@ public partial class ReconstructorViewModel : ViewModelBase
 
         _progress = new ReconstructionProgressTracker<VersionEntry>(
             VersionEntries,
-            createRow: (label, args, dir, inputDir, outputPath, executedArgs) => new VersionEntry
+            createRow: (label, args, dir, inputDir, outputPath, executedArgs, inputFileArgs) => new VersionEntry
             {
                 VersionName = label,
                 Arguments = args,
@@ -108,6 +108,7 @@ public partial class ReconstructorViewModel : ViewModelBase
                 InputDirectory = inputDir,
                 OutputFilePath = outputPath,
                 ExecutedArguments = executedArgs,
+                InputFileArguments = inputFileArgs,
             },
             setStatus: (row, status) => row.Status = status,
             setResult: (row, result) => row.Result = result,
@@ -442,6 +443,15 @@ public partial class ReconstructorViewModel : ViewModelBase
         public string ExecutedArguments { get; set; } = "";
 
         /// <summary>
+        /// This attempt's rar INPUT operand, rendered the same way as <see cref="ExecutedArguments"/> —
+        /// the explicit, SRR-ordered file-list tail passed after the output path when SRR-guided
+        /// assembly supplied an archived-file order. Empty when this attempt used rar's own input mask
+        /// (no order available, or assembly not engaged for this set); the copied command line then
+        /// falls back to the platform mask exactly as before.
+        /// </summary>
+        public string InputFileArguments { get; set; } = "";
+
+        /// <summary>
         /// The quoted RAR console binary followed by the switches — the terse per-attempt form used by
         /// the "Testing …" log lines (the merged log keeps its lines short; the temp paths would
         /// repeat on every line).
@@ -455,7 +465,8 @@ public partial class ReconstructorViewModel : ViewModelBase
         /// must never auto-execute): a shell prefix entering the invocation's working directory
         /// (pushd on Windows so cross-drive cd works in cmd — the Windows form is cmd dialect by
         /// choice; cd on Unix, valid in every POSIX shell), the quoted RAR console binary, the
-        /// switches, the quoted output archive, and the platform input mask — mirroring
+        /// switches, the quoted output archive, and either <see cref="InputFileArguments"/> (when this
+        /// attempt used an explicit SRR-ordered file list) or the platform input mask — mirroring
         /// <see cref="ReScene.Core.Diagnostics.RARProcess"/>'s composition. The prefix matters: rar
         /// stores entry names relative to its working directory, so running the same switches against
         /// an absolute path would archive different names. Falls back to
@@ -482,9 +493,17 @@ public partial class ReconstructorViewModel : ViewModelBase
                 // different archive than the run this line claims to reproduce.
                 string effectiveArguments = ExecutedArguments.Length > 0 ? ExecutedArguments : Arguments;
                 string invocation = $"\"{RarExecutable.ResolveIn(VersionDirectory)}\" {effectiveArguments}";
+
+                // The tail reproduces the ACTUAL input rar was given: the explicit SRR-ordered file list
+                // (already whole-token quoted, like ExecutedArguments) when this attempt used one, else
+                // today's platform input mask unchanged — pasting the mask on a machine whose rarfiles.lst
+                // or name-sort default differs could otherwise reorder a solid set's contents.
+                string tail = InputFileArguments.Length > 0
+                    ? InputFileArguments
+                    : OperatingSystem.IsWindows() ? ".\\*" : "'./*'";
                 return OperatingSystem.IsWindows()
-                    ? $"pushd \"{InputDirectory}\" && {invocation} \"{OutputFilePath}\" .\\*"
-                    : $"cd \"{InputDirectory}\" && {invocation} \"{OutputFilePath}\" './*'";
+                    ? $"pushd \"{InputDirectory}\" && {invocation} \"{OutputFilePath}\" {tail}"
+                    : $"cd \"{InputDirectory}\" && {invocation} \"{OutputFilePath}\" {tail}";
             }
         }
 

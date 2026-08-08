@@ -8,6 +8,15 @@ namespace ReScene.App.Core.Tests;
 
 public class ArchiveSetPlannerTests
 {
+    // SRRArchiveSet.ArchivedFilesInOrder is populated only by the SRR parser — its backing list is
+    // internal, deliberately not settable from outside the parser. Reflecting into it here lets
+    // planner tests pin a specific archive order without a real SRR parse, mirroring the parser's
+    // own dedupe-on-HashSet-add rule (a file is added to the order list only the first time its
+    // name is newly added to ArchivedFiles).
+    private static readonly System.Reflection.PropertyInfo ArchivedFilesInOrderProperty =
+        typeof(SRRArchiveSet).GetProperty("_archivedFilesInOrder",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+
     private static SRRArchiveSet MakeSet(string key, string dir, string[] volumes, (string file, string crc)[] content)
     {
         var set = new SRRArchiveSet { Key = key, Directory = dir };
@@ -16,9 +25,14 @@ public class ArchiveSetPlannerTests
             set.VolumeNames.Add(v);
         }
 
+        var orderedFiles = (List<string>)ArchivedFilesInOrderProperty.GetValue(set)!;
         foreach ((string file, string crc) in content)
         {
-            set.ArchivedFiles.Add(file);
+            if (set.ArchivedFiles.Add(file))
+            {
+                orderedFiles.Add(file);
+            }
+
             set.ArchivedFileCrcs[file] = crc;
         }
 
@@ -166,6 +180,22 @@ public class ArchiveSetPlannerTests
         Assert.Equal(["DVD1\\aln-re4a.rar", "DVD1\\aln-re4a.r00"], opts.RAROptions.OriginalRARFileNames);
         Assert.True(opts.ExpectedVolumeCrcs.ContainsKey("aln-re4a.rar"));
         Assert.Contains("f1a3ec0d", opts.Hashes);
+    }
+
+    [Fact]
+    public void BuildOptionsForSet_CopiesArchivedFilesInOrder_PreservingSrrOrder()
+    {
+        // The SRR's own archive order (non-alphabetical here) must survive into RAROptions verbatim —
+        // the engine needs it to drive rar with an explicit, ordered file list instead of its own
+        // platform input mask.
+        SRRArchiveSet set = MakeSet("DVD1/aln-re4a", "DVD1",
+            ["DVD1\\aln-re4a.rar"], [("z.bin", "00000000"), ("a.cue", "11111111")]);
+        SharedReconstructionSettings shared = ArchiveSetPlannerTestData.SharedSettings();
+
+        BruteForceOptions opts = ArchiveSetPlanner.BuildOptionsForSet(set, shared,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+        Assert.Equal(["z.bin", "a.cue"], opts.RAROptions.OrderedArchiveFiles);
     }
 
     [Fact]
@@ -547,6 +577,22 @@ public class ArchiveSetPlannerTests
     }
 
     [Fact]
+    public void NarrowToCombo_PreservesOrderedArchiveFiles()
+    {
+        // Seeded re-runs (NarrowToCombo) must keep the SRR-guided order too — losing it here would
+        // silently fall back to rar's own input mask for the seed attempt only.
+        var full = new BruteForceOptions("C:\\rar", "C:\\release", "C:\\out")
+        {
+            RAROptions = new RAROptions { OrderedArchiveFiles = ["z.bin", "a.cue"] },
+        };
+        var combo = new WinningCombo(351, [new RARCommandLineArgument("-m0", 300)]);
+
+        BruteForceOptions narrowed = ArchiveSetPlanner.NarrowToCombo(full, combo);
+
+        Assert.Equal(["z.bin", "a.cue"], narrowed.RAROptions.OrderedArchiveFiles);
+    }
+
+    [Fact]
     public void ResolveSets_PrefersParsedArchiveSets()
     {
         SRRArchiveSet existing = MakeSet("DVD1/x", "DVD1", ["DVD1\\x.rar"], [("x.iso", "00000000")]);
@@ -581,6 +627,7 @@ public class ArchiveSetPlannerTests
             // Each set's options carry only that set's own volume names and archived content.
             Assert.Equal(set.VolumeNames, opts.RAROptions.OriginalRARFileNames);
             Assert.Equal(set.ArchivedFiles.Count, opts.RAROptions.ArchiveFilePaths.Count);
+            Assert.Equal(set.ArchivedFilesInOrder, opts.RAROptions.OrderedArchiveFiles);
 
             foreach (string f in opts.RAROptions.ArchiveFilePaths)
             {
