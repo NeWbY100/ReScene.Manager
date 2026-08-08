@@ -156,6 +156,108 @@ public class ProgressWindowControllerTests
     }
 
     /// <summary>
+    /// The race the two legs above do not cover: they only ever pump AFTER a close has already
+    /// resolved, because the headless backend finishes <c>Close()</c> synchronously. A real
+    /// platform's native close is not synchronous with the managed <c>Close()</c> call — so this
+    /// suppresses the FIRST <c>Closing</c> on the window under test, which keeps it alive
+    /// (<c>PlatformImpl</c> non-null, same liveness signal as everywhere else in this file)
+    /// exactly as a close that has been requested but not yet delivered would. The controller
+    /// under test never sees this trick; it only ever calls <c>Close()</c>, same as always.
+    /// <para>
+    /// While that close sits pending, a fresh busy=true arrives. The buggy reconcile sees a
+    /// non-null tracked reference and returns, believing the request already satisfied. When the
+    /// pending close is then allowed to complete, the resulting <c>Closed</c> event must (a) NOT
+    /// cancel the new operation — the operation it belonged to is the one that asked for the
+    /// close, not whatever is live now — and (b) reopen the dialog, since nothing else will.
+    /// </para>
+    /// </summary>
+    private static void AssertReopensWhileCloseIsPending<TWindow>(
+        Action<bool> drive, Func<bool> setTrue, Action setFalse, Func<int> cancelCount)
+        where TWindow : Window
+    {
+        int baseline = Live<TWindow>();
+        int cancelsBefore = cancelCount();
+        var before = new HashSet<Window>(Tracked);
+
+        _ = setTrue();
+        drive(true);
+        Pump();
+        Assert.True(Live<TWindow>() == baseline + 1,
+            $"rig validity: a plain busy=true did not open a {typeof(TWindow).Name}, so nothing " +
+            "below is measuring anything");
+
+        TWindow firstWindow = Tracked.OfType<TWindow>()
+            .Single(w => !before.Contains(w) && w.PlatformImpl is not null);
+
+        bool suppressClose = true;
+        firstWindow.Closing += (_, e) =>
+        {
+            if (suppressClose) { e.Cancel = true; }
+        };
+
+        // Request the close, but hold it open — Closed does not fire, standing in for a platform
+        // whose native close does not finish synchronously with the Close() call that starts it.
+        setFalse();
+        drive(false);
+        Pump();
+        Assert.True(Live<TWindow>() == baseline + 1,
+            "rig invalid: the close must still be pending here, or this leg proves nothing");
+
+        // The reopen intent arrives while that close is still in flight.
+        _ = setTrue();
+        drive(true);
+        Pump();
+
+        // Now let the original close actually complete.
+        suppressClose = false;
+        firstWindow.Close();
+        Pump();
+
+        Assert.True(Live<TWindow>() == baseline + 1,
+            $"expected exactly one live {typeof(TWindow).Name} after the flicker, found " +
+            $"{Live<TWindow>() - baseline}. The busy=true that arrived while the previous " +
+            "window's close was still pending must reopen once that close is actually " +
+            "delivered — nothing else will.");
+        Assert.True(cancelCount() == cancelsBefore,
+            $"the delayed Closed event cancelled the restarted operation " +
+            $"({cancelCount() - cancelsBefore} time(s)) — it must only ever affect the operation " +
+            "the closed window belonged to, never a busy=true that arrived after.");
+    }
+
+    [AvaloniaFact]
+    public void ModalProgressWindowController_ReopensWhenBusyReturnsWhileCloseIsPending()
+    {
+        Window owner = ShownOwner();
+        try
+        {
+            bool busy = false;
+            int cancelCount = 0;
+            var controller = new ModalProgressWindowController<FileCopyProgressWindow>(
+                owner, () => busy, () => cancelCount++);
+
+            AssertReopensWhileCloseIsPending<FileCopyProgressWindow>(
+                controller.OnBusyChanged, () => busy = true, () => busy = false, () => cancelCount);
+        }
+        finally { owner.Close(); Pump(); }
+    }
+
+    [AvaloniaFact]
+    public void IsoProgressWindowController_ReopensWhenBusyReturnsWhileCloseIsPending()
+    {
+        Window owner = ShownOwner();
+        try
+        {
+            bool busy = false;
+            int cancelCount = 0;
+            var controller = new IsoProgressWindowController(owner, () => busy, () => cancelCount++);
+
+            AssertReopensWhileCloseIsPending<ISOProgressWindow>(
+                controller.OnProcessingChanged, () => busy = true, () => busy = false, () => cancelCount);
+        }
+        finally { owner.Close(); Pump(); }
+    }
+
+    /// <summary>
     /// The population, taken from the assembly rather than from a list: every type in
     /// <c>ReScene.Manager.Helpers</c> that HOLDS a window is a lifecycle controller and has to be
     /// covered above. The defect this file guards was identical in both controllers, found only

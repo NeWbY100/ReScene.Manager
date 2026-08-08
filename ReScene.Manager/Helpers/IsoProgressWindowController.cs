@@ -27,6 +27,7 @@ internal sealed class IsoProgressWindowController(
     private ISOProgressWindow? _isoWindow;
     private bool _desiredProcessing;
     private bool _reconcilePending;
+    private bool _closingProgrammatically;
 
     /// <summary>
     /// Notifies the controller that <c>ISOProcessing</c> moved. The dialog is opened or closed to
@@ -42,7 +43,11 @@ internal sealed class IsoProgressWindowController(
     public void OnProcessingChanged(bool processing)
     {
         _desiredProcessing = processing;
+        ScheduleReconcile();
+    }
 
+    private void ScheduleReconcile()
+    {
         if (_reconcilePending)
         {
             return;
@@ -80,11 +85,19 @@ internal sealed class IsoProgressWindowController(
                 DataContext = _windowDataContext is not null ? _windowDataContext() : _owner.DataContext,
             };
             _isoWindow = window;
+            _closingProgrammatically = false;
 
             window.Closed += (sender, _) =>
             {
-                // If the window was cancelled (not closed by code), cancel the operation.
-                if (_isProcessing())
+                // If the window was cancelled (not closed by code), cancel the operation. Gated on
+                // _closingProgrammatically — set right before WE call Close() below, for exactly
+                // this window — rather than on _isProcessing() alone: closing a real window is not
+                // necessarily synchronous with the Close() call that starts it, so a processing=true
+                // for a RESTARTED operation can arrive (and its own reconcile run) before this
+                // Closed is delivered. _isProcessing() would then read the restarted operation's
+                // live state and cancel it by mistake; whether WE asked this window to close does
+                // not depend on what is processing now.
+                if (!_closingProgrammatically && _isProcessing())
                 {
                     _cancel();
                 }
@@ -95,6 +108,15 @@ internal sealed class IsoProgressWindowController(
                 if (ReferenceEquals(_isoWindow, sender))
                 {
                     _isoWindow = null;
+
+                    // A processing=true that arrived while this window's close was still pending
+                    // saw a non-null reference and deferred to us, believing the request already
+                    // satisfied. Catch up now that the window is actually gone, or that reopen
+                    // never happens.
+                    if (_desiredProcessing)
+                    {
+                        ScheduleReconcile();
+                    }
                 }
             };
 
@@ -104,11 +126,12 @@ internal sealed class IsoProgressWindowController(
             // Closed handler above turns into a cancel).
             _ = window.ShowDialog(ownerWindow);
         }
-        else
+        else if (_isoWindow is not null)
         {
             // The reference is cleared by the Closed handler, which knows whether the window closing
             // is still the tracked one.
-            _isoWindow?.Close();
+            _closingProgrammatically = true;
+            _isoWindow.Close();
         }
     }
 }

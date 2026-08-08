@@ -23,6 +23,7 @@ internal sealed class ModalProgressWindowController<TWindow>(Control owner, Func
     private TWindow? _window;
     private bool _desiredBusy;
     private bool _reconcilePending;
+    private bool _closingProgrammatically;
 
     /// <summary>
     /// Notifies the controller that the busy flag moved. The dialog is opened or closed to match, on
@@ -41,7 +42,11 @@ internal sealed class ModalProgressWindowController<TWindow>(Control owner, Func
     public void OnBusyChanged(bool busy)
     {
         _desiredBusy = busy;
+        ScheduleReconcile();
+    }
 
+    private void ScheduleReconcile()
+    {
         if (_reconcilePending)
         {
             return;
@@ -75,12 +80,19 @@ internal sealed class ModalProgressWindowController<TWindow>(Control owner, Func
 
             var window = new TWindow { DataContext = _owner.DataContext };
             _window = window;
+            _closingProgrammatically = false;
 
             window.Closed += (sender, _) =>
             {
-                // If the window was closed by the user (not programmatically by Reconcile), treat it
-                // as a cancel request.
-                if (_isBusy())
+                // If the window was closed by the user (not programmatically, via the not-busy
+                // branch below), treat it as a cancel request. Gated on _closingProgrammatically —
+                // set right before WE call Close() below, for exactly this window — rather than on
+                // _isBusy() alone: closing a real window is not necessarily synchronous with the
+                // Close() call that starts it, so a busy=true for a RESTARTED operation can arrive
+                // (and its own reconcile run) before this Closed is delivered. _isBusy() would then
+                // read the restarted operation's live state and cancel it by mistake; whether WE
+                // asked this window to close does not depend on what is busy now.
+                if (!_closingProgrammatically && _isBusy())
                 {
                     _cancel();
                 }
@@ -92,6 +104,15 @@ internal sealed class ModalProgressWindowController<TWindow>(Control owner, Func
                 if (ReferenceEquals(_window, sender))
                 {
                     _window = null;
+
+                    // A busy=true that arrived while this window's close was still pending saw a
+                    // non-null reference and deferred to us, believing the request already
+                    // satisfied. Catch up now that the window is actually gone, or that reopen
+                    // never happens.
+                    if (_desiredBusy)
+                    {
+                        ScheduleReconcile();
+                    }
                 }
             };
 
@@ -101,11 +122,12 @@ internal sealed class ModalProgressWindowController<TWindow>(Control owner, Func
             // handler above turns into a cancel).
             _ = window.ShowDialog(ownerWindow);
         }
-        else
+        else if (_window is not null)
         {
             // The reference is cleared by the Closed handler, which knows whether the window closing
             // is still the tracked one.
-            _window?.Close();
+            _closingProgrammatically = true;
+            _window.Close();
         }
     }
 }
